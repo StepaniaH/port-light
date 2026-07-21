@@ -1,0 +1,7 @@
+{
+  "_comment": "Copy this to custom_ports.json and add your own ports. This file is gitignored and never committed.",
+  "_format": "port_number: {name, description, category, is_access_port}",
+  "_categories": "system | web | database | message | proxy | vpn | selfhosted | dev | infra | gaming",
+  "3001": {"name": "Grafana", "description": "Grafana dashboard", "category": "selfhosted", "is_access_port": true},
+  "8080": {"name": "Custom Web App", "description": "My custom web application", "category": "web", "is_access_port": true}
+}

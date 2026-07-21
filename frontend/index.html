@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Port-Light</title>
+  <link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header>
+      <h1>🚦 Port-Light</h1>
+      <div id="summary"></div>
+    </header>
+
+    <!-- Toolbar -->
+    <div id="toolbar">
+      <!-- Machine selector -->
+      <select id="machine-select" class="dropdown" title="Machine">
+        <option value="localhost">🖥️ This machine</option>
+      </select>
+
+      <!-- Filter chips (multi-select) -->
+      <div class="filter-chips" id="filter-chips">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="running">▶ Running</button>
+        <button class="chip" data-filter="used">🔵 In Use</button>
+        <button class="chip" data-filter="configured">🟡 Configured</button>
+        <button class="chip" data-filter="system">⚙ System</button>
+        <button class="chip" data-filter="docker">🐳 Docker</button>
+        <button class="chip" data-filter="access">🔓 Access</button>
+        <button class="chip" data-filter="hidden">👻 Hidden</button>
+      </div>
+
+      <!-- Sort -->
+      <select id="sort-select" class="dropdown" title="Sort">
+        <option value="port-asc">Port ↑</option>
+        <option value="port-desc">Port ↓</option>
+        <option value="name-asc">Name A-Z</option>
+        <option value="name-desc">Name Z-A</option>
+        <option value="status">Status</option>
+      </select>
+
+      <!-- Range -->
+      <div class="range-group">
+        <input type="number" id="range-start" value="1" min="1" max="65535" class="range-input">
+        <span>–</span>
+        <input type="number" id="range-end" value="9999" min="1" max="65535" class="range-input">
+      </div>
+
+      <!-- Search -->
+      <input type="text" id="search" placeholder="🔍 Search port number…" autocomplete="off">
+
+      <!-- Action buttons -->
+      <div class="action-group">
+        <button id="btn-refresh" class="icon-btn" title="Refresh now">⟳</button>
+        <button id="btn-add" class="icon-btn" title="Add manual port">＋</button>
+        <button id="btn-unhide" class="icon-btn" title="Show hidden ports">👁</button>
+        <button id="btn-settings" class="icon-btn" title="Settings">⚙</button>
+      </div>
+    </div>
+
+    <!-- Grid -->
+    <div id="grid"></div>
+
+    <!-- Detail panel -->
+    <div id="detail-panel" class="hidden">
+      <div id="detail-content"></div>
+    </div>
+
+    <!-- Add port modal -->
+    <div id="add-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>＋ Add Manual Port</h3>
+        <label>Port number <input type="number" id="add-port" min="1" max="65535" placeholder="e.g. 8000"></label>
+        <label>Label <input type="text" id="add-label" placeholder="e.g. My custom service"></label>
+        <div class="modal-actions">
+          <button id="add-cancel" class="btn-secondary">Cancel</button>
+          <button id="add-confirm" class="btn-primary">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unhide modal (password) -->
+    <div id="unhide-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>👁 Show Hidden Ports</h3>
+        <label>Password <input type="password" id="unhide-password" placeholder="Enter password…"></label>
+        <p class="modal-hint">Hidden ports are protected. Enter your password to reveal them.</p>
+        <div class="modal-actions">
+          <button id="unhide-cancel" class="btn-secondary">Cancel</button>
+          <button id="unhide-confirm" class="btn-primary">Unlock</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings modal -->
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-content wide">
+        <h3>⚙ Settings</h3>
+        <label class="toggle-row">
+          <span>Show status text on cards</span>
+          <input type="checkbox" id="setting-status-text">
+        </label>
+        <label class="toggle-row">
+          <span>Show access port badge</span>
+          <input type="checkbox" id="setting-access-badge" checked>
+        </label>
+        <label class="toggle-row">
+          <span>Auto-refresh (5s)</span>
+          <input type="checkbox" id="setting-autorefresh" checked>
+        </label>
+        <div class="modal-actions">
+          <button id="settings-close" class="btn-primary">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=3"></script>
+</body>
+</html>

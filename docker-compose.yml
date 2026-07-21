@@ -1,0 +1,30 @@
+services:
+  port-light:
+    build: .
+    container_name: port-light
+    restart: unless-stopped
+    ports:
+      - "2100:2100"
+    volumes:
+      # Mount compose project dir so the scanner can read your docker-compose files
+      - ${COMPOSE_SCAN_DIR:-~/your-compose-dir}:/compose:ro
+      # Docker socket — to query running containers
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Host network namespace — so `ss` sees real listening ports
+      - /proc:/host/proc:ro
+      # Persistent data: manual ports, hidden ports, machines
+      - ./data:/data
+      # Custom port definitions (gitignored, user-specific)
+      - ${CUSTOM_PORTS_FILE:-./custom_ports.json}:/data/custom_ports.json:ro
+    environment:
+      - COMPOSE_SCAN_DIR=/compose
+      - PORT_RANGE_START=${PORT_RANGE_START:-1}
+      - PORT_RANGE_END=${PORT_RANGE_END:-9999}
+      - PORT_LIGHT_DATA_DIR=/data
+      - CUSTOM_PORTS_FILE=/data/custom_ports.json
+    # NET_ADMIN + NET_RAW needed for `ss` to see process names
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # Read-only access to host network namespace
+    network_mode: host
