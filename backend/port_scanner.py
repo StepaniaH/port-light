@@ -1,7 +1,13 @@
 """Port scanner: detects listening TCP ports on the host.
 
-Primary method: ``ss -tlnp`` (requires iproute2).
-Fallback: parse ``/proc/net/tcp`` (IPv4 only, no process names).
+When running in a Docker container with ``/host/proc`` mounted (read-only),
+reads the host's ``/host/proc/net/tcp`` and ``/host/proc/net/tcp6`` directly.
+This works without root or nsenter — just needs the /proc mount.
+
+When running on bare metal or with ``network_mode: host``, uses ``ss -tlnpH``
+which provides process names in addition to port numbers.
+
+Falls back to local ``/proc/net/tcp`` if neither host proc nor ss work.
 """
 
 from __future__ import annotations
@@ -28,48 +34,43 @@ class ListeningPort:
 
 # ── ss parser ──────────────────────────────────────────────────────────
 
-# `ss -tlnpH` output (no header) looks like:
-#   LISTEN 0 4096  0.0.0.0:8443       0.0.0.0:*
-#   LISTEN 0 4096  [::]:8443          [::]:*
-#   LISTEN 0 5      0.0.0.0:8080       0.0.0.0:*  users:(("python3",pid=42,fd=4))
-#
-# Some iproute2 versions prepend "tcp "/"tcp6 " — handle both.
-# We use -H to suppress the header line.
-
 _SS_PROC_RE = re.compile(r'users:\(\("([^"]+)",pid=(\d+)')
 
 
 def scan_listening_ports() -> list[ListeningPort]:
     """Return all listening TCP ports on the host.
 
-    Tries nsenter first (peeks into host network namespace from a bridge
-    container), falls back to plain ss (for host-network mode or bare metal),
-    then falls back to /proc/net/tcp.
+    Strategy:
+    1. /host/proc/1/net/tcp + tcp6  (Docker container with /host/proc mount)
+       — this is checked first because it sees the host's real ports
+    2. ss -tlnpH  (host network or bare metal — gives process names)
+    3. /proc/net/tcp  (last resort, local only)
     """
-    for scanner in (_scan_with_nsenter, _scan_with_ss, _scan_with_proc):
-        try:
-            result = scanner()
-            if result:
-                return result
-        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            continue
+    # Try host proc first — in a container this sees the host's ports
+    try:
+        result = _scan_with_host_proc()
+        if result and len(result) > 1:
+            return result
+    except (FileNotFoundError, OSError):
+        pass
+
+    # Fall back to ss (bare metal or host network mode)
+    try:
+        result = _scan_with_ss()
+        if result:
+            return result
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        pass
+
+    # Last resort: local /proc
+    try:
+        result = _scan_with_proc()
+        if result:
+            return result
+    except (FileNotFoundError, OSError):
+        pass
+
     return []
-
-
-def _scan_with_nsenter() -> list[ListeningPort]:
-    """Use nsenter to run ss inside PID 1's network namespace (the host)."""
-    result = subprocess.run(
-        ['nsenter', '-t', '1', '-n', 'ss', '-tlnpH'],
-        capture_output=True, text=True, timeout=5,
-    )
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, 'nsenter')
-    ports: list[ListeningPort] = []
-    for line in result.stdout.strip().splitlines():
-        parsed = _parse_ss_line(line)
-        if parsed:
-            ports.append(parsed)
-    return ports
 
 
 def _scan_with_ss() -> list[ListeningPort]:
@@ -89,7 +90,6 @@ def _scan_with_ss() -> list[ListeningPort]:
 
 
 def _parse_ss_line(line: str) -> ListeningPort | None:
-    # Strip optional protocol prefix ("tcp " / "tcp6 ")
     stripped = line.strip()
     if stripped.startswith('tcp6 '):
         protocol = 'tcp6'
@@ -98,17 +98,14 @@ def _parse_ss_line(line: str) -> ListeningPort | None:
         protocol = 'tcp'
         stripped = stripped[4:]
     else:
-        protocol = 'tcp'  # determined by address format below
+        protocol = 'tcp'
 
-    # Tokenise: LISTEN <recv-q> <send-q> <local> <peer> [process...]
     parts = stripped.split()
     if len(parts) < 4 or parts[0] != 'LISTEN':
         return None
 
     local_spec = parts[3]
-    # local_spec: "0.0.0.0:443", "[::]:443", "127.0.0.1:443", "[::1]:443"
     if ']' in local_spec:
-        # IPv6: [::]:443 or [fe80::1]:443
         addr_part, _, port_part = local_spec.rpartition(']')
         ip = addr_part.strip('[]')
         port_str = port_part.lstrip(':')
@@ -123,7 +120,6 @@ def _parse_ss_line(line: str) -> ListeningPort | None:
     except ValueError:
         return None
 
-    # Normalise wildcard addresses
     if ip in ('*', '0.0.0.0'):
         ip = '0.0.0.0'
         protocol = 'tcp'
@@ -131,7 +127,6 @@ def _parse_ss_line(line: str) -> ListeningPort | None:
         ip = '::'
         protocol = 'tcp6'
 
-    # Process info (optional, last field(s))
     process_name = pid = None
     proc_part = ' '.join(parts[5:]) if len(parts) > 5 else ''
     pm = _SS_PROC_RE.search(proc_part)
@@ -145,25 +140,89 @@ def _parse_ss_line(line: str) -> ListeningPort | None:
     )
 
 
-# ── /proc fallback ──────────────────────────────────────────────────────
+# ── /host/proc scanner (Docker container, no root needed) ───────────────
+
+def _scan_with_host_proc() -> list[ListeningPort]:
+    """Parse host's /proc/1/net/tcp and /proc/1/net/tcp6 from /host/proc mount.
+
+    This works in a bridge container without root or nsenter — just needs
+    /proc mounted at /host/proc (read-only).
+
+    Key detail: /host/proc/net/tcp is the *container's* network namespace
+    (it's a symlink to /proc/self/net). The host's network namespace is at
+    /host/proc/1/net/tcp (PID 1 = host's init process).
+    """
+    ports: list[ListeningPort] = []
+    for proto, path in [
+        ('tcp', '/host/proc/1/net/tcp'),
+        ('tcp6', '/host/proc/1/net/tcp6'),
+    ]:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path) as f:
+                for line in f.readlines()[1:]:  # skip header
+                    parsed = _parse_proc_net_line(line, proto)
+                    if parsed:
+                        ports.append(parsed)
+        except OSError:
+            continue
+    return ports
+
+
+def _parse_proc_net_line(line: str, protocol: str) -> ListeningPort | None:
+    """Parse one line from /proc/net/tcp or /proc/net/tcp6."""
+    parts = line.split()
+    if len(parts) < 4 or parts[3] != '0A':  # 0A = LISTEN
+        return None
+
+    ip_hex, port_hex = parts[1].split(':')
+    port = int(port_hex, 16)
+
+    if protocol == 'tcp6':
+        # IPv6: 32 hex chars in little-endian groups
+        ip = _parse_ipv6_hex(ip_hex)
+    else:
+        # IPv4: 8 hex chars, little-endian uint32
+        ip = socket.inet_ntoa(struct.pack('<I', int(ip_hex, 16)))
+
+    # Normalize wildcard
+    if ip == '0.0.0.0' or ip == '::':
+        ip = '0.0.0.0' if protocol == 'tcp' else '::'
+
+    return ListeningPort(
+        port=port, protocol=protocol, ip=ip,
+        process_name=None, pid=None,
+    )
+
+
+def _parse_ipv6_hex(hex_str: str) -> str:
+    """Convert 32-char hex from /proc/net/tcp6 to IPv6 address string."""
+    # /proc/net/tcp6 stores addresses as 4 little-endian 32-bit words
+    raw = bytes.fromhex(hex_str)
+    if len(raw) != 16:
+        return '::'
+    # Each 4-byte group is in little-endian order
+    addr_bytes = b''
+    for i in range(0, 16, 4):
+        addr_bytes += raw[i:i+4][::-1]
+    return socket.inet_ntop(socket.AF_INET6, addr_bytes)
+
+
+# ── local /proc fallback ────────────────────────────────────────────────
 
 def _scan_with_proc() -> list[ListeningPort]:
-    """Fallback: parse /proc/net/tcp (IPv4 only, no process names)."""
+    """Fallback: parse local /proc/net/tcp (IPv4 only, no process names)."""
     ports: list[ListeningPort] = []
-    path = '/proc/net/tcp'
-    if not os.path.exists(path):
-        return ports
-
-    with open(path) as f:
-        for line in f.readlines()[1:]:  # skip header
-            parts = line.split()
-            if len(parts) < 8 or parts[3] != '0A':  # 0A = LISTEN
-                continue
-            ip_hex, port_hex = parts[1].split(':')
-            port = int(port_hex, 16)
-            ip = socket.inet_ntoa(struct.pack('<I', int(ip_hex, 16)))
-            ports.append(ListeningPort(
-                port=port, protocol='tcp', ip=ip,
-                process_name=None, pid=None,
-            ))
+    for proto, path in [('tcp', '/proc/net/tcp'), ('tcp6', '/proc/net/tcp6')]:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path) as f:
+                for line in f.readlines()[1:]:
+                    parsed = _parse_proc_net_line(line, proto)
+                    if parsed:
+                        ports.append(parsed)
+        except OSError:
+            continue
     return ports

@@ -10,7 +10,7 @@ services:
       - ${COMPOSE_SCAN_DIR:-~/your-compose-dir}:/compose:ro
       # Docker socket — to query running containers
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Host /proc — so nsenter can access host PID 1's network namespace
+      # Host /proc — so we can read /host/proc/net/tcp to see host listening ports
       - /proc:/host/proc:ro
       # Persistent data: manual ports, hidden ports, machines
       - ./data:/data
@@ -22,16 +22,7 @@ services:
       - PORT_RANGE_END=${PORT_RANGE_END:-9999}
       - PORT_LIGHT_DATA_DIR=/data
       - CUSTOM_PORTS_FILE=/data/custom_ports.json
-    # PID namespace = host, so nsenter can target PID 1 (the host's init)
-    pid: host
-    # Capabilities needed:
-    #   NET_ADMIN, NET_RAW — for `ss` to resolve process names
-    #   SYS_PTRACE, SYS_ADMIN — for `nsenter` to enter the host network namespace
+    # NET_ADMIN needed for `ss` to see process names (bare metal fallback only).
+    # In bridge mode we read /host/proc/net/tcp directly — no special caps needed.
     cap_add:
       - NET_ADMIN
-      - NET_RAW
-      - SYS_PTRACE
-      - SYS_ADMIN
-    # nsenter needs to perform namespace operations blocked by default seccomp
-    security_opt:
-      - seccomp:unconfined

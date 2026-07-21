@@ -51,10 +51,7 @@ If you'd rather use the prebuilt image from Docker Hub:
 ```bash
 docker run -d \
   --name port-light \
-  --pid host \
-  --cap-add NET_ADMIN --cap-add NET_RAW \
-  --cap-add SYS_PTRACE --cap-add SYS_ADMIN \
-  --security-opt seccomp=unconfined \
+  --cap-add NET_ADMIN \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v /proc:/host/proc:ro \
   -v ~/your-compose-dir:/compose:ro \
@@ -81,15 +78,11 @@ docker run -d \
 | Docker | `/var/run/docker.sock` | Container names, status, images, port bindings |
 | Compose files | Scans `COMPOSE_SCAN_DIR` for `docker-compose.y*ml` | Expected port mappings (even when stopped) |
 
-### Why `pid: host` and `nsenter`?
+### How does port scanning work in a container?
 
-The container uses `nsenter -t 1 -n ss -tlnpH` to peek into PID 1's network namespace (the host's). This lets Port-Light see the host's real listening ports while staying in its own bridge network with normal port mapping. `pid: host` shares the PID namespace so PID 1 inside the container is the host's init process.
+Port-Light reads the host's `/proc/net/tcp` and `/proc/net/tcp6` directly from the `/host/proc` mount. This works in a standard bridge container without root, `pid: host`, or `nsenter` — it's just reading files. The trade-off is that process names aren't available this way (only port numbers and IPs), but Port-Light cross-references with the Docker API to fill in container names.
 
-`SYS_PTRACE`, `SYS_ADMIN`, and `seccomp:unconfined` are needed for nsenter to enter the host's network namespace. Without these, nsenter gets "Operation not permitted".
-
-### Why `cap_add: NET_ADMIN`?
-
-So `ss -tlnp` can resolve process names. Without it you still get port numbers, but not which process owns them.
+`cap_add: NET_ADMIN` is kept as a fallback for bare-metal deployments where `ss -tlnpH` can provide process names directly.
 
 ## Configuration
 

@@ -7,11 +7,11 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
 
-# iproute2 provides `ss` for port scanning
-# util-linux provides `nsenter` to peek at the host network namespace from a bridge container
+# iproute2 provides `ss` for port scanning (used when running on bare metal
+# or with host network mode). In bridge containers we read /host/proc/net/tcp
+# directly, so ss is optional — but keeping it for the fallback path.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 \
-    util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -19,6 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
+
+# Ensure files are readable by non-root users (e.g. when container runs with --user 1000:1000)
+RUN chmod -R a+r /app
 
 ENV COMPOSE_SCAN_DIR=/compose
 ENV PORT_RANGE_START=1
