@@ -51,12 +51,15 @@ If you'd rather use the prebuilt image from Docker Hub:
 ```bash
 docker run -d \
   --name port-light \
-  --network host \
+  --pid host \
   --cap-add NET_ADMIN --cap-add NET_RAW \
+  --cap-add SYS_PTRACE --cap-add SYS_ADMIN \
+  --security-opt seccomp=unconfined \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v /proc:/host/proc:ro \
   -v ~/your-compose-dir:/compose:ro \
   -v port-light-data:/data \
+  -p 2100:2100 \
   stepaniah/port-light:latest
 ```
 
@@ -78,9 +81,11 @@ docker run -d \
 | Docker | `/var/run/docker.sock` | Container names, status, images, port bindings |
 | Compose files | Scans `COMPOSE_SCAN_DIR` for `docker-compose.y*ml` | Expected port mappings (even when stopped) |
 
-### Why `network_mode: host`?
+### Why `pid: host` and `nsenter`?
 
-The container needs to see the host's real network namespace. Without it, `ss` only sees Port-Light's own port 2100.
+The container uses `nsenter -t 1 -n ss -tlnpH` to peek into PID 1's network namespace (the host's). This lets Port-Light see the host's real listening ports while staying in its own bridge network with normal port mapping. `pid: host` shares the PID namespace so PID 1 inside the container is the host's init process.
+
+`SYS_PTRACE`, `SYS_ADMIN`, and `seccomp:unconfined` are needed for nsenter to enter the host's network namespace. Without these, nsenter gets "Operation not permitted".
 
 ### Why `cap_add: NET_ADMIN`?
 

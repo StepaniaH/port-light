@@ -8,8 +8,10 @@ LABEL org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 
 # iproute2 provides `ss` for port scanning
+# util-linux provides `nsenter` to peek at the host network namespace from a bridge container
 RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 \
+    util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

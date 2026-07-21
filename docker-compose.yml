@@ -3,14 +3,14 @@ services:
     build: .
     container_name: port-light
     restart: unless-stopped
-    # No ports: needed — network_mode: host uses the host network directly.
-    # The container listens on host port 2100.
+    ports:
+      - "2100:2100"
     volumes:
       # Mount compose project dir so the scanner can read your docker-compose files
       - ${COMPOSE_SCAN_DIR:-~/your-compose-dir}:/compose:ro
       # Docker socket — to query running containers
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Host network namespace — so `ss` sees real listening ports
+      # Host /proc — so nsenter can access host PID 1's network namespace
       - /proc:/host/proc:ro
       # Persistent data: manual ports, hidden ports, machines
       - ./data:/data
@@ -22,9 +22,16 @@ services:
       - PORT_RANGE_END=${PORT_RANGE_END:-9999}
       - PORT_LIGHT_DATA_DIR=/data
       - CUSTOM_PORTS_FILE=/data/custom_ports.json
-    # NET_ADMIN + NET_RAW needed for `ss` to see process names
+    # PID namespace = host, so nsenter can target PID 1 (the host's init)
+    pid: host
+    # Capabilities needed:
+    #   NET_ADMIN, NET_RAW — for `ss` to resolve process names
+    #   SYS_PTRACE, SYS_ADMIN — for `nsenter` to enter the host network namespace
     cap_add:
       - NET_ADMIN
       - NET_RAW
-    # Read-only access to host network namespace
-    network_mode: host
+      - SYS_PTRACE
+      - SYS_ADMIN
+    # nsenter needs to perform namespace operations blocked by default seccomp
+    security_opt:
+      - seccomp:unconfined

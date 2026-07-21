@@ -40,18 +40,46 @@ _SS_PROC_RE = re.compile(r'users:\(\("([^"]+)",pid=(\d+)')
 
 
 def scan_listening_ports() -> list[ListeningPort]:
-    """Return all listening TCP ports on the host."""
-    try:
-        return _scan_with_ss()
-    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return _scan_with_proc()
+    """Return all listening TCP ports on the host.
+
+    Tries nsenter first (peeks into host network namespace from a bridge
+    container), falls back to plain ss (for host-network mode or bare metal),
+    then falls back to /proc/net/tcp.
+    """
+    for scanner in (_scan_with_nsenter, _scan_with_ss, _scan_with_proc):
+        try:
+            result = scanner()
+            if result:
+                return result
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            continue
+    return []
+
+
+def _scan_with_nsenter() -> list[ListeningPort]:
+    """Use nsenter to run ss inside PID 1's network namespace (the host)."""
+    result = subprocess.run(
+        ['nsenter', '-t', '1', '-n', 'ss', '-tlnpH'],
+        capture_output=True, text=True, timeout=5,
+    )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, 'nsenter')
+    ports: list[ListeningPort] = []
+    for line in result.stdout.strip().splitlines():
+        parsed = _parse_ss_line(line)
+        if parsed:
+            ports.append(parsed)
+    return ports
 
 
 def _scan_with_ss() -> list[ListeningPort]:
+    """Run ss directly (host-network mode or bare metal)."""
     result = subprocess.run(
         ['ss', '-tlnpH'],
         capture_output=True, text=True, timeout=5,
     )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, 'ss')
     ports: list[ListeningPort] = []
     for line in result.stdout.strip().splitlines():
         parsed = _parse_ss_line(line)
