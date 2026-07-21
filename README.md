@@ -57,7 +57,6 @@ docker run -d \
   -v /proc:/host/proc:ro \
   -v ~/your-compose-dir:/compose:ro \
   -v port-light-data:/data \
-  -p 2100:2100 \
   stepaniah/port-light:latest
 ```
 

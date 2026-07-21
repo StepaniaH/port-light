@@ -3,8 +3,8 @@ services:
     build: .
     container_name: port-light
     restart: unless-stopped
-    ports:
-      - "2100:2100"
+    # No ports: needed — network_mode: host uses the host network directly.
+    # The container listens on host port 2100.
     volumes:
       # Mount compose project dir so the scanner can read your docker-compose files
       - ${COMPOSE_SCAN_DIR:-~/your-compose-dir}:/compose:ro
