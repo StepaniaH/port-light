@@ -35,18 +35,45 @@ The result: every port gets one of three states.
 - **Auto-refresh** — 5 second polling, toggleable
 - **Zero dependencies on the frontend** — vanilla HTML/CSS/JS, no npm, no build step
 
-## Quick start
+## Deployment
+
+The prebuilt image is published on [Docker Hub](https://hub.docker.com/r/stepaniah/port-light) (`stepaniah/port-light`).
+
+### Docker Compose (recommended)
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  port-light:
+    image: stepaniah/port-light:latest
+    container_name: port-light
+    restart: unless-stopped
+    # Run as non-root so the ./data bind mount stays owned by your host user.
+    # Set to your UID:GID — run `id -u` / `id -g` to find them.
+    # If you enable this, create ./data first and `chown` it to that user.
+    # user: "1000:1000"
+    ports:
+      - "2100:2100"
+    volumes:
+      # Replace with the directory that holds your docker-compose files
+      - ~/your-compose-dir:/compose:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - ./data:/data
+    environment:
+      - COMPOSE_SCAN_DIR=/compose
+    cap_add:
+      - NET_ADMIN
+```
 
 ```bash
-git clone https://github.com/StepaniaH/port-light.git
-cd port-light
-cp .env.example .env  # point COMPOSE_SCAN_DIR at your compose stacks
 docker compose up -d
 ```
 
 Open `http://localhost:2100`.
 
-If you'd rather use the prebuilt image from Docker Hub:
+### Docker run
 
 ```bash
 docker run -d \
@@ -58,6 +85,15 @@ docker run -d \
   -v port-light-data:/data \
   -p 2100:2100 \
   stepaniah/port-light:latest
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/StepaniaH/port-light.git
+cd port-light
+cp .env.example .env  # point COMPOSE_SCAN_DIR at your compose stacks
+docker compose up -d --build
 ```
 
 ## How it works
@@ -126,4 +162,4 @@ Categories: `system`, `web`, `database`, `message`, `proxy`, `vpn`, `selfhosted`
 
 ## License
 
-MIT
+[MIT](LICENSE)
