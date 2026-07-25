@@ -13,7 +13,7 @@
   let rangeStart = 1;
   let rangeEnd = 9999;
   let showHidden = false;
-  let settings = { statusText: false, accessBadge: true, autoRefresh: true };
+  let settings = { statusText: false, accessBadge: true, autoRefresh: true, copyOnClick: true };
   let refreshTimer = null;
 
   // DOM
@@ -35,6 +35,7 @@
   document.getElementById('setting-status-text').checked = settings.statusText;
   document.getElementById('setting-access-badge').checked = settings.accessBadge;
   document.getElementById('setting-autorefresh').checked = settings.autoRefresh;
+  document.getElementById('setting-copy-on-click').checked = settings.copyOnClick;
 
   // ── Event listeners ──────────────────────────
 
@@ -112,6 +113,7 @@
     settings.statusText = document.getElementById('setting-status-text').checked;
     settings.accessBadge = document.getElementById('setting-access-badge').checked;
     settings.autoRefresh = document.getElementById('setting-autorefresh').checked;
+    settings.copyOnClick = document.getElementById('setting-copy-on-click').checked;
     localStorage.setItem('port-light-settings', JSON.stringify(settings));
     setupRefresh();
     render();
@@ -384,6 +386,16 @@
         selectedPort = port;
         const entry = displayPorts.find(p => p.port === port);
         if (entry) renderDetail(entry);
+        if (settings.copyOnClick) {
+          navigator.clipboard.writeText(String(port)).then(() => {
+            const hint = detailContent.querySelector('.copied-hint');
+            if (hint) {
+              hint.classList.add('show');
+              clearTimeout(hint._hideTimer);
+              hint._hideTimer = setTimeout(() => hint.classList.remove('show'), 1200);
+            }
+          }).catch(() => {});
+        }
       });
     });
   }
@@ -395,7 +407,7 @@
     const statusIcon = p.status === 'used' ? '🔵' : p.status === 'configured' ? '🟡' : '🟢';
     let html = `
       <button class="close-btn" onclick="this.closest('#detail-panel').classList.add('hidden')">✕</button>
-      <h3>${statusIcon} Port ${p.port}</h3>
+      <h3>${statusIcon} Port ${p.port}<span class="copied-hint">Copied</span></h3>
     `;
 
     html += `<div class="row"><span class="key">Status</span><span class="tag ${p.status}">${p.status}</span></div>`;
