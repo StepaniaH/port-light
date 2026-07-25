@@ -2,6 +2,8 @@
 
 A web dashboard that shows your server's port usage as a traffic-light grid. Built for homelabbers who run many Docker Compose stacks and keep forgetting which port is taken.
 
+<a href="https://www.producthunt.com/products/port-light?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-port-light" target="_blank" rel="noopener noreferrer"><img alt="Port Light - A web dashboard shows your port usage as a traffic-light. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1203037&theme=light&t=1784992647570"></a>
+
 ![Port-Light screenshot](docs/screenshot.png)
 
 ## What it does
