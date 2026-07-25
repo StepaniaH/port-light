@@ -366,15 +366,12 @@
         accessBadge = '<div class="access-badge">🔓</div>';
       }
 
-      // Running pulse
-      const running = p.containers && p.containers.some(c => c.status === 'running') ? ' running' : '';
-
       return `
         <div class="port-cell ${cls}${conflict}${selected}${searchHit}${searchNear}"
              data-port="${p.port}">
           <div class="port-num">${p.port}</div>
           ${labelText}
-          <div class="indicator${running}"></div>
+          <div class="indicator"></div>
           ${statusText}${accessBadge}
         </div>
       `;
@@ -388,16 +385,26 @@
         if (entry) renderDetail(entry);
         if (settings.copyOnClick) {
           navigator.clipboard.writeText(String(port)).then(() => {
-            const hint = detailContent.querySelector('.copied-hint');
-            if (hint) {
-              hint.classList.add('show');
-              clearTimeout(hint._hideTimer);
-              hint._hideTimer = setTimeout(() => hint.classList.remove('show'), 1200);
-            }
+            showCopyToast(el);
           }).catch(() => {});
         }
       });
     });
+  }
+
+  function showCopyToast(cell) {
+    cell.querySelectorAll('.copy-toast').forEach(t => t.remove());
+    const toast = document.createElement('div');
+    toast.className = 'copy-toast';
+    toast.textContent = 'Copied';
+    cell.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('show'));
+    clearTimeout(cell._copyToastTimer);
+    cell._copyToastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+      toast.classList.add('hide');
+      setTimeout(() => toast.remove(), 400);
+    }, 900);
   }
 
   // ── Detail panel ─────────────────────────────
@@ -407,7 +414,7 @@
     const statusIcon = p.status === 'used' ? '🔵' : p.status === 'configured' ? '🟡' : '🟢';
     let html = `
       <button class="close-btn" onclick="this.closest('#detail-panel').classList.add('hidden')">✕</button>
-      <h3>${statusIcon} Port ${p.port}<span class="copied-hint">Copied</span></h3>
+      <h3>${statusIcon} Port ${p.port}</h3>
     `;
 
     html += `<div class="row"><span class="key">Status</span><span class="tag ${p.status}">${p.status}</span></div>`;

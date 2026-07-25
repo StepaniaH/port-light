@@ -161,9 +161,23 @@ h1 { font-size: 1.4rem; font-weight: 600; }
   color: var(--access); opacity: 0.7;
 }
 
-/* Running indicator (subtle pulse) */
-.port-cell.used .indicator.running { animation: pulse 2s infinite; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+/* Copy-on-click toast */
+.port-cell .copy-toast {
+  position: absolute; top: 4px; right: 6px;
+  padding: 2px 7px; border-radius: 4px;
+  background: rgba(22, 27, 34, 0.92); border: 1px solid var(--border);
+  color: var(--text); font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.02em; white-space: nowrap;
+  opacity: 0; pointer-events: none; z-index: 2;
+  transform: translateY(-2px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.port-cell .copy-toast.show {
+  opacity: 1; transform: translateY(0);
+}
+.port-cell .copy-toast.hide {
+  opacity: 0; transform: translateY(-4px);
+}
 
 /* ── Detail panel ──── */
 
@@ -174,11 +188,6 @@ h1 { font-size: 1.4rem; font-weight: 600; }
 }
 #detail-panel.hidden { display: none; }
 #detail-content h3 { font-size: 1.1rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-#detail-content .copied-hint {
-  font-size: 0.72rem; font-weight: 500; color: var(--free);
-  opacity: 0; transition: opacity 0.2s;
-}
-#detail-content .copied-hint.show { opacity: 1; }
 #detail-content .row {
   display: flex; justify-content: space-between; padding: 6px 0;
   border-bottom: 1px solid var(--border); font-size: 0.85rem;
