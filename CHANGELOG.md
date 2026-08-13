@@ -4,6 +4,19 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Added
+
+- Light theme (Settings: System / Dark / Light). Follows `prefers-color-scheme` when set to System.
+- Dockerfile `HEALTHCHECK` against `/api/health` (no extra packages).
+- `ruff` in CI; Dependabot for pip and GitHub Actions.
+- GitHub Release notes from `CHANGELOG.md` when a `v*` tag is pushed.
+- Unraid Docker template at `deploy/unraid/port-light.xml`.
+- More built-in names (Home Assistant, Plex, Immich, Lidarr, Prowlarr 9696, Port-Light 2100, …).
+
+### Changed
+
+- Homelab-oriented labels on a few shared ports (3000 Grafana, 5000 Synology DSM, 9000 Portainer HTTP, 8787 Readarr). Override with `custom_ports.json` if you use them for something else.
+
 ## 0.5.0 — 2026-08-13
 
 ### Added

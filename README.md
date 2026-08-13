@@ -44,6 +44,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Built-in names for common homelab ports (SSH, Jellyfin, Postgres, …), plus a local override file
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
+- Dark / light / system theme (settings)
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
 - Vanilla HTML/CSS/JS frontend — no npm, no build step
@@ -86,7 +87,7 @@ docker compose up -d
 
 Open `http://localhost:2100`.
 
-`/var/run/docker.sock` is powerful, even mounted read-only. Prefer a [socket proxy](docs/deployment.md#docker-socket-proxy) if the UI might be reachable by anyone you do not fully trust. More install options (Unraid-style bind mounts, reverse proxy, build from source): [docs/deployment.md](docs/deployment.md).
+`/var/run/docker.sock` is powerful, even mounted read-only. Prefer a [socket proxy](docs/deployment.md#docker-socket-proxy) if the UI might be reachable by anyone you do not fully trust. More install options (Unraid template, Podman, reverse proxy, build from source): [docs/deployment.md](docs/deployment.md).
 
 `NET_ADMIN` is **not required** in the usual bridge setup. It only helps the `ss` fallback on bare metal.
 

@@ -10,12 +10,18 @@ Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and
 - Traefik / Caddy URLs in the detail panel
 - Tests + CI; images on Docker Hub and GHCR
 
-## Next
+## Next (unreleased on `main`)
 
-- Podman / rootless notes from a working setup
-- Light theme
+- Light / system theme
+- Broader known-port table
+- Unraid XML template, Podman notes, image healthcheck
+- Ruff + Dependabot; GitHub Release from changelog on new tags
+
+## Later
+
 - Read-only multi-host agent (snapshot JSON, then UI)
-- More entries in the known-port table (PRs welcome)
+- Community Apps listing (Unraid) once a template repo exists
+- Working Podman rootless report from a real host
 
 ## Out of scope
 

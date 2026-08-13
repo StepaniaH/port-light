@@ -44,6 +44,7 @@
 - 常见 homelab 端口内置名称（SSH、Jellyfin、Postgres 等），可用本地文件覆盖
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
+- 深色 / 浅色 / 跟随系统（设置里切换）
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
 - 前端是原生 HTML/CSS/JS，没有 npm，没有构建步骤
@@ -86,7 +87,7 @@ docker compose up -d
 
 打开 `http://localhost:2100`。
 
-`/var/run/docker.sock` 即使只读也权限很高。如果 UI 可能被不完全信任的人访问，请用 [socket proxy](docs/deployment.md#docker-socket-proxy)。更多安装方式见 [docs/deployment.md](docs/deployment.md)。
+`/var/run/docker.sock` 即使只读也权限很高。如果 UI 可能被不完全信任的人访问，请用 [socket proxy](docs/deployment.md#docker-socket-proxy)。更多安装方式（Unraid 模板、Podman、反向代理、从源码构建）见 [docs/deployment.md](docs/deployment.md)。
 
 常规桥接网络**不需要** `NET_ADMIN`。它只对裸机上的 `ss` 回退路径有帮助。
 
