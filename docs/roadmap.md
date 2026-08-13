@@ -12,7 +12,7 @@ Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and
 
 ## Next (unreleased on `main`)
 
-- Light / system theme
+- Light / system theme and a Settings page (Compose env or Web UI)
 - Broader known-port table
 - Unraid XML template, Podman notes, image healthcheck
 - Ruff + Dependabot; GitHub Release from changelog on new tags

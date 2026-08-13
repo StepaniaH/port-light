@@ -171,3 +171,20 @@ If a Quadlet or rootless snippet works on your machine, open an issue or PR with
 ## Health
 
 `GET /api/health` returns process liveness plus `{ proc, docker, compose }` booleans. It does not require Basic Auth and does not include port data. `proc: false` / `docker: false` means the UI can be up while the grid is empty.
+
+## Settings (Compose and Web UI)
+
+Non-secret options (theme, range, refresh, `URL_HOST`, compose scan depth, …) can be set as environment variables **or** on the Settings page (`#/settings`). The UI writes `settings` into `/data/port_light.json`. That overlay wins on the next refresh.
+
+To keep GitOps / Compose as the only source:
+
+```yaml
+environment:
+  PORT_LIGHT_SETTINGS_SOURCE: env
+  THEME: dark
+  URL_HOST: nas.lan
+```
+
+Paths (`COMPOSE_SCAN_DIR`) and secrets (`AUTH_*`, `HIDDEN_UNLOCK_PASSWORD`) cannot be stored from the UI.
+
+Interactive API docs: `http://localhost:2100/docs`.

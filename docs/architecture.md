@@ -80,9 +80,11 @@ One file: `$PORT_LIGHT_DATA_DIR/port_light.json`. A process-wide `threading.Lock
 
 The `machines` array may still exist in older `port_light.json` files. It is not scanned and is not shown in the UI.
 
+`settings` in that file is the Web UI / API overlay. Resolution is **default < env < file**, unless `PORT_LIGHT_SETTINGS_SOURCE=env` (Compose wins, PUT returns 403). Paths and secrets (`COMPOSE_SCAN_DIR`, `AUTH_*`, `HIDDEN_UNLOCK_PASSWORD`) are env-only.
+
 ## Frontend
 
-No framework. Settings live in `localStorage` (`theme`: `system` | `dark` | `light`). An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
+No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
 
 ## Why not Kubernetes / remote Docker
 

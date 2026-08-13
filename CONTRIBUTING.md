@@ -25,6 +25,8 @@ pytest
 
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 
+Settings that belong on both Compose and the UI live in `backend/settings.py`. Secrets and filesystem paths stay env-only.
+
 The root `docker-compose.yml` **builds from source**. It bind-mounts `./custom_ports.json` — create that file first, or drop the volume.
 
 ## Style

@@ -31,6 +31,8 @@ services:
       # - AUTH_USER=admin
       # - AUTH_PASSWORD=change-me
       # - HIDDEN_UNLOCK_PASSWORD=change-me-too
+      # - URL_HOST=nas.lan
+      # - PORT_LIGHT_SETTINGS_SOURCE=auto
     healthcheck:
       test:
         [

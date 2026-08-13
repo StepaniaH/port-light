@@ -4,77 +4,103 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Port-Light</title>
+  <link rel="icon" type="image/png" href="/static/icon.png">
+  <link rel="apple-touch-icon" href="/static/icon.png">
   <script>
     try {
       var s = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
       var t = s.theme || 'system';
       if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', t);
+      if (s.grid_density) document.documentElement.setAttribute('data-density', s.grid_density);
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=10">
+  <link rel="stylesheet" href="/static/style.css?v=11">
 </head>
 <body>
   <div id="app">
-    <!-- Header -->
     <header>
-      <h1>🚦 Port-Light</h1>
-      <div id="summary"></div>
+      <a class="brand" href="#/" id="brand-link">
+        <img class="brand-icon" src="/static/icon.png" width="40" height="40" alt="">
+        <span class="brand-text">
+          <h1>Port-Light</h1>
+          <span class="brand-sub" id="app-version"></span>
+        </span>
+      </a>
+      <div class="header-right">
+        <div id="scanner-pills" class="scanner-pills" aria-label="Scanner status"></div>
+        <div id="summary"></div>
+      </div>
     </header>
 
-    <!-- Toolbar -->
-    <div id="toolbar">
-      <!-- Filter chips (multi-select) -->
-      <div class="filter-chips" id="filter-chips">
-        <button class="chip active" data-filter="all">All</button>
-        <button class="chip" data-filter="running">▶ Running</button>
-        <button class="chip" data-filter="used">🔵 In Use</button>
-        <button class="chip" data-filter="configured">🟡 Configured</button>
-        <button class="chip" data-filter="system">⚙ System</button>
-        <button class="chip" data-filter="docker">🐳 Docker</button>
-        <button class="chip" data-filter="access">🔓 Access</button>
-        <button class="chip" data-filter="udp">UDP</button>
-        <button class="chip" data-filter="localhost">localhost</button>
-        <button class="chip" data-filter="hidden">👻 Hidden</button>
+    <section id="view-grid" class="view">
+      <div id="toolbar">
+        <div class="filter-chips" id="filter-chips">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="running">▶ Running</button>
+          <button class="chip" data-filter="used">🔵 In Use</button>
+          <button class="chip" data-filter="configured">🟡 Configured</button>
+          <button class="chip" data-filter="system">⚙ System</button>
+          <button class="chip" data-filter="docker">🐳 Docker</button>
+          <button class="chip" data-filter="access">🔓 Access</button>
+          <button class="chip" data-filter="udp">UDP</button>
+          <button class="chip" data-filter="localhost">localhost</button>
+          <button class="chip" data-filter="hidden">👻 Hidden</button>
+        </div>
+
+        <select id="sort-select" class="dropdown" title="Sort">
+          <option value="port-asc">Port ↑</option>
+          <option value="port-desc">Port ↓</option>
+          <option value="name-asc">Name A-Z</option>
+          <option value="name-desc">Name Z-A</option>
+          <option value="status">Status</option>
+        </select>
+
+        <div class="range-group">
+          <input type="number" id="range-start" value="1" min="1" max="65535" class="range-input">
+          <span>–</span>
+          <input type="number" id="range-end" value="9999" min="1" max="65535" class="range-input">
+        </div>
+
+        <input type="text" id="search" placeholder="Search port, name, host…" autocomplete="off">
+
+        <div class="action-group">
+          <button id="btn-refresh" class="icon-btn" title="Refresh now">⟳</button>
+          <button id="btn-add" class="icon-btn" title="Add manual port">＋</button>
+          <button id="btn-unhide" class="icon-btn" title="Show ports hidden from the grid">👁</button>
+          <a id="btn-settings" class="icon-btn" href="#/settings" title="Settings">⚙</a>
+        </div>
       </div>
 
-      <!-- Sort -->
-      <select id="sort-select" class="dropdown" title="Sort">
-        <option value="port-asc">Port ↑</option>
-        <option value="port-desc">Port ↓</option>
-        <option value="name-asc">Name A-Z</option>
-        <option value="name-desc">Name Z-A</option>
-        <option value="status">Status</option>
-      </select>
+      <div id="grid"></div>
+    </section>
 
-      <!-- Range -->
-      <div class="range-group">
-        <input type="number" id="range-start" value="1" min="1" max="65535" class="range-input">
-        <span>–</span>
-        <input type="number" id="range-end" value="9999" min="1" max="65535" class="range-input">
+    <section id="view-settings" class="view hidden">
+      <div class="settings-page">
+        <div class="settings-toolbar">
+          <a class="btn-secondary" href="#/">← Grid</a>
+          <h2>Settings</h2>
+        </div>
+        <p class="settings-lead" id="settings-lead"></p>
+        <form id="settings-form">
+          <div id="settings-fields"></div>
+          <fieldset class="settings-group">
+            <legend>Host (Compose / env only)</legend>
+            <p class="field-help">Secrets and filesystem paths stay in the container environment. They are not stored in the Web UI.</p>
+            <div id="settings-env-only"></div>
+          </fieldset>
+          <div class="settings-actions">
+            <span id="settings-status"></span>
+            <button type="submit" class="btn-primary" id="settings-save">Save</button>
+          </div>
+        </form>
       </div>
+    </section>
 
-      <!-- Search -->
-      <input type="text" id="search" placeholder="🔍 Search port number…" autocomplete="off">
-
-      <!-- Action buttons -->
-      <div class="action-group">
-        <button id="btn-refresh" class="icon-btn" title="Refresh now">⟳</button>
-        <button id="btn-add" class="icon-btn" title="Add manual port">＋</button>
-        <button id="btn-unhide" class="icon-btn" title="Show ports hidden from the grid">👁</button>
-        <button id="btn-settings" class="icon-btn" title="Settings">⚙</button>
-      </div>
-    </div>
-
-    <!-- Grid -->
-    <div id="grid"></div>
-
-    <!-- Detail panel -->
     <div id="detail-panel" class="hidden">
       <div id="detail-content"></div>
     </div>
 
-    <!-- Add port modal -->
     <div id="add-modal" class="modal hidden">
       <div class="modal-content">
         <h3>＋ Add Manual Port</h3>
@@ -87,7 +113,6 @@
       </div>
     </div>
 
-    <!-- Unhide modal (password) -->
     <div id="unhide-modal" class="modal hidden">
       <div class="modal-content">
         <h3>Show ports hidden from the grid</h3>
@@ -99,41 +124,8 @@
         </div>
       </div>
     </div>
-
-    <!-- Settings modal -->
-    <div id="settings-modal" class="modal hidden">
-      <div class="modal-content wide">
-        <h3>⚙ Settings</h3>
-        <label class="toggle-row">
-          <span>Show status text on cards</span>
-          <input type="checkbox" id="setting-status-text">
-        </label>
-        <label class="toggle-row">
-          <span>Show access port badge</span>
-          <input type="checkbox" id="setting-access-badge" checked>
-        </label>
-        <label class="toggle-row">
-          <span>Auto-refresh (5s)</span>
-          <input type="checkbox" id="setting-autorefresh" checked>
-        </label>
-        <label class="toggle-row">
-          <span>Copy port number on click</span>
-          <input type="checkbox" id="setting-copy-on-click" checked>
-        </label>
-        <label>Theme
-          <select id="setting-theme" class="dropdown" style="width:100%;margin-top:4px">
-            <option value="system">System</option>
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-          </select>
-        </label>
-        <div class="modal-actions">
-          <button id="settings-close" class="btn-primary">Done</button>
-        </div>
-      </div>
-    </div>
   </div>
 
-  <script src="/static/app.js?v=10"></script>
+  <script src="/static/app.js?v=11"></script>
 </body>
 </html>

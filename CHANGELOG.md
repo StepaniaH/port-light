@@ -7,6 +7,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Added
 
 - Light theme (Settings: System / Dark / Light). Follows `prefers-color-scheme` when set to System.
+- Settings page (`#/settings`) with the same knobs as Compose env. Saves persist in the data volume; `PORT_LIGHT_SETTINGS_SOURCE=env` locks the UI.
+- `GET`/`PUT /api/settings`, `GET /api/ports/{port}`, `GET`/`PATCH /api/manual-ports`, `GET /api/known-ports/{port}`.
+- Guessed access URLs can use `URL_HOST` / `URL_SCHEME`.
+- Project icon (favicon, header, README).
 - UDP and localhost filter chips; protocol badge on non-TCP cards.
 - `/` focuses search; Escape closes the detail panel and modals.
 - Dockerfile `HEALTHCHECK` against `/api/health` (no extra packages).

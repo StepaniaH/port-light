@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.png" width="96" height="96" alt="Port-Light">
+</p>
+
 # Port-Light
 
 本机端口占用的红绿灯看板。给跑很多 Compose 栈、却总记不清端口的 homelab 用户。
@@ -44,7 +48,7 @@
 - 常见 homelab 端口内置名称（SSH、Jellyfin、Postgres 等），可用本地文件覆盖
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
-- 深色 / 浅色 / 跟随系统（设置里切换）
+- 深色 / 浅色 / 跟随系统、紧凑网格等：设置页可改，也可以写在 Compose 环境变量里
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
 - 前端是原生 HTML/CSS/JS，没有 npm，没有构建步骤
@@ -95,15 +99,23 @@ docker compose up -d
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `COMPOSE_SCAN_DIR` | `/compose` | 扫描 `compose.y*ml` / `docker-compose.y*ml` 的目录 |
+| `COMPOSE_SCAN_DIR` | `/compose` | 扫描 compose 文件的目录（只能用环境变量） |
 | `COMPOSE_SCAN_DEPTH` | `4` | 扫描子目录的最大深度 |
 | `COMPOSE_SCAN_MAX_FILES` | `400` | 每次刷新最多解析的 compose 文件数 |
 | `PORT_RANGE_START` | `1` | **空闲数量**统计的起始端口 |
 | `PORT_RANGE_END` | `9999` | 上述区间的结束（不会把网格填满绿格） |
-| `PORT_LIGHT_DATA_DIR` | `/data` | 手动端口、隐藏列表等 JSON |
-| `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称 |
-| `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。 |
-| `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。 |
+| `PORT_LIGHT_DATA_DIR` | `/data` | 手动端口、隐藏列表、已保存设置（JSON） |
+| `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称（只能用环境变量） |
+| `THEME` | `system` | `system` / `dark` / `light` |
+| `GRID_DENSITY` | `comfortable` | `comfortable` 或 `compact` |
+| `REFRESH_MS` | `5000` | 自动刷新间隔 |
+| `URL_HOST` | 空 | 猜测链接里用的主机名 |
+| `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
+| `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 |
+| `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。只能用环境变量。 |
+| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页保存的值覆盖 env。`env`：只认 Compose，设置页只读。 |
+
+上表里除路径和密钥外，也可以在 Web UI 的 **Settings** 里改，写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
 
 把 [custom_ports.example.json](custom_ports.example.json) 复制为 `custom_ports.json`（已 gitignore）。分类：`system`、`web`、`database`、`message`、`proxy`、`vpn`、`selfhosted`、`dev`、`infra`、`gaming`。
 

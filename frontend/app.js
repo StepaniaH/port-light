@@ -3,7 +3,6 @@
 (function () {
   'use strict';
 
-  const REFRESH_MS = 5000;
   let currentData = null;
   let activeFilters = new Set(['all']);
   let sortMode = 'port-asc';
@@ -13,12 +12,27 @@
   let rangeStart = 1;
   let rangeEnd = 9999;
   let showHidden = false;
-  let settings = { statusText: false, accessBadge: true, autoRefresh: true, copyOnClick: true, theme: 'system' };
+  let settings = {
+    theme: 'system',
+    grid_density: 'comfortable',
+    show_status_text: false,
+    show_access_badge: true,
+    show_protocol_badge: true,
+    copy_on_click: true,
+    auto_refresh: true,
+    refresh_ms: 5000,
+    port_range_start: 1,
+    port_range_end: 9999,
+    guess_urls: true,
+    url_host: '',
+    url_scheme: 'auto',
+  };
+  let settingsDoc = null;
   let refreshTimer = null;
-  let meta = { hidden_unlock_required: false, hidden_ports_withheld: false, version: '' };
+  let meta = { hidden_unlock_required: false, hidden_ports_withheld: false, version: '', settings_readonly: false };
   let hiddenUnlock = sessionStorage.getItem('port-light-hidden-unlock') || '';
+  let route = { name: 'grid' };
 
-  // DOM
   const grid = document.getElementById('grid');
   const summary = document.getElementById('summary');
   const detailPanel = document.getElementById('detail-panel');
@@ -27,19 +41,28 @@
   const rangeStartInput = document.getElementById('range-start');
   const rangeEndInput = document.getElementById('range-end');
   const sortSelect = document.getElementById('sort-select');
+  const GROUP_LABELS = {
+    appearance: 'Appearance',
+    grid: 'Grid',
+    scanning: 'Compose scan',
+    links: 'Access URLs',
+  };
 
-  // Load settings from localStorage
   try {
-    const saved = localStorage.getItem('port-light-settings');
-    if (saved) settings = { ...settings, ...JSON.parse(saved) };
+    const cached = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
+    if (cached.theme) settings.theme = cached.theme;
+    if (cached.grid_density) settings.grid_density = cached.grid_density;
   } catch (e) {}
-  document.getElementById('setting-status-text').checked = settings.statusText;
-  document.getElementById('setting-access-badge').checked = settings.accessBadge;
-  document.getElementById('setting-autorefresh').checked = settings.autoRefresh;
-  document.getElementById('setting-copy-on-click').checked = settings.copyOnClick;
-  if (!settings.theme) settings.theme = 'system';
-  document.getElementById('setting-theme').value = settings.theme;
-  applyTheme();
+  try {
+    const view = JSON.parse(localStorage.getItem('port-light-view') || '{}');
+    if (view.sort) sortMode = view.sort;
+    if (Array.isArray(view.filters) && view.filters.length) activeFilters = new Set(view.filters);
+  } catch (e) {}
+  sortSelect.value = sortMode;
+  document.querySelectorAll('.chip').forEach(function (c) {
+    c.classList.toggle('active', activeFilters.has(c.dataset.filter));
+  });
+  applyAppearance();
 
   function applyTheme() {
     var t = settings.theme || 'system';
@@ -48,15 +71,62 @@
     }
     document.documentElement.setAttribute('data-theme', t);
   }
+
+  function applyAppearance() {
+    applyTheme();
+    document.documentElement.setAttribute('data-density', settings.grid_density || 'comfortable');
+    try {
+      localStorage.setItem('port-light-settings', JSON.stringify({
+        theme: settings.theme,
+        grid_density: settings.grid_density,
+      }));
+    } catch (e) {}
+  }
+
+  function saveView() {
+    try {
+      localStorage.setItem('port-light-view', JSON.stringify({
+        sort: sortMode,
+        filters: Array.from(activeFilters),
+      }));
+    } catch (e) {}
+  }
+
   try {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
       if ((settings.theme || 'system') === 'system') applyTheme();
     });
   } catch (e) {}
 
-  // ── Event listeners ──────────────────────────
+  function parseRoute() {
+    const raw = (location.hash || '#/').replace(/^#\/?/, '');
+    const parts = raw.split('/').filter(Boolean);
+    if (parts[0] === 'settings') return { name: 'settings' };
+    if (parts[0] === 'port' && /^\d+$/.test(parts[1] || '')) {
+      return { name: 'port', port: parseInt(parts[1], 10) };
+    }
+    return { name: 'grid' };
+  }
 
-  // Filter chips (multi-select)
+  function applyRoute() {
+    route = parseRoute();
+    const onSettings = route.name === 'settings';
+    document.getElementById('view-grid').classList.toggle('hidden', onSettings);
+    document.getElementById('view-settings').classList.toggle('hidden', !onSettings);
+    document.getElementById('btn-settings').classList.toggle('active', onSettings);
+    if (onSettings) {
+      closeDetail(true);
+      loadSettingsPage();
+      return;
+    }
+    if (route.name === 'port') {
+      selectedPort = route.port;
+      if (currentData) render();
+    }
+  }
+
+  window.addEventListener('hashchange', applyRoute);
+
   document.getElementById('filter-chips').addEventListener('click', e => {
     const chip = e.target.closest('.chip');
     if (!chip) return;
@@ -69,7 +139,6 @@
       chip.classList.toggle('active');
       if (chip.classList.contains('active')) activeFilters.add(f);
       else activeFilters.delete(f);
-      // If nothing selected, revert to all
       if (activeFilters.size === 0) {
         activeFilters.add('all');
         document.querySelector('.chip[data-filter="all"]').classList.add('active');
@@ -77,10 +146,15 @@
         document.querySelector('.chip[data-filter="all"]').classList.remove('active');
       }
     }
+    saveView();
     render();
   });
 
-  sortSelect.addEventListener('change', e => { sortMode = e.target.value; render(); });
+  sortSelect.addEventListener('change', e => {
+    sortMode = e.target.value;
+    saveView();
+    render();
+  });
 
   searchInput.addEventListener('input', e => {
     const val = e.target.value.trim();
@@ -101,7 +175,6 @@
     tick();
   }
 
-  // Action buttons
   document.getElementById('btn-refresh').addEventListener('click', () => { tick(); });
 
   document.getElementById('btn-add').addEventListener('click', () => {
@@ -128,54 +201,48 @@
   });
   document.getElementById('unhide-confirm').addEventListener('click', unlockHidden);
 
-  document.getElementById('btn-settings').addEventListener('click', () => {
-    document.getElementById('settings-modal').classList.remove('hidden');
-  });
-  document.getElementById('settings-close').addEventListener('click', () => {
-    const m = document.getElementById('settings-modal');
-    m.classList.add('hidden');
-    settings.statusText = document.getElementById('setting-status-text').checked;
-    settings.accessBadge = document.getElementById('setting-access-badge').checked;
-    settings.autoRefresh = document.getElementById('setting-autorefresh').checked;
-    settings.copyOnClick = document.getElementById('setting-copy-on-click').checked;
-    settings.theme = document.getElementById('setting-theme').value;
-    localStorage.setItem('port-light-settings', JSON.stringify(settings));
-    applyTheme();
-    setupRefresh();
-    render();
-  });
-  document.getElementById('setting-theme').addEventListener('change', function () {
-    settings.theme = document.getElementById('setting-theme').value;
-    localStorage.setItem('port-light-settings', JSON.stringify(settings));
-    applyTheme();
-  });
-
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      closeDetail();
       document.querySelectorAll('.modal').forEach(function (m) { m.classList.add('hidden'); });
+      if (route.name === 'settings') {
+        location.hash = '#/';
+        return;
+      }
+      closeDetail();
       return;
     }
     if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (route.name === 'settings') return;
     e.preventDefault();
     searchInput.focus();
   });
 
-  // Close modals on backdrop click
   document.querySelectorAll('.modal').forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.classList.add('hidden'); });
   });
 
-  // Click outside detail to close
   document.addEventListener('click', e => {
+    if (route.name === 'settings') return;
     if (!detailPanel.contains(e.target) && !e.target.closest('.port-cell')) {
       closeDetail();
     }
   });
 
-  // ── Data fetch ───────────────────────────────
+  document.getElementById('settings-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    saveSettingsPage();
+  });
+
+  document.getElementById('settings-fields').addEventListener('change', function (e) {
+    const field = e.target && e.target.name;
+    if (field === 'theme' || field === 'grid_density') {
+      if (field === 'theme') settings.theme = e.target.value;
+      if (field === 'grid_density') settings.grid_density = e.target.value;
+      applyAppearance();
+    }
+  });
 
   function apiHeaders(extra) {
     const headers = Object.assign({}, extra || {});
@@ -198,6 +265,47 @@
     } catch (err) {
       console.error('meta error:', err);
     }
+    const ver = document.getElementById('app-version');
+    if (ver && meta.version) ver.textContent = 'v' + meta.version;
+  }
+
+  async function fetchHealth() {
+    try {
+      const res = await api('/api/health');
+      if (!res.ok) return;
+      const body = await res.json();
+      renderScanners(body.scanners || {});
+    } catch (err) {}
+  }
+
+  function renderScanners(scanners) {
+    const host = document.getElementById('scanner-pills');
+    const items = [
+      ['proc', 'Listen table'],
+      ['docker', 'Docker'],
+      ['compose', 'Compose'],
+    ];
+    host.innerHTML = items.map(function (pair) {
+      const ok = !!scanners[pair[0]];
+      return '<span class="pill' + (ok ? ' ok' : ' bad') + '" title="' + pair[1] + '">' +
+        '<span class="pill-dot"></span>' + pair[1] + '</span>';
+    }).join('');
+  }
+
+  async function fetchSettings() {
+    const res = await api('/api/settings');
+    if (!res.ok) return null;
+    return res.json();
+  }
+
+  function applyServerSettings(doc) {
+    settingsDoc = doc;
+    settings = Object.assign({}, settings, doc.values || {});
+    rangeStart = settings.port_range_start;
+    rangeEnd = settings.port_range_end;
+    rangeStartInput.value = rangeStart;
+    rangeEndInput.value = rangeEnd;
+    applyAppearance();
   }
 
   async function fetchPorts() {
@@ -213,22 +321,140 @@
   }
 
   function tick() {
+    if (route.name === 'settings') return;
     fetchPorts().then(data => {
       if (data) { currentData = data; render(); }
     });
+    fetchHealth();
   }
 
   function setupRefresh() {
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-    if (settings.autoRefresh) {
+    if (settings.auto_refresh) {
       tick();
-      refreshTimer = setInterval(tick, REFRESH_MS);
+      refreshTimer = setInterval(tick, settings.refresh_ms || 5000);
+    } else {
+      tick();
     }
   }
 
-  fetchMeta().then(() => setupRefresh());
+  function loadSettingsPage() {
+    fetchSettings().then(function (doc) {
+      if (!doc) return;
+      settingsDoc = doc;
+      renderSettingsForm(doc);
+    });
+  }
 
-  // ── Render ───────────────────────────────────
+  function renderSettingsForm(doc) {
+    const values = doc.values || {};
+    const fields = doc.fields || [];
+    const host = document.getElementById('settings-fields');
+    const lead = document.getElementById('settings-lead');
+    const saveBtn = document.getElementById('settings-save');
+    lead.textContent = doc.readonly
+      ? 'Locked by PORT_LIGHT_SETTINGS_SOURCE=env (or SETTINGS_READONLY). Change values in Compose and recreate the container.'
+      : 'Saved values live in the data volume and override Compose env for the same key. Set PORT_LIGHT_SETTINGS_SOURCE=env to make Compose the only source.';
+    saveBtn.disabled = !!doc.readonly;
+
+    const groups = [];
+    const byGroup = {};
+    fields.forEach(function (f) {
+      if (!byGroup[f.group]) {
+        byGroup[f.group] = [];
+        groups.push(f.group);
+      }
+      byGroup[f.group].push(f);
+    });
+
+    host.innerHTML = groups.map(function (g) {
+      const rows = byGroup[g].map(function (f) {
+        return renderField(f, values[f.key], doc.readonly);
+      }).join('');
+      return '<fieldset class="settings-group"><legend>' + escapeHtml(GROUP_LABELS[g] || g) + '</legend>' + rows + '</fieldset>';
+    }).join('');
+
+    const envHost = document.getElementById('settings-env-only');
+    const env = doc.env_only || {};
+    envHost.innerHTML = [
+      envRow('COMPOSE_SCAN_DIR', env.compose_scan_dir),
+      envRow('CUSTOM_PORTS_FILE', env.custom_ports_file),
+      envRow('PORT_LIGHT_DATA_DIR', env.data_dir),
+      envRow('AUTH_USER / AUTH_PASSWORD', env.auth_required ? 'configured' : 'unset (open LAN)'),
+      envRow('HIDDEN_UNLOCK_PASSWORD', env.hidden_unlock_required ? 'configured' : 'unset'),
+      envRow('PORT_LIGHT_SETTINGS_SOURCE', doc.source),
+    ].join('');
+  }
+
+  function envRow(label, value) {
+    return '<div class="setting-row readonly"><div class="setting-copy"><span class="setting-label">' +
+      escapeHtml(label) + '</span></div><code class="setting-value">' + escapeHtml(String(value == null ? '' : value)) +
+      '</code></div>';
+  }
+
+  function renderField(f, value, readonly) {
+    const origin = f.origin || 'default';
+    const disabled = readonly ? ' disabled' : '';
+    let control = '';
+    if (f.type === 'bool') {
+      control = '<input type="checkbox" name="' + f.key + '"' + (value ? ' checked' : '') + disabled + '>';
+    } else if (f.type === 'choice') {
+      const opts = (f.choices || []).map(function (c) {
+        return '<option value="' + escapeHtml(c) + '"' + (c === value ? ' selected' : '') + '>' + escapeHtml(c) + '</option>';
+      }).join('');
+      control = '<select name="' + f.key + '" class="dropdown"' + disabled + '>' + opts + '</select>';
+    } else if (f.type === 'int') {
+      const min = f.min != null ? ' min="' + f.min + '"' : '';
+      const max = f.max != null ? ' max="' + f.max + '"' : '';
+      control = '<input type="number" name="' + f.key + '" value="' + escapeHtml(String(value)) + '"' + min + max + disabled + '>';
+    } else {
+      control = '<input type="text" name="' + f.key + '" value="' + escapeHtml(String(value || '')) +
+        '" placeholder="optional"' + disabled + '>';
+    }
+    return '<label class="setting-row">' +
+      '<span class="setting-copy"><span class="setting-label">' + escapeHtml(f.label) +
+      '</span><span class="origin-tag" title="Source">' + escapeHtml(origin) + '</span>' +
+      '<span class="field-help">' + escapeHtml(f.help) + ' <code>' + escapeHtml(f.env) + '</code></span></span>' +
+      control + '</label>';
+  }
+
+  async function saveSettingsPage() {
+    const status = document.getElementById('settings-status');
+    const form = document.getElementById('settings-form');
+    const patch = {};
+    (settingsDoc && settingsDoc.fields ? settingsDoc.fields : []).forEach(function (f) {
+      const el = form.elements[f.key];
+      if (!el || el.disabled) return;
+      if (f.type === 'bool') patch[f.key] = el.checked;
+      else if (f.type === 'int') patch[f.key] = parseInt(el.value, 10);
+      else patch[f.key] = el.value;
+    });
+    status.textContent = 'Saving…';
+    const res = await api('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    const body = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      status.textContent = body.detail || ('HTTP ' + res.status);
+      return;
+    }
+    applyServerSettings(body);
+    renderSettingsForm(body);
+    setupRefresh();
+    status.textContent = 'Saved.';
+  }
+
+  fetchMeta()
+    .then(fetchSettings)
+    .then(function (doc) {
+      if (doc) applyServerSettings(doc);
+    })
+    .then(function () {
+      applyRoute();
+      setupRefresh();
+    });
 
   function render() {
     if (!currentData) return;
@@ -237,7 +463,7 @@
     if (selectedPort !== null) {
       const entry = currentData.ports.find(p => p.port === selectedPort);
       if (entry) renderDetail(entry);
-      else closeDetail();
+      else if (route.name !== 'port') closeDetail(true);
     }
   }
 
@@ -247,7 +473,6 @@
       <span class="stat"><span class="dot configured"></span> Configured: ${s.configured}</span>
       <span class="stat"><span class="dot free"></span> Free: ${s.free}</span>
       ${s.hidden > 0 ? `<span class="stat"><span class="dot hidden"></span> Hidden: ${s.hidden}${s.hidden_locked ? ' (locked)' : ''}</span>` : ''}
-      <span class="stat" style="color:var(--text-dim)">Range: ${s.range_start}-${s.range_end}</span>
     `;
   }
 
@@ -260,27 +485,21 @@
     return '';
   }
 
-  // ── Smart search context ─────────────────────
-
   function buildSearchContext(ports, hitPort) {
-    // If hitPort is free (not in ports list), show it as green + nearby free ports
     const allPortNums = new Set(ports.map(p => p.port));
     const hitExists = allPortNums.has(hitPort);
     const result = [];
 
     if (!hitExists) {
-      // Port is free — show it as a synthetic free entry
       result.push({ port: hitPort, status: 'free', _synthetic: true, known_service: getKnownForFree(hitPort) });
     }
 
-    // Gather context: 3 free ports before and after the hit
     let beforeFree = 0, afterFree = 0;
     for (let p = hitPort - 1; p >= Math.max(1, hitPort - 50) && beforeFree < 3; p--) {
       if (!allPortNums.has(p)) {
         result.unshift({ port: p, status: 'free', _synthetic: true, known_service: getKnownForFree(p) });
         beforeFree++;
       } else {
-        // Include occupied port in context
         const entry = ports.find(x => x.port === p);
         if (entry) result.unshift(entry);
       }
@@ -295,16 +514,12 @@
       }
     }
 
-    // If hit exists, add it
     if (hitExists) {
       const hit = ports.find(p => p.port === hitPort);
       result.push(hit);
     }
 
-    // Sort by port number
     result.sort((a, b) => a.port - b.port);
-
-    // Dedupe
     const seen = new Set();
     return result.filter(p => {
       if (seen.has(p.port)) return false;
@@ -314,15 +529,12 @@
   }
 
   function getKnownForFree(port) {
-    // Check if currentData has known_service for this port (from API)
     if (currentData && currentData.ports) {
       const found = currentData.ports.find(p => p.port === port);
       if (found && found.known_service) return found.known_service;
     }
     return null;
   }
-
-  // ── Filtering ────────────────────────────────
 
   function matchesFilter(p) {
     if (activeFilters.has('all')) return true;
@@ -362,8 +574,6 @@
     return matched;
   }
 
-  // ── Sorting ──────────────────────────────────
-
   function sortPorts(arr) {
     switch (sortMode) {
       case 'port-desc': return arr.sort((a, b) => b.port - a.port);
@@ -376,20 +586,16 @@
           const order = { used: 0, configured: 1, free: 2 };
           return (order[a.status] || 9) - (order[b.status] || 9) || a.port - b.port;
         });
-      default: return arr.sort((a, b) => a.port - b.port); // port-asc
+      default: return arr.sort((a, b) => a.port - b.port);
     }
   }
-
-  // ── Grid render ──────────────────────────────
 
   function renderGrid(ports) {
     let displayPorts;
 
-    // Smart search: if searching for a specific port number
     if (searchPortNum !== null) {
       displayPorts = buildSearchContext(ports, searchPortNum);
     } else {
-      // Normal filtering
       displayPorts = ports.filter(p => {
         if (p.port < rangeStart || p.port > rangeEnd) return false;
         if (!showHidden && p.is_hidden) return false;
@@ -428,21 +634,19 @@
       const label = getCellLabel(p);
       const labelText = label ? `<div class="port-label">${escapeHtml(label)}</div>` : '';
 
-      // Status text
       let statusText = '';
-      if (settings.statusText) {
+      if (settings.show_status_text) {
         const st = p.status === 'used' ? 'USE' : p.status === 'configured' ? 'CFG' : '';
         if (st) statusText = `<div class="status-text">${st}</div>`;
       }
 
-      // Access badge
       let accessBadge = '';
-      if (settings.accessBadge && p.known_service && p.known_service.is_access_port) {
+      if (settings.show_access_badge && p.known_service && p.known_service.is_access_port) {
         accessBadge = '<div class="access-badge">🔓</div>';
       }
 
       let protoBadge = '';
-      if (p.protocol && p.protocol !== 'tcp') {
+      if (settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp') {
         protoBadge = `<div class="proto-badge">${escapeHtml(p.protocol)}</div>`;
       }
 
@@ -462,9 +666,10 @@
       el.addEventListener('click', () => {
         const port = parseInt(el.dataset.port, 10);
         selectedPort = port;
+        location.hash = '#/port/' + port;
         const entry = displayPorts.find(p => p.port === port);
         if (entry) renderDetail(entry);
-        if (settings.copyOnClick) {
+        if (settings.copy_on_click) {
           navigator.clipboard.writeText(String(port)).then(() => {
             showCopyToast(el);
           }).catch(() => {});
@@ -488,13 +693,11 @@
     }, 900);
   }
 
-  // ── Detail panel ─────────────────────────────
-
   function renderDetail(p) {
     detailPanel.classList.remove('hidden');
     const statusIcon = p.status === 'used' ? '🔵' : p.status === 'configured' ? '🟡' : '🟢';
     let html = `
-      <button class="close-btn" onclick="this.closest('#detail-panel').classList.add('hidden')">✕</button>
+      <button class="close-btn" onclick="location.hash='#/'">✕</button>
       <h3>${statusIcon} Port ${p.port}</h3>
     `;
 
@@ -512,11 +715,8 @@
       }
     }
 
-    // Known service
     if (p.known_service) {
       html += `<div class="info-box"><span class="info-name">${escapeHtml(p.known_service.name)}</span> — ${escapeHtml(p.known_service.description)}</div>`;
-
-      // Access port info
       if (p.known_service.is_access_port !== undefined) {
         const isAccess = p.known_service.is_access_port;
         html += `<div class="info-box access-box"><span class="info-name">${isAccess ? '🔓 Access Port' : '🔒 Internal Port'}</span>`;
@@ -524,12 +724,10 @@
       }
     }
 
-    // Conflict
     if (p.conflict) {
       html += `<div class="info-box conflict-box"><span class="info-name">⚠ Port Conflict</span> — Declared in ${p.compose_configs.length} compose files.</div>`;
     }
 
-    // Containers
     if (p.containers && p.containers.length > 0) {
       html += '<div class="section-title">Containers</div>';
       for (const c of p.containers) {
@@ -544,7 +742,6 @@
       }
     }
 
-    // Compose configs
     if (p.compose_configs && p.compose_configs.length > 0) {
       html += '<div class="section-title">Compose Configs</div>';
       for (const cc of p.compose_configs) {
@@ -557,12 +754,10 @@
       }
     }
 
-    // Manual label
     if (p.manual_label) {
       html += `<div class="info-box"><span class="info-name">Manual Entry</span> — ${escapeHtml(p.manual_label)}</div>`;
     }
 
-    // Action buttons
     html += '<div class="action-row">';
     if (p.is_hidden) {
       html += `<button class="btn-unhide" onclick="window._portLightUnhide(${p.port})">Unhide</button>`;
@@ -577,12 +772,11 @@
     detailContent.innerHTML = html;
   }
 
-  function closeDetail() {
+  function closeDetail(skipHash) {
     detailPanel.classList.add('hidden');
     selectedPort = null;
+    if (!skipHash && route.name === 'port') location.hash = '#/';
   }
-
-  // ── Actions (global for inline onclick) ──────
 
   window._portLightHide = async function(port) {
     await api(`/api/hidden/${port}`, { method: 'POST' });
@@ -596,8 +790,6 @@
     await api(`/api/manual-ports/${port}`, { method: 'DELETE' });
     tick();
   };
-
-  // ── Add manual port ──────────────────────────
 
   async function addManualPort() {
     const port = parseInt(document.getElementById('add-port').value, 10);
@@ -615,8 +807,6 @@
     document.getElementById('add-label').value = '';
     tick();
   }
-
-  // ── Unlock hidden ────────────────────────────
 
   async function unlockHidden() {
     const password = document.getElementById('unhide-password').value;
@@ -643,12 +833,11 @@
     render();
   }
 
-  // ── Utils ────────────────────────────────────
-
   function escapeHtml(text) {
+    if (text === 0) return '0';
     if (!text) return '';
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = String(text);
     return div.innerHTML;
   }
 

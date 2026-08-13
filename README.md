@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.png" width="96" height="96" alt="Port-Light">
+</p>
+
 # Port-Light
 
 A local web dashboard that shows **which host ports are taken**, as a traffic-light grid. Built for homelabbers who run many Compose stacks and keep losing track of bindings.
@@ -44,7 +48,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Built-in names for common homelab ports (SSH, Jellyfin, Postgres, …), plus a local override file
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
-- Dark / light / system theme (settings)
+- Dark / light / system theme, compact grid, and other options on the Settings page (also via Compose env)
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
 - Vanilla HTML/CSS/JS frontend — no npm, no build step
@@ -95,15 +99,23 @@ Open `http://localhost:2100`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `COMPOSE_SCAN_DIR` | `/compose` | Directory to scan for `compose.y*ml` / `docker-compose.y*ml` |
+| `COMPOSE_SCAN_DIR` | `/compose` | Directory to scan for `compose.y*ml` / `docker-compose.y*ml` (env only) |
 | `COMPOSE_SCAN_DEPTH` | `4` | Max subdirectory depth under the scan dir |
 | `COMPOSE_SCAN_MAX_FILES` | `400` | Cap on compose files parsed per refresh |
 | `PORT_RANGE_START` | `1` | Start of the range used for the **free** summary count |
 | `PORT_RANGE_END` | `9999` | End of that range (does not fill the grid with green cells) |
-| `PORT_LIGHT_DATA_DIR` | `/data` | Manual ports and hidden-port list (JSON) |
-| `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | Extra / overriding port names |
-| `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. |
-| `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. |
+| `PORT_LIGHT_DATA_DIR` | `/data` | Manual ports, hidden list, and saved settings (JSON) |
+| `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | Extra / overriding port names (env only) |
+| `THEME` | `system` | `system` / `dark` / `light` |
+| `GRID_DENSITY` | `comfortable` | `comfortable` or `compact` |
+| `REFRESH_MS` | `5000` | Auto-refresh interval |
+| `URL_HOST` | empty | Hostname used in guessed `http(s)://` links |
+| `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
+| `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. Env only. |
+| `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. Env only. |
+| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI save wins over env. `env`: Compose is the only source and the Settings page is read-only. |
+
+Most of the table (except paths and secrets) can also be changed on **Settings** in the UI. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
 
 Copy [custom_ports.example.json](custom_ports.example.json) to `custom_ports.json` (gitignored). Categories: `system`, `web`, `database`, `message`, `proxy`, `vpn`, `selfhosted`, `dev`, `infra`, `gaming`.
 

@@ -13,7 +13,7 @@
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:2100]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/StepaniaH/port-light/main/deploy/unraid/port-light.xml</TemplateURL>
-  <Icon/>
+  <Icon>https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
@@ -30,5 +30,6 @@
   <Config Name="AUTH_PASSWORD" Target="AUTH_PASSWORD" Default="" Description="Optional HTTP Basic Auth password" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="HIDDEN_UNLOCK_PASSWORD" Target="HIDDEN_UNLOCK_PASSWORD" Default="" Description="Optional password to reveal hidden ports in the API" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="COMPOSE_SCAN_DIR" Target="COMPOSE_SCAN_DIR" Default="/compose" Description="In-container compose scan path" Type="Variable" Display="advanced" Required="false" Mask="false">/compose</Config>
-  <Config Name="COMPOSE_SCAN_DEPTH" Target="COMPOSE_SCAN_DEPTH" Default="4" Description="How deep to walk for compose files" Type="Variable" Display="advanced" Required="false" Mask="false">4</Config>
+  <Config Name="URL_HOST" Target="URL_HOST" Default="" Description="Hostname for guessed http(s) links (optional)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="THEME" Target="THEME" Default="system" Description="system, dark, or light" Type="Variable" Display="advanced" Required="false" Mask="false">system</Config>
 </Container>
