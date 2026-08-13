@@ -158,30 +158,57 @@ def _classify(
     hidden_locked: bool,
 ) -> dict:
     listening_map: dict[int, dict] = {}
+    inode_to_port: dict[int, int] = {}
     for lp in listening:
-        listening_map.setdefault(lp.port, {
-            "protocol": lp.protocol,
-            "ip": lp.ip,
-            "ips": [lp.ip] if lp.ip else [],
-            "process": lp.process_name,
-            "pid": lp.pid,
-        })
-        existing = listening_map[lp.port]
-        if lp.ip and lp.ip not in existing.get("ips", []):
-            existing.setdefault("ips", []).append(lp.ip)
+        if lp.inode:
+            inode_to_port[lp.inode] = lp.port
+        rec = listening_map.get(lp.port)
+        if rec is None:
+            listening_map[lp.port] = {
+                "protocol": _proto_label([lp.protocol]),
+                "protocols": [lp.protocol],
+                "ip": lp.ip,
+                "ips": [lp.ip] if lp.ip else [],
+                "process": lp.process_name,
+                "pid": lp.pid,
+            }
+            continue
+        if lp.protocol and lp.protocol not in rec["protocols"]:
+            rec["protocols"].append(lp.protocol)
+            rec["protocol"] = _proto_label(rec["protocols"])
+        if lp.ip and lp.ip not in rec["ips"]:
+            rec["ips"].append(lp.ip)
+        if lp.process_name and not rec["process"]:
+            rec["process"] = lp.process_name
+            rec["pid"] = lp.pid
 
     container_map: dict[int, list[dict]] = {}
+
+    def _add_container(port: int, c, extra: dict | None = None) -> None:
+        payload = {
+            "name": c.name,
+            "status": c.status,
+            "image": c.image,
+            "compose_project": c.compose_project,
+            "compose_service": c.compose_service,
+            "network_mode": c.network_mode,
+            "urls": list(c.urls or []),
+        }
+        if extra:
+            payload.update(extra)
+        lst = container_map.setdefault(port, [])
+        if any(x["name"] == c.name for x in lst):
+            return
+        lst.append(payload)
+
     for c in containers:
         for p in c.ports:
-            container_map.setdefault(p["host_port"], []).append({
-                "name": c.name,
-                "status": c.status,
-                "image": c.image,
-                "compose_project": c.compose_project,
-                "compose_service": c.compose_service,
-                "network_mode": getattr(c, "network_mode", None),
-                "urls": getattr(c, "urls", None) or [],
-            })
+            _add_container(p["host_port"], c)
+        if c.network_mode == "host" and c.socket_inodes:
+            for inode in c.socket_inodes:
+                port = inode_to_port.get(inode)
+                if port:
+                    _add_container(port, c)
 
     compose_map: dict[int, list[dict]] = {}
     for cp in compose_ports:
@@ -190,7 +217,7 @@ def _classify(
             "service_name": cp.service_name,
             "compose_file": cp.compose_file,
             "container_port": cp.container_port,
-            "protocol": getattr(cp, "protocol", "tcp"),
+            "protocol": cp.protocol,
         })
 
     manual_map: dict[int, dict] = {}
@@ -239,17 +266,20 @@ def _classify(
             source_type = "unknown"
 
         known = get_known_port(port)
-        ip = lp_info["ip"] if lp_info else "0.0.0.0"
-        urls = _collect_urls(port, ip, ctors, known)
+        ips = (lp_info.get("ips") if lp_info else None) or []
+        if not ips:
+            ips = [lp_info["ip"] if lp_info else "0.0.0.0"]
+        ip = lp_info["ip"] if lp_info else ips[0]
+        urls = _collect_urls(port, ips, ctors, known)
 
         port_list.append({
             "port": port,
             "status": status,
             "source_type": source_type,
-            "protocol": lp_info["protocol"] if lp_info else "tcp",
+            "protocol": lp_info["protocol"] if lp_info else (composes[0].get("protocol") if composes else "tcp"),
             "ip": ip,
-            "ips": (lp_info.get("ips") if lp_info else None) or [ip],
-            "bind_scope": _bind_scope(ip),
+            "ips": ips,
+            "bind_scope": _bind_scope_many(ips),
             "process": lp_info["process"] if lp_info else None,
             "pid": lp_info["pid"] if lp_info else None,
             "containers": ctors,
@@ -281,6 +311,15 @@ def _classify(
     }
 
 
+def _proto_label(protocols: list[str]) -> str:
+    bases: list[str] = []
+    for proto in protocols:
+        base = proto.replace("6", "")
+        if base not in bases:
+            bases.append(base)
+    return ",".join(bases) if bases else "tcp"
+
+
 def _bind_scope(ip: str) -> str:
     if not ip or ip in ("0.0.0.0", "::", "*"):
         return "public"
@@ -289,7 +328,16 @@ def _bind_scope(ip: str) -> str:
     return "lan"
 
 
-def _collect_urls(port: int, ip: str, containers: list[dict], known: dict | None) -> list[str]:
+def _bind_scope_many(ips: list[str]) -> str:
+    scopes = {_bind_scope(ip) for ip in ips or ["0.0.0.0"]}
+    if "public" in scopes:
+        return "public"
+    if "lan" in scopes:
+        return "lan"
+    return "localhost"
+
+
+def _collect_urls(port: int, ips: list[str], containers: list[dict], known: dict | None) -> list[str]:
     urls: list[str] = []
     seen: set[str] = set()
     for c in containers:
@@ -297,9 +345,11 @@ def _collect_urls(port: int, ip: str, containers: list[dict], known: dict | None
             if u and u not in seen:
                 seen.add(u)
                 urls.append(u)
+    scope = _bind_scope_many(ips)
     if known and known.get("is_access_port"):
-        host = "127.0.0.1" if _bind_scope(ip) == "localhost" else "localhost"
-        scheme = "https" if port in (443, 8443, 9443) or (known.get("name") or "").upper().find("HTTPS") >= 0 else "http"
+        host = "127.0.0.1" if scope == "localhost" else "localhost"
+        name = (known.get("name") or "").upper()
+        scheme = "https" if port in (443, 8443, 9443) or "HTTPS" in name else "http"
         if port in (22, 23, 25, 53, 110, 143, 445, 3389, 5900, 1194, 51820):
             return urls
         guess = f"{scheme}://{host}:{port}"

@@ -26,39 +26,37 @@ Optional HTTP Basic Auth is applied as middleware to every path except `/api/hea
 
 Order of attempts:
 
-1. **`/host/proc/1/net/tcp` and `tcp6`** — used in the published Docker image when `/proc` is mounted at `/host/proc`. `/host/proc/net/tcp` is the *container* namespace (symlink to `/proc/self/net`). PID 1 on the host is the namespace that has the real host listeners.
-2. **`ss -tlnpH`** — bare metal or `network_mode: host`. This is the only path that fills `process_name` / `pid`.
-3. **Local `/proc/net/tcp`** — last resort (usually the container’s own listeners).
+1. **`/host/proc/1/net/{tcp,tcp6,udp,udp6}`** — used in the published Docker image when `/proc` is mounted at `/host/proc`. `/host/proc/net` is the *container* namespace. PID 1 is the host init network namespace.
+2. **`ss -tulnpH`** — bare metal or `network_mode: host`. This is the only path that fills `process_name` / `pid`.
+3. **Local `/proc/net/*`** — last resort (usually the container’s own listeners).
 
-The scanner keeps a result from (1) only if it finds **more than one** port. That heuristic avoids treating a nearly empty file as success; it can also hide a host that truly has a single listener.
-
-No UDP. Duplicate listen entries (IPv4 + IPv6, or `0.0.0.0` + a specific address) collapse to one map key: the port number.
+UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, or `tcp,udp`), and `bind_scope` (`public` / `lan` / `localhost`).
 
 ## Docker
 
-`docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings` only.
+`docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings`, then `NetworkSettings.Ports`.
 
-Consequences:
+`network_mode: host`:
 
-- Published ports on a bridge network show up with container name and status.
-- `network_mode: host` containers typically have **empty** PortBindings. Their sockets still appear in the host TCP table, but without a container name unless `ss` could see the process.
-- Stopped containers still contribute mappings if Docker recorded PortBindings — those become amber if nothing is listening.
+- `Config.ExposedPorts` is treated as host ports (same number).
+- Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` and match `/proc/net/*` inodes, so anonymous listeners get a container name when `/proc` is mounted.
+
+Traefik `Host(\`…\`)` rules and a `caddy:` site label become `urls` on the port.
+
+Stopped containers still contribute PortBindings — those become amber if nothing is listening.
 
 ## Compose
 
-`COMPOSE_SCAN_DIR` is globbed with:
+`COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`.
 
-- `*/docker-compose.y*ml`, `*/compose.y*ml`
-- `docker-compose.y*ml`, `compose.y*ml` at the scan root
-
-That is **one** subdirectory level. Nested gitops trees and `include:` files are not followed.
+`include:` paths (string or `{ path: }`) are followed. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile.
 
 Supported port syntax:
 
 - Short: `8080:80`, `0.0.0.0:8080:80`, `8080:80/tcp`
 - Long: `{ published, target, protocol }`
-- `${VAR}` / `$VAR` from the sibling `.env` plus process environment
-- Ranges: **first** number only (`3000-3002:80` → `3000`)
+- `${VAR}` / `$VAR` / `${VAR:-default}` from the sibling `.env` plus process environment
+- Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 128 ports per mapping
 
 A host port listed in more than one parsed file is marked `conflict: true`. That is a Compose-declaration conflict, not a runtime bind failure.
 
@@ -74,7 +72,7 @@ For each port in the union of listeners ∪ Docker mappings ∪ Compose ∪ manu
 
 `source_type` is a rough tag for filters (`docker` / `system` / `host` / `manual`). System vs host uses the known-port category, not the OS.
 
-Hidden ports are omitted from the payload unless `include_hidden=true`. That query flag is **not** authenticated.
+Hidden ports are omitted from the payload unless `include_hidden=true` **and** the request may see them (open LAN, or Basic Auth / `X-Hidden-Unlock`).
 
 ## Persistence
 

@@ -38,20 +38,14 @@ Those paths collide with larger projects and abandon the only unique question: *
 3. **Socket story.** [docker-socket-proxy](deployment.md#docker-socket-proxy) documented. Default `NET_ADMIN` removed from the dev Compose file.
 4. **Versions.** App version is `0.5.0`. Publish workflow also pushes GHCR. GitHub Releases are still a maintainer step at tag time.
 
-### P1 — Make the map correct
+### P1 — Make the map correct (done in 0.5.0)
 
-This is the product.
-
-- Attribute **host-network** containers (today they show as nameless listeners).
-- Mark bind address: `0.0.0.0` vs `127.0.0.1` vs LAN IP (a port bound to localhost is not “taken” for LAN services).
-- UDP. IPv4/IPv6 dedup.
-- Compose: `include:`, profiles, full published ranges, deeper trees (with a size cap).
-- Load `custom_ports.json` once (it is read per port today).
-- Re-fetch when the range inputs change.
-- Either wire the machine selector or delete it.
-- Detail panel: open `http(s)://host:port` when it is an access port; optional Traefik/Caddy label URL.
-
-Polling every 5s is fine until scanners get expensive. SSE is polish, not the bottleneck.
+- Host-network containers attributed via `/proc/<pid>/fd` inodes plus `ExposedPorts`.
+- Bind scope: `0.0.0.0` / `127.0.0.1` / LAN IP.
+- UDP; IPv4/IPv6 and TCP/UDP collapse to one card with `ips` + `protocol`.
+- Compose: `include:`, nested trees with a depth/file cap, full published ranges (max 128), `${VAR:-default}`.
+- `custom_ports.json` is mtime-cached.
+- Range inputs refetch; access ports and Traefik/Caddy labels expose open URLs.
 
 ### P2 — Engineering hygiene
 

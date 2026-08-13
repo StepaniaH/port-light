@@ -22,6 +22,8 @@ services:
       - ${CUSTOM_PORTS_FILE:-./custom_ports.json}:/data/custom_ports.json:ro
     environment:
       - COMPOSE_SCAN_DIR=/compose
+      - COMPOSE_SCAN_DEPTH=${COMPOSE_SCAN_DEPTH:-4}
+      - COMPOSE_SCAN_MAX_FILES=${COMPOSE_SCAN_MAX_FILES:-400}
       - PORT_RANGE_START=${PORT_RANGE_START:-1}
       - PORT_RANGE_END=${PORT_RANGE_END:-9999}
       - PORT_LIGHT_DATA_DIR=/data

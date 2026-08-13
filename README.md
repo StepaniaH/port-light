@@ -53,8 +53,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - **Hide from grid** is a display filter. It becomes an API gate only when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set.
 - **Multi-host is not implemented.** Run one Port-Light per machine.
 - Typical Docker deploy **cannot show process names** (only container names from the Docker API). `ss -tlnp` process names need a host-network / bare-metal path.
-- Containers with `network_mode: host` often appear as anonymous listening ports (no PortBindings).
-- TCP only. UDP is not scanned. Compose scan is one directory level deep.
+- Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
 
 Roadmap and design notes: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md).
 
@@ -95,6 +94,8 @@ Open `http://localhost:2100`.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `COMPOSE_SCAN_DIR` | `/compose` | Directory to scan for `compose.y*ml` / `docker-compose.y*ml` |
+| `COMPOSE_SCAN_DEPTH` | `4` | Max subdirectory depth under the scan dir |
+| `COMPOSE_SCAN_MAX_FILES` | `400` | Cap on compose files parsed per refresh |
 | `PORT_RANGE_START` | `1` | Start of the range used for the **free** summary count |
 | `PORT_RANGE_END` | `9999` | End of that range (does not fill the grid with green cells) |
 | `PORT_LIGHT_DATA_DIR` | `/data` | Manual ports, hidden-port list, machine list (JSON) |

@@ -123,29 +123,30 @@ KNOWN_PORTS: dict[int, dict] = {
 }
 
 
+_custom_cache: dict[int, dict] | None = None
+_custom_mtime: float | None = None
+_custom_path: str | None = None
+
+
 def _load_custom_ports() -> dict[int, dict]:
-    """Load user-specific port overrides from a local JSON file.
-
-    Path is set by ``CUSTOM_PORTS_FILE`` env var.
-    Default: ``/data/custom_ports.json`` (typically a Docker volume).
-
-    Format — same as KNOWN_PORTS entries::
-        {
-            "3001": {"name": "Grafana", "description": "...", "category": "selfhosted", "is_access_port": true},
-            "8188": {"name": "ComfyUI", "description": "...", "category": "selfhosted", "is_access_port": true}
-        }
-
-    This file is user-specific, gitignored, and never included in the repo.
-    """
+    """Load user-specific port overrides from a local JSON file (mtime-cached)."""
+    global _custom_cache, _custom_mtime, _custom_path
     path = os.environ.get("CUSTOM_PORTS_FILE", "/data/custom_ports.json")
     p = Path(path)
-    if not p.exists():
+    try:
+        mtime = p.stat().st_mtime
+    except OSError:
+        _custom_cache, _custom_mtime, _custom_path = {}, None, path
         return {}
+    if _custom_cache is not None and _custom_path == path and _custom_mtime == mtime:
+        return _custom_cache
     try:
         raw = json.loads(p.read_text())
-        return {int(k): v for k, v in raw.items()}
+        parsed = {int(k): v for k, v in raw.items() if str(k).lstrip("-").isdigit()}
     except (json.JSONDecodeError, ValueError, OSError):
-        return {}
+        parsed = {}
+    _custom_cache, _custom_mtime, _custom_path = parsed, mtime, path
+    return parsed
 
 
 def get_known_port(port: int) -> dict | None:

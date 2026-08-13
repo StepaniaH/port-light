@@ -359,6 +359,8 @@
             p.known_service ? p.known_service.description : '',
             ...(p.containers || []).map(c => c.name + ' ' + (c.compose_project || '') + ' ' + (c.compose_service || '') + ' ' + c.image),
             ...(p.compose_configs || []).map(c => c.project_dir + ' ' + c.service_name + ' ' + c.compose_file),
+            p.protocol || '', p.bind_scope || '', (p.ips || []).join(' '),
+            ...(p.urls || []),
           ].join(' ').toLowerCase();
           if (!haystack.includes(searchTerm)) return false;
         }
@@ -399,7 +401,8 @@
 
       return `
         <div class="port-cell ${cls}${conflict}${selected}${searchHit}${searchNear}"
-             data-port="${p.port}">
+             data-port="${p.port}"
+             title="${escapeHtml([p.port, p.protocol, p.bind_scope, label].filter(Boolean).join(' · '))}">
           <div class="port-num">${p.port}</div>
           ${labelText}
           <div class="indicator"></div>

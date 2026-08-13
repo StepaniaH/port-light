@@ -16,6 +16,12 @@ All notable changes to this project are documented here. Versions match git tags
 - App version string is `0.5.0`.
 - Hide-from-grid copy and UI: no client-side password hash; machine selector removed (multi-host is not implemented).
 - Changing the port range refetches from the API.
+- UDP listen/bound sockets; IPv4-mapped IPv6 collapse; bind scope on each card (`public` / `lan` / `localhost`).
+- Host-network containers matched by socket inode (and `ExposedPorts` fallback).
+- Compose walk with depth/file caps, `include:`, expanded port ranges, `${VAR:-default}`.
+- Traefik `Host()` / Caddy label URLs in the detail panel.
+- `custom_ports.json` loaded with mtime cache.
+- Parser tests and a GitHub Actions `CI` workflow.
 
 ### Documentation
 

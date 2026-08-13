@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+from backend.compose_scanner import (
+    expand_port_range,
+    parse_port_entry,
+    parse_short_port,
+    scan_compose_files,
+    substitute_vars,
+)
+from backend.docker_scanner import extract_label_urls, extract_ports
+from backend.port_scanner import normalize_ip, parse_proc_net_line, parse_ss_line
+
+
+def test_parse_short_port_basic():
+    assert parse_short_port("8080:80") == [
+        {"host_port": 8080, "container_port": 80, "protocol": "tcp"}
+    ]
+    assert parse_short_port("0.0.0.0:443:8443/tcp")[0]["host_port"] == 443
+    assert parse_short_port("53:53/udp")[0]["protocol"] == "udp"
+    assert parse_short_port("8080") == []
+
+
+def test_port_range_expansion():
+    assert expand_port_range("3000-3002") == [3000, 3001, 3002]
+    assert len(expand_port_range("1000-2000")) == 128
+    hosts = parse_short_port("6000-6002:80")
+    assert [p["host_port"] for p in hosts] == [6000, 6001, 6002]
+    long = parse_port_entry({"published": "9000-9001", "target": 80, "protocol": "tcp"})
+    assert [p["host_port"] for p in long] == [9000, 9001]
+
+
+def test_compose_include_and_depth(tmp_path):
+    nested = tmp_path / "apps" / "wiki"
+    nested.mkdir(parents=True)
+    included = tmp_path / "shared" / "ports.yml"
+    included.parent.mkdir()
+    included.write_text(
+        "services:\n  db:\n    ports:\n      - '5432:5432'\n",
+        encoding="utf-8",
+    )
+    (nested / "compose.yml").write_text(
+        "include:\n  - ../../shared/ports.yml\n"
+        "services:\n  wiki:\n    ports:\n      - '3000-3001:80'\n",
+        encoding="utf-8",
+    )
+    ports = scan_compose_files(str(tmp_path))
+    numbers = sorted({p.port for p in ports})
+    assert 5432 in numbers
+    assert 3000 in numbers
+    assert 3001 in numbers
+
+
+def test_env_default_substitution():
+    out = substitute_vars("ports: '${WEB_PORT:-8080}:80'", {})
+    assert "8080:80" in out
+
+
+def test_proc_tcp_and_udp():
+    tcp = (
+        "   0: 00000000:0050 00000000:0000 0A 00000000:00000000 "
+        "00:00000000 00000000     0        0 12345 1 0000000000000000 00"
+    )
+    lp = parse_proc_net_line(tcp, "tcp")
+    assert lp is not None
+    assert lp.port == 80
+    assert lp.ip == "0.0.0.0"
+    assert lp.inode == 12345
+
+    udp = (
+        "   0: 00000000:0035 00000000:0000 07 00000000:00000000 "
+        "00:00000000 00000000     0        0 99 1 0000000000000000 00"
+    )
+    up = parse_proc_net_line(udp, "udp")
+    assert up is not None
+    assert up.port == 53
+    assert up.protocol == "udp"
+
+
+def test_ss_lines():
+    tcp = 'tcp   LISTEN 0  4096  0.0.0.0:22  0.0.0.0:*  users:(("sshd",pid=1,fd=3))'
+    lp = parse_ss_line(tcp)
+    assert lp is not None
+    assert lp.port == 22
+    assert lp.process_name == "sshd"
+    udp = "udp   UNCONN 0  0  0.0.0.0:53  0.0.0.0:*"
+    up = parse_ss_line(udp)
+    assert up is not None
+    assert up.port == 53
+    assert up.protocol == "udp"
+
+
+def test_normalize_ip():
+    assert normalize_ip("::ffff:127.0.0.1") == "127.0.0.1"
+    assert normalize_ip("*") == "0.0.0.0"
+
+
+def test_extract_ports_and_labels():
+    attrs = {
+        "HostConfig": {
+            "NetworkMode": "host",
+            "PortBindings": {},
+        },
+        "NetworkSettings": {"Ports": {}},
+        "Config": {"ExposedPorts": {"53/udp": {}, "80/tcp": {}}},
+    }
+    ports = extract_ports(attrs)
+    mapped = {(p["host_port"], p["protocol"]) for p in ports}
+    assert (53, "udp") in mapped
+    assert (80, "tcp") in mapped
+
+    urls = extract_label_urls({
+        "traefik.http.routers.wiki.rule": "Host(`wiki.home.arpa`)",
+        "caddy": "media.home.arpa",
+    })
+    assert "https://wiki.home.arpa" in urls
+    assert "https://media.home.arpa" in urls

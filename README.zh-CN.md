@@ -53,8 +53,7 @@
 - **从网格隐藏**只是显示过滤。只有配置了 `AUTH_*` 或 `HIDDEN_UNLOCK_PASSWORD` 时，API 才会真正不返回这些端口。
 - **多机尚未实现。** 每台机器各自跑一份 Port-Light。
 - 常见 Docker 部署**看不到进程名**（只能看到 Docker API 给的容器名）。`ss -tlnp` 的进程名需要 host network 或裸机。
-- `network_mode: host` 的容器常常显示成匿名监听端口（没有 PortBindings）。
-- 只扫 TCP，不扫 UDP。Compose 扫描只下一层子目录。
+- `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
 
 后续计划与设计：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。
 
@@ -95,6 +94,8 @@ docker compose up -d
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `COMPOSE_SCAN_DIR` | `/compose` | 扫描 `compose.y*ml` / `docker-compose.y*ml` 的目录 |
+| `COMPOSE_SCAN_DEPTH` | `4` | 扫描子目录的最大深度 |
+| `COMPOSE_SCAN_MAX_FILES` | `400` | 每次刷新最多解析的 compose 文件数 |
 | `PORT_RANGE_START` | `1` | **空闲数量**统计的起始端口 |
 | `PORT_RANGE_END` | `9999` | 上述区间的结束（不会把网格填满绿格） |
 | `PORT_LIGHT_DATA_DIR` | `/data` | 手动端口、隐藏列表等 JSON |
