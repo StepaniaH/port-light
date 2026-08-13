@@ -4,18 +4,18 @@ Published image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/por
 
 | Tag | Meaning |
 |-----|---------|
-| `v0.4.0` (and other `v*`) | Immutable-ish release built from the matching git tag |
+| `v0.5.0` (and other `v*`) | Release built from that git tag |
 | `latest` | Same as the newest `v*` tag at build time |
-| `dev` | Manual `workflow_dispatch` builds (not a tagged release) |
+| `dev` | Manual `workflow_dispatch` builds |
 
-Pin a `v*` tag on anything that is not a toy.
+Pin a `v*` tag on hosts you care about.
 
 ## Docker Compose (image)
 
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.4.0
+    image: stepaniah/port-light:v0.5.0
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -48,7 +48,7 @@ docker run -d \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  stepaniah/port-light:v0.4.0
+  stepaniah/port-light:v0.5.0
 ```
 
 ## Build from this repo
@@ -86,7 +86,7 @@ services:
       - internal
 
   port-light:
-    image: stepaniah/port-light:v0.4.0
+    image: stepaniah/port-light:v0.5.0
     restart: unless-stopped
     ports:
       - "2100:2100"

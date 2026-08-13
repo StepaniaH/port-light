@@ -19,7 +19,7 @@ Port-Light merges three local sources into one grid:
 
 | Source | What you learn |
 |--------|----------------|
-| Host TCP tables (`/proc` or `ss`) | Which ports are actually listening |
+| Host listen tables (`/proc` or `ss`) | TCP/UDP ports that are actually bound |
 | Docker API | Container name, status, image, published mappings |
 | Compose files | Ports that are **declared** even if the stack is stopped |
 
@@ -45,6 +45,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
+- UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
 - Vanilla HTML/CSS/JS frontend — no npm, no build step
 
 ### Known limits (read before you deploy)
@@ -64,7 +65,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.4.0
+    image: stepaniah/port-light:v0.5.0
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -98,7 +99,7 @@ Open `http://localhost:2100`.
 | `COMPOSE_SCAN_MAX_FILES` | `400` | Cap on compose files parsed per refresh |
 | `PORT_RANGE_START` | `1` | Start of the range used for the **free** summary count |
 | `PORT_RANGE_END` | `9999` | End of that range (does not fill the grid with green cells) |
-| `PORT_LIGHT_DATA_DIR` | `/data` | Manual ports, hidden-port list, machine list (JSON) |
+| `PORT_LIGHT_DATA_DIR` | `/data` | Manual ports and hidden-port list (JSON) |
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | Extra / overriding port names |
 | `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. |
 | `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. |
@@ -109,9 +110,9 @@ If you bind-mount `custom_ports.json` in Compose, create the **file** on the hos
 
 ## Privacy
 
-- No telemetry, no analytics, no outbound calls
-- Data stays on the machine that runs the container
-- User edits live in a local JSON file under `/data`
+- No telemetry or analytics. The app does not make outbound requests.
+- All data stays on the machine that runs the container (listen tables, Docker API, Compose files, `/data` JSON).
+- Sibling `.env` files next to Compose stacks are read locally for `${VAR}` substitution and are never uploaded.
 
 ## Tech stack
 
@@ -123,4 +124,4 @@ If you bind-mount `custom_ports.json` in Compose, create the **file** on the hos
 
 [MIT](LICENSE) © 2026 StepaniaH
 
-If Port-Light saves you a `bind: address already in use` afternoon, [Ko-fi](https://ko-fi.com/stepaniah) is optional and appreciated.
+[Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Ko-fi](https://ko-fi.com/stepaniah)

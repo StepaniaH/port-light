@@ -19,7 +19,7 @@
 
 | 来源 | 你能看到什么 |
 |------|----------------|
-| 主机 TCP 表（`/proc` 或 `ss`） | 哪些端口真正在监听 |
+| 主机监听表（`/proc` 或 `ss`） | 实际绑定的 TCP/UDP 端口 |
 | Docker API | 容器名、状态、镜像、发布的端口映射 |
 | Compose 文件 | **声明了**但栈可能没在跑的端口 |
 
@@ -45,6 +45,7 @@
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
+- TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
 - 前端是原生 HTML/CSS/JS，没有 npm，没有构建步骤
 
 ### 已知限制（部署前请读）
@@ -64,7 +65,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.4.0
+    image: stepaniah/port-light:v0.5.0
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -109,9 +110,9 @@ docker compose up -d
 
 ## 隐私
 
-- 无遥测、无统计、无出站请求
-- 数据留在跑容器的那台机器上
-- 用户修改存在 `/data` 下的本地 JSON
+- 无遥测、无统计。应用本身不会发外网请求。
+- 数据留在跑容器的那台机器上（监听表、Docker API、Compose 文件、`/data` 里的 JSON）。
+- Compose 旁边的 `.env` 只用于本地 `${VAR}` 替换，不会上传。
 
 ## 技术栈
 
@@ -123,4 +124,4 @@ docker compose up -d
 
 [MIT](LICENSE) © 2026 StepaniaH
 
-如果 Port-Light 让你少撞一次 `bind: address already in use`，可选请作者喝杯咖啡：[Ko-fi](https://ko-fi.com/stepaniah)。
+[Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Ko-fi](https://ko-fi.com/stepaniah)

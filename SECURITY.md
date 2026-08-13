@@ -1,52 +1,39 @@
 # Security Policy
 
-## What this software is
+Port-Light is a LAN dashboard. Run it on a host you administer, on a network you trust, or behind a reverse proxy / VPN. It is not hardened for the public internet.
 
-Port-Light is a **LAN dashboard**. It is meant to run on a homelab host you already administer, reachable by people you already trust, or gated by a reverse proxy / VPN you control.
+## Reporting a vulnerability
 
-It is **not** hardened for the public internet.
+Do not open a public issue for anything that could help someone abuse the Docker socket or read host network state.
 
-## Report a vulnerability
+Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-light/security/advisories/new) if it is enabled, or contact the maintainer via [Ko-fi](https://ko-fi.com/stepaniah).
 
-Please do **not** open a public issue for anything that could help an attacker use the Docker socket or read host network state.
+## Trust model
 
-Email or Ko-fi contact via [https://ko-fi.com/stepaniah](https://ko-fi.com/stepaniah), or use GitHub’s private vulnerability reporting if it is enabled on this repository.
+| Surface | Behavior |
+|---------|----------|
+| HTTP API | Unauthenticated unless `AUTH_USER` and `AUTH_PASSWORD` are set. `/api/health` is always open. |
+| Hidden ports | Display filter by default. With `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD`, rows are withheld until Basic Auth or `X-Hidden-Unlock` succeeds. |
+| Docker socket | Often mounted into the container. Read-only is not the same as safe. |
+| `/host/proc` | Read-only view of host network tables (and other `/proc` data for PID 1). |
+| Compose mount | Read-only view of the bind you set, including sibling `.env` files. |
+| Data volume | Local JSON under `/data`. Never sent off-box. |
 
-## Trust model (current)
+Without auth, anyone who can reach port 2100 can read the port map (names, images, Compose paths) and change manual/hidden entries.
 
-| Surface | Reality |
-|---------|---------|
-| HTTP API | No authentication unless `AUTH_USER` and `AUTH_PASSWORD` are set. `/api/health` is always unauthenticated. |
-| Hidden ports | Display filter by default. When `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set, `include_hidden` and `/api/hidden` require a valid Basic Auth session or `X-Hidden-Unlock` header. Client-side hashes are not used. |
-| Docker socket | Often mounted into the container. Read-only is **not** equivalent to safe; the Docker API can still be a path to host compromise depending on what is allowed |
-| `/host/proc` | Read-only view of host network tables (and whatever else is under `/proc` for PID 1) |
-| Compose mount | Read-only view of whatever you bind to `/compose` (including `.env` files next to stacks) |
-| Data volume | Writable JSON under `/data` |
+## Recommendations
 
-Anyone who can reach port 2100 can:
-
-- Read the merged port map (services, container names, images, Compose paths)
-- Add/delete manual ports and hide/unhide entries
-- See “hidden” ports via the API
-
-Treat the UI like `docker ps` plus your Compose tree on a webpage.
-
-## Deploying less badly
-
-1. Do not publish `2100` to `0.0.0.0` on a VPS. Bind to LAN, Tailscale, or localhost + reverse proxy.
-2. Prefer **application Basic Auth** (`AUTH_USER` / `AUTH_PASSWORD`) and/or a reverse proxy gate (Caddy/Traefik basic auth, Authelia, Authentik, SSO). `/api/health` remains open for Docker healthchecks.
-3. Prefer a [Docker socket proxy](docs/deployment.md#docker-socket-proxy) that allows only the reads Port-Light needs. Do not enable container create/exec.
-4. Do not add `privileged`, extra capabilities, or `pid: host` “to make scanning work.” Bridge + `/host/proc` + socket (or proxy) is the intended path. `NET_ADMIN` is optional and unused in that path.
-5. Run as a non-root `user:` if the `/data` mount ownership allows it.
-6. Do not point `COMPOSE_SCAN_DIR` at home directories that contain secrets you would not paste into a wiki.
+1. Do not publish `2100` on a public VPS. Bind to LAN, Tailscale, or localhost plus a reverse proxy.
+2. Set `AUTH_USER` / `AUTH_PASSWORD` and/or put SSO / basic auth on the proxy. `/api/health` stays open for Docker healthchecks.
+3. Prefer a [Docker socket proxy](docs/deployment.md#docker-socket-proxy) limited to reads. Do not allow create/exec.
+4. Do not add `privileged`, extra capabilities, or `pid: host`. Bridge + `/host/proc` + socket (or proxy) is enough. `NET_ADMIN` is optional.
+5. Run as a non-root `user:` when the `/data` mount allows it.
+6. Do not point `COMPOSE_SCAN_DIR` at trees that contain secrets you would not put in a screenshot.
 
 ## Hidden ports
 
-**Hide from grid** is a display filter so a screenshot or shoulder-surfer is less likely to see a port number.
-
-- With no `AUTH_*` and no `HIDDEN_UNLOCK_PASSWORD`, the API still has the data. Anyone who can reach the UI can unhide or call the API. That matches the LAN-without-login model.
-- When either secret is set, hidden port rows are omitted until the caller is authorized. This is still not a confidentiality boundary for `docker.sock` or Compose `.env` files.
+Hide-from-grid only reduces what shows up in the UI (and, when secrets are set, in the API). It is not a confidentiality boundary for `docker.sock` or Compose `.env` files.
 
 ## Supply chain
 
-Images are built on GitHub Actions from this repository and pushed to Docker Hub (`stepaniah/port-light`) and GHCR (`ghcr.io/<owner>/port-light`). Pin a `v*` digest or tag. There is no SLSA provenance attestation yet.
+Images are built on GitHub Actions and pushed to Docker Hub (`stepaniah/port-light`) and GHCR (`ghcr.io/stepaniah/port-light`). Pin a `v*` tag or digest.

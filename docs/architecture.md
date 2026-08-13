@@ -86,4 +86,4 @@ No framework. Settings live in `localStorage`. An optional `HIDDEN_UNLOCK_PASSWO
 
 ## Why not Kubernetes / remote Docker
 
-The product assumption is “one homelab machine, Compose files on disk, a Docker socket.” Remote `DOCKER_HOST`, Swarm, and Kubernetes need a different agent and a different trust model. See [roadmap.md](roadmap.md).
+Remote `DOCKER_HOST`, Swarm, and Kubernetes need a different agent. See [roadmap.md](roadmap.md).
