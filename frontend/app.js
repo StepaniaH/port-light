@@ -150,6 +150,19 @@
     applyTheme();
   });
 
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closeDetail();
+      document.querySelectorAll('.modal').forEach(function (m) { m.classList.add('hidden'); });
+      return;
+    }
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    e.preventDefault();
+    searchInput.focus();
+  });
+
   // Close modals on backdrop click
   document.querySelectorAll('.modal').forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.classList.add('hidden'); });
@@ -335,6 +348,12 @@
         case 'access':
           if (p.known_service && p.known_service.is_access_port) matched = true;
           break;
+        case 'udp':
+          if ((p.protocol || '').indexOf('udp') !== -1) matched = true;
+          break;
+        case 'localhost':
+          if (p.bind_scope === 'localhost') matched = true;
+          break;
         case 'hidden':
           if (p.is_hidden) matched = true;
           break;
@@ -422,6 +441,11 @@
         accessBadge = '<div class="access-badge">🔓</div>';
       }
 
+      let protoBadge = '';
+      if (p.protocol && p.protocol !== 'tcp') {
+        protoBadge = `<div class="proto-badge">${escapeHtml(p.protocol)}</div>`;
+      }
+
       return `
         <div class="port-cell ${cls}${conflict}${selected}${searchHit}${searchNear}"
              data-port="${p.port}"
@@ -429,7 +453,7 @@
           <div class="port-num">${p.port}</div>
           ${labelText}
           <div class="indicator"></div>
-          ${statusText}${accessBadge}
+          ${statusText}${accessBadge}${protoBadge}
         </div>
       `;
     }).join('');
@@ -502,7 +526,7 @@
 
     // Conflict
     if (p.conflict) {
-      html += `<div class="info-box" style="background:rgba(240,136,62,0.06);border-color:rgba(240,136,62,0.2)"><span class="info-name" style="color:var(--conflict)">⚠ Port Conflict</span> — Declared in ${p.compose_configs.length} compose files.</div>`;
+      html += `<div class="info-box conflict-box"><span class="info-name">⚠ Port Conflict</span> — Declared in ${p.compose_configs.length} compose files.</div>`;
     }
 
     // Containers

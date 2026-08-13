@@ -7,6 +7,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Added
 
 - Light theme (Settings: System / Dark / Light). Follows `prefers-color-scheme` when set to System.
+- UDP and localhost filter chips; protocol badge on non-TCP cards.
+- `/` focuses search; Escape closes the detail panel and modals.
 - Dockerfile `HEALTHCHECK` against `/api/health` (no extra packages).
 - `ruff` in CI; Dependabot for pip and GitHub Actions.
 - GitHub Release notes from `CHANGELOG.md` when a `v*` tag is pushed.
