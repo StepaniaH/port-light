@@ -1,0 +1,35 @@
+name: GitHub Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Notes from CHANGELOG
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          version = os.environ["TAG"].lstrip("v")
+          text = pathlib.Path("CHANGELOG.md").read_text()
+          m = re.search(rf"^## {re.escape(version)}\b.*?(?=^## |\Z)", text, re.M | re.S)
+          if not m:
+              m = re.search(r"^## Unreleased\b.*?(?=^## |\Z)", text, re.M | re.S)
+          notes = (m.group(0).strip() if m else f"See CHANGELOG.md for {os.environ['TAG']}.")
+          pathlib.Path("release-notes.md").write_text(notes + "\n")
+          PY
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          generate_release_notes: false

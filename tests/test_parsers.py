@@ -94,7 +94,65 @@ def test_normalize_ip():
     assert normalize_ip("*") == "0.0.0.0"
 
 
-def test_extract_ports_and_labels():
+def test_ss_ipv6_and_star():
+    line = "tcp   LISTEN 0  4096  [::]:443  [::]:*"
+    lp = parse_ss_line(line)
+    assert lp is not None
+    assert lp.port == 443
+    assert lp.ip == "::"
+    star = parse_ss_line("tcp LISTEN 0 128 *:22 *:*")
+    assert star is not None
+    assert star.port == 22
+    assert star.ip == "0.0.0.0"
+
+
+def test_proc_tcp6():
+    line = (
+        "   0: 00000000000000000000000000000000:01BB "
+        "00000000000000000000000000000000:0000 0A 00000000:00000000 "
+        "00:00000000 00000000     0        0 7 1 0000000000000000 00"
+    )
+    lp = parse_proc_net_line(line, "tcp6")
+    assert lp is not None
+    assert lp.port == 443
+    assert lp.ip == "::"
+    assert lp.inode == 7
+
+
+def test_extract_port_bindings_and_homepage():
+    attrs = {
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {
+                "8096/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8096"}],
+            },
+        },
+        "NetworkSettings": {"Ports": {}},
+        "Config": {"ExposedPorts": {}},
+    }
+    ports = extract_ports(attrs)
+    assert ports[0]["host_port"] == 8096
+    assert ports[0]["host_ip"] == "127.0.0.1"
+    urls = extract_label_urls({
+        "homepage.href": "http://photos.lan:2283",
+        "traefik.http.routers.x.rule": "HostRegexp(`*.home.arpa`)",
+    })
+    assert "http://photos.lan:2283" in urls
+    assert all("*" not in u for u in urls)
+
+
+def test_env_var_without_default(monkeypatch):
+    monkeypatch.setenv("WEB_PORT", "9090")
+    out = substitute_vars("ports: '${WEB_PORT}:80'", {})
+    assert "9090:80" in out
+    missing = substitute_vars("ports: '${NO_SUCH_PORT}:80'", {})
+    assert "${NO_SUCH_PORT}:80" in missing
+
+
+def test_long_syntax_and_ipv4_host():
+    assert parse_short_port("127.0.0.1:8080:80")[0]["host_port"] == 8080
+    assert parse_port_entry("not-a-port") == []
+    assert parse_port_entry({"target": 80}) == []
     attrs = {
         "HostConfig": {
             "NetworkMode": "host",
