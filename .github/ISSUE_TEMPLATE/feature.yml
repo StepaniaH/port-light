@@ -1,0 +1,34 @@
+name: Feature request
+description: A change that keeps Port-Light a port occupancy map.
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Container start/stop, logs, and image updates are out of scope (see `docs/roadmap.md`).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      placeholder: I cannot see which host-network container owns port 53.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Host / Docker / Compose scanning
+        - UI / search / filters
+        - Security / auth / deployment
+        - Docs
+        - Other
+    validations:
+      required: true

@@ -1,3 +1,10 @@
+# Development stack: builds from the Dockerfile in this repo.
+# For the published image, copy the compose snippet in README.md (or docs/deployment.md).
+#
+# Create ./custom_ports.json as a file before the first `up` if you keep the
+# bind mount below — a missing path becomes a directory and the app cannot read it.
+# NET_ADMIN is unused in the usual bridge + /host/proc setup.
+
 services:
   port-light:
     build: .
@@ -6,15 +13,12 @@ services:
     ports:
       - "2100:2100"
     volumes:
-      # Mount compose project dir so the scanner can read your docker-compose files
+      # Directory of compose projects (one level of subfolders is scanned)
       - ${COMPOSE_SCAN_DIR:-~/your-compose-dir}:/compose:ro
-      # Docker socket — to query running containers
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Host /proc — so we can read /host/proc/net/tcp to see host listening ports
+      # Host PID 1 network namespace: /host/proc/1/net/tcp
       - /proc:/host/proc:ro
-      # Persistent data: manual ports, hidden ports, machines
       - ./data:/data
-      # Custom port definitions (gitignored, user-specific)
       - ${CUSTOM_PORTS_FILE:-./custom_ports.json}:/data/custom_ports.json:ro
     environment:
       - COMPOSE_SCAN_DIR=/compose
@@ -22,7 +26,9 @@ services:
       - PORT_RANGE_END=${PORT_RANGE_END:-9999}
       - PORT_LIGHT_DATA_DIR=/data
       - CUSTOM_PORTS_FILE=/data/custom_ports.json
-    # NET_ADMIN needed for `ss` to see process names (bare metal fallback only).
-    # In bridge mode we read /host/proc/net/tcp directly — no special caps needed.
-    cap_add:
-      - NET_ADMIN
+      # - AUTH_USER=admin
+      # - AUTH_PASSWORD=change-me
+      # - HIDDEN_UNLOCK_PASSWORD=change-me-too
+    # Uncomment only if you rely on `ss -tlnp` process names (bare metal / host net).
+    # cap_add:
+    #   - NET_ADMIN

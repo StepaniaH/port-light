@@ -21,6 +21,15 @@ class ContainerInfo:
     compose_service: str | None = None
 
 
+def docker_available() -> bool:
+    if not HAS_DOCKER:
+        return False
+    try:
+        return bool(docker.from_env().ping())
+    except Exception:
+        return False
+
+
 def scan_containers() -> list[ContainerInfo]:
     """Get all containers (running + stopped) with port mappings."""
     if not HAS_DOCKER:

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/StepaniaH/port-light/blob/main/SECURITY.md
+    about: Do not file public issues for Docker socket or data-leak bugs.
+  - name: Roadmap
+    url: https://github.com/StepaniaH/port-light/blob/main/docs/roadmap.md
+    about: See what is intentionally out of scope before requesting a Docker control panel.

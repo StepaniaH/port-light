@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Port-Light</title>
-  <link rel="stylesheet" href="/static/style.css?v=6">
+  <link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body>
   <div id="app">
@@ -16,11 +16,6 @@
 
     <!-- Toolbar -->
     <div id="toolbar">
-      <!-- Machine selector -->
-      <select id="machine-select" class="dropdown" title="Machine">
-        <option value="localhost">🖥️ This machine</option>
-      </select>
-
       <!-- Filter chips (multi-select) -->
       <div class="filter-chips" id="filter-chips">
         <button class="chip active" data-filter="all">All</button>
@@ -56,7 +51,7 @@
       <div class="action-group">
         <button id="btn-refresh" class="icon-btn" title="Refresh now">⟳</button>
         <button id="btn-add" class="icon-btn" title="Add manual port">＋</button>
-        <button id="btn-unhide" class="icon-btn" title="Show hidden ports">👁</button>
+        <button id="btn-unhide" class="icon-btn" title="Show ports hidden from the grid">👁</button>
         <button id="btn-settings" class="icon-btn" title="Settings">⚙</button>
       </div>
     </div>
@@ -85,9 +80,9 @@
     <!-- Unhide modal (password) -->
     <div id="unhide-modal" class="modal hidden">
       <div class="modal-content">
-        <h3>👁 Show Hidden Ports</h3>
-        <label>Password <input type="password" id="unhide-password" placeholder="Enter password…"></label>
-        <p class="modal-hint">Hidden ports are protected. Enter your password to reveal them.</p>
+        <h3>Show ports hidden from the grid</h3>
+        <label>Unlock password <input type="password" id="unhide-password" placeholder="HIDDEN_UNLOCK_PASSWORD"></label>
+        <p class="modal-hint">This is a server secret, not a login. Without AUTH_USER or HIDDEN_UNLOCK_PASSWORD, hide-from-grid is only a display filter.</p>
         <div class="modal-actions">
           <button id="unhide-cancel" class="btn-secondary">Cancel</button>
           <button id="unhide-confirm" class="btn-primary">Unlock</button>
@@ -122,6 +117,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=6"></script>
+  <script src="/static/app.js?v=7"></script>
 </body>
 </html>

@@ -37,6 +37,10 @@ class ListeningPort:
 _SS_PROC_RE = re.compile(r'users:\(\("([^"]+)",pid=(\d+)')
 
 
+def host_proc_available() -> bool:
+    return os.path.exists("/host/proc/1/net/tcp") or os.path.exists("/proc/net/tcp")
+
+
 def scan_listening_ports() -> list[ListeningPort]:
     """Return all listening TCP ports on the host.
 

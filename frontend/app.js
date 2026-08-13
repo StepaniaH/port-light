@@ -1,4 +1,4 @@
-/* Port-Light v3 — full feature frontend */
+/* Port-Light frontend */
 
 (function () {
   'use strict';
@@ -15,6 +15,8 @@
   let showHidden = false;
   let settings = { statusText: false, accessBadge: true, autoRefresh: true, copyOnClick: true };
   let refreshTimer = null;
+  let meta = { hidden_unlock_required: false, hidden_ports_withheld: false, version: '' };
+  let hiddenUnlock = sessionStorage.getItem('port-light-hidden-unlock') || '';
 
   // DOM
   const grid = document.getElementById('grid');
@@ -25,7 +27,6 @@
   const rangeStartInput = document.getElementById('range-start');
   const rangeEndInput = document.getElementById('range-end');
   const sortSelect = document.getElementById('sort-select');
-  const machineSelect = document.getElementById('machine-select');
 
   // Load settings from localStorage
   try {
@@ -81,6 +82,7 @@
     const e = parseInt(rangeEndInput.value, 10);
     if (s >= 1 && s <= 65535) rangeStart = s;
     if (e >= 1 && e <= 65535 && e >= rangeStart) rangeEnd = e;
+    tick();
   }
 
   // Action buttons
@@ -96,8 +98,14 @@
   document.getElementById('add-confirm').addEventListener('click', addManualPort);
 
   document.getElementById('btn-unhide').addEventListener('click', () => {
-    document.getElementById('unhide-modal').classList.remove('hidden');
-    document.getElementById('unhide-password').focus();
+    if (meta.hidden_unlock_required && !hiddenUnlock) {
+      document.getElementById('unhide-modal').classList.remove('hidden');
+      document.getElementById('unhide-password').focus();
+      return;
+    }
+    showHidden = !showHidden;
+    document.getElementById('btn-unhide').classList.toggle('active', showHidden);
+    tick();
   });
   document.getElementById('unhide-cancel').addEventListener('click', () => {
     document.getElementById('unhide-modal').classList.add('hidden');
@@ -133,10 +141,33 @@
 
   // ── Data fetch ───────────────────────────────
 
+  function apiHeaders(extra) {
+    const headers = Object.assign({}, extra || {});
+    if (hiddenUnlock) headers['X-Hidden-Unlock'] = hiddenUnlock;
+    return headers;
+  }
+
+  async function api(url, opts) {
+    opts = opts || {};
+    const res = await fetch(url, Object.assign({ credentials: 'same-origin' }, opts, {
+      headers: apiHeaders(opts.headers),
+    }));
+    return res;
+  }
+
+  async function fetchMeta() {
+    try {
+      const res = await api('/api/meta');
+      if (res.ok) meta = await res.json();
+    } catch (err) {
+      console.error('meta error:', err);
+    }
+  }
+
   async function fetchPorts() {
     try {
       const url = `/api/ports?range_start=${rangeStart}&range_end=${rangeEnd}&include_hidden=${showHidden}`;
-      const res = await fetch(url);
+      const res = await api(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return await res.json();
     } catch (err) {
@@ -159,7 +190,7 @@
     }
   }
 
-  setupRefresh();
+  fetchMeta().then(() => setupRefresh());
 
   // ── Render ───────────────────────────────────
 
@@ -179,7 +210,7 @@
       <span class="stat"><span class="dot used"></span> In Use: ${s.used}</span>
       <span class="stat"><span class="dot configured"></span> Configured: ${s.configured}</span>
       <span class="stat"><span class="dot free"></span> Free: ${s.free}</span>
-      ${s.hidden > 0 ? `<span class="stat"><span class="dot hidden"></span> Hidden: ${s.hidden}</span>` : ''}
+      ${s.hidden > 0 ? `<span class="stat"><span class="dot hidden"></span> Hidden: ${s.hidden}${s.hidden_locked ? ' (locked)' : ''}</span>` : ''}
       <span class="stat" style="color:var(--text-dim)">Range: ${s.range_start}-${s.range_end}</span>
     `;
   }
@@ -419,11 +450,17 @@
 
     html += `<div class="row"><span class="key">Status</span><span class="tag ${p.status}">${p.status}</span></div>`;
     html += `<div class="row"><span class="key">Source</span><span class="val">${escapeHtml(p.source_type || 'unknown')}</span></div>`;
-    if (p.protocol) html += `<div class="row"><span class="key">Protocol</span><span class="val">${p.protocol}</span></div>`;
-    if (p.ip) html += `<div class="row"><span class="key">IP</span><span class="val">${p.ip}</span></div>`;
+    if (p.protocol) html += `<div class="row"><span class="key">Protocol</span><span class="val">${escapeHtml(p.protocol)}</span></div>`;
+    if (p.ip) html += `<div class="row"><span class="key">Bind</span><span class="val">${escapeHtml((p.ips && p.ips.join(', ')) || p.ip)}${p.bind_scope ? ' (' + p.bind_scope + ')' : ''}</span></div>`;
     if (p.process) html += `<div class="row"><span class="key">Process</span><span class="val">${escapeHtml(p.process)}</span></div>`;
     if (p.pid) html += `<div class="row"><span class="key">PID</span><span class="val">${p.pid}</span></div>`;
-    if (p.machine && p.machine !== 'localhost') html += `<div class="row"><span class="key">Machine</span><span class="val">${escapeHtml(p.machine)}</span></div>`;
+
+    if (p.urls && p.urls.length > 0) {
+      html += '<div class="section-title">Open</div>';
+      for (const u of p.urls) {
+        html += `<div class="row"><span class="key">URL</span><span class="val"><a class="detail-link" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u)}</a></span></div>`;
+      }
+    }
 
     // Known service
     if (p.known_service) {
@@ -452,6 +489,7 @@
           <div class="row"><span class="key">Image</span><span class="val" style="font-size:0.75rem">${escapeHtml(c.image)}</span></div>
           ${c.compose_project ? `<div class="row"><span class="key">Project</span><span class="val">${escapeHtml(c.compose_project)}</span></div>` : ''}
           ${c.compose_service ? `<div class="row"><span class="key">Service</span><span class="val">${escapeHtml(c.compose_service)}</span></div>` : ''}
+          ${c.network_mode === 'host' ? '<div class="row"><span class="key">Network</span><span class="val">host</span></div>' : ''}
         `;
       }
     }
@@ -479,7 +517,7 @@
     if (p.is_hidden) {
       html += `<button class="btn-unhide" onclick="window._portLightUnhide(${p.port})">Unhide</button>`;
     } else {
-      html += `<button class="btn-hide" onclick="window._portLightHide(${p.port})">Hide</button>`;
+      html += `<button class="btn-hide" onclick="window._portLightHide(${p.port})">Hide from grid</button>`;
     }
     if (p.manual_label || p.source_type === 'manual') {
       html += `<button class="btn-delete" onclick="window._portLightDeleteManual(${p.port})">Delete</button>`;
@@ -497,15 +535,15 @@
   // ── Actions (global for inline onclick) ──────
 
   window._portLightHide = async function(port) {
-    await fetch(`/api/hidden/${port}`, { method: 'POST' });
+    await api(`/api/hidden/${port}`, { method: 'POST' });
     tick();
   };
   window._portLightUnhide = async function(port) {
-    await fetch(`/api/hidden/${port}`, { method: 'DELETE' });
+    await api(`/api/hidden/${port}`, { method: 'DELETE' });
     tick();
   };
   window._portLightDeleteManual = async function(port) {
-    await fetch(`/api/manual-ports/${port}`, { method: 'DELETE' });
+    await api(`/api/manual-ports/${port}`, { method: 'DELETE' });
     tick();
   };
 
@@ -516,7 +554,7 @@
     const label = document.getElementById('add-label').value.trim();
     if (!port || port < 1 || port > 65535) return;
 
-    await fetch('/api/manual-ports', {
+    await api('/api/manual-ports', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ port, label, machine: 'localhost' }),
@@ -531,38 +569,28 @@
   // ── Unlock hidden ────────────────────────────
 
   async function unlockHidden() {
-    // Password is stored as a simple hash in localStorage
-    // First-time setup: user enters a password, we store its hash
     const password = document.getElementById('unhide-password').value;
     if (!password) return;
-
-    const storedHash = localStorage.getItem('port-light-hidden-hash');
-    const inputHash = await sha256(password);
-
-    if (!storedHash) {
-      // First time — set password
-      localStorage.setItem('port-light-hidden-hash', inputHash);
-      showHidden = true;
-      document.getElementById('unhide-modal').classList.add('hidden');
-      document.getElementById('unhide-password').value = '';
-      tick();
-    } else if (inputHash === storedHash) {
-      showHidden = true;
-      document.getElementById('unhide-modal').classList.add('hidden');
-      document.getElementById('unhide-password').value = '';
-      tick();
-    } else {
+    hiddenUnlock = password;
+    sessionStorage.setItem('port-light-hidden-unlock', password);
+    showHidden = true;
+    const data = await fetchPorts();
+    if (!data) return;
+    if (data.summary && data.summary.hidden_locked) {
+      hiddenUnlock = '';
+      sessionStorage.removeItem('port-light-hidden-unlock');
+      showHidden = false;
       const input = document.getElementById('unhide-password');
       input.value = '';
       input.placeholder = 'Wrong password — try again';
       input.style.borderColor = 'var(--danger)';
+      return;
     }
-  }
-
-  async function sha256(text) {
-    const buf = new TextEncoder().encode(text);
-    const hash = await crypto.subtle.digest('SHA-256', buf);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    currentData = data;
+    document.getElementById('unhide-modal').classList.add('hidden');
+    document.getElementById('unhide-password').value = '';
+    document.getElementById('btn-unhide').classList.add('active');
+    render();
   }
 
   // ── Utils ────────────────────────────────────

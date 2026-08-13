@@ -194,6 +194,8 @@ h1 { font-size: 1.4rem; font-weight: 600; }
 }
 #detail-content .row .key { color: var(--text-dim); }
 #detail-content .row .val { text-align: right; max-width: 220px; word-break: break-all; }
+#detail-content .detail-link { color: var(--accent); text-decoration: none; }
+#detail-content .detail-link:hover { text-decoration: underline; }
 #detail-content .section-title {
   margin-top: 14px; margin-bottom: 4px; font-size: 0.75rem; text-transform: uppercase;
   color: var(--text-dim); letter-spacing: 0.5px;

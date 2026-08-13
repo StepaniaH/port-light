@@ -1,0 +1,56 @@
+name: Bug report
+description: Something is wrong in scanning, the API, or the UI.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hide secrets (tokens, `.env`, internal hostnames you care about). The API dumps container names and Compose paths.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      placeholder: Port 8096 shows as free but Jellyfin is running, …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Image or git version
+      placeholder: "v0.4.0 or commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you run it
+      options:
+        - Docker Compose (published image)
+        - Docker Compose (build from source)
+        - docker run
+        - uvicorn on the host
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: mounts
+    attributes:
+      label: Mounts / caps (check what you enabled)
+      options:
+        - label: `/var/run/docker.sock` (or DOCKER_HOST / socket proxy)
+        - label: `/proc` → `/host/proc`
+        - label: Compose directory → `/compose`
+        - label: `NET_ADMIN`
+        - label: `network_mode: host` or `privileged`
+  - type: textarea
+    id: extra
+    attributes:
+      label: Extra context
+      placeholder: "Host OS, Unraid/TrueNAS, compose snippet (redacted), browser console errors"
