@@ -31,6 +31,18 @@ services:
       # - AUTH_USER=admin
       # - AUTH_PASSWORD=change-me
       # - HIDDEN_UNLOCK_PASSWORD=change-me-too
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:2100/api/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     # Uncomment only if you rely on `ss -tlnp` process names (bare metal / host net).
     # cap_add:
     #   - NET_ADMIN

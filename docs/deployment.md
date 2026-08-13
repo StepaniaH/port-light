@@ -32,6 +32,8 @@ services:
       # HIDDEN_UNLOCK_PASSWORD: change-me-too
 ```
 
+The image includes a `HEALTHCHECK` on `GET /api/health`. Compose does not need a duplicate unless you want different intervals.
+
 Create `./data` first if you run the container as a non-root `user:` so the bind mount is writable.
 
 Do **not** add `cap_add: NET_ADMIN` unless you are on the bare-metal `ss` path and actually need process names.
@@ -122,17 +124,49 @@ port.home.arpa {
 
 `/api/health` is always unauthenticated so Docker can healthcheck the container.
 
-## Unraid / NAS notes
+## Unraid
 
-- Map your appdata compose folder to `/compose`.
-- Map `/var/run/docker.sock` read-only.
-- Map `/proc` to `/host/proc` read-only (Unraid: this is the host proc; required for listen detection in a bridge container).
-- Use a version tag, not `latest`.
-- Do not give the container privileged mode.
+A Docker template lives at [`deploy/unraid/port-light.xml`](../deploy/unraid/port-light.xml). In Unraid you can:
+
+1. Docker → Add Container → fill the fields from that file, or
+2. Point a template URL at the raw GitHub copy once you trust it.
+
+Required mappings:
+
+- Host path of your compose stacks → `/compose` (read-only)
+- `/var/run/docker.sock` → `/var/run/docker.sock` (read-only)
+- `/proc` → `/host/proc` (read-only). This is the Unraid host proc; the grid is empty without it in a bridge container.
+- Appdata → `/data` (read-write)
+
+Use a `v*` tag, not `latest`. Do not enable privileged mode. Optional: `AUTH_USER` / `AUTH_PASSWORD` / `HIDDEN_UNLOCK_PASSWORD`.
+
+Community Applications listing is a separate templates repository; this XML is the starting point.
 
 ## Podman
 
-Not tested. Socket path is often `/run/podman/podman.sock`. Rootless networking will change what `/proc/1/net/tcp` means. Treat this as unsupported until someone files a working compose snippet.
+The app uses the Docker SDK `from_env()`. Podman’s API socket is usually enough:
+
+```bash
+# Rootful
+podman run -d --name port-light --restart unless-stopped \
+  -p 2100:2100 \
+  -v /run/podman/podman.sock:/var/run/docker.sock:ro \
+  -v /proc:/host/proc:ro \
+  -v /path/to/your/compose-stacks:/compose:ro \
+  -v port-light-data:/data \
+  -e COMPOSE_SCAN_DIR=/compose \
+  docker.io/stepaniah/port-light:v0.5.0
+```
+
+Rootless socket is typically `$XDG_RUNTIME_DIR/podman/podman.sock`. SELinux hosts often need `:z` (or `:Z`) on the volume flags.
+
+What still bites:
+
+- `/host/proc/1/net/tcp` is the **host init netns**. In a rootless container that may not be the ports you care about.
+- Host-network inode matching assumes Linux `/proc/<pid>/fd` as Docker presents it.
+- Compose scan is just files on disk; that part does not need a socket.
+
+If a Quadlet or rootless snippet works on your machine, open an issue or PR with the exact unit.
 
 ## Health
 
