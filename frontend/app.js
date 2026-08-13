@@ -13,7 +13,7 @@
   let rangeStart = 1;
   let rangeEnd = 9999;
   let showHidden = false;
-  let settings = { statusText: false, accessBadge: true, autoRefresh: true, copyOnClick: true };
+  let settings = { statusText: false, accessBadge: true, autoRefresh: true, copyOnClick: true, theme: 'system' };
   let refreshTimer = null;
   let meta = { hidden_unlock_required: false, hidden_ports_withheld: false, version: '' };
   let hiddenUnlock = sessionStorage.getItem('port-light-hidden-unlock') || '';
@@ -37,6 +37,22 @@
   document.getElementById('setting-access-badge').checked = settings.accessBadge;
   document.getElementById('setting-autorefresh').checked = settings.autoRefresh;
   document.getElementById('setting-copy-on-click').checked = settings.copyOnClick;
+  if (!settings.theme) settings.theme = 'system';
+  document.getElementById('setting-theme').value = settings.theme;
+  applyTheme();
+
+  function applyTheme() {
+    var t = settings.theme || 'system';
+    if (t === 'system') {
+      t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  }
+  try {
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
+      if ((settings.theme || 'system') === 'system') applyTheme();
+    });
+  } catch (e) {}
 
   // ── Event listeners ──────────────────────────
 
@@ -122,9 +138,16 @@
     settings.accessBadge = document.getElementById('setting-access-badge').checked;
     settings.autoRefresh = document.getElementById('setting-autorefresh').checked;
     settings.copyOnClick = document.getElementById('setting-copy-on-click').checked;
+    settings.theme = document.getElementById('setting-theme').value;
     localStorage.setItem('port-light-settings', JSON.stringify(settings));
+    applyTheme();
     setupRefresh();
     render();
+  });
+  document.getElementById('setting-theme').addEventListener('change', function () {
+    settings.theme = document.getElementById('setting-theme').value;
+    localStorage.setItem('port-light-settings', JSON.stringify(settings));
+    applyTheme();
   });
 
   // Close modals on backdrop click

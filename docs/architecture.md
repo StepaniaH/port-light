@@ -82,7 +82,7 @@ The `machines` array may still exist in older `port_light.json` files. It is not
 
 ## Frontend
 
-No framework. Settings live in `localStorage`. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
+No framework. Settings live in `localStorage` (`theme`: `system` | `dark` | `light`). An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
 
 ## Why not Kubernetes / remote Docker
 

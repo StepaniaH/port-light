@@ -4,7 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Port-Light</title>
-  <link rel="stylesheet" href="/static/style.css?v=8">
+  <script>
+    try {
+      var s = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
+      var t = s.theme || 'system';
+      if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/static/style.css?v=9">
 </head>
 <body>
   <div id="app">
@@ -110,6 +118,13 @@
           <span>Copy port number on click</span>
           <input type="checkbox" id="setting-copy-on-click" checked>
         </label>
+        <label>Theme
+          <select id="setting-theme" class="dropdown" style="width:100%;margin-top:4px">
+            <option value="system">System</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </label>
         <div class="modal-actions">
           <button id="settings-close" class="btn-primary">Done</button>
         </div>
@@ -117,6 +132,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=8"></script>
+  <script src="/static/app.js?v=9"></script>
 </body>
 </html>
