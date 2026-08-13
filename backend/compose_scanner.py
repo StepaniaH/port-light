@@ -32,15 +32,19 @@ class ComposePort:
     protocol: str = "tcp"
 
 
-def scan_compose_files(scan_dir: str) -> list[ComposePort]:
+def scan_compose_files(
+    scan_dir: str,
+    max_depth: int | None = None,
+    max_files: int | None = None,
+) -> list[ComposePort]:
     ports: list[ComposePort] = []
     if not os.path.isdir(scan_dir):
         return ports
 
-    max_depth = _env_int("COMPOSE_SCAN_DEPTH", 4)
-    max_files = _env_int("COMPOSE_SCAN_MAX_FILES", 400)
+    depth = max_depth if max_depth is not None else _env_int("COMPOSE_SCAN_DEPTH", 4)
+    files_cap = max_files if max_files is not None else _env_int("COMPOSE_SCAN_MAX_FILES", 400)
 
-    files = _find_compose_files(scan_dir, max_depth, max_files)
+    files = _find_compose_files(scan_dir, depth, files_cap)
     seen_real: set[str] = set()
     for filepath in files:
         real = os.path.realpath(filepath)

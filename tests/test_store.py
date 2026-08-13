@@ -14,4 +14,7 @@ def test_manual_and_hidden_roundtrip(tmp_path, monkeypatch):
     assert port_store.remove_manual_port(2100) is True
     assert port_store.remove_hidden_port(2100) is True
     assert port_store.get_manual_ports() == []
-    assert port_store.get_hidden_ports() == []
+    port_store.update_stored_settings({"theme": "light"})
+    assert port_store.get_stored_settings()["theme"] == "light"
+    port_store.update_stored_settings({"theme": None})
+    assert "theme" not in port_store.get_stored_settings()

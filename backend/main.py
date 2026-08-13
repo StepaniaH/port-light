@@ -1,28 +1,16 @@
-"""Port-Light backend — FastAPI app.
-
-API:
-  GET  /api/ports         merged occupancy map
-  GET  /api/health        liveness + scanner presence (no secrets)
-  GET  /api/meta          version and auth/unlock flags
-  GET  /                  frontend
-  POST /api/manual-ports
-  DELETE /api/manual-ports/{port}
-  GET  /api/hidden        hidden port numbers (gated when secrets are set)
-  POST /api/hidden/{port}
-  DELETE /api/hidden/{port}
-"""
+"""Port-Light backend — FastAPI app."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Query, Request
+from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from . import port_store
+from . import port_store, settings as app_settings
 from .auth import (
     auth_configured,
     basic_auth_middleware,
@@ -44,7 +32,12 @@ _FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
 class ManualPortCreate(BaseModel):
-    port: int
+    port: int = Field(ge=1, le=65535)
+    label: str = ""
+    machine: str = "localhost"
+
+
+class ManualPortUpdate(BaseModel):
     label: str = ""
     machine: str = "localhost"
 
@@ -53,13 +46,23 @@ def _compose_dir() -> str:
     return os.environ.get("COMPOSE_SCAN_DIR", "/compose")
 
 
+def _values() -> dict:
+    values, _ = app_settings.resolve()
+    return values
+
+
 @app.get("/api/meta")
 def meta() -> dict:
+    values, _ = app_settings.resolve()
     return {
         "version": VERSION,
         "auth_required": auth_configured(),
         "hidden_unlock_required": hidden_unlock_configured(),
         "hidden_ports_withheld": hidden_ports_withheld(),
+        "settings_readonly": app_settings.settings_readonly(),
+        "refresh_ms": values["refresh_ms"],
+        "theme": values["theme"],
+        "grid_density": values["grid_density"],
     }
 
 
@@ -78,33 +81,101 @@ def health() -> dict:
     }
 
 
+def _occupancy(
+    request: Request,
+    range_start: int | None,
+    range_end: int | None,
+    include_hidden: bool,
+) -> dict:
+    values = _values()
+    start = range_start if range_start is not None else values["port_range_start"]
+    end = range_end if range_end is not None else values["port_range_end"]
+    if end < start:
+        end = start
+    may_see = request_may_see_hidden(request)
+    show_hidden = bool(include_hidden and may_see)
+    return _classify(
+        scan_listening_ports(),
+        scan_containers(),
+        scan_compose_files(
+            _compose_dir(),
+            max_depth=values["compose_scan_depth"],
+            max_files=values["compose_scan_max_files"],
+        ),
+        port_store.get_manual_ports(),
+        port_store.get_hidden_ports(),
+        start,
+        end,
+        show_hidden,
+        hidden_locked=hidden_ports_withheld() and not may_see,
+        options=values,
+    )
+
+
+@app.get("/api/settings")
+def get_settings() -> dict:
+    return app_settings.snapshot()
+
+
+@app.put("/api/settings")
+def put_settings(body: dict = Body(...)) -> dict:
+    try:
+        return app_settings.apply_patch(body)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/ports")
 def get_ports(
     request: Request,
-    range_start: int = Query(default=1, ge=1, le=65535),
-    range_end: int = Query(default=9999, ge=1, le=65535),
+    range_start: int | None = Query(default=None, ge=1, le=65535),
+    range_end: int | None = Query(default=None, ge=1, le=65535),
     include_hidden: bool = Query(default=False),
 ) -> dict:
-    may_see = request_may_see_hidden(request)
-    show_hidden = bool(include_hidden and may_see)
+    return _occupancy(request, range_start, range_end, include_hidden)
 
-    listening = scan_listening_ports()
-    containers = scan_containers()
-    compose_ports = scan_compose_files(_compose_dir())
-    manual_ports = port_store.get_manual_ports()
-    hidden_ports = port_store.get_hidden_ports()
 
-    return _classify(
-        listening,
-        containers,
-        compose_ports,
-        manual_ports,
-        hidden_ports,
-        range_start,
-        range_end,
-        show_hidden,
-        hidden_locked=hidden_ports_withheld() and not may_see,
-    )
+@app.get("/api/ports/{port}")
+def get_port(
+    port: int,
+    request: Request,
+    include_hidden: bool = Query(default=False),
+) -> dict:
+    if port < 1 or port > 65535:
+        raise HTTPException(status_code=400, detail="port out of range")
+    payload = _occupancy(request, 1, 65535, include_hidden)
+    for row in payload["ports"]:
+        if row["port"] == port:
+            return row
+    if port in port_store.get_hidden_ports() and payload["summary"]["hidden_locked"]:
+        raise HTTPException(status_code=404, detail="not found")
+    known = get_known_port(port)
+    return {
+        "port": port,
+        "status": "free",
+        "source_type": "unknown",
+        "known_service": known,
+        "is_hidden": False,
+        "conflict": False,
+        "urls": [],
+        "containers": [],
+        "compose_configs": [],
+    }
+
+
+@app.get("/api/known-ports/{port}")
+def known_port(port: int) -> dict:
+    known = get_known_port(port)
+    if not known:
+        raise HTTPException(status_code=404, detail="unknown port")
+    return {"port": port, **known}
+
+
+@app.get("/api/manual-ports")
+def list_manual_ports() -> dict:
+    return {"manual_ports": port_store.get_manual_ports()}
 
 
 @app.post("/api/manual-ports")
@@ -113,10 +184,20 @@ def add_manual_port(body: ManualPortCreate) -> dict:
     return {"status": "ok", "entry": entry}
 
 
+@app.patch("/api/manual-ports/{port}")
+def patch_manual_port(port: int, body: ManualPortUpdate) -> dict:
+    entry = port_store.update_manual_port(port, body.label, body.machine)
+    if not entry:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"status": "ok", "entry": entry}
+
+
 @app.delete("/api/manual-ports/{port}")
 def del_manual_port(port: int, machine: str = Query(default="localhost")) -> dict:
     removed = port_store.remove_manual_port(port, machine)
-    return {"status": "ok" if removed else "not_found"}
+    if not removed:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"status": "ok"}
 
 
 @app.get("/api/hidden")
@@ -135,12 +216,19 @@ def hide_port(port: int) -> dict:
 @app.delete("/api/hidden/{port}")
 def unhide_port(port: int) -> dict:
     removed = port_store.remove_hidden_port(port)
-    return {"status": "ok" if removed else "not_hidden"}
+    if not removed:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"status": "ok"}
 
 
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(_FRONTEND_DIR / "index.html")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(_FRONTEND_DIR / "icon.png")
 
 
 app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
@@ -156,6 +244,7 @@ def _classify(
     range_end: int,
     include_hidden: bool,
     hidden_locked: bool,
+    options: dict | None = None,
 ) -> dict:
     listening_map: dict[int, dict] = {}
     inode_to_port: dict[int, int] = {}
@@ -270,7 +359,7 @@ def _classify(
         if not ips:
             ips = [lp_info["ip"] if lp_info else "0.0.0.0"]
         ip = lp_info["ip"] if lp_info else ips[0]
-        urls = _collect_urls(port, ips, ctors, known)
+        urls = _collect_urls(port, ips, ctors, known, options)
 
         port_list.append({
             "port": port,
@@ -337,7 +426,13 @@ def _bind_scope_many(ips: list[str]) -> str:
     return "localhost"
 
 
-def _collect_urls(port: int, ips: list[str], containers: list[dict], known: dict | None) -> list[str]:
+def _collect_urls(
+    port: int,
+    ips: list[str],
+    containers: list[dict],
+    known: dict | None,
+    options: dict | None = None,
+) -> list[str]:
     urls: list[str] = []
     seen: set[str] = set()
     for c in containers:
@@ -345,11 +440,22 @@ def _collect_urls(port: int, ips: list[str], containers: list[dict], known: dict
             if u and u not in seen:
                 seen.add(u)
                 urls.append(u)
+    opts = options or {}
+    if opts.get("guess_urls") is False:
+        return urls
     scope = _bind_scope_many(ips)
     if known and known.get("is_access_port"):
-        host = "127.0.0.1" if scope == "localhost" else "localhost"
+        configured = (opts.get("url_host") or "").strip()
+        if scope == "localhost":
+            host = "127.0.0.1"
+        else:
+            host = configured or "localhost"
         name = (known.get("name") or "").upper()
-        scheme = "https" if port in (443, 8443, 9443) or "HTTPS" in name else "http"
+        scheme_pref = opts.get("url_scheme") or "auto"
+        if scheme_pref in ("http", "https"):
+            scheme = scheme_pref
+        else:
+            scheme = "https" if port in (443, 8443, 9443) or "HTTPS" in name else "http"
         if port in (22, 23, 25, 53, 110, 143, 445, 3389, 5900, 1194, 51820):
             return urls
         guess = f"{scheme}://{host}:{port}"

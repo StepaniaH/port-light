@@ -113,6 +113,39 @@ def remove_hidden_port(port: int) -> bool:
         return False
 
 
+def update_manual_port(port: int, label: str, machine: str = "localhost") -> dict | None:
+    with _LOCK:
+        data = _load()
+        mp = data.get("manual_ports", [])
+        for entry in mp:
+            if entry["port"] == port and entry.get("machine", "localhost") == machine:
+                entry["label"] = label
+                _save(data)
+                return entry
+        return None
+
+
+def get_stored_settings() -> dict:
+    data = _load()
+    raw = data.get("settings")
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def update_stored_settings(patch: dict) -> dict:
+    """Merge *patch* into stored settings. ``None`` values delete a key."""
+    with _LOCK:
+        data = _load()
+        current = dict(data.get("settings") or {})
+        for key, value in patch.items():
+            if value is None:
+                current.pop(key, None)
+            else:
+                current[key] = value
+        data["settings"] = current
+        _save(data)
+        return current
+
+
 # ── Machines ──────────────────────────────────────────────────
 
 def get_machines() -> list[dict]:
