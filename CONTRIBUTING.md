@@ -27,6 +27,12 @@ Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/in
 
 Settings that belong on both Compose and the UI live in `backend/settings.py`. Secrets and filesystem paths stay env-only.
 
+## Locales
+
+UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`. English is the source tree; the other three files must use the same keys (`tests/test_i18n.py` checks this). `frontend/i18n.js` resolves `auto` from `navigator.languages`, sets `html lang`, and interpolates `{name}` placeholders. Do not concatenate translated fragments. Language names in `choice.*` stay in their own script in every file.
+
+Bump the `?v=` on `i18n.js` and the `CACHE_BUST` constant inside it when locale JSON changes.
+
 The root `docker-compose.yml` **builds from source**. It bind-mounts `./custom_ports.json` — create that file first, or drop the volume.
 
 ## Style

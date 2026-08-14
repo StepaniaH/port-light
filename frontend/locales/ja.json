@@ -1,0 +1,239 @@
+{
+  "search": {
+    "placeholder": "ポート・名前・ホストを検索",
+    "aria": "検索"
+  },
+  "action": {
+    "refresh": "更新",
+    "add": "ポートを追加",
+    "showHidden": "非表示ポートを表示",
+    "hiddenVisible": "非表示ポートを表示中",
+    "settings": "設定"
+  },
+  "legend": {
+    "inUse": "使用中",
+    "configured": "定義済み",
+    "free": "空き",
+    "hidden": "非表示",
+    "locked": "ロック中"
+  },
+  "filter": {
+    "running": "実行中",
+    "system": "システム",
+    "docker": "Docker",
+    "access": "Web",
+    "udp": "UDP",
+    "localhost": "localhost",
+    "hidden": "非表示",
+    "kinds": "種類",
+    "sort": "並び替え",
+    "range": "範囲",
+    "rangeStart": "範囲の開始",
+    "rangeEnd": "範囲の終了",
+    "portAsc": "ポート ↑",
+    "portDesc": "ポート ↓",
+    "nameAsc": "名前 A–Z",
+    "nameDesc": "名前 Z–A",
+    "byStatus": "状態"
+  },
+  "scanner": {
+    "label": "スキャナー",
+    "host": "ホスト",
+    "docker": "Docker",
+    "compose": "Compose",
+    "available": "{name} 利用可",
+    "unavailable": "{name} 利用不可"
+  },
+  "status": {
+    "used": "使用中",
+    "configured": "定義済み",
+    "free": "空き",
+    "running": "実行中",
+    "exited": "終了"
+  },
+  "detail": {
+    "panel": "ポート詳細",
+    "close": "閉じる",
+    "status": "状態",
+    "source": "ソース",
+    "protocol": "プロトコル",
+    "bind": "バインド",
+    "process": "プロセス",
+    "pid": "PID",
+    "open": "開く",
+    "url": "URL",
+    "containers": "コンテナ",
+    "image": "イメージ",
+    "project": "プロジェクト",
+    "service": "サービス",
+    "network": "ネットワーク",
+    "compose": "Compose",
+    "file": "ファイル",
+    "containerPort": "コンテナポート",
+    "manual": "手動",
+    "accessPort": "アクセスポート",
+    "internalPort": "内部ポート",
+    "accessHint": "ブラウザやクライアントで開くことが一般的です。",
+    "internalHint": "直接アクセスすることは稀です。",
+    "conflict": "Compose の競合",
+    "conflictHint": "{n} 個のファイルで定義されています。",
+    "hide": "一覧から隠す",
+    "unhide": "再表示",
+    "delete": "削除"
+  },
+  "modal": {
+    "addTitle": "ポートを追加",
+    "portNumber": "ポート番号",
+    "label": "ラベル",
+    "optional": "任意",
+    "cancel": "キャンセル",
+    "add": "追加",
+    "unhideTitle": "非表示ポートを表示",
+    "unhideHint": "ホストで解除パスワードを設定している場合は入力してください。未設定なら、目のボタンで非表示ポートを一覧に含めます。",
+    "unlockPassword": "解除パスワード",
+    "unlock": "解除",
+    "wrongPassword": "パスワードが違います"
+  },
+  "settings": {
+    "title": "設定",
+    "lead": "保存するとデータボリュームに書き込み、対応する環境変数を上書きします。",
+    "leadReadonly": "ホスト環境によりロックされています。Compose を変更してコンテナを再作成してください。",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "保存しました",
+    "unsaved": "未保存の変更があります",
+    "mustBeNumber": "{label} は数値にしてください",
+    "groups": {
+      "appearance": {
+        "title": "外観",
+        "blurb": "言語、テーマ、カードに出す情報量。"
+      },
+      "grid": {
+        "title": "グリッド",
+        "blurb": "更新間隔と、空き数に使うポート範囲。"
+      },
+      "scanning": {
+        "title": "Compose スキャン",
+        "blurb": "更新のたびに compose.yml を探す深さ。"
+      },
+      "links": {
+        "title": "アクセス URL",
+        "blurb": "詳細パネルで http リンクを推定するときのホスト名。"
+      }
+    },
+    "host": {
+      "title": "ホスト",
+      "blurb": "パスとパスワードはコンテナ環境にあり、このページでは変更できません。",
+      "composeScanDir": "Compose スキャンディレクトリ",
+      "customPortsFile": "カスタムポートファイル",
+      "dataDir": "データディレクトリ",
+      "basicAuth": "Basic Auth",
+      "hiddenUnlock": "非表示の解除",
+      "settingsSource": "設定のソース"
+    },
+    "origin": {
+      "saved": "保存済み",
+      "env": "環境変数"
+    },
+    "on": "オン",
+    "off": "オフ",
+    "fields": {
+      "locale": {
+        "label": "言語",
+        "help": "自動はブラウザの言語に合わせます。"
+      },
+      "theme": {
+        "label": "テーマ",
+        "help": "システムはブラウザの配色に合わせます。"
+      },
+      "grid_density": {
+        "label": "グリッド密度",
+        "help": "コンパクトはカードをより多く表示します。"
+      },
+      "show_status_text": {
+        "label": "カードの状態テキスト",
+        "help": "使用中 / 定義済みをカードに表示します。"
+      },
+      "show_access_badge": {
+        "label": "アクセスポートのバッジ",
+        "help": "ブラウザで開くことが多いポートを示します。"
+      },
+      "show_protocol_badge": {
+        "label": "プロトコルのバッジ",
+        "help": "TCP のみでないカードに udp / tcp,udp を表示します。"
+      },
+      "copy_on_click": {
+        "label": "クリックでポート番号をコピー",
+        "help": "ポート番号をクリップボードにコピーします。"
+      },
+      "auto_refresh": {
+        "label": "自動更新",
+        "help": "間隔を置いて占用マップを取得します。"
+      },
+      "refresh_ms": {
+        "label": "更新間隔（ミリ秒）",
+        "help": "自動更新がオンのときに使います。1000–300000。"
+      },
+      "port_range_start": {
+        "label": "範囲の開始",
+        "help": "空き数とヘッダー範囲の下限です。"
+      },
+      "port_range_end": {
+        "label": "範囲の終了",
+        "help": "上限です。未使用ポートをすべて緑にはしません。"
+      },
+      "compose_scan_depth": {
+        "label": "Compose スキャンの深さ",
+        "help": "COMPOSE_SCAN_DIR の下を何階層まで辿るか。"
+      },
+      "compose_scan_max_files": {
+        "label": "Compose ファイルの上限",
+        "help": "更新ごとに解析する compose ファイルの最大数。"
+      },
+      "guess_urls": {
+        "label": "アクセス URL を推定",
+        "help": "既知のアクセスポートに http(s)://ホスト:ポート を付けます。"
+      },
+      "url_host": {
+        "label": "URL のホスト名",
+        "help": "推定リンクで localhost の代わりに使います。空なら localhost / 127.0.0.1。"
+      },
+      "url_scheme": {
+        "label": "URL のスキーム",
+        "help": "自動は 443/8443/9443 と HTTPS を含む名前で https を使います。"
+      }
+    }
+  },
+  "choice": {
+    "auto": "自動",
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語",
+    "system": "システム",
+    "dark": "ダーク",
+    "light": "ライト",
+    "comfortable": "標準",
+    "compact": "コンパクト",
+    "http": "HTTP",
+    "https": "HTTPS"
+  },
+  "localeNative": {
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  },
+  "localeName": {
+    "auto": "ブラウザに合わせる",
+    "en": "英語",
+    "zh-CN": "簡体字中国語",
+    "zh-TW": "繁体字中国語",
+    "ja": "日本語"
+  },
+  "grid": {
+    "empty": "条件に合うポートがありません。",
+    "copied": "コピーしました",
+    "web": "Web"
+  }
+}

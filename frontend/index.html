@@ -15,117 +15,137 @@
       if (s.grid_density) document.documentElement.setAttribute('data-density', s.grid_density);
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=11">
+  <link rel="stylesheet" href="/static/style.css?v=16">
 </head>
 <body>
   <div id="app">
-    <header>
-      <a class="brand" href="#/" id="brand-link">
-        <img class="brand-icon" src="/static/icon.png" width="40" height="40" alt="">
-        <span class="brand-text">
-          <h1>Port-Light</h1>
-          <span class="brand-sub" id="app-version"></span>
-        </span>
-      </a>
-      <div class="header-right">
-        <div id="scanner-pills" class="scanner-pills" aria-label="Scanner status"></div>
-        <div id="summary"></div>
+    <header class="app-header" id="app-header">
+      <div class="app-bar">
+        <a class="brand" href="#/" id="brand-link">
+          <img class="brand-icon" src="/static/icon.png" width="32" height="32" alt="">
+          <span class="brand-text">
+            <span class="brand-name">Port-Light</span>
+            <span class="brand-sub" id="app-version"></span>
+          </span>
+        </a>
+        <div class="app-search" id="app-search">
+          <input type="search" id="search" autocomplete="off" enterkeyhint="search" data-i18n-placeholder="search.placeholder" data-i18n-aria="search.aria">
+        </div>
+        <div class="app-actions">
+          <div id="scanner-pills" class="scanner-dots" data-i18n-aria="scanner.label"></div>
+          <button type="button" id="btn-refresh" class="icon-btn" data-i18n-title="action.refresh">
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
+              <path d="M13.2 8A5.2 5.2 0 1 1 8 2.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M13.25 2.4v3.1H10.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" id="btn-add" class="icon-btn" data-i18n-title="action.add">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 1.5a.75.75 0 0 1 .75.75v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0v-5h-5a.75.75 0 0 1 0-1.5h5v-5A.75.75 0 0 1 8 1.5z"/></svg>
+          </button>
+          <button type="button" id="btn-unhide" class="icon-btn" data-i18n-title="action.showHidden" aria-pressed="false">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 3c-3.2 0-5.9 2.1-7.2 5 1.3 2.9 4 5 7.2 5s5.9-2.1 7.2-5C13.9 5.1 11.2 3 8 3zm0 8.2A3.2 3.2 0 1 1 8 4.8a3.2 3.2 0 0 1 0 6.4zM8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8z"/></svg>
+          </button>
+          <a href="#/settings" id="btn-settings" class="icon-btn" data-nav="settings" data-i18n-title="action.settings">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5.87-2.13.9.52a.75.75 0 0 1 .28 1.02l-.7 1.21a.75.75 0 0 1-.95.32l-1.04-.4a5.03 5.03 0 0 1-1.13.65l-.16 1.1A.75.75 0 0 1 9.32 14H6.68a.75.75 0 0 1-.74-.64l-.16-1.1a5.03 5.03 0 0 1-1.13-.65l-1.04.4a.75.75 0 0 1-.95-.32l-.7-1.21a.75.75 0 0 1 .28-1.02l.9-.52a5.1 5.1 0 0 1 0-1.74l-.9-.52a.75.75 0 0 1-.28-1.02l.7-1.21a.75.75 0 0 1 .95-.32l1.04.4c.35-.27.73-.5 1.13-.65l.16-1.1A.75.75 0 0 1 6.68 2h2.64a.75.75 0 0 1 .74.64l.16 1.1c.4.15.78.38 1.13.65l1.04-.4a.75.75 0 0 1 .95.32l.7 1.21a.75.75 0 0 1-.28 1.02l-.9.52c.08.57.08 1.17 0 1.74z"/></svg>
+          </a>
+        </div>
+      </div>
+      <div class="context-bar" id="context-bar">
+        <div id="summary" class="legend"></div>
+        <div id="filters" class="filter-chips" role="group" data-i18n-aria="filter.kinds">
+          <button type="button" class="chip" data-filter="running" aria-pressed="false" data-i18n="filter.running">Running</button>
+          <button type="button" class="chip" data-filter="system" aria-pressed="false" data-i18n="filter.system">System</button>
+          <button type="button" class="chip" data-filter="docker" aria-pressed="false" data-i18n="filter.docker">Docker</button>
+          <button type="button" class="chip" data-filter="access" aria-pressed="false" data-i18n="filter.access">Web</button>
+          <button type="button" class="chip" data-filter="udp" aria-pressed="false">UDP</button>
+          <button type="button" class="chip" data-filter="localhost" aria-pressed="false">localhost</button>
+          <button type="button" class="chip" data-filter="hidden" aria-pressed="false" data-i18n="filter.hidden">Hidden</button>
+        </div>
+        <div class="filter-aside">
+          <label class="quiet-field">
+            <span data-i18n="filter.sort">Sort</span>
+            <select id="sort-select" class="dropdown">
+              <option value="port-asc" data-i18n="filter.portAsc">Port ↑</option>
+              <option value="port-desc" data-i18n="filter.portDesc">Port ↓</option>
+              <option value="name-asc" data-i18n="filter.nameAsc">Name A–Z</option>
+              <option value="name-desc" data-i18n="filter.nameDesc">Name Z–A</option>
+              <option value="status" data-i18n="filter.byStatus">Status</option>
+            </select>
+          </label>
+          <label class="quiet-field">
+            <span data-i18n="filter.range">Range</span>
+            <span class="range-group">
+              <input type="number" id="range-start" value="1" min="1" max="65535" class="range-input" data-i18n-aria="filter.rangeStart">
+              <span class="range-sep">–</span>
+              <input type="number" id="range-end" value="9999" min="1" max="65535" class="range-input" data-i18n-aria="filter.rangeEnd">
+            </span>
+          </label>
+        </div>
       </div>
     </header>
 
     <section id="view-grid" class="view">
-      <div id="toolbar">
-        <div class="filter-chips" id="filter-chips">
-          <button class="chip active" data-filter="all">All</button>
-          <button class="chip" data-filter="running">▶ Running</button>
-          <button class="chip" data-filter="used">🔵 In Use</button>
-          <button class="chip" data-filter="configured">🟡 Configured</button>
-          <button class="chip" data-filter="system">⚙ System</button>
-          <button class="chip" data-filter="docker">🐳 Docker</button>
-          <button class="chip" data-filter="access">🔓 Access</button>
-          <button class="chip" data-filter="udp">UDP</button>
-          <button class="chip" data-filter="localhost">localhost</button>
-          <button class="chip" data-filter="hidden">👻 Hidden</button>
-        </div>
-
-        <select id="sort-select" class="dropdown" title="Sort">
-          <option value="port-asc">Port ↑</option>
-          <option value="port-desc">Port ↓</option>
-          <option value="name-asc">Name A-Z</option>
-          <option value="name-desc">Name Z-A</option>
-          <option value="status">Status</option>
-        </select>
-
-        <div class="range-group">
-          <input type="number" id="range-start" value="1" min="1" max="65535" class="range-input">
-          <span>–</span>
-          <input type="number" id="range-end" value="9999" min="1" max="65535" class="range-input">
-        </div>
-
-        <input type="text" id="search" placeholder="Search port, name, host…" autocomplete="off">
-
-        <div class="action-group">
-          <button id="btn-refresh" class="icon-btn" title="Refresh now">⟳</button>
-          <button id="btn-add" class="icon-btn" title="Add manual port">＋</button>
-          <button id="btn-unhide" class="icon-btn" title="Show ports hidden from the grid">👁</button>
-          <a id="btn-settings" class="icon-btn" href="#/settings" title="Settings">⚙</a>
-        </div>
-      </div>
-
       <div id="grid"></div>
     </section>
 
     <section id="view-settings" class="view hidden">
-      <div class="settings-page">
-        <div class="settings-toolbar">
-          <a class="btn-secondary" href="#/">← Grid</a>
-          <h2>Settings</h2>
+      <form id="settings-form" class="settings-page" autocomplete="off">
+        <div class="page-intro">
+          <h1 data-i18n="settings.title">Settings</h1>
+          <p class="settings-lead" id="settings-lead"></p>
         </div>
-        <p class="settings-lead" id="settings-lead"></p>
-        <form id="settings-form">
-          <div id="settings-fields"></div>
-          <fieldset class="settings-group">
-            <legend>Host (Compose / env only)</legend>
-            <p class="field-help">Secrets and filesystem paths stay in the container environment. They are not stored in the Web UI.</p>
-            <div id="settings-env-only"></div>
-          </fieldset>
-          <div class="settings-actions">
-            <span id="settings-status"></span>
-            <button type="submit" class="btn-primary" id="settings-save">Save</button>
-          </div>
-        </form>
-      </div>
+        <div id="settings-fields"></div>
+        <section class="settings-card">
+          <header class="settings-card-head">
+            <h2 data-i18n="settings.host.title">Host</h2>
+            <p data-i18n="settings.host.blurb">Paths and passwords stay in the container environment. This page cannot change them.</p>
+          </header>
+          <div id="settings-env-only" class="settings-card-body"></div>
+        </section>
+        <div class="settings-footer">
+          <span id="settings-status"></span>
+          <button type="submit" class="btn-primary" id="settings-save" data-i18n="settings.save">Save</button>
+        </div>
+      </form>
     </section>
 
-    <div id="detail-panel" class="hidden">
+    <div id="detail-backdrop" class="hidden"></div>
+    <aside id="detail-panel" class="hidden" data-i18n-aria="detail.panel">
       <div id="detail-content"></div>
+    </aside>
+
+    <div id="add-modal" class="modal hidden" role="dialog" aria-labelledby="add-title" aria-modal="true">
+      <form class="modal-content" id="add-form">
+        <h2 id="add-title" data-i18n="modal.addTitle">Add port</h2>
+        <label><span data-i18n="modal.portNumber">Port number</span>
+          <input type="number" id="add-port" min="1" max="65535" placeholder="8000" required>
+        </label>
+        <label><span data-i18n="modal.label">Label</span>
+          <input type="text" id="add-label" maxlength="80" data-i18n-placeholder="modal.optional">
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="add-cancel" class="btn-secondary" data-i18n="modal.cancel">Cancel</button>
+          <button type="submit" id="add-confirm" class="btn-primary" data-i18n="modal.add">Add</button>
+        </div>
+      </form>
     </div>
 
-    <div id="add-modal" class="modal hidden">
-      <div class="modal-content">
-        <h3>＋ Add Manual Port</h3>
-        <label>Port number <input type="number" id="add-port" min="1" max="65535" placeholder="e.g. 8000"></label>
-        <label>Label <input type="text" id="add-label" placeholder="e.g. My custom service"></label>
+    <div id="unhide-modal" class="modal hidden" role="dialog" aria-labelledby="unhide-title" aria-modal="true">
+      <form class="modal-content" id="unhide-form">
+        <h2 id="unhide-title" data-i18n="modal.unhideTitle">Show hidden ports</h2>
+        <p class="modal-hint" data-i18n="modal.unhideHint">Enter the unlock password if the host requires one. Otherwise the eye button just includes hidden ports in the grid.</p>
+        <label><span data-i18n="modal.unlockPassword">Unlock password</span>
+          <input type="password" id="unhide-password" autocomplete="current-password">
+        </label>
         <div class="modal-actions">
-          <button id="add-cancel" class="btn-secondary">Cancel</button>
-          <button id="add-confirm" class="btn-primary">Add</button>
+          <button type="button" id="unhide-cancel" class="btn-secondary" data-i18n="modal.cancel">Cancel</button>
+          <button type="submit" id="unhide-confirm" class="btn-primary" data-i18n="modal.unlock">Unlock</button>
         </div>
-      </div>
-    </div>
-
-    <div id="unhide-modal" class="modal hidden">
-      <div class="modal-content">
-        <h3>Show ports hidden from the grid</h3>
-        <label>Unlock password <input type="password" id="unhide-password" placeholder="HIDDEN_UNLOCK_PASSWORD"></label>
-        <p class="modal-hint">This is a server secret, not a login. Without AUTH_USER or HIDDEN_UNLOCK_PASSWORD, hide-from-grid is only a display filter.</p>
-        <div class="modal-actions">
-          <button id="unhide-cancel" class="btn-secondary">Cancel</button>
-          <button id="unhide-confirm" class="btn-primary">Unlock</button>
-        </div>
-      </div>
+      </form>
     </div>
   </div>
 
-  <script src="/static/app.js?v=11"></script>
+  <script src="/static/i18n.js?v=16"></script>
+  <script src="/static/app.js?v=16"></script>
 </body>
 </html>

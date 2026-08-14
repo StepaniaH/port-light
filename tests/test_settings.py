@@ -41,6 +41,7 @@ def test_settings_rejects_bad_values(tmp_path, monkeypatch):
     monkeypatch.delenv("PORT_LIGHT_SETTINGS_SOURCE", raising=False)
     client = TestClient(app)
     assert client.put("/api/settings", json={"theme": "neon"}).status_code == 400
+    assert client.put("/api/settings", json={"locale": "fr"}).status_code == 400
     assert client.put("/api/settings", json={"nope": 1}).status_code == 400
     assert client.put("/api/settings", json={"url_host": "http://nas.lan"}).status_code == 400
 

@@ -1,0 +1,239 @@
+{
+  "search": {
+    "placeholder": "Search port, name, or host",
+    "aria": "Search"
+  },
+  "action": {
+    "refresh": "Refresh",
+    "add": "Add port",
+    "showHidden": "Show hidden ports",
+    "hiddenVisible": "Hidden ports visible",
+    "settings": "Settings"
+  },
+  "legend": {
+    "inUse": "in use",
+    "configured": "configured",
+    "free": "free",
+    "hidden": "hidden",
+    "locked": "locked"
+  },
+  "filter": {
+    "running": "Running",
+    "system": "System",
+    "docker": "Docker",
+    "access": "Web",
+    "udp": "UDP",
+    "localhost": "localhost",
+    "hidden": "Hidden",
+    "kinds": "Kind",
+    "sort": "Sort",
+    "range": "Range",
+    "rangeStart": "Range start",
+    "rangeEnd": "Range end",
+    "portAsc": "Port ↑",
+    "portDesc": "Port ↓",
+    "nameAsc": "Name A–Z",
+    "nameDesc": "Name Z–A",
+    "byStatus": "Status"
+  },
+  "scanner": {
+    "label": "Scanners",
+    "host": "Host",
+    "docker": "Docker",
+    "compose": "Compose",
+    "available": "{name} available",
+    "unavailable": "{name} unavailable"
+  },
+  "status": {
+    "used": "in use",
+    "configured": "configured",
+    "free": "free",
+    "running": "running",
+    "exited": "exited"
+  },
+  "detail": {
+    "panel": "Port detail",
+    "close": "Close",
+    "status": "Status",
+    "source": "Source",
+    "protocol": "Protocol",
+    "bind": "Bind",
+    "process": "Process",
+    "pid": "PID",
+    "open": "Open",
+    "url": "URL",
+    "containers": "Containers",
+    "image": "Image",
+    "project": "Project",
+    "service": "Service",
+    "network": "Network",
+    "compose": "Compose",
+    "file": "File",
+    "containerPort": "Container port",
+    "manual": "Manual",
+    "accessPort": "Access port",
+    "internalPort": "Internal port",
+    "accessHint": "Typically opened in a browser or client.",
+    "internalHint": "Usually not reached directly.",
+    "conflict": "Compose conflict",
+    "conflictHint": "Declared in {n} files.",
+    "hide": "Hide from grid",
+    "unhide": "Unhide",
+    "delete": "Delete"
+  },
+  "modal": {
+    "addTitle": "Add port",
+    "portNumber": "Port number",
+    "label": "Label",
+    "optional": "Optional",
+    "cancel": "Cancel",
+    "add": "Add",
+    "unhideTitle": "Show hidden ports",
+    "unhideHint": "Enter the unlock password if the host requires one. Otherwise the eye button just includes hidden ports in the grid.",
+    "unlockPassword": "Unlock password",
+    "unlock": "Unlock",
+    "wrongPassword": "Wrong password"
+  },
+  "settings": {
+    "title": "Settings",
+    "lead": "Saving writes to the data volume and overrides the matching environment variable.",
+    "leadReadonly": "Locked by the host environment. Change values in Compose and recreate the container.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "unsaved": "Unsaved changes",
+    "mustBeNumber": "{label} must be a number",
+    "groups": {
+      "appearance": {
+        "title": "Appearance",
+        "blurb": "Language, theme, and how much each card shows."
+      },
+      "grid": {
+        "title": "Grid",
+        "blurb": "Refresh interval and the range used for the free count."
+      },
+      "scanning": {
+        "title": "Compose scan",
+        "blurb": "How far to walk for compose.yml files on each refresh."
+      },
+      "links": {
+        "title": "Access URLs",
+        "blurb": "Host used when guessing http links in the detail panel."
+      }
+    },
+    "host": {
+      "title": "Host",
+      "blurb": "Paths and passwords stay in the container environment. This page cannot change them.",
+      "composeScanDir": "Compose scan directory",
+      "customPortsFile": "Custom ports file",
+      "dataDir": "Data directory",
+      "basicAuth": "Basic Auth",
+      "hiddenUnlock": "Hidden unlock",
+      "settingsSource": "Settings source"
+    },
+    "origin": {
+      "saved": "Saved",
+      "env": "Environment"
+    },
+    "on": "on",
+    "off": "off",
+    "fields": {
+      "locale": {
+        "label": "Language",
+        "help": "Auto follows the browser."
+      },
+      "theme": {
+        "label": "Theme",
+        "help": "System follows the browser color scheme."
+      },
+      "grid_density": {
+        "label": "Grid density",
+        "help": "Compact packs more port cards on screen."
+      },
+      "show_status_text": {
+        "label": "Status text on cards",
+        "help": "Short in-use / configured label on each card."
+      },
+      "show_access_badge": {
+        "label": "Access-port badge",
+        "help": "Mark ports people usually open in a browser."
+      },
+      "show_protocol_badge": {
+        "label": "Protocol badge",
+        "help": "Show udp / tcp,udp on cards that are not TCP-only."
+      },
+      "copy_on_click": {
+        "label": "Copy port on click",
+        "help": "Copies the port number to the clipboard."
+      },
+      "auto_refresh": {
+        "label": "Auto-refresh",
+        "help": "Poll the occupancy map on an interval."
+      },
+      "refresh_ms": {
+        "label": "Refresh interval (ms)",
+        "help": "Used when auto-refresh is on. 1000–300000."
+      },
+      "port_range_start": {
+        "label": "Range start",
+        "help": "Lower bound for the free-count and the default header range."
+      },
+      "port_range_end": {
+        "label": "Range end",
+        "help": "Upper bound. Does not paint every unused port green."
+      },
+      "compose_scan_depth": {
+        "label": "Compose scan depth",
+        "help": "How many directory levels under COMPOSE_SCAN_DIR to walk."
+      },
+      "compose_scan_max_files": {
+        "label": "Compose file cap",
+        "help": "Stop after this many compose files per refresh."
+      },
+      "guess_urls": {
+        "label": "Guess access URLs",
+        "help": "Add http(s)://host:port for known access ports."
+      },
+      "url_host": {
+        "label": "URL hostname",
+        "help": "Used in guessed links instead of localhost. Leave empty for localhost / 127.0.0.1."
+      },
+      "url_scheme": {
+        "label": "URL scheme",
+        "help": "Auto uses https for 443/8443/9443 and names containing HTTPS."
+      }
+    }
+  },
+  "choice": {
+    "auto": "Auto",
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語",
+    "system": "System",
+    "dark": "Dark",
+    "light": "Light",
+    "comfortable": "Comfortable",
+    "compact": "Compact",
+    "http": "HTTP",
+    "https": "HTTPS"
+  },
+  "localeNative": {
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  },
+  "localeName": {
+    "auto": "Follows the browser",
+    "en": "English",
+    "zh-CN": "Simplified Chinese",
+    "zh-TW": "Traditional Chinese",
+    "ja": "Japanese"
+  },
+  "grid": {
+    "empty": "No ports match these filters.",
+    "copied": "Copied",
+    "web": "web"
+  }
+}

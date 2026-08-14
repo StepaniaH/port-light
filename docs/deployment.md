@@ -174,7 +174,7 @@ If a Quadlet or rootless snippet works on your machine, open an issue or PR with
 
 ## Settings (Compose and Web UI)
 
-Non-secret options (theme, range, refresh, `URL_HOST`, compose scan depth, …) can be set as environment variables **or** on the Settings page (`#/settings`). The UI writes `settings` into `/data/port_light.json`. That overlay wins on the next refresh.
+Non-secret options (theme, language, range, refresh, `URL_HOST`, compose scan depth, …) can be set as environment variables **or** on the Settings page (`#/settings`). The UI writes `settings` into `/data/port_light.json`. That overlay wins on the next refresh.
 
 To keep GitOps / Compose as the only source:
 

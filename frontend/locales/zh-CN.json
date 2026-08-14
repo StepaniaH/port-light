@@ -1,0 +1,239 @@
+{
+  "search": {
+    "placeholder": "搜索端口、名称或主机",
+    "aria": "搜索"
+  },
+  "action": {
+    "refresh": "刷新",
+    "add": "添加端口",
+    "showHidden": "显示隐藏端口",
+    "hiddenVisible": "正在显示隐藏端口",
+    "settings": "设置"
+  },
+  "legend": {
+    "inUse": "占用中",
+    "configured": "已配置",
+    "free": "空闲",
+    "hidden": "隐藏",
+    "locked": "已锁定"
+  },
+  "filter": {
+    "running": "运行中",
+    "system": "系统",
+    "docker": "Docker",
+    "access": "网页",
+    "udp": "UDP",
+    "localhost": "localhost",
+    "hidden": "隐藏",
+    "kinds": "类型",
+    "sort": "排序",
+    "range": "范围",
+    "rangeStart": "范围起点",
+    "rangeEnd": "范围终点",
+    "portAsc": "端口 ↑",
+    "portDesc": "端口 ↓",
+    "nameAsc": "名称 A–Z",
+    "nameDesc": "名称 Z–A",
+    "byStatus": "状态"
+  },
+  "scanner": {
+    "label": "扫描器",
+    "host": "主机",
+    "docker": "Docker",
+    "compose": "Compose",
+    "available": "{name}可用",
+    "unavailable": "{name}不可用"
+  },
+  "status": {
+    "used": "占用中",
+    "configured": "已配置",
+    "free": "空闲",
+    "running": "运行中",
+    "exited": "已退出"
+  },
+  "detail": {
+    "panel": "端口详情",
+    "close": "关闭",
+    "status": "状态",
+    "source": "来源",
+    "protocol": "协议",
+    "bind": "绑定",
+    "process": "进程",
+    "pid": "PID",
+    "open": "打开",
+    "url": "URL",
+    "containers": "容器",
+    "image": "镜像",
+    "project": "项目",
+    "service": "服务",
+    "network": "网络",
+    "compose": "Compose",
+    "file": "文件",
+    "containerPort": "容器端口",
+    "manual": "手动",
+    "accessPort": "访问端口",
+    "internalPort": "内部端口",
+    "accessHint": "通常在浏览器或客户端中打开。",
+    "internalHint": "一般不直接访问。",
+    "conflict": "Compose 冲突",
+    "conflictHint": "在 {n} 个文件中声明。",
+    "hide": "从网格隐藏",
+    "unhide": "取消隐藏",
+    "delete": "删除"
+  },
+  "modal": {
+    "addTitle": "添加端口",
+    "portNumber": "端口号",
+    "label": "标签",
+    "optional": "可选",
+    "cancel": "取消",
+    "add": "添加",
+    "unhideTitle": "显示隐藏端口",
+    "unhideHint": "若主机设置了解锁密码，请在此输入。否则点眼睛按钮即可把隐藏端口纳入网格。",
+    "unlockPassword": "解锁密码",
+    "unlock": "解锁",
+    "wrongPassword": "密码错误"
+  },
+  "settings": {
+    "title": "设置",
+    "lead": "保存会写入数据卷，并覆盖对应的环境变量。",
+    "leadReadonly": "已由主机环境锁定。请在 Compose 中修改后重建容器。",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "unsaved": "有未保存的更改",
+    "mustBeNumber": "{label}必须是数字",
+    "groups": {
+      "appearance": {
+        "title": "外观",
+        "blurb": "语言、主题，以及卡片上显示多少信息。"
+      },
+      "grid": {
+        "title": "网格",
+        "blurb": "刷新间隔，以及空闲计数所用的端口范围。"
+      },
+      "scanning": {
+        "title": "Compose 扫描",
+        "blurb": "每次刷新时向下查找 compose.yml 的深度。"
+      },
+      "links": {
+        "title": "访问地址",
+        "blurb": "详情面板里猜测 http 链接所用的主机名。"
+      }
+    },
+    "host": {
+      "title": "主机",
+      "blurb": "路径和密码留在容器环境中，此页无法修改。",
+      "composeScanDir": "Compose 扫描目录",
+      "customPortsFile": "自定义端口文件",
+      "dataDir": "数据目录",
+      "basicAuth": "Basic Auth",
+      "hiddenUnlock": "隐藏解锁",
+      "settingsSource": "设置来源"
+    },
+    "origin": {
+      "saved": "已保存",
+      "env": "环境变量"
+    },
+    "on": "开",
+    "off": "关",
+    "fields": {
+      "locale": {
+        "label": "语言",
+        "help": "自动跟随浏览器语言。"
+      },
+      "theme": {
+        "label": "主题",
+        "help": "系统跟随浏览器配色。"
+      },
+      "grid_density": {
+        "label": "网格密度",
+        "help": "紧凑模式在一屏显示更多卡片。"
+      },
+      "show_status_text": {
+        "label": "卡片上的状态文字",
+        "help": "在卡片上显示占用中 / 已配置。"
+      },
+      "show_access_badge": {
+        "label": "访问端口标记",
+        "help": "标出通常在浏览器中打开的端口。"
+      },
+      "show_protocol_badge": {
+        "label": "协议标记",
+        "help": "在非纯 TCP 的卡片上显示 udp / tcp,udp。"
+      },
+      "copy_on_click": {
+        "label": "点击复制端口号",
+        "help": "把端口号复制到剪贴板。"
+      },
+      "auto_refresh": {
+        "label": "自动刷新",
+        "help": "按间隔轮询占用图。"
+      },
+      "refresh_ms": {
+        "label": "刷新间隔（毫秒）",
+        "help": "开启自动刷新时使用。1000–300000。"
+      },
+      "port_range_start": {
+        "label": "范围起点",
+        "help": "空闲计数和页头范围的下限。"
+      },
+      "port_range_end": {
+        "label": "范围终点",
+        "help": "上限。不会把所有未占用端口都画成绿色。"
+      },
+      "compose_scan_depth": {
+        "label": "Compose 扫描深度",
+        "help": "在 COMPOSE_SCAN_DIR 下向下走多少层目录。"
+      },
+      "compose_scan_max_files": {
+        "label": "Compose 文件上限",
+        "help": "每次刷新最多解析这么多 compose 文件。"
+      },
+      "guess_urls": {
+        "label": "猜测访问地址",
+        "help": "为已知访问端口补上 http(s)://主机:端口。"
+      },
+      "url_host": {
+        "label": "URL 主机名",
+        "help": "猜测链接时用来代替 localhost。留空则用 localhost / 127.0.0.1。"
+      },
+      "url_scheme": {
+        "label": "URL 协议",
+        "help": "自动会在 443/8443/9443 以及名称含 HTTPS 时使用 https。"
+      }
+    }
+  },
+  "choice": {
+    "auto": "自动",
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語",
+    "system": "系统",
+    "dark": "深色",
+    "light": "浅色",
+    "comfortable": "舒适",
+    "compact": "紧凑",
+    "http": "HTTP",
+    "https": "HTTPS"
+  },
+  "localeNative": {
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  },
+  "localeName": {
+    "auto": "跟随浏览器",
+    "en": "英语",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁体中文",
+    "ja": "日语"
+  },
+  "grid": {
+    "empty": "没有符合筛选条件的端口。",
+    "copied": "已复制",
+    "web": "网页"
+  }
+}

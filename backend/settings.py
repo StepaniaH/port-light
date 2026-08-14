@@ -39,6 +39,11 @@ class FieldSpec:
 
 FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
+        "locale", "choice", "LOCALE", "auto", "appearance", "Language",
+        "Auto follows the browser.",
+        choices=("auto", "en", "zh-CN", "zh-TW", "ja"),
+    ),
+    FieldSpec(
         "theme", "choice", "THEME", "system", "appearance", "Theme",
         "System follows the browser color scheme.",
         choices=("system", "dark", "light"),
@@ -50,11 +55,11 @@ FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         "show_status_text", "bool", "SHOW_STATUS_TEXT", False, "appearance",
-        "Status text on cards", "Tiny USE / CFG label on each card.",
+        "Status text on cards", "Short in-use / configured label on each card.",
     ),
     FieldSpec(
         "show_access_badge", "bool", "SHOW_ACCESS_BADGE", True, "appearance",
-        "Access-port badge", "Show the lock icon on ports people usually open in a browser.",
+        "Access-port badge", "Mark ports people usually open in a browser.",
     ),
     FieldSpec(
         "show_protocol_badge", "bool", "SHOW_PROTOCOL_BADGE", True, "appearance",

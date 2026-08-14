@@ -18,9 +18,12 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - GitHub Release notes from `CHANGELOG.md` when a `v*` tag is pushed.
 - Unraid Docker template at `deploy/unraid/port-light.xml`.
 - More built-in names (Home Assistant, Plex, Immich, Lidarr, Prowlarr 9696, Port-Light 2100, …).
+- UI language: English, Simplified Chinese, Traditional Chinese, Japanese (`LOCALE` / Settings). `frontend/locales/` is the source; files share one key tree.
 
 ### Changed
 
+- Grid chrome is one sticky header: search in the top row, occupancy counts as the status filter, kind chips and range on the second row. Settings is a gear, not a competing nav tab.
+- Language picker is a dropdown: native name on the first line, current UI language on the second.
 - Homelab-oriented labels on a few shared ports (3000 Grafana, 5000 Synology DSM, 9000 Portainer HTTP, 8787 Readarr). Override with `custom_ports.json` if you use them for something else.
 
 ## 0.5.0 — 2026-08-13

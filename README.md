@@ -48,7 +48,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Built-in names for common homelab ports (SSH, Jellyfin, Postgres, …), plus a local override file
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
-- Dark / light / system theme, compact grid, and other options on the Settings page (also via Compose env)
+- Dark / light / system theme, compact grid, UI language (English, 简体中文, 繁體中文, 日本語), and other options on the Settings page (also via Compose env)
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
 - Vanilla HTML/CSS/JS frontend — no npm, no build step
@@ -107,6 +107,7 @@ Open `http://localhost:2100`.
 | `PORT_LIGHT_DATA_DIR` | `/data` | Manual ports, hidden list, and saved settings (JSON) |
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | Extra / overriding port names (env only) |
 | `THEME` | `system` | `system` / `dark` / `light` |
+| `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`. Auto follows the browser. |
 | `GRID_DENSITY` | `comfortable` | `comfortable` or `compact` |
 | `REFRESH_MS` | `5000` | Auto-refresh interval |
 | `URL_HOST` | empty | Hostname used in guessed `http(s)://` links |

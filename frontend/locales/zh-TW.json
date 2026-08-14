@@ -1,0 +1,239 @@
+{
+  "search": {
+    "placeholder": "搜尋連接埠、名稱或主機",
+    "aria": "搜尋"
+  },
+  "action": {
+    "refresh": "重新整理",
+    "add": "新增連接埠",
+    "showHidden": "顯示隱藏的連接埠",
+    "hiddenVisible": "正在顯示隱藏的連接埠",
+    "settings": "設定"
+  },
+  "legend": {
+    "inUse": "使用中",
+    "configured": "已設定",
+    "free": "閒置",
+    "hidden": "隱藏",
+    "locked": "已鎖定"
+  },
+  "filter": {
+    "running": "執行中",
+    "system": "系統",
+    "docker": "Docker",
+    "access": "網頁",
+    "udp": "UDP",
+    "localhost": "localhost",
+    "hidden": "隱藏",
+    "kinds": "類型",
+    "sort": "排序",
+    "range": "範圍",
+    "rangeStart": "範圍起點",
+    "rangeEnd": "範圍終點",
+    "portAsc": "連接埠 ↑",
+    "portDesc": "連接埠 ↓",
+    "nameAsc": "名稱 A–Z",
+    "nameDesc": "名稱 Z–A",
+    "byStatus": "狀態"
+  },
+  "scanner": {
+    "label": "掃描器",
+    "host": "主機",
+    "docker": "Docker",
+    "compose": "Compose",
+    "available": "{name}可用",
+    "unavailable": "{name}不可用"
+  },
+  "status": {
+    "used": "使用中",
+    "configured": "已設定",
+    "free": "閒置",
+    "running": "執行中",
+    "exited": "已結束"
+  },
+  "detail": {
+    "panel": "連接埠詳情",
+    "close": "關閉",
+    "status": "狀態",
+    "source": "來源",
+    "protocol": "協定",
+    "bind": "繫結",
+    "process": "程序",
+    "pid": "PID",
+    "open": "開啟",
+    "url": "URL",
+    "containers": "容器",
+    "image": "映像檔",
+    "project": "專案",
+    "service": "服務",
+    "network": "網路",
+    "compose": "Compose",
+    "file": "檔案",
+    "containerPort": "容器連接埠",
+    "manual": "手動",
+    "accessPort": "存取連接埠",
+    "internalPort": "內部連接埠",
+    "accessHint": "通常以瀏覽器或用戶端開啟。",
+    "internalHint": "通常不會直接連線。",
+    "conflict": "Compose 衝突",
+    "conflictHint": "在 {n} 個檔案中宣告。",
+    "hide": "從一覽隱藏",
+    "unhide": "取消隱藏",
+    "delete": "刪除"
+  },
+  "modal": {
+    "addTitle": "新增連接埠",
+    "portNumber": "連接埠號碼",
+    "label": "標籤",
+    "optional": "選填",
+    "cancel": "取消",
+    "add": "新增",
+    "unhideTitle": "顯示隱藏的連接埠",
+    "unhideHint": "若主機設了解鎖密碼，請在此輸入。否則點眼睛按鈕即可把隱藏的連接埠納入一覽。",
+    "unlockPassword": "解鎖密碼",
+    "unlock": "解鎖",
+    "wrongPassword": "密碼錯誤"
+  },
+  "settings": {
+    "title": "設定",
+    "lead": "儲存會寫入資料卷，並覆蓋對應的環境變數。",
+    "leadReadonly": "已由主機環境鎖定。請在 Compose 中修改後重建容器。",
+    "save": "儲存",
+    "saving": "儲存中…",
+    "saved": "已儲存",
+    "unsaved": "有未儲存的變更",
+    "mustBeNumber": "{label}必須是數字",
+    "groups": {
+      "appearance": {
+        "title": "外觀",
+        "blurb": "語言、主題，以及卡片上顯示多少資訊。"
+      },
+      "grid": {
+        "title": "網格",
+        "blurb": "重新整理間隔，以及閒置計數所用的連接埠範圍。"
+      },
+      "scanning": {
+        "title": "Compose 掃描",
+        "blurb": "每次重新整理時向下尋找 compose.yml 的深度。"
+      },
+      "links": {
+        "title": "存取網址",
+        "blurb": "詳情面板裡猜測 http 連結所用的主機名稱。"
+      }
+    },
+    "host": {
+      "title": "主機",
+      "blurb": "路徑與密碼留在容器環境中，此頁無法變更。",
+      "composeScanDir": "Compose 掃描目錄",
+      "customPortsFile": "自訂連接埠檔案",
+      "dataDir": "資料目錄",
+      "basicAuth": "Basic Auth",
+      "hiddenUnlock": "隱藏解鎖",
+      "settingsSource": "設定來源"
+    },
+    "origin": {
+      "saved": "已儲存",
+      "env": "環境變數"
+    },
+    "on": "開",
+    "off": "關",
+    "fields": {
+      "locale": {
+        "label": "語言",
+        "help": "自動跟隨瀏覽器語言。"
+      },
+      "theme": {
+        "label": "主題",
+        "help": "系統跟隨瀏覽器配色。"
+      },
+      "grid_density": {
+        "label": "網格密度",
+        "help": "緊湊模式可在同一畫面顯示更多卡片。"
+      },
+      "show_status_text": {
+        "label": "卡片上的狀態文字",
+        "help": "在卡片上顯示使用中 / 已設定。"
+      },
+      "show_access_badge": {
+        "label": "存取連接埠標記",
+        "help": "標出通常在瀏覽器中開啟的連接埠。"
+      },
+      "show_protocol_badge": {
+        "label": "協定標記",
+        "help": "在非純 TCP 的卡片上顯示 udp / tcp,udp。"
+      },
+      "copy_on_click": {
+        "label": "點選複製連接埠號碼",
+        "help": "把連接埠號碼複製到剪貼簿。"
+      },
+      "auto_refresh": {
+        "label": "自動重新整理",
+        "help": "依間隔輪詢佔用圖。"
+      },
+      "refresh_ms": {
+        "label": "重新整理間隔（毫秒）",
+        "help": "開啟自動重新整理時使用。1000–300000。"
+      },
+      "port_range_start": {
+        "label": "範圍起點",
+        "help": "閒置計數與頁首範圍的下限。"
+      },
+      "port_range_end": {
+        "label": "範圍終點",
+        "help": "上限。不會把所有未佔用的連接埠都畫成綠色。"
+      },
+      "compose_scan_depth": {
+        "label": "Compose 掃描深度",
+        "help": "在 COMPOSE_SCAN_DIR 下向下走多少層目錄。"
+      },
+      "compose_scan_max_files": {
+        "label": "Compose 檔案上限",
+        "help": "每次重新整理最多解析這麼多 compose 檔案。"
+      },
+      "guess_urls": {
+        "label": "猜測存取網址",
+        "help": "為已知存取連接埠補上 http(s)://主機:連接埠。"
+      },
+      "url_host": {
+        "label": "URL 主機名稱",
+        "help": "猜測連結時用來代替 localhost。留空則用 localhost / 127.0.0.1。"
+      },
+      "url_scheme": {
+        "label": "URL 通訊協定",
+        "help": "自動會在 443/8443/9443 以及名稱含 HTTPS 時使用 https。"
+      }
+    }
+  },
+  "choice": {
+    "auto": "自動",
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語",
+    "system": "系統",
+    "dark": "深色",
+    "light": "淺色",
+    "comfortable": "舒適",
+    "compact": "緊湊",
+    "http": "HTTP",
+    "https": "HTTPS"
+  },
+  "localeNative": {
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  },
+  "localeName": {
+    "auto": "跟隨瀏覽器",
+    "en": "英語",
+    "zh-CN": "簡體中文",
+    "zh-TW": "繁體中文",
+    "ja": "日語"
+  },
+  "grid": {
+    "empty": "沒有符合篩選條件的連接埠。",
+    "copied": "已複製",
+    "web": "網頁"
+  }
+}

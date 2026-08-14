@@ -3,16 +3,23 @@
 (function () {
   'use strict';
 
+  function t(key, vars) {
+    return window.PortLightI18n ? window.PortLightI18n.t(key, vars) : key;
+  }
+
   let currentData = null;
-  let activeFilters = new Set(['all']);
+  let statusFilter = 'all';
+  let kindFilters = new Set();
   let sortMode = 'port-asc';
   let searchTerm = '';
   let searchPortNum = null;
   let selectedPort = null;
   let rangeStart = 1;
   let rangeEnd = 9999;
+  let rangeFromView = false;
   let showHidden = false;
   let settings = {
+    locale: 'auto',
     theme: 'system',
     grid_density: 'comfortable',
     show_status_text: false,
@@ -28,48 +35,87 @@
     url_scheme: 'auto',
   };
   let settingsDoc = null;
+  let settingsDirty = false;
   let refreshTimer = null;
   let meta = { hidden_unlock_required: false, hidden_ports_withheld: false, version: '', settings_readonly: false };
   let hiddenUnlock = sessionStorage.getItem('port-light-hidden-unlock') || '';
   let route = { name: 'grid' };
+  let pendingAfterUnlock = null;
+  let focusBack = null;
 
+  const appEl = document.getElementById('app');
   const grid = document.getElementById('grid');
   const summary = document.getElementById('summary');
   const detailPanel = document.getElementById('detail-panel');
+  const detailBackdrop = document.getElementById('detail-backdrop');
   const detailContent = document.getElementById('detail-content');
   const searchInput = document.getElementById('search');
   const rangeStartInput = document.getElementById('range-start');
   const rangeEndInput = document.getElementById('range-end');
   const sortSelect = document.getElementById('sort-select');
-  const GROUP_LABELS = {
-    appearance: 'Appearance',
-    grid: 'Grid',
-    scanning: 'Compose scan',
-    links: 'Access URLs',
+  const unhideBtn = document.getElementById('btn-unhide');
+  const settingsBtn = document.getElementById('btn-settings');
+
+  const KIND_MATCHERS = {
+    running: function (p) {
+      return p.containers && p.containers.some(function (c) { return c.status === 'running'; });
+    },
+    system: function (p) {
+      return p.source_type === 'system' || (p.known_service && p.known_service.category === 'system');
+    },
+    docker: function (p) {
+      return p.source_type === 'docker' || (p.containers && p.containers.length > 0);
+    },
+    access: function (p) {
+      return p.known_service && p.known_service.is_access_port;
+    },
+    udp: function (p) {
+      return (p.protocol || '').indexOf('udp') !== -1;
+    },
+    localhost: function (p) {
+      return p.bind_scope === 'localhost';
+    },
+    hidden: function (p) {
+      return !!p.is_hidden;
+    },
   };
 
   try {
     const cached = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
     if (cached.theme) settings.theme = cached.theme;
     if (cached.grid_density) settings.grid_density = cached.grid_density;
+    if (cached.locale) settings.locale = cached.locale;
   } catch (e) {}
   try {
     const view = JSON.parse(localStorage.getItem('port-light-view') || '{}');
     if (view.sort) sortMode = view.sort;
-    if (Array.isArray(view.filters) && view.filters.length) activeFilters = new Set(view.filters);
+    if (view.status && view.status !== 'running') statusFilter = view.status;
+    if (Array.isArray(view.kinds)) {
+      kindFilters = new Set(view.kinds);
+    } else if (Array.isArray(view.filters) && view.filters.length) {
+      view.filters.forEach(function (f) {
+        if (f === 'all') return;
+        if (f === 'used' || f === 'configured') statusFilter = f;
+        else kindFilters.add(f);
+      });
+    }
+    if (view.status === 'running') kindFilters.add('running');
+    if (view.rangeStart >= 1 && view.rangeStart <= 65535) {
+      rangeStart = view.rangeStart;
+      rangeFromView = true;
+    }
+    if (view.rangeEnd >= 1 && view.rangeEnd <= 65535) {
+      rangeEnd = view.rangeEnd;
+      rangeFromView = true;
+    }
   } catch (e) {}
-  sortSelect.value = sortMode;
-  document.querySelectorAll('.chip').forEach(function (c) {
-    c.classList.toggle('active', activeFilters.has(c.dataset.filter));
-  });
-  applyAppearance();
 
   function applyTheme() {
-    var t = settings.theme || 'system';
-    if (t === 'system') {
-      t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    var th = settings.theme || 'system';
+    if (th === 'system') {
+      th = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     }
-    document.documentElement.setAttribute('data-theme', t);
+    document.documentElement.setAttribute('data-theme', th);
   }
 
   function applyAppearance() {
@@ -79,6 +125,7 @@
       localStorage.setItem('port-light-settings', JSON.stringify({
         theme: settings.theme,
         grid_density: settings.grid_density,
+        locale: settings.locale || 'auto',
       }));
     } catch (e) {}
   }
@@ -87,9 +134,34 @@
     try {
       localStorage.setItem('port-light-view', JSON.stringify({
         sort: sortMode,
-        filters: Array.from(activeFilters),
+        status: statusFilter,
+        kinds: Array.from(kindFilters),
+        rangeStart: rangeStart,
+        rangeEnd: rangeEnd,
       }));
     } catch (e) {}
+  }
+
+  function syncFilterUI() {
+    document.querySelectorAll('#filters .chip').forEach(function (c) {
+      const on = kindFilters.has(c.dataset.filter);
+      c.classList.toggle('active', on);
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function syncHiddenButton() {
+    unhideBtn.classList.toggle('active', showHidden);
+    unhideBtn.setAttribute('aria-pressed', showHidden ? 'true' : 'false');
+    const title = t(showHidden ? 'action.hiddenVisible' : 'action.showHidden');
+    unhideBtn.title = title;
+    unhideBtn.setAttribute('aria-label', title);
+  }
+
+  function syncHeaderHeight() {
+    const header = document.getElementById('app-header');
+    if (!header) return;
+    document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
   }
 
   try {
@@ -97,6 +169,7 @@
       if ((settings.theme || 'system') === 'system') applyTheme();
     });
   } catch (e) {}
+  window.addEventListener('resize', syncHeaderHeight);
 
   function parseRoute() {
     const raw = (location.hash || '#/').replace(/^#\/?/, '');
@@ -109,54 +182,88 @@
   }
 
   function applyRoute() {
+    const prev = route.name;
     route = parseRoute();
     const onSettings = route.name === 'settings';
     document.getElementById('view-grid').classList.toggle('hidden', onSettings);
     document.getElementById('view-settings').classList.toggle('hidden', !onSettings);
-    document.getElementById('btn-settings').classList.toggle('active', onSettings);
+    appEl.classList.toggle('page-settings', onSettings);
+    settingsBtn.classList.toggle('active', onSettings);
+    syncHeaderHeight();
     if (onSettings) {
       closeDetail(true);
       loadSettingsPage();
       return;
     }
+    if (prev === 'settings') tick();
     if (route.name === 'port') {
       selectedPort = route.port;
       if (currentData) render();
+      return;
     }
+    closeDetail(true);
+    if (currentData) render();
   }
 
   window.addEventListener('hashchange', applyRoute);
 
-  document.getElementById('filter-chips').addEventListener('click', e => {
-    const chip = e.target.closest('.chip');
-    if (!chip) return;
-    const f = chip.dataset.filter;
-    if (f === 'all') {
-      activeFilters = new Set(['all']);
-      document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
-    } else {
-      activeFilters.delete('all');
-      chip.classList.toggle('active');
-      if (chip.classList.contains('active')) activeFilters.add(f);
-      else activeFilters.delete(f);
-      if (activeFilters.size === 0) {
-        activeFilters.add('all');
-        document.querySelector('.chip[data-filter="all"]').classList.add('active');
-      } else {
-        document.querySelector('.chip[data-filter="all"]').classList.remove('active');
+  summary.addEventListener('click', function (e) {
+    const btn = e.target.closest('button.stat');
+    if (!btn) return;
+    if (btn.dataset.status) {
+      const f = btn.dataset.status;
+      statusFilter = statusFilter === f ? 'all' : f;
+    } else if (btn.dataset.kind === 'hidden') {
+      if (kindFilters.has('hidden')) kindFilters.delete('hidden');
+      else {
+        if (!ensureHiddenVisible()) return;
+        kindFilters.add('hidden');
       }
     }
+    syncFilterUI();
     saveView();
     render();
   });
 
-  sortSelect.addEventListener('change', e => {
+  document.getElementById('filters').addEventListener('click', function (e) {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    const f = chip.dataset.filter;
+    if (kindFilters.has(f)) kindFilters.delete(f);
+    else {
+      if (f === 'hidden' && !ensureHiddenVisible()) return;
+      kindFilters.add(f);
+    }
+    syncFilterUI();
+    saveView();
+    render();
+  });
+
+  function ensureHiddenVisible() {
+    if (showHidden) return true;
+    if (meta.hidden_unlock_required && !hiddenUnlock) {
+      pendingAfterUnlock = function () {
+        kindFilters.add('hidden');
+        syncFilterUI();
+        saveView();
+        render();
+      };
+      openModal('unhide-modal');
+      return false;
+    }
+    showHidden = true;
+    syncHiddenButton();
+    tick();
+    return true;
+  }
+
+  sortSelect.addEventListener('change', function (e) {
     sortMode = e.target.value;
     saveView();
     render();
   });
 
-  searchInput.addEventListener('input', e => {
+  searchInput.addEventListener('input', function (e) {
     const val = e.target.value.trim();
     searchTerm = val.toLowerCase();
     searchPortNum = /^\d+$/.test(val) ? parseInt(val, 10) : null;
@@ -172,77 +279,121 @@
     const e = parseInt(rangeEndInput.value, 10);
     if (s >= 1 && s <= 65535) rangeStart = s;
     if (e >= 1 && e <= 65535 && e >= rangeStart) rangeEnd = e;
+    rangeFromView = true;
+    saveView();
     tick();
   }
 
-  document.getElementById('btn-refresh').addEventListener('click', () => { tick(); });
+  document.getElementById('btn-refresh').addEventListener('click', function () { tick(); });
 
-  document.getElementById('btn-add').addEventListener('click', () => {
-    document.getElementById('add-modal').classList.remove('hidden');
-    document.getElementById('add-port').focus();
-  });
-  document.getElementById('add-cancel').addEventListener('click', () => {
-    document.getElementById('add-modal').classList.add('hidden');
-  });
-  document.getElementById('add-confirm').addEventListener('click', addManualPort);
+  function openModal(id) {
+    focusBack = document.activeElement;
+    document.getElementById(id).classList.remove('hidden');
+    document.documentElement.classList.add('modal-open');
+    const input = document.getElementById(id).querySelector('input');
+    if (input) input.focus();
+  }
+  function closeModals() {
+    document.querySelectorAll('.modal').forEach(function (m) { m.classList.add('hidden'); });
+    document.documentElement.classList.remove('modal-open');
+    pendingAfterUnlock = null;
+    if (focusBack && typeof focusBack.focus === 'function') focusBack.focus();
+    focusBack = null;
+  }
+  function modalOpen() {
+    return !!document.querySelector('.modal:not(.hidden)');
+  }
 
-  document.getElementById('btn-unhide').addEventListener('click', () => {
-    if (meta.hidden_unlock_required && !hiddenUnlock) {
-      document.getElementById('unhide-modal').classList.remove('hidden');
-      document.getElementById('unhide-password').focus();
+  document.getElementById('btn-add').addEventListener('click', function () {
+    openModal('add-modal');
+  });
+  document.getElementById('add-cancel').addEventListener('click', closeModals);
+  document.getElementById('add-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    addManualPort();
+  });
+
+  unhideBtn.addEventListener('click', function () {
+    if (showHidden) {
+      showHidden = false;
+      kindFilters.delete('hidden');
+      syncHiddenButton();
+      syncFilterUI();
+      saveView();
+      tick();
       return;
     }
-    showHidden = !showHidden;
-    document.getElementById('btn-unhide').classList.toggle('active', showHidden);
+    if (meta.hidden_unlock_required && !hiddenUnlock) {
+      openModal('unhide-modal');
+      return;
+    }
+    showHidden = true;
+    syncHiddenButton();
     tick();
   });
-  document.getElementById('unhide-cancel').addEventListener('click', () => {
-    document.getElementById('unhide-modal').classList.add('hidden');
+  document.getElementById('unhide-cancel').addEventListener('click', closeModals);
+  document.getElementById('unhide-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    unlockHidden();
   });
-  document.getElementById('unhide-confirm').addEventListener('click', unlockHidden);
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      document.querySelectorAll('.modal').forEach(function (m) { m.classList.add('hidden'); });
-      if (route.name === 'settings') {
-        location.hash = '#/';
-        return;
-      }
+      if (modalOpen()) { closeModals(); return; }
+      if (closeLocaleMenu()) return;
+      if (route.name === 'settings') { location.hash = '#/'; return; }
       closeDetail();
       return;
     }
     if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (route.name === 'settings') return;
+    if (route.name === 'settings' || modalOpen()) return;
     e.preventDefault();
     searchInput.focus();
   });
 
-  document.querySelectorAll('.modal').forEach(m => {
-    m.addEventListener('click', e => { if (e.target === m) m.classList.add('hidden'); });
+  document.querySelectorAll('.modal').forEach(function (m) {
+    m.addEventListener('click', function (e) { if (e.target === m) closeModals(); });
   });
-
-  document.addEventListener('click', e => {
-    if (route.name === 'settings') return;
-    if (!detailPanel.contains(e.target) && !e.target.closest('.port-cell')) {
-      closeDetail();
-    }
-  });
+  detailBackdrop.addEventListener('click', function () { closeDetail(); });
 
   document.getElementById('settings-form').addEventListener('submit', function (e) {
     e.preventDefault();
     saveSettingsPage();
   });
-
   document.getElementById('settings-fields').addEventListener('change', function (e) {
     const field = e.target && e.target.name;
-    if (field === 'theme' || field === 'grid_density') {
+    if (field === 'theme' || field === 'grid_density' || field === 'locale') {
       if (field === 'theme') settings.theme = e.target.value;
       if (field === 'grid_density') settings.grid_density = e.target.value;
+      if (field === 'locale') settings.locale = e.target.value;
       applyAppearance();
+      if (field === 'locale' && window.PortLightI18n) {
+        PortLightI18n.load(settings.locale).then(function () {
+          PortLightI18n.applyDom();
+          syncLocaleTrigger();
+          syncHiddenButton();
+          if (settingsDoc) {
+            const lead = document.getElementById('settings-lead');
+            lead.textContent = t(settingsDoc.readonly ? 'settings.leadReadonly' : 'settings.lead');
+          }
+          if (currentData) render();
+          syncHeaderHeight();
+        });
+      }
     }
+    markDirty();
   });
+  document.getElementById('settings-fields').addEventListener('input', markDirty);
+
+  function markDirty() {
+    if (settingsDoc && settingsDoc.readonly) return;
+    settingsDirty = true;
+    const status = document.getElementById('settings-status');
+    status.className = '';
+    status.textContent = t('settings.unsaved');
+  }
 
   function apiHeaders(extra) {
     const headers = Object.assign({}, extra || {});
@@ -281,14 +432,15 @@
   function renderScanners(scanners) {
     const host = document.getElementById('scanner-pills');
     const items = [
-      ['proc', 'Listen table'],
-      ['docker', 'Docker'],
-      ['compose', 'Compose'],
+      ['proc', 'host'],
+      ['docker', 'docker'],
+      ['compose', 'compose'],
     ];
     host.innerHTML = items.map(function (pair) {
+      const name = t('scanner.' + pair[1]);
       const ok = !!scanners[pair[0]];
-      return '<span class="pill' + (ok ? ' ok' : ' bad') + '" title="' + pair[1] + '">' +
-        '<span class="pill-dot"></span>' + pair[1] + '</span>';
+      const title = t(ok ? 'scanner.available' : 'scanner.unavailable', { name: name });
+      return '<span class="pill' + (ok ? ' ok' : ' bad') + '" title="' + escapeHtml(title) + '"></span>';
     }).join('');
   }
 
@@ -301,16 +453,18 @@
   function applyServerSettings(doc) {
     settingsDoc = doc;
     settings = Object.assign({}, settings, doc.values || {});
-    rangeStart = settings.port_range_start;
-    rangeEnd = settings.port_range_end;
-    rangeStartInput.value = rangeStart;
-    rangeEndInput.value = rangeEnd;
+    if (!rangeFromView) {
+      rangeStart = settings.port_range_start;
+      rangeEnd = settings.port_range_end;
+      rangeStartInput.value = rangeStart;
+      rangeEndInput.value = rangeEnd;
+    }
     applyAppearance();
   }
 
   async function fetchPorts() {
     try {
-      const url = `/api/ports?range_start=${rangeStart}&range_end=${rangeEnd}&include_hidden=${showHidden}`;
+      const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
       const res = await api(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return await res.json();
@@ -322,7 +476,7 @@
 
   function tick() {
     if (route.name === 'settings') return;
-    fetchPorts().then(data => {
+    fetchPorts().then(function (data) {
       if (data) { currentData = data; render(); }
     });
     fetchHealth();
@@ -346,15 +500,27 @@
     });
   }
 
+  function fieldLabel(f) {
+    return t('settings.fields.' + f.key + '.label');
+  }
+  function fieldHelp(f) {
+    return t('settings.fields.' + f.key + '.help');
+  }
+  function choiceLabel(c) {
+    return t('choice.' + c);
+  }
+
   function renderSettingsForm(doc) {
     const values = doc.values || {};
     const fields = doc.fields || [];
     const host = document.getElementById('settings-fields');
     const lead = document.getElementById('settings-lead');
     const saveBtn = document.getElementById('settings-save');
-    lead.textContent = doc.readonly
-      ? 'Locked by PORT_LIGHT_SETTINGS_SOURCE=env (or SETTINGS_READONLY). Change values in Compose and recreate the container.'
-      : 'Saved values live in the data volume and override Compose env for the same key. Set PORT_LIGHT_SETTINGS_SOURCE=env to make Compose the only source.';
+    const status = document.getElementById('settings-status');
+    settingsDirty = false;
+    status.className = '';
+    status.textContent = '';
+    lead.textContent = t(doc.readonly ? 'settings.leadReadonly' : 'settings.lead');
     saveBtn.disabled = !!doc.readonly;
 
     const groups = [];
@@ -371,65 +537,177 @@
       const rows = byGroup[g].map(function (f) {
         return renderField(f, values[f.key], doc.readonly);
       }).join('');
-      return '<fieldset class="settings-group"><legend>' + escapeHtml(GROUP_LABELS[g] || g) + '</legend>' + rows + '</fieldset>';
+      return '<section class="settings-card"><header class="settings-card-head"><h2 data-i18n="settings.groups.' + g + '.title">' +
+        escapeHtml(t('settings.groups.' + g + '.title')) + '</h2><p data-i18n="settings.groups.' + g + '.blurb">' +
+        escapeHtml(t('settings.groups.' + g + '.blurb')) +
+        '</p></header><div class="settings-card-body">' + rows + '</div></section>';
     }).join('');
 
-    const envHost = document.getElementById('settings-env-only');
     const env = doc.env_only || {};
-    envHost.innerHTML = [
-      envRow('COMPOSE_SCAN_DIR', env.compose_scan_dir),
-      envRow('CUSTOM_PORTS_FILE', env.custom_ports_file),
-      envRow('PORT_LIGHT_DATA_DIR', env.data_dir),
-      envRow('AUTH_USER / AUTH_PASSWORD', env.auth_required ? 'configured' : 'unset (open LAN)'),
-      envRow('HIDDEN_UNLOCK_PASSWORD', env.hidden_unlock_required ? 'configured' : 'unset'),
-      envRow('PORT_LIGHT_SETTINGS_SOURCE', doc.source),
+    document.getElementById('settings-env-only').innerHTML = [
+      kvRow('settings.host.composeScanDir', env.compose_scan_dir),
+      kvRow('settings.host.customPortsFile', env.custom_ports_file),
+      kvRow('settings.host.dataDir', env.data_dir),
+      kvRow('settings.host.basicAuth', env.auth_required ? t('settings.on') : t('settings.off'), env.auth_required ? 'settings.on' : 'settings.off'),
+      kvRow('settings.host.hiddenUnlock', env.hidden_unlock_required ? t('settings.on') : t('settings.off'), env.hidden_unlock_required ? 'settings.on' : 'settings.off'),
+      kvRow('settings.host.settingsSource', doc.source),
     ].join('');
   }
 
-  function envRow(label, value) {
-    return '<div class="setting-row readonly"><div class="setting-copy"><span class="setting-label">' +
-      escapeHtml(label) + '</span></div><code class="setting-value">' + escapeHtml(String(value == null ? '' : value)) +
-      '</code></div>';
+  function kvRow(labelKey, value, valueKey) {
+    const val = valueKey
+      ? '<span class="kv-val" data-i18n="' + valueKey + '">' + escapeHtml(String(value == null ? '' : value)) + '</span>'
+      : '<span class="kv-val">' + escapeHtml(String(value == null ? '' : value)) + '</span>';
+    return '<div class="kv-row"><span class="kv-key" data-i18n="' + labelKey + '">' +
+      escapeHtml(t(labelKey)) + '</span>' + val + '</div>';
+  }
+
+  function originHint(f) {
+    if (!f.origin || f.origin === 'default') return '';
+    const key = f.origin === 'file' ? 'settings.origin.saved' : 'settings.origin.env';
+    return '<span class="origin-hint" data-i18n="' + key + '" title="' + escapeHtml(f.env) + '">' + escapeHtml(t(key)) + '</span>';
+  }
+
+  function localeCopyHtml(c) {
+    var native;
+    var nativeAttr;
+    var localKey;
+    if (c === 'auto') {
+      native = t('choice.auto');
+      nativeAttr = ' data-i18n="choice.auto"';
+      localKey = 'localeName.auto';
+    } else {
+      native = t('localeNative.' + c);
+      nativeAttr = '';
+      localKey = 'localeName.' + c;
+    }
+    return '<span class="locale-copy"><span class="locale-endonym"' + nativeAttr + '>' +
+      escapeHtml(native) + '</span><span class="locale-exonym" data-i18n="' + localKey + '">' +
+      escapeHtml(t(localKey)) + '</span></span>';
+  }
+
+  function closeLocaleMenu() {
+    const drop = document.querySelector('.locale-dropdown.is-open');
+    if (!drop) return false;
+    drop.classList.remove('is-open');
+    const btn = drop.querySelector('.locale-trigger');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+    return true;
+  }
+
+  function syncLocaleTrigger() {
+    const drop = document.querySelector('.locale-dropdown');
+    if (!drop) return;
+    const input = drop.querySelector('input[name="locale"]');
+    const dest = drop.querySelector('.locale-trigger .locale-copy');
+    if (!input || !dest) return;
+    const row = drop.querySelector('.locale-row[data-value="' + input.value + '"] .locale-copy');
+    if (row) dest.innerHTML = row.innerHTML;
+  }
+
+  document.getElementById('settings-fields').addEventListener('click', function (e) {
+    const trigger = e.target.closest('.locale-trigger');
+    if (trigger) {
+      e.preventDefault();
+      const drop = trigger.closest('.locale-dropdown');
+      const open = !drop.classList.contains('is-open');
+      closeLocaleMenu();
+      if (open) {
+        drop.classList.add('is-open');
+        trigger.setAttribute('aria-expanded', 'true');
+      }
+      return;
+    }
+    const row = e.target.closest('.locale-row');
+    if (!row) return;
+    e.preventDefault();
+    const drop = row.closest('.locale-dropdown');
+    const input = drop.querySelector('input[name="locale"]');
+    const value = row.getAttribute('data-value');
+    input.value = value;
+    drop.querySelectorAll('.locale-row').forEach(function (r) {
+      const on = r === row;
+      r.classList.toggle('is-selected', on);
+      r.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    syncLocaleTrigger();
+    closeLocaleMenu();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.locale-dropdown')) closeLocaleMenu();
+  });
+
+  function renderLocaleList(choices, value, disabled) {
+    const current = choices.indexOf(value) >= 0 ? value : 'auto';
+    const rows = choices.map(function (c) {
+      const on = c === current;
+      return '<button type="button" class="locale-row' + (on ? ' is-selected' : '') +
+        '" data-value="' + escapeHtml(c) + '" role="option" aria-selected="' + (on ? 'true' : 'false') + '"' +
+        disabled + '>' + localeCopyHtml(c) + '<span class="locale-check" aria-hidden="true"></span></button>';
+    }).join('');
+    return '<div class="locale-dropdown">' +
+      '<input type="hidden" name="locale" value="' + escapeHtml(current) + '"' + disabled + '>' +
+      '<button type="button" class="locale-trigger" aria-haspopup="listbox" aria-expanded="false"' + disabled + '>' +
+      localeCopyHtml(current) + '<span class="locale-caret" aria-hidden="true"></span></button>' +
+      '<div class="locale-menu" role="listbox">' + rows + '</div></div>';
   }
 
   function renderField(f, value, readonly) {
-    const origin = f.origin || 'default';
     const disabled = readonly ? ' disabled' : '';
     let control = '';
+    let tag = 'div';
     if (f.type === 'bool') {
-      control = '<input type="checkbox" name="' + f.key + '"' + (value ? ' checked' : '') + disabled + '>';
+      tag = 'label';
+      control = '<span class="switch"><input type="checkbox" name="' + f.key + '"' +
+        (value ? ' checked' : '') + disabled + '><span class="track"></span></span>';
+    } else if (f.key === 'locale') {
+      control = renderLocaleList(f.choices || [], value, disabled);
     } else if (f.type === 'choice') {
-      const opts = (f.choices || []).map(function (c) {
-        return '<option value="' + escapeHtml(c) + '"' + (c === value ? ' selected' : '') + '>' + escapeHtml(c) + '</option>';
-      }).join('');
-      control = '<select name="' + f.key + '" class="dropdown"' + disabled + '>' + opts + '</select>';
+      const choices = f.choices || [];
+      control = '<div class="segmented" role="radiogroup">' +
+        choices.map(function (c) {
+          return '<label class="seg-opt"><input type="radio" name="' + f.key + '" value="' +
+            escapeHtml(c) + '"' + (c === value ? ' checked' : '') + disabled +
+            '><span data-i18n="choice.' + c + '">' + escapeHtml(choiceLabel(c)) + '</span></label>';
+        }).join('') + '</div>';
     } else if (f.type === 'int') {
       const min = f.min != null ? ' min="' + f.min + '"' : '';
       const max = f.max != null ? ' max="' + f.max + '"' : '';
       control = '<input type="number" name="' + f.key + '" value="' + escapeHtml(String(value)) + '"' + min + max + disabled + '>';
     } else {
       control = '<input type="text" name="' + f.key + '" value="' + escapeHtml(String(value || '')) +
-        '" placeholder="optional"' + disabled + '>';
+        '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + disabled + '>';
     }
-    return '<label class="setting-row">' +
-      '<span class="setting-copy"><span class="setting-label">' + escapeHtml(f.label) +
-      '</span><span class="origin-tag" title="Source">' + escapeHtml(origin) + '</span>' +
-      '<span class="field-help">' + escapeHtml(f.help) + ' <code>' + escapeHtml(f.env) + '</code></span></span>' +
-      control + '</label>';
+    return '<' + tag + ' class="setting-row"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
+      escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
+      '</span></span><span class="setting-control">' + control + originHint(f) +
+      '</span></' + tag + '>';
   }
 
   async function saveSettingsPage() {
+    if (settingsDoc && settingsDoc.readonly) return;
     const status = document.getElementById('settings-status');
     const form = document.getElementById('settings-form');
     const patch = {};
-    (settingsDoc && settingsDoc.fields ? settingsDoc.fields : []).forEach(function (f) {
+    const fields = settingsDoc && settingsDoc.fields ? settingsDoc.fields : [];
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
       const el = form.elements[f.key];
-      if (!el || el.disabled) return;
+      if (!el || el.disabled) continue;
       if (f.type === 'bool') patch[f.key] = el.checked;
-      else if (f.type === 'int') patch[f.key] = parseInt(el.value, 10);
-      else patch[f.key] = el.value;
-    });
-    status.textContent = 'Saving…';
+      else if (f.type === 'int') {
+        const n = parseInt(el.value, 10);
+        if (isNaN(n)) {
+          status.className = 'is-error';
+          status.textContent = t('settings.mustBeNumber', { label: fieldLabel(f) });
+          return;
+        }
+        patch[f.key] = n;
+      } else patch[f.key] = el.value;
+    }
+    status.className = '';
+    status.textContent = t('settings.saving');
     const res = await api('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -437,43 +715,53 @@
     });
     const body = await res.json().catch(function () { return {}; });
     if (!res.ok) {
+      status.className = 'is-error';
       status.textContent = body.detail || ('HTTP ' + res.status);
       return;
     }
+    rangeFromView = false;
     applyServerSettings(body);
+    rangeFromView = true;
+    saveView();
     renderSettingsForm(body);
     setupRefresh();
-    status.textContent = 'Saved.';
+    status.className = 'is-ok';
+    status.textContent = t('settings.saved');
+    settingsDirty = false;
   }
 
-  fetchMeta()
-    .then(fetchSettings)
-    .then(function (doc) {
-      if (doc) applyServerSettings(doc);
-    })
-    .then(function () {
-      applyRoute();
-      setupRefresh();
-    });
+  function setDetailOpen(open) {
+    appEl.classList.toggle('detail-open', open);
+    document.documentElement.classList.toggle('detail-open', open);
+    detailPanel.classList.toggle('hidden', !open);
+    detailBackdrop.classList.toggle('hidden', !open);
+  }
 
   function render() {
     if (!currentData) return;
     renderSummary(currentData.summary);
     renderGrid(currentData.ports);
     if (selectedPort !== null) {
-      const entry = currentData.ports.find(p => p.port === selectedPort);
+      const entry = currentData.ports.find(function (p) { return p.port === selectedPort; });
       if (entry) renderDetail(entry);
       else if (route.name !== 'port') closeDetail(true);
     }
   }
 
   function renderSummary(s) {
-    summary.innerHTML = `
-      <span class="stat"><span class="dot used"></span> In Use: ${s.used}</span>
-      <span class="stat"><span class="dot configured"></span> Configured: ${s.configured}</span>
-      <span class="stat"><span class="dot free"></span> Free: ${s.free}</span>
-      ${s.hidden > 0 ? `<span class="stat"><span class="dot hidden"></span> Hidden: ${s.hidden}${s.hidden_locked ? ' (locked)' : ''}</span>` : ''}
-    `;
+    function toggle(active, attrs, dot, n, label) {
+      return '<button type="button" class="stat' + (active ? ' active' : '') + '" ' + attrs +
+        ' aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        '<span class="dot ' + dot + '"></span><span class="num">' + n + '</span> ' + label + '</button>';
+    }
+    let html = toggle(statusFilter === 'used', 'data-status="used"', 'used', s.used, t('legend.inUse')) +
+      toggle(statusFilter === 'configured', 'data-status="configured"', 'configured', s.configured, t('legend.configured')) +
+      '<span class="stat is-static"><span class="dot free"></span><span class="num">' + s.free + '</span> ' + t('legend.free') + '</span>';
+    if (s.hidden > 0) {
+      html += toggle(kindFilters.has('hidden'), 'data-kind="hidden"', 'hidden', s.hidden,
+        t('legend.hidden') + (s.hidden_locked ? ' (' + t('legend.locked') + ')' : ''));
+    }
+    summary.innerHTML = html;
   }
 
   function getCellLabel(p) {
@@ -486,7 +774,7 @@
   }
 
   function buildSearchContext(ports, hitPort) {
-    const allPortNums = new Set(ports.map(p => p.port));
+    const allPortNums = new Set(ports.map(function (p) { return p.port; }));
     const hitExists = allPortNums.has(hitPort);
     const result = [];
 
@@ -500,7 +788,7 @@
         result.unshift({ port: p, status: 'free', _synthetic: true, known_service: getKnownForFree(p) });
         beforeFree++;
       } else {
-        const entry = ports.find(x => x.port === p);
+        const entry = ports.find(function (x) { return x.port === p; });
         if (entry) result.unshift(entry);
       }
     }
@@ -509,19 +797,19 @@
         result.push({ port: p, status: 'free', _synthetic: true, known_service: getKnownForFree(p) });
         afterFree++;
       } else {
-        const entry = ports.find(x => x.port === p);
+        const entry = ports.find(function (x) { return x.port === p; });
         if (entry) result.push(entry);
       }
     }
 
     if (hitExists) {
-      const hit = ports.find(p => p.port === hitPort);
+      const hit = ports.find(function (p) { return p.port === hitPort; });
       result.push(hit);
     }
 
-    result.sort((a, b) => a.port - b.port);
+    result.sort(function (a, b) { return a.port - b.port; });
     const seen = new Set();
-    return result.filter(p => {
+    return result.filter(function (p) {
       if (seen.has(p.port)) return false;
       seen.add(p.port);
       return true;
@@ -530,63 +818,36 @@
 
   function getKnownForFree(port) {
     if (currentData && currentData.ports) {
-      const found = currentData.ports.find(p => p.port === port);
+      const found = currentData.ports.find(function (p) { return p.port === port; });
       if (found && found.known_service) return found.known_service;
     }
     return null;
   }
 
   function matchesFilter(p) {
-    if (activeFilters.has('all')) return true;
-
-    let matched = false;
-    for (const f of activeFilters) {
-      switch (f) {
-        case 'running':
-          if (p.containers && p.containers.some(c => c.status === 'running')) matched = true;
-          break;
-        case 'used':
-          if (p.status === 'used') matched = true;
-          break;
-        case 'configured':
-          if (p.status === 'configured') matched = true;
-          break;
-        case 'system':
-          if (p.source_type === 'system' || (p.known_service && p.known_service.category === 'system')) matched = true;
-          break;
-        case 'docker':
-          if (p.source_type === 'docker' || (p.containers && p.containers.length > 0)) matched = true;
-          break;
-        case 'access':
-          if (p.known_service && p.known_service.is_access_port) matched = true;
-          break;
-        case 'udp':
-          if ((p.protocol || '').indexOf('udp') !== -1) matched = true;
-          break;
-        case 'localhost':
-          if (p.bind_scope === 'localhost') matched = true;
-          break;
-        case 'hidden':
-          if (p.is_hidden) matched = true;
-          break;
-      }
+    if (statusFilter === 'used' && p.status !== 'used') return false;
+    if (statusFilter === 'configured' && p.status !== 'configured') return false;
+    const kinds = Array.from(kindFilters);
+    for (let i = 0; i < kinds.length; i++) {
+      const match = KIND_MATCHERS[kinds[i]];
+      if (match && !match(p)) return false;
     }
-    return matched;
+    return true;
   }
 
   function sortPorts(arr) {
     switch (sortMode) {
-      case 'port-desc': return arr.sort((a, b) => b.port - a.port);
+      case 'port-desc': return arr.sort(function (a, b) { return b.port - a.port; });
       case 'name-asc':
-        return arr.sort((a, b) => (getCellLabel(a) || '~').localeCompare(getCellLabel(b) || '~'));
+        return arr.sort(function (a, b) { return (getCellLabel(a) || '~').localeCompare(getCellLabel(b) || '~'); });
       case 'name-desc':
-        return arr.sort((a, b) => (getCellLabel(b) || '~').localeCompare(getCellLabel(a) || '~'));
+        return arr.sort(function (a, b) { return (getCellLabel(b) || '~').localeCompare(getCellLabel(a) || '~'); });
       case 'status':
-        return arr.sort((a, b) => {
+        return arr.sort(function (a, b) {
           const order = { used: 0, configured: 1, free: 2 };
           return (order[a.status] || 9) - (order[b.status] || 9) || a.port - b.port;
         });
-      default: return arr.sort((a, b) => a.port - b.port);
+      default: return arr.sort(function (a, b) { return a.port - b.port; });
     }
   }
 
@@ -596,7 +857,7 @@
     if (searchPortNum !== null) {
       displayPorts = buildSearchContext(ports, searchPortNum);
     } else {
-      displayPorts = ports.filter(p => {
+      displayPorts = ports.filter(function (p) {
         if (p.port < rangeStart || p.port > rangeEnd) return false;
         if (!showHidden && p.is_hidden) return false;
         if (!matchesFilter(p)) return false;
@@ -605,8 +866,12 @@
             String(p.port), p.process || '', p.manual_label || '',
             p.known_service ? p.known_service.name : '',
             p.known_service ? p.known_service.description : '',
-            ...(p.containers || []).map(c => c.name + ' ' + (c.compose_project || '') + ' ' + (c.compose_service || '') + ' ' + c.image),
-            ...(p.compose_configs || []).map(c => c.project_dir + ' ' + c.service_name + ' ' + c.compose_file),
+            ...(p.containers || []).map(function (c) {
+              return c.name + ' ' + (c.compose_project || '') + ' ' + (c.compose_service || '') + ' ' + c.image;
+            }),
+            ...(p.compose_configs || []).map(function (c) {
+              return c.project_dir + ' ' + c.service_name + ' ' + c.compose_file;
+            }),
             p.protocol || '', p.bind_scope || '', (p.ips || []).join(' '),
             ...(p.urls || []),
           ].join(' ').toLowerCase();
@@ -616,14 +881,14 @@
       });
     }
 
-    displayPorts = sortPorts([...displayPorts]);
+    displayPorts = sortPorts(displayPorts.slice());
 
     if (displayPorts.length === 0) {
-      grid.innerHTML = '<div class="loading">No ports match the current filter.</div>';
+      grid.innerHTML = '<div class="empty">' + escapeHtml(t('grid.empty')) + '</div>';
       return;
     }
 
-    grid.innerHTML = displayPorts.map(p => {
+    grid.innerHTML = displayPorts.map(function (p) {
       let cls = p.status === 'used' ? 'used' : p.status === 'configured' ? 'configured' : 'free';
       if (p.is_hidden) cls = 'hidden';
       const conflict = p.conflict ? ' conflict' : '';
@@ -632,162 +897,181 @@
       const searchHit = isSearchHit ? ' search-hit' : '';
       const searchNear = searchPortNum !== null && !isSearchHit ? ' search-near' : '';
       const label = getCellLabel(p);
-      const labelText = label ? `<div class="port-label">${escapeHtml(label)}</div>` : '';
+      const labelText = label ? '<div class="port-label">' + escapeHtml(label) + '</div>' : '';
+      const statusText = settings.show_status_text && p.status !== 'free'
+        ? '<span class="status-text">' + escapeHtml(t('status.' + p.status)) + '</span>' : '';
+      const accessBadge = settings.show_access_badge && p.known_service && p.known_service.is_access_port
+        ? '<span class="access-badge">' + escapeHtml(t('grid.web')) + '</span>' : '';
+      const protoBadge = settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp'
+        ? '<span class="proto-badge">' + escapeHtml(p.protocol) + '</span>' : '';
 
-      let statusText = '';
-      if (settings.show_status_text) {
-        const st = p.status === 'used' ? 'USE' : p.status === 'configured' ? 'CFG' : '';
-        if (st) statusText = `<div class="status-text">${st}</div>`;
-      }
-
-      let accessBadge = '';
-      if (settings.show_access_badge && p.known_service && p.known_service.is_access_port) {
-        accessBadge = '<div class="access-badge">🔓</div>';
-      }
-
-      let protoBadge = '';
-      if (settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp') {
-        protoBadge = `<div class="proto-badge">${escapeHtml(p.protocol)}</div>`;
-      }
-
-      return `
-        <div class="port-cell ${cls}${conflict}${selected}${searchHit}${searchNear}"
-             data-port="${p.port}"
-             title="${escapeHtml([p.port, p.protocol, p.bind_scope, label].filter(Boolean).join(' · '))}">
-          <div class="port-num">${p.port}</div>
-          ${labelText}
-          <div class="indicator"></div>
-          ${statusText}${accessBadge}${protoBadge}
-        </div>
-      `;
+      return '<button type="button" class="port-cell ' + cls + conflict + selected + searchHit + searchNear + '"' +
+        ' data-port="' + p.port + '"' +
+        ' title="' + escapeHtml([p.port, p.protocol, p.bind_scope, label].filter(Boolean).join(' · ')) + '">' +
+        '<div class="port-num">' + p.port + '</div>' +
+        labelText +
+        '<div class="cell-meta"><span class="indicator"></span>' + protoBadge + accessBadge + statusText + '</div>' +
+        '</button>';
     }).join('');
 
-    grid.querySelectorAll('.port-cell').forEach(el => {
-      el.addEventListener('click', () => {
+    grid.querySelectorAll('.port-cell').forEach(function (el) {
+      el.addEventListener('click', function () {
         const port = parseInt(el.dataset.port, 10);
+        if (selectedPort === port && route.name === 'port') {
+          closeDetail();
+          return;
+        }
         selectedPort = port;
-        location.hash = '#/port/' + port;
-        const entry = displayPorts.find(p => p.port === port);
-        if (entry) renderDetail(entry);
+        if (location.hash !== '#/port/' + port) {
+          location.hash = '#/port/' + port;
+        } else {
+          const entry = displayPorts.find(function (p) { return p.port === port; });
+          if (entry) renderDetail(entry);
+        }
         if (settings.copy_on_click) {
-          navigator.clipboard.writeText(String(port)).then(() => {
+          navigator.clipboard.writeText(String(port)).then(function () {
             showCopyToast(el);
-          }).catch(() => {});
+          }).catch(function () {});
         }
       });
     });
   }
 
   function showCopyToast(cell) {
-    cell.querySelectorAll('.copy-toast').forEach(t => t.remove());
+    cell.querySelectorAll('.copy-toast').forEach(function (tEl) { tEl.remove(); });
     const toast = document.createElement('div');
     toast.className = 'copy-toast';
-    toast.textContent = 'Copied';
+    toast.textContent = t('grid.copied');
     cell.appendChild(toast);
-    requestAnimationFrame(() => toast.classList.add('show'));
+    requestAnimationFrame(function () { toast.classList.add('show'); });
     clearTimeout(cell._copyToastTimer);
-    cell._copyToastTimer = setTimeout(() => {
+    cell._copyToastTimer = setTimeout(function () {
       toast.classList.remove('show');
-      toast.classList.add('hide');
-      setTimeout(() => toast.remove(), 400);
+      setTimeout(function () { toast.remove(); }, 200);
     }, 900);
   }
 
   function renderDetail(p) {
-    detailPanel.classList.remove('hidden');
-    const statusIcon = p.status === 'used' ? '🔵' : p.status === 'configured' ? '🟡' : '🟢';
-    let html = `
-      <button class="close-btn" onclick="location.hash='#/'">✕</button>
-      <h3>${statusIcon} Port ${p.port}</h3>
-    `;
+    setDetailOpen(true);
+    const name = getCellLabel(p);
+    let html = '<div class="detail-head"><div><h2>' + p.port + '</h2>' +
+      (name ? '<div class="detail-sub">' + escapeHtml(name) + '</div>' : '') +
+      '</div><button type="button" class="close-btn" data-close-detail aria-label="' +
+      escapeHtml(t('detail.close')) + '">×</button></div>';
 
-    html += `<div class="row"><span class="key">Status</span><span class="tag ${p.status}">${p.status}</span></div>`;
-    html += `<div class="row"><span class="key">Source</span><span class="val">${escapeHtml(p.source_type || 'unknown')}</span></div>`;
-    if (p.protocol) html += `<div class="row"><span class="key">Protocol</span><span class="val">${escapeHtml(p.protocol)}</span></div>`;
-    if (p.ip) html += `<div class="row"><span class="key">Bind</span><span class="val">${escapeHtml((p.ips && p.ips.join(', ')) || p.ip)}${p.bind_scope ? ' (' + p.bind_scope + ')' : ''}</span></div>`;
-    if (p.process) html += `<div class="row"><span class="key">Process</span><span class="val">${escapeHtml(p.process)}</span></div>`;
-    if (p.pid) html += `<div class="row"><span class="key">PID</span><span class="val">${p.pid}</span></div>`;
+    html += '<div class="row"><span class="key">' + escapeHtml(t('detail.status')) + '</span><span class="tag ' + p.status + '">' +
+      escapeHtml(t('status.' + p.status) || p.status) + '</span></div>';
+    html += '<div class="row"><span class="key">' + escapeHtml(t('detail.source')) + '</span><span class="val">' + escapeHtml(p.source_type || 'unknown') + '</span></div>';
+    if (p.protocol) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.protocol')) + '</span><span class="val">' + escapeHtml(p.protocol) + '</span></div>';
+    if (p.ip) {
+      html += '<div class="row"><span class="key">' + escapeHtml(t('detail.bind')) + '</span><span class="val">' +
+        escapeHtml((p.ips && p.ips.join(', ')) || p.ip) +
+        (p.bind_scope ? ' <span class="tag scope">' + escapeHtml(p.bind_scope) + '</span>' : '') +
+        '</span></div>';
+    }
+
+    if (p.process) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.process')) + '</span><span class="val">' + escapeHtml(p.process) + '</span></div>';
+    if (p.pid) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.pid')) + '</span><span class="val">' + p.pid + '</span></div>';
 
     if (p.urls && p.urls.length > 0) {
-      html += '<div class="section-title">Open</div>';
-      for (const u of p.urls) {
-        html += `<div class="row"><span class="key">URL</span><span class="val"><a class="detail-link" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u)}</a></span></div>`;
+      html += '<div class="section-title">' + escapeHtml(t('detail.open')) + '</div>';
+      for (let i = 0; i < p.urls.length; i++) {
+        const u = p.urls[i];
+        html += '<div class="row"><span class="key">' + escapeHtml(t('detail.url')) + '</span><span class="val"><a class="detail-link" href="' +
+          escapeHtml(u) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(u) + '</a></span></div>';
       }
     }
 
     if (p.known_service) {
-      html += `<div class="info-box"><span class="info-name">${escapeHtml(p.known_service.name)}</span> — ${escapeHtml(p.known_service.description)}</div>`;
+      html += '<div class="info-box"><span class="info-name">' + escapeHtml(p.known_service.name) +
+        '</span> — ' + escapeHtml(p.known_service.description) + '</div>';
       if (p.known_service.is_access_port !== undefined) {
         const isAccess = p.known_service.is_access_port;
-        html += `<div class="info-box access-box"><span class="info-name">${isAccess ? '🔓 Access Port' : '🔒 Internal Port'}</span>`;
-        html += ` — ${isAccess ? 'Users connect to this port directly (web UI, SSH, etc.)' : 'Internal service — not accessed directly'}</div>`;
+        html += '<div class="info-box access-box"><span class="info-name">' +
+          escapeHtml(t(isAccess ? 'detail.accessPort' : 'detail.internalPort')) + '</span> — ' +
+          escapeHtml(t(isAccess ? 'detail.accessHint' : 'detail.internalHint')) +
+          '</div>';
       }
     }
 
     if (p.conflict) {
-      html += `<div class="info-box conflict-box"><span class="info-name">⚠ Port Conflict</span> — Declared in ${p.compose_configs.length} compose files.</div>`;
+      html += '<div class="info-box conflict-box"><span class="info-name">' + escapeHtml(t('detail.conflict')) +
+        '</span> — ' + escapeHtml(t('detail.conflictHint', { n: p.compose_configs.length })) + '</div>';
     }
 
     if (p.containers && p.containers.length > 0) {
-      html += '<div class="section-title">Containers</div>';
-      for (const c of p.containers) {
+      html += '<div class="section-title">' + escapeHtml(t('detail.containers')) + '</div>';
+      for (let i = 0; i < p.containers.length; i++) {
+        const c = p.containers[i];
         const tag = c.status === 'running' ? 'running' : 'exited';
-        html += `
-          <div class="row"><span class="key">${escapeHtml(c.name)}</span><span class="tag ${tag}">${c.status}</span></div>
-          <div class="row"><span class="key">Image</span><span class="val" style="font-size:0.75rem">${escapeHtml(c.image)}</span></div>
-          ${c.compose_project ? `<div class="row"><span class="key">Project</span><span class="val">${escapeHtml(c.compose_project)}</span></div>` : ''}
-          ${c.compose_service ? `<div class="row"><span class="key">Service</span><span class="val">${escapeHtml(c.compose_service)}</span></div>` : ''}
-          ${c.network_mode === 'host' ? '<div class="row"><span class="key">Network</span><span class="val">host</span></div>' : ''}
-        `;
+        html += '<div class="row"><span class="key">' + escapeHtml(c.name) + '</span><span class="tag ' + tag + '">' +
+          escapeHtml(t('status.' + tag) || c.status) + '</span></div>';
+        html += '<div class="row"><span class="key">' + escapeHtml(t('detail.image')) + '</span><span class="val">' + escapeHtml(c.image) + '</span></div>';
+        if (c.compose_project) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.project')) + '</span><span class="val">' + escapeHtml(c.compose_project) + '</span></div>';
+        if (c.compose_service) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.service')) + '</span><span class="val">' + escapeHtml(c.compose_service) + '</span></div>';
+        if (c.network_mode === 'host') html += '<div class="row"><span class="key">' + escapeHtml(t('detail.network')) + '</span><span class="val">host</span></div>';
       }
     }
 
     if (p.compose_configs && p.compose_configs.length > 0) {
-      html += '<div class="section-title">Compose Configs</div>';
-      for (const cc of p.compose_configs) {
-        html += `
-          <div class="row"><span class="key">Project</span><span class="val">${escapeHtml(cc.project_dir)}</span></div>
-          <div class="row"><span class="key">Service</span><span class="val">${escapeHtml(cc.service_name)}</span></div>
-          <div class="row"><span class="key">File</span><span class="val" style="font-size:0.75rem">${escapeHtml(cc.compose_file)}</span></div>
-          ${cc.container_port ? `<div class="row"><span class="key">Container Port</span><span class="val">${cc.container_port}</span></div>` : ''}
-        `;
+      html += '<div class="section-title">' + escapeHtml(t('detail.compose')) + '</div>';
+      for (let i = 0; i < p.compose_configs.length; i++) {
+        const cc = p.compose_configs[i];
+        html += '<div class="row"><span class="key">' + escapeHtml(t('detail.project')) + '</span><span class="val">' + escapeHtml(cc.project_dir) + '</span></div>';
+        html += '<div class="row"><span class="key">' + escapeHtml(t('detail.service')) + '</span><span class="val">' + escapeHtml(cc.service_name) + '</span></div>';
+        html += '<div class="row"><span class="key">' + escapeHtml(t('detail.file')) + '</span><span class="val">' + escapeHtml(cc.compose_file) + '</span></div>';
+        if (cc.container_port) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.containerPort')) + '</span><span class="val">' + cc.container_port + '</span></div>';
       }
     }
 
     if (p.manual_label) {
-      html += `<div class="info-box"><span class="info-name">Manual Entry</span> — ${escapeHtml(p.manual_label)}</div>`;
+      html += '<div class="info-box"><span class="info-name">' + escapeHtml(t('detail.manual')) + '</span> — ' + escapeHtml(p.manual_label) + '</div>';
     }
 
     html += '<div class="action-row">';
     if (p.is_hidden) {
-      html += `<button class="btn-unhide" onclick="window._portLightUnhide(${p.port})">Unhide</button>`;
+      html += '<button type="button" class="btn-unhide" data-unhide-port="' + p.port + '">' + escapeHtml(t('detail.unhide')) + '</button>';
     } else {
-      html += `<button class="btn-hide" onclick="window._portLightHide(${p.port})">Hide from grid</button>`;
+      html += '<button type="button" class="btn-hide" data-hide-port="' + p.port + '">' + escapeHtml(t('detail.hide')) + '</button>';
     }
     if (p.manual_label || p.source_type === 'manual') {
-      html += `<button class="btn-delete" onclick="window._portLightDeleteManual(${p.port})">Delete</button>`;
+      html += '<button type="button" class="btn-delete" data-delete-port="' + p.port + '">' + escapeHtml(t('detail.delete')) + '</button>';
     }
     html += '</div>';
 
     detailContent.innerHTML = html;
+    const closeBtn = detailContent.querySelector('[data-close-detail]');
+    if (closeBtn) closeBtn.addEventListener('click', function () { closeDetail(); });
+    const hideBtn = detailContent.querySelector('[data-hide-port]');
+    if (hideBtn) hideBtn.addEventListener('click', function () { window._portLightHide(p.port); });
+    const showBtn = detailContent.querySelector('[data-unhide-port]');
+    if (showBtn) showBtn.addEventListener('click', function () { window._portLightUnhide(p.port); });
+    const delBtn = detailContent.querySelector('[data-delete-port]');
+    if (delBtn) delBtn.addEventListener('click', function () { window._portLightDeleteManual(p.port); });
   }
 
   function closeDetail(skipHash) {
-    detailPanel.classList.add('hidden');
+    const wasOpen = !detailPanel.classList.contains('hidden') || selectedPort !== null;
+    setDetailOpen(false);
     selectedPort = null;
-    if (!skipHash && route.name === 'port') location.hash = '#/';
+    if (!skipHash && route.name === 'port') {
+      location.hash = '#/';
+      return;
+    }
+    if (wasOpen && currentData && route.name !== 'settings') render();
   }
 
-  window._portLightHide = async function(port) {
-    await api(`/api/hidden/${port}`, { method: 'POST' });
+  window._portLightHide = async function (port) {
+    await api('/api/hidden/' + port, { method: 'POST' });
     tick();
   };
-  window._portLightUnhide = async function(port) {
-    await api(`/api/hidden/${port}`, { method: 'DELETE' });
+  window._portLightUnhide = async function (port) {
+    await api('/api/hidden/' + port, { method: 'DELETE' });
     tick();
   };
-  window._portLightDeleteManual = async function(port) {
-    await api(`/api/manual-ports/${port}`, { method: 'DELETE' });
+  window._portLightDeleteManual = async function (port) {
+    await api('/api/manual-ports/' + port, { method: 'DELETE' });
+    closeDetail();
     tick();
   };
 
@@ -799,10 +1083,10 @@
     await api('/api/manual-ports', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ port, label, machine: 'localhost' }),
+      body: JSON.stringify({ port: port, label: label, machine: 'localhost' }),
     });
 
-    document.getElementById('add-modal').classList.add('hidden');
+    closeModals();
     document.getElementById('add-port').value = '';
     document.getElementById('add-label').value = '';
     tick();
@@ -822,15 +1106,17 @@
       showHidden = false;
       const input = document.getElementById('unhide-password');
       input.value = '';
-      input.placeholder = 'Wrong password — try again';
-      input.style.borderColor = 'var(--danger)';
+      input.placeholder = t('modal.wrongPassword');
       return;
     }
     currentData = data;
-    document.getElementById('unhide-modal').classList.add('hidden');
+    const followup = pendingAfterUnlock;
+    pendingAfterUnlock = null;
+    closeModals();
     document.getElementById('unhide-password').value = '';
-    document.getElementById('btn-unhide').classList.add('active');
-    render();
+    syncHiddenButton();
+    if (followup) followup();
+    else render();
   }
 
   function escapeHtml(text) {
@@ -839,6 +1125,35 @@
     const div = document.createElement('div');
     div.textContent = String(text);
     return div.innerHTML;
+  }
+
+  function startApp() {
+    sortSelect.value = sortMode;
+    rangeStartInput.value = rangeStart;
+    rangeEndInput.value = rangeEnd;
+    syncFilterUI();
+    applyAppearance();
+    fetchMeta()
+      .then(fetchSettings)
+      .then(function (doc) {
+        if (doc) applyServerSettings(doc);
+        return window.PortLightI18n
+          ? PortLightI18n.load(settings.locale || 'auto')
+          : Promise.resolve();
+      })
+      .then(function () {
+        if (window.PortLightI18n) PortLightI18n.applyDom();
+        syncHiddenButton();
+        applyRoute();
+        setupRefresh();
+        syncHeaderHeight();
+      });
+  }
+
+  if (window.PortLightI18n) PortLightI18n.load().then(startApp);
+  else {
+    document.documentElement.setAttribute('data-i18n-ready', '');
+    startApp();
   }
 
 })();
