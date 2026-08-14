@@ -30,6 +30,8 @@ def test_homelab_defaults(monkeypatch, tmp_path):
     assert get_known_port(32400)["name"] == "Plex"
     assert get_known_port(2283)["name"] == "Immich"
     assert get_known_port(9696)["name"] == "Prowlarr"
+    assert get_known_port(81)["name"] == "NPM"
+    assert get_known_port(7575)["name"] == "Homarr"
     assert get_known_port(22)["is_access_port"] is True
     assert get_known_port(5432)["is_access_port"] is False
     assert get_known_port(1) is None

@@ -182,6 +182,7 @@ To keep GitOps / Compose as the only source:
 environment:
   PORT_LIGHT_SETTINGS_SOURCE: env
   THEME: dark
+  LOCALE: en
   URL_HOST: nas.lan
 ```
 

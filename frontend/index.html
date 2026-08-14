@@ -15,7 +15,7 @@
       if (s.grid_density) document.documentElement.setAttribute('data-density', s.grid_density);
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=16">
+  <link rel="stylesheet" href="/static/style.css?v=17">
 </head>
 <body>
   <div id="app">
@@ -51,14 +51,14 @@
         </div>
       </div>
       <div class="context-bar" id="context-bar">
-        <div id="summary" class="legend"></div>
+        <div id="summary" class="legend" role="group" data-i18n-aria="legend.occupancy"></div>
         <div id="filters" class="filter-chips" role="group" data-i18n-aria="filter.kinds">
           <button type="button" class="chip" data-filter="running" aria-pressed="false" data-i18n="filter.running">Running</button>
           <button type="button" class="chip" data-filter="system" aria-pressed="false" data-i18n="filter.system">System</button>
           <button type="button" class="chip" data-filter="docker" aria-pressed="false" data-i18n="filter.docker">Docker</button>
           <button type="button" class="chip" data-filter="access" aria-pressed="false" data-i18n="filter.access">Web</button>
-          <button type="button" class="chip" data-filter="udp" aria-pressed="false">UDP</button>
-          <button type="button" class="chip" data-filter="localhost" aria-pressed="false">localhost</button>
+          <button type="button" class="chip" data-filter="udp" aria-pressed="false" data-i18n="filter.udp">UDP</button>
+          <button type="button" class="chip" data-filter="localhost" aria-pressed="false" data-i18n="filter.localhost">localhost</button>
           <button type="button" class="chip" data-filter="hidden" aria-pressed="false" data-i18n="filter.hidden">Hidden</button>
         </div>
         <div class="filter-aside">
@@ -145,7 +145,7 @@
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=16"></script>
-  <script src="/static/app.js?v=16"></script>
+  <script src="/static/i18n.js?v=17"></script>
+  <script src="/static/app.js?v=17"></script>
 </body>
 </html>

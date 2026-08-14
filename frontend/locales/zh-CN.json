@@ -15,7 +15,8 @@
     "configured": "已配置",
     "free": "空闲",
     "hidden": "隐藏",
-    "locked": "已锁定"
+    "locked": "已锁定",
+    "occupancy": "占用"
   },
   "filter": {
     "running": "运行中",
@@ -102,6 +103,7 @@
     "saving": "保存中…",
     "saved": "已保存",
     "unsaved": "有未保存的更改",
+    "discard": "放弃未保存的设置？",
     "mustBeNumber": "{label}必须是数字",
     "groups": {
       "appearance": {
@@ -233,7 +235,19 @@
   },
   "grid": {
     "empty": "没有符合筛选条件的端口。",
+    "emptyNone": "这个范围内没有占用或已声明的端口。",
     "copied": "已复制",
     "web": "网页"
+  },
+  "sourceType": {
+    "docker": "Docker",
+    "system": "系统",
+    "host": "主机",
+    "manual": "手动"
+  },
+  "scope": {
+    "public": "公网",
+    "lan": "局域网",
+    "localhost": "localhost"
   }
 }

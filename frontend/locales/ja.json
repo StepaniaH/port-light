@@ -15,7 +15,8 @@
     "configured": "定義済み",
     "free": "空き",
     "hidden": "非表示",
-    "locked": "ロック中"
+    "locked": "ロック中",
+    "occupancy": "使用状況"
   },
   "filter": {
     "running": "実行中",
@@ -102,6 +103,7 @@
     "saving": "保存中…",
     "saved": "保存しました",
     "unsaved": "未保存の変更があります",
+    "discard": "保存していない設定を破棄しますか？",
     "mustBeNumber": "{label} は数値にしてください",
     "groups": {
       "appearance": {
@@ -233,7 +235,19 @@
   },
   "grid": {
     "empty": "条件に合うポートがありません。",
+    "emptyNone": "この範囲に使用中または宣言済みのポートはありません。",
     "copied": "コピーしました",
     "web": "Web"
+  },
+  "sourceType": {
+    "docker": "Docker",
+    "system": "システム",
+    "host": "ホスト",
+    "manual": "手動"
+  },
+  "scope": {
+    "public": "公開",
+    "lan": "LAN",
+    "localhost": "localhost"
   }
 }

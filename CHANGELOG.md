@@ -4,6 +4,19 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Added
+
+- Keyboard navigation on the language dropdown (arrows, Home, End).
+- Known-port names for Nginx Proxy Manager (81), SNMP, LDAP, syslog, and Homarr.
+
+### Fixed
+
+- UDP and localhost filter chips were not wired to the locale files.
+
+### Changed
+
+- Name sort uses the active UI locale. Occupancy counts expose a group label. Empty-grid copy distinguishes “nothing in range” from “filters hid everything”.
+
 ## 0.5.2 — 2026-08-15
 
 ### Added

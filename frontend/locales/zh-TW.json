@@ -15,7 +15,8 @@
     "configured": "已設定",
     "free": "閒置",
     "hidden": "隱藏",
-    "locked": "已鎖定"
+    "locked": "已鎖定",
+    "occupancy": "占用"
   },
   "filter": {
     "running": "執行中",
@@ -102,6 +103,7 @@
     "saving": "儲存中…",
     "saved": "已儲存",
     "unsaved": "有未儲存的變更",
+    "discard": "放棄未儲存的設定？",
     "mustBeNumber": "{label}必須是數字",
     "groups": {
       "appearance": {
@@ -233,7 +235,19 @@
   },
   "grid": {
     "empty": "沒有符合篩選條件的連接埠。",
+    "emptyNone": "這個範圍內沒有占用或已聲明的連接埠。",
     "copied": "已複製",
     "web": "網頁"
+  },
+  "sourceType": {
+    "docker": "Docker",
+    "system": "系統",
+    "host": "主機",
+    "manual": "手動"
+  },
+  "scope": {
+    "public": "公開",
+    "lan": "區域網路",
+    "localhost": "localhost"
   }
 }

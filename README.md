@@ -41,7 +41,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 
 - Container / service names on the cards
 - Search by port number, with nearby free alternatives if it is taken
-- Filters: running, in use, configured, system, Docker, access, UDP, localhost
+- Occupancy counts filter in-use / configured; kind chips for running, system, Docker, web, UDP, localhost, hidden
 - Sort by port, name, or status; clamp the visible range
 - Manual entries for things the scanners miss
 - Compose conflict warning when the same host port is declared in more than one file

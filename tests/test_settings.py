@@ -42,6 +42,9 @@ def test_settings_rejects_bad_values(tmp_path, monkeypatch):
     client = TestClient(app)
     assert client.put("/api/settings", json={"theme": "neon"}).status_code == 400
     assert client.put("/api/settings", json={"locale": "fr"}).status_code == 400
+    ok = client.put("/api/settings", json={"locale": "ja"})
+    assert ok.status_code == 200
+    assert ok.json()["values"]["locale"] == "ja"
     assert client.put("/api/settings", json={"nope": 1}).status_code == 400
     assert client.put("/api/settings", json={"url_host": "http://nas.lan"}).status_code == 400
 

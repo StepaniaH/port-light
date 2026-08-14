@@ -32,4 +32,5 @@
   <Config Name="COMPOSE_SCAN_DIR" Target="COMPOSE_SCAN_DIR" Default="/compose" Description="In-container compose scan path" Type="Variable" Display="advanced" Required="false" Mask="false">/compose</Config>
   <Config Name="URL_HOST" Target="URL_HOST" Default="" Description="Hostname for guessed http(s) links (optional)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="THEME" Target="THEME" Default="system" Description="system, dark, or light" Type="Variable" Display="advanced" Required="false" Mask="false">system</Config>
+  <Config Name="LOCALE" Target="LOCALE" Default="auto" Description="auto, en, zh-CN, zh-TW, or ja" Type="Variable" Display="advanced" Required="false" Mask="false">auto</Config>
 </Container>

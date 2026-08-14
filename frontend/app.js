@@ -7,6 +7,36 @@
     return window.PortLightI18n ? window.PortLightI18n.t(key, vars) : key;
   }
 
+  function tx(prefix, value) {
+    if (!value) return '';
+    const key = prefix + '.' + value;
+    const out = t(key);
+    return out === key ? value : out;
+  }
+
+  function collate(a, b) {
+    const loc = window.PortLightI18n ? PortLightI18n.locale() : undefined;
+    try {
+      return String(a || '').localeCompare(String(b || ''), loc, { numeric: true, sensitivity: 'base' });
+    } catch (err) {
+      return String(a || '').localeCompare(String(b || ''));
+    }
+  }
+
+  function errorText(body, status) {
+    const detail = body && body.detail;
+    if (typeof detail === 'string' && detail) return detail;
+    if (Array.isArray(detail)) {
+      const parts = detail.map(function (item) {
+        if (typeof item === 'string') return item;
+        if (item && item.msg) return item.msg;
+        return '';
+      }).filter(Boolean);
+      if (parts.length) return parts.join('; ');
+    }
+    return 'HTTP ' + status;
+  }
+
   let currentData = null;
   let statusFilter = 'all';
   let kindFilters = new Set();
@@ -182,8 +212,16 @@
   }
 
   function applyRoute() {
+    const next = parseRoute();
+    if (settingsDirty && route.name === 'settings' && next.name !== 'settings') {
+      if (!window.confirm(t('settings.discard'))) {
+        location.hash = '#/settings';
+        return;
+      }
+      settingsDirty = false;
+    }
     const prev = route.name;
-    route = parseRoute();
+    route = next;
     const onSettings = route.name === 'settings';
     document.getElementById('view-grid').classList.toggle('hidden', onSettings);
     document.getElementById('view-settings').classList.toggle('hidden', !onSettings);
@@ -275,10 +313,19 @@
   rangeEndInput.addEventListener('change', updateRange);
 
   function updateRange() {
-    const s = parseInt(rangeStartInput.value, 10);
-    const e = parseInt(rangeEndInput.value, 10);
-    if (s >= 1 && s <= 65535) rangeStart = s;
-    if (e >= 1 && e <= 65535 && e >= rangeStart) rangeEnd = e;
+    let s = parseInt(rangeStartInput.value, 10);
+    let e = parseInt(rangeEndInput.value, 10);
+    if (!(s >= 1 && s <= 65535)) s = rangeStart;
+    if (!(e >= 1 && e <= 65535)) e = rangeEnd;
+    if (e < s) {
+      const tmp = s;
+      s = e;
+      e = tmp;
+    }
+    rangeStart = s;
+    rangeEnd = e;
+    rangeStartInput.value = s;
+    rangeEndInput.value = e;
     rangeFromView = true;
     saveView();
     tick();
@@ -340,10 +387,40 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       if (modalOpen()) { closeModals(); return; }
-      if (closeLocaleMenu()) return;
+      if (closeLocaleMenu({ focusTrigger: true })) return;
       if (route.name === 'settings') { location.hash = '#/'; return; }
       closeDetail();
       return;
+    }
+    if (e.key === 'Tab' && modalOpen()) {
+      const modal = document.querySelector('.modal:not(.hidden) .modal-content') || document.querySelector('.modal:not(.hidden)');
+      const nodes = modal ? modal.querySelectorAll('button, input, select, textarea, a[href]') : [];
+      const list = Array.prototype.filter.call(nodes, function (el) { return !el.disabled && el.offsetParent !== null; });
+      if (!list.length) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+      return;
+    }
+    if (e.target && e.target.classList && e.target.classList.contains('locale-trigger') &&
+        (e.key === 'ArrowDown' || e.key === 'ArrowUp') &&
+        !document.querySelector('.locale-dropdown.is-open')) {
+      e.preventDefault();
+      e.target.click();
+      return;
+    }
+    if (document.querySelector('.locale-dropdown.is-open')) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveLocaleHighlight(1); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); moveLocaleHighlight(-1); return; }
+      if (e.key === 'Home') { e.preventDefault(); moveLocaleHighlight('start'); return; }
+      if (e.key === 'End') { e.preventDefault(); moveLocaleHighlight('end'); return; }
+      if (e.key === 'Tab') { closeLocaleMenu(); return; }
     }
     if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
@@ -351,6 +428,11 @@
     if (route.name === 'settings' || modalOpen()) return;
     e.preventDefault();
     searchInput.focus();
+  });
+  window.addEventListener('beforeunload', function (e) {
+    if (!settingsDirty) return;
+    e.preventDefault();
+    e.returnValue = '';
   });
 
   document.querySelectorAll('.modal').forEach(function (m) {
@@ -440,7 +522,8 @@
       const name = t('scanner.' + pair[1]);
       const ok = !!scanners[pair[0]];
       const title = t(ok ? 'scanner.available' : 'scanner.unavailable', { name: name });
-      return '<span class="pill' + (ok ? ' ok' : ' bad') + '" title="' + escapeHtml(title) + '"></span>';
+      return '<span class="pill' + (ok ? ' ok' : ' bad') + '" role="img" title="' +
+        escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"></span>';
     }).join('');
   }
 
@@ -586,13 +669,27 @@
       escapeHtml(t(localKey)) + '</span></span>';
   }
 
-  function closeLocaleMenu() {
+  function closeLocaleMenu(opts) {
     const drop = document.querySelector('.locale-dropdown.is-open');
     if (!drop) return false;
     drop.classList.remove('is-open');
     const btn = drop.querySelector('.locale-trigger');
     if (btn) btn.setAttribute('aria-expanded', 'false');
+    if (opts && opts.focusTrigger && btn) btn.focus();
     return true;
+  }
+
+  function moveLocaleHighlight(delta) {
+    const drop = document.querySelector('.locale-dropdown.is-open');
+    if (!drop) return;
+    const rows = Array.prototype.slice.call(drop.querySelectorAll('.locale-row'));
+    if (!rows.length) return;
+    let i = rows.indexOf(document.activeElement);
+    if (delta === 'start') i = 0;
+    else if (delta === 'end') i = rows.length - 1;
+    else if (i < 0) i = 0;
+    else i = (i + delta + rows.length) % rows.length;
+    rows[i].focus();
   }
 
   function syncLocaleTrigger() {
@@ -615,6 +712,8 @@
       if (open) {
         drop.classList.add('is-open');
         trigger.setAttribute('aria-expanded', 'true');
+        const selected = drop.querySelector('.locale-row.is-selected') || drop.querySelector('.locale-row');
+        if (selected) selected.focus();
       }
       return;
     }
@@ -631,7 +730,7 @@
       r.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     syncLocaleTrigger();
-    closeLocaleMenu();
+    closeLocaleMenu({ focusTrigger: true });
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
   document.addEventListener('click', function (e) {
@@ -640,17 +739,20 @@
 
   function renderLocaleList(choices, value, disabled) {
     const current = choices.indexOf(value) >= 0 ? value : 'auto';
+    const label = escapeHtml(t('settings.fields.locale.label'));
     const rows = choices.map(function (c) {
       const on = c === current;
+      const id = 'locale-opt-' + c;
       return '<button type="button" class="locale-row' + (on ? ' is-selected' : '') +
-        '" data-value="' + escapeHtml(c) + '" role="option" aria-selected="' + (on ? 'true' : 'false') + '"' +
+        '" id="' + escapeHtml(id) + '" data-value="' + escapeHtml(c) + '" role="option" aria-selected="' + (on ? 'true' : 'false') + '"' +
         disabled + '>' + localeCopyHtml(c) + '<span class="locale-check" aria-hidden="true"></span></button>';
     }).join('');
     return '<div class="locale-dropdown">' +
       '<input type="hidden" name="locale" value="' + escapeHtml(current) + '"' + disabled + '>' +
-      '<button type="button" class="locale-trigger" aria-haspopup="listbox" aria-expanded="false"' + disabled + '>' +
+      '<button type="button" class="locale-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="locale-menu" aria-label="' +
+      label + '"' + disabled + '>' +
       localeCopyHtml(current) + '<span class="locale-caret" aria-hidden="true"></span></button>' +
-      '<div class="locale-menu" role="listbox">' + rows + '</div></div>';
+      '<div class="locale-menu" id="locale-menu" role="listbox" aria-label="' + label + '">' + rows + '</div></div>';
   }
 
   function renderField(f, value, readonly) {
@@ -716,7 +818,7 @@
     const body = await res.json().catch(function () { return {}; });
     if (!res.ok) {
       status.className = 'is-error';
-      status.textContent = body.detail || ('HTTP ' + res.status);
+      status.textContent = errorText(body, res.status);
       return;
     }
     rangeFromView = false;
@@ -839,9 +941,9 @@
     switch (sortMode) {
       case 'port-desc': return arr.sort(function (a, b) { return b.port - a.port; });
       case 'name-asc':
-        return arr.sort(function (a, b) { return (getCellLabel(a) || '~').localeCompare(getCellLabel(b) || '~'); });
+        return arr.sort(function (a, b) { return collate(getCellLabel(a) || '~', getCellLabel(b) || '~'); });
       case 'name-desc':
-        return arr.sort(function (a, b) { return (getCellLabel(b) || '~').localeCompare(getCellLabel(a) || '~'); });
+        return arr.sort(function (a, b) { return collate(getCellLabel(b) || '~', getCellLabel(a) || '~'); });
       case 'status':
         return arr.sort(function (a, b) {
           const order = { used: 0, configured: 1, free: 2 };
@@ -884,7 +986,12 @@
     displayPorts = sortPorts(displayPorts.slice());
 
     if (displayPorts.length === 0) {
-      grid.innerHTML = '<div class="empty">' + escapeHtml(t('grid.empty')) + '</div>';
+      const inRange = (currentData.ports || []).filter(function (p) {
+        return p.port >= rangeStart && p.port <= rangeEnd && (showHidden || !p.is_hidden);
+      });
+      const noFacet = !searchTerm && searchPortNum === null && kindFilters.size === 0 && statusFilter === 'all';
+      const key = noFacet && inRange.length === 0 ? 'grid.emptyNone' : 'grid.empty';
+      grid.innerHTML = '<div class="empty">' + escapeHtml(t(key)) + '</div>';
       return;
     }
 
@@ -961,12 +1068,13 @@
 
     html += '<div class="row"><span class="key">' + escapeHtml(t('detail.status')) + '</span><span class="tag ' + p.status + '">' +
       escapeHtml(t('status.' + p.status) || p.status) + '</span></div>';
-    html += '<div class="row"><span class="key">' + escapeHtml(t('detail.source')) + '</span><span class="val">' + escapeHtml(p.source_type || 'unknown') + '</span></div>';
+    html += '<div class="row"><span class="key">' + escapeHtml(t('detail.source')) + '</span><span class="val">' +
+      escapeHtml(tx('sourceType', p.source_type || 'unknown')) + '</span></div>';
     if (p.protocol) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.protocol')) + '</span><span class="val">' + escapeHtml(p.protocol) + '</span></div>';
     if (p.ip) {
       html += '<div class="row"><span class="key">' + escapeHtml(t('detail.bind')) + '</span><span class="val">' +
         escapeHtml((p.ips && p.ips.join(', ')) || p.ip) +
-        (p.bind_scope ? ' <span class="tag scope">' + escapeHtml(p.bind_scope) + '</span>' : '') +
+        (p.bind_scope ? ' <span class="tag scope">' + escapeHtml(tx('scope', p.bind_scope)) + '</span>' : '') +
         '</span></div>';
     }
 

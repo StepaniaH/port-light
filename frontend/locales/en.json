@@ -15,7 +15,8 @@
     "configured": "configured",
     "free": "free",
     "hidden": "hidden",
-    "locked": "locked"
+    "locked": "locked",
+    "occupancy": "Occupancy"
   },
   "filter": {
     "running": "Running",
@@ -102,6 +103,8 @@
     "saving": "Saving…",
     "saved": "Saved",
     "unsaved": "Unsaved changes",
+    "discard": "Discard unsaved settings?",
+    "discard": "Discard unsaved settings?",
     "mustBeNumber": "{label} must be a number",
     "groups": {
       "appearance": {
@@ -233,7 +236,19 @@
   },
   "grid": {
     "empty": "No ports match these filters.",
+    "emptyNone": "No occupied or declared ports in this range.",
     "copied": "Copied",
     "web": "web"
+  },
+  "sourceType": {
+    "docker": "Docker",
+    "system": "System",
+    "host": "Host",
+    "manual": "Manual"
+  },
+  "scope": {
+    "public": "public",
+    "lan": "LAN",
+    "localhost": "localhost"
   }
 }

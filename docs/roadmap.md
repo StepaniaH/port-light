@@ -21,6 +21,7 @@ Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and
 
 ## Later
 
+- Fresh screenshot of the redesigned grid chrome (`docs/screenshot.png`)
 - Read-only multi-host agent (snapshot JSON, then UI)
 - Community Apps listing (Unraid) once a template repo exists
 - Working Podman rootless report from a real host

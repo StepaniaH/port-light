@@ -448,7 +448,7 @@ a:focus-visible,
   padding: 8px 12px; border: 0; background: transparent; color: inherit;
   text-align: left; cursor: pointer; font: inherit;
 }
-.locale-row:hover { background: var(--card-hover); }
+.locale-row:hover, .locale-row:focus { background: var(--card-hover); }
 .locale-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .locale-endonym { font-size: 0.88rem; font-weight: 550; }
 .locale-exonym { font-size: 0.72rem; color: var(--text-dim); }
@@ -550,5 +550,5 @@ a:focus-visible,
 
 @media (prefers-reduced-motion: reduce) {
   .chip, .icon-btn, .port-cell, .switch .track, .switch .track::after,
-  .port-cell .copy-toast { transition: none; }
+  .port-cell .copy-toast, .locale-menu { transition: none; }
 }
