@@ -84,7 +84,7 @@ The `machines` array may still exist in older `port_light.json` files. It is not
 
 ## Frontend
 
-No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
+No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`; `frontend/i18n.js` sets `html lang`. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
 
 ## Why not Kubernetes / remote Docker
 

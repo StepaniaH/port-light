@@ -4,6 +4,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.5.2 — 2026-08-15
+
 ### Added
 
 - Light theme (Settings: System / Dark / Light). Follows `prefers-color-scheme` when set to System.

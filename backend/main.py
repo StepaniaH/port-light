@@ -23,7 +23,7 @@ from .docker_scanner import docker_available, scan_containers
 from .known_ports import get_known_port
 from .port_scanner import host_proc_available, scan_listening_ports
 
-VERSION = "0.5.0"
+VERSION = "0.5.2"
 
 app = FastAPI(title="Port-Light", version=VERSION)
 app.middleware("http")(basic_auth_middleware)

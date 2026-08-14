@@ -2,6 +2,15 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.5.2
+
+- Settings page (`#/settings`): Compose env or Web UI, file overlay in the data volume
+- Light / system / dark theme
+- Four UI locales (en, zh-CN, zh-TW, ja)
+- Broader known-port table
+- Unraid XML template, Podman notes, image healthcheck
+- Ruff + Dependabot; GitHub Release from changelog on new tags
+
 ## Shipped in 0.5.0
 
 - Optional Basic Auth and a real gate for hidden ports when secrets are set
@@ -9,13 +18,6 @@ Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and
 - Nested Compose files, `include:`, port ranges
 - Traefik / Caddy URLs in the detail panel
 - Tests + CI; images on Docker Hub and GHCR
-
-## Next (unreleased on `main`)
-
-- Light / system theme and a Settings page (Compose env or Web UI)
-- Broader known-port table
-- Unraid XML template, Podman notes, image healthcheck
-- Ruff + Dependabot; GitHub Release from changelog on new tags
 
 ## Later
 
