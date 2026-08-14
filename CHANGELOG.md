@@ -8,7 +8,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 - Keyboard navigation on the language dropdown (arrows, Home, End).
 - Known-port names for Nginx Proxy Manager (81), SNMP, LDAP, syslog, and Homarr.
-- `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` on every response.
+- `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` on every response. API JSON is `Cache-Control: no-store`.
 
 ### Fixed
 

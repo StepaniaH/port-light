@@ -15,6 +15,7 @@ def test_health_unauthenticated(monkeypatch):
     assert res.headers.get("x-content-type-options") == "nosniff"
     assert res.headers.get("x-frame-options") == "DENY"
     assert res.headers.get("referrer-policy") == "no-referrer"
+    assert res.headers.get("cache-control") == "no-store"
     body = res.json()
     assert body["status"] == "ok"
     assert body["auth_required"] is True
