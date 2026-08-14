@@ -12,6 +12,9 @@ def test_health_unauthenticated(monkeypatch):
     client = TestClient(app)
     res = client.get("/api/health")
     assert res.status_code == 200
+    assert res.headers.get("x-content-type-options") == "nosniff"
+    assert res.headers.get("x-frame-options") == "DENY"
+    assert res.headers.get("referrer-policy") == "no-referrer"
     body = res.json()
     assert body["status"] == "ok"
     assert body["auth_required"] is True

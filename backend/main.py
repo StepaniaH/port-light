@@ -26,7 +26,18 @@ from .port_scanner import host_proc_available, scan_listening_ports
 VERSION = "0.5.2"
 
 app = FastAPI(title="Port-Light", version=VERSION)
+
+
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
+
+
 app.middleware("http")(basic_auth_middleware)
+app.middleware("http")(security_headers_middleware)
 
 _FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 

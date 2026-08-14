@@ -98,7 +98,7 @@ html:not([data-i18n-ready]) body { visibility: hidden; }
 
 button, input, select { font: inherit; color: inherit; }
 
-#app { min-height: 100vh; }
+#app { min-height: 100vh; min-height: 100dvh; }
 
 .view.hidden, .hidden { display: none !important; }
 
@@ -308,7 +308,7 @@ a:focus-visible,
   position: fixed; top: var(--header-h); right: 0; bottom: 0;
   width: var(--drawer-w); z-index: 40;
   background: var(--elevated); border-left: 1px solid var(--border);
-  overflow: auto; padding: 20px 20px 28px;
+  overflow: auto; padding: 20px 20px calc(28px + env(safe-area-inset-bottom, 0px));
 }
 #detail-content { display: flex; flex-direction: column; gap: 4px; }
 .detail-head {

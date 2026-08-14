@@ -227,6 +227,7 @@
     document.getElementById('view-settings').classList.toggle('hidden', !onSettings);
     appEl.classList.toggle('page-settings', onSettings);
     settingsBtn.classList.toggle('active', onSettings);
+    settingsBtn.setAttribute('aria-current', onSettings ? 'page' : 'false');
     syncHeaderHeight();
     if (onSettings) {
       closeDetail(true);
@@ -545,13 +546,19 @@
     applyAppearance();
   }
 
+  let portsAbort = null;
+
   async function fetchPorts() {
+    if (portsAbort) portsAbort.abort();
+    const ac = new AbortController();
+    portsAbort = ac;
     try {
       const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
-      const res = await api(url);
+      const res = await api(url, { signal: ac.signal });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return await res.json();
     } catch (err) {
+      if (err && err.name === 'AbortError') return null;
       console.error('fetch error:', err);
       return null;
     }
@@ -560,7 +567,9 @@
   function tick() {
     if (route.name === 'settings') return;
     fetchPorts().then(function (data) {
-      if (data) { currentData = data; render(); }
+      if (!data || route.name === 'settings') return;
+      currentData = data;
+      render();
     });
     fetchHealth();
   }

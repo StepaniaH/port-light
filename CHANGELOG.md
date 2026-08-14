@@ -8,6 +8,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 - Keyboard navigation on the language dropdown (arrows, Home, End).
 - Known-port names for Nginx Proxy Manager (81), SNMP, LDAP, syslog, and Homarr.
+- `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` on every response.
 
 ### Fixed
 
@@ -16,6 +17,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Changed
 
 - Name sort uses the active UI locale. Occupancy counts expose a group label. Empty-grid copy distinguishes “nothing in range” from “filters hid everything”.
+- In-flight `/api/ports` requests are aborted on the next refresh so a slow poll cannot overwrite a newer grid.
 
 ## 0.5.2 — 2026-08-15
 
