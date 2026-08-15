@@ -97,6 +97,7 @@
     "actionFailed": "無法更新該連接埠。",
     "notFound": "占用圖上沒有這個連接埠。",
     "hiddenLocked": "此連接埠已隱藏。解鎖隱藏連接埠後才能查看。",
+    "loading": "正在讀取占用…",
     "label": "標籤",
     "saveLabel": "儲存標籤",
     "copyPort": "複製連接埠號碼",

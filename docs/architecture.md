@@ -32,11 +32,11 @@ Order of attempts:
 
 The Host scanner pill is green for `/host/proc/1/net/tcp`, local `/proc/net/tcp` on a non-container host, or `ss` when the process looks like host netns (`docker0` / several host NICs). A bridge container without that mount stays red even though `/proc/net/tcp` exists. `/api/health` includes `listen_source`: `host_proc`, `ss`, `proc`, or `none`.
 
-UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, or `tcp,udp` — listen, Docker, and Compose protocols are unioned), and `bind_scope` (`public` / `lan` / `link` / `localhost`). An empty `/host/proc` listen table is authoritative (no fall-through into the container netns).
+UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, or `tcp,udp` — listen, Docker, and Compose protocols are unioned), and `bind_scope` (`public` / `lan` / `link` / `localhost`). An empty `/host/proc` listen table is authoritative (no fall-through into the container netns). If `/host/proc` is mounted but `/host/proc/1/net/tcp` is missing, the listen scan also stops (no `ss` / local `/proc` fall-through).
 
 ## Docker
 
-`docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings`, then `NetworkSettings.Ports`.
+`docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings`, then `NetworkSettings.Ports`. Empty / `0` HostPort on one address family reuses a sibling assignment on the same spec (typical dual-stack `-P`). Unassigned ephemeral publishes stay off the map until Docker fills `NetworkSettings.Ports`.
 
 `network_mode: host`:
 
@@ -44,7 +44,7 @@ UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate list
 - Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` **and descendant PIDs** (`task/*/children`), or listen rows whose `pid` is in that tree, so worker processes still get a container name.
 - `network_mode: container:…` joiners of a host-network target are treated the same way (shared netns). Joiners of a bridge container are not matched by inode (inode numbers are per-netns).
 
-macvlan/ipvlan networks: `ExposedPorts` plus the network IPv4 and IPv6 addresses are treated as LAN occupancy (Docker does not publish those on the host).
+macvlan/ipvlan networks: `ExposedPorts` plus the network IPv4/IPv6 addresses (including `IPv6Address` prefixes and secondary addresses) are treated as LAN occupancy (Docker does not publish those on the host).
 
 Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` / `HostHeader(\`…\`)` rules (http when the router entrypoint is `web`/`http` without TLS; regexp templates are dropped), a `caddy:` / `caddy_0` site address (including `http://…`), nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (on the published mapping whose container port is `VIRTUAL_PORT`, default 80), and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]`) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count). Label URLs attach to the Traefik loadbalancer port or to 80/443/8080/8443 when several mappings exist.
 
@@ -52,14 +52,14 @@ Stopped containers still contribute PortBindings — those become amber if nothi
 
 ## Compose
 
-`COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`. Hitting the cap sets `summary.compose_truncated` (the Compose pill turns amber). Files matching `compose*.yml|yaml` and `docker-compose*.yml|yaml` are parsed (including `compose.prod.yml`). A non-UTF-8 or tagged (`!reset`) file is skipped or stripped; it does not abort the rest of the walk.
+`COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`. Hitting the cap sets `summary.compose_truncated` (the Compose pill turns amber). Files matching `compose*.yml|yaml` and `docker-compose*.yml|yaml` are parsed (including `compose.prod.yml`). A non-UTF-8 or tagged (`!reset` / `!override`) file still loads; `extends` plus `ports: !reset` **replaces** the parent ports instead of merging them.
 
 `include:` paths (string, `{ path: }`, `{ path: [a.yml, b.yml] }`, or a glob like `../shared/*.yml`) are followed. `{ path, env_file }` interpolates the included file with those env files (Compose spec; `env_file.path` mappings too). `{ project_directory }` contributes that directory’s `.env`. Top-level `env_file` interpolates the compose file itself. Sibling `.env` lines may start with `export `. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile. `network_mode: service:…` / `container:…` ports are ignored (they belong to the target service).
 
 Supported port syntax:
 
-- Short: `8080:80`, `0.0.0.0:8080:80`, `127.0.0.1:8080:80`, `8080:80/tcp`, YAML `{8080: 80}`
-- Long: `{ published, target, protocol, host_ip, mode }` (`mode: host` without `published` uses `target` as the host port; published may be `"5353/udp"`)
+- Short: `8080:80`, `0.0.0.0:8080:80`, `127.0.0.1:8080:80`, `8080:80/tcp`, YAML `{8080: 80}` / `{53/udp: 53}` / `53/udp:53`
+- Long: `{ published, target, protocol, host_ip, mode }` (`mode: host` without a usable `published` uses `target` as the host port; published may be `"5353/udp"`)
 - Swarm `deploy.ports`
 - `${VAR}` / `$VAR` / `${VAR:-default}` / `${VAR-default}` / `${VAR:?err}` / `${VAR?err}` from the sibling `.env` plus process environment
 - Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 128 ports per mapping

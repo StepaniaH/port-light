@@ -22,17 +22,30 @@ _COMPOSE_SUFFIXES = (".yml", ".yaml")
 
 
 class _ComposeLoader(yaml.SafeLoader):
-    """Ignore Compose ``!reset`` / ``!override`` tags so the rest of the file still loads."""
+    """Keep Compose ``!reset`` / ``!override`` so extends can replace, not merge."""
 
 
-def _unknown_compose_tag(loader, _tag_suffix, node):
+class _ComposeTag:
+    __slots__ = ("name", "value")
+
+    def __init__(self, name: str, value):
+        self.name = name
+        self.value = value
+
+
+def _unknown_compose_tag(loader, tag_suffix, node):
     if isinstance(node, yaml.ScalarNode):
-        return loader.construct_scalar(node)
-    if isinstance(node, yaml.SequenceNode):
-        return loader.construct_sequence(node)
-    if isinstance(node, yaml.MappingNode):
-        return loader.construct_mapping(node)
-    return None
+        value = loader.construct_scalar(node)
+    elif isinstance(node, yaml.SequenceNode):
+        value = loader.construct_sequence(node)
+    elif isinstance(node, yaml.MappingNode):
+        value = loader.construct_mapping(node)
+    else:
+        value = None
+    suffix = str(tag_suffix or "").lstrip("!").lower()
+    if suffix in ("reset", "override"):
+        return _ComposeTag(suffix, value)
+    return value
 
 
 _ComposeLoader.add_multi_constructor("!", _unknown_compose_tag)
@@ -88,7 +101,12 @@ def _is_shared_netns(net: str | None) -> bool:
     return net.startswith("service:") or net.startswith("container:")
 
 
+def _unwrap_compose(val):
+    return val.value if isinstance(val, _ComposeTag) else val
+
+
 def _port_entries(ports_cfg) -> list:
+    ports_cfg = _unwrap_compose(ports_cfg)
     if ports_cfg is None or ports_cfg is False:
         return []
     if isinstance(ports_cfg, dict):
@@ -96,7 +114,7 @@ def _port_entries(ports_cfg) -> list:
             return [ports_cfg]
         return [{k: v} for k, v in ports_cfg.items()]
     if isinstance(ports_cfg, list):
-        return ports_cfg
+        return [_unwrap_compose(item) for item in ports_cfg]
     return [ports_cfg]
 
 
@@ -243,11 +261,11 @@ def _parse_compose_file(
         svc_cfg = _resolve_extends(
             svc_cfg, filepath, env_vars, frozenset(), local_services,
         )
-        net = str(svc_cfg.get("network_mode") or "").strip().lower() or None
+        net = str(_unwrap_compose(svc_cfg.get("network_mode")) or "").strip().lower() or None
         if _is_shared_netns(net):
             continue
         entries = _port_entries(svc_cfg.get("ports"))
-        deploy = svc_cfg.get("deploy")
+        deploy = _unwrap_compose(svc_cfg.get("deploy"))
         if isinstance(deploy, dict):
             entries.extend(_port_entries(deploy.get("ports")))
         for entry in entries:
@@ -264,7 +282,7 @@ def _parse_compose_file(
                     network_mode=net,
                 ))
         if net == "host":
-            for entry in svc_cfg.get("expose") or []:
+            for entry in _port_entries(svc_cfg.get("expose")):
                 for p in parse_expose_entry(entry):
                     ports.append(ComposePort(
                         port=p["host_port"],
@@ -413,14 +431,19 @@ def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
 
 def _overlay_port_fields(base: dict, child: dict) -> dict:
     out = dict(base)
-    if child.get("network_mode"):
-        out["network_mode"] = child["network_mode"]
+    child_net = _unwrap_compose(child.get("network_mode"))
+    if child_net:
+        out["network_mode"] = child_net
     for key in ("ports", "expose"):
+        child_val = child.get(key)
+        if isinstance(child_val, _ComposeTag) and child_val.name in ("reset", "override"):
+            out[key] = _port_entries(child_val.value)
+            continue
         merged: list = []
         for src in (base, child):
-            val = src.get(key)
+            val = _unwrap_compose(src.get(key))
             if isinstance(val, list):
-                merged.extend(val)
+                merged.extend(_unwrap_compose(item) for item in val)
             elif isinstance(val, dict):
                 merged.extend(_port_entries(val))
             elif val is not None and val is not False:
@@ -509,13 +532,20 @@ def parse_port_entry(entry) -> list[dict]:
             key, val = next(iter(entry.items()))
             if isinstance(val, dict):
                 return parse_port_entry(val)
+            key_s = str(key)
+            if "/" in key_s:
+                port_part, proto = key_s.rsplit("/", 1)
+                rows = parse_short_port(f"{port_part}:{val}")
+                for row in rows:
+                    row["protocol"] = _norm_proto(proto)
+                return rows
             return parse_short_port(f"{key}:{val}")
         host = entry.get("published")
         target = entry.get("target")
         proto = _norm_proto(entry.get("protocol") or "tcp")
         host_ip = entry.get("host_ip") or None
         mode = str(entry.get("mode") or "").strip().lower()
-        if host is None:
+        if _published_unset(host):
             if mode == "host" and target is not None:
                 host = target
             else:
@@ -583,8 +613,15 @@ def parse_expose_entry(entry) -> list[dict]:
 
 def parse_short_port(entry: str) -> list[dict]:
     protocol = "tcp"
+    entry = entry.strip()
     if "/" in entry:
-        entry, protocol = entry.rsplit("/", 1)
+        left, right = entry.rsplit("/", 1)
+        if ":" in right:
+            proto_tok, _, tail = right.partition(":")
+            protocol = _norm_proto(proto_tok)
+            entry = f"{left}:{tail}" if tail else left
+        else:
+            entry, protocol = left, _norm_proto(right)
     protocol = _norm_proto(protocol)
     entry = entry.strip()
     host_ip = None
@@ -631,3 +668,17 @@ def expand_port_range(spec: str, cap: int = _MAX_RANGE) -> list[int]:
     if end - start + 1 > cap:
         end = start + cap - 1
     return list(range(start, end + 1))
+
+
+def _published_unset(host) -> bool:
+    if host is None or host is False:
+        return True
+    text = str(host).strip()
+    if not text:
+        return True
+    if isinstance(host, str) and "/" in text:
+        text = text.split("/", 1)[0].strip()
+    try:
+        return int(str(text).split("-", 1)[0]) == 0
+    except (TypeError, ValueError):
+        return False

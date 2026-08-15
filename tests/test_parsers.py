@@ -39,6 +39,9 @@ def test_parse_short_port_basic():
     assert bound["host_port"] == 443
     assert bound["host_ip"] == "0.0.0.0"
     assert parse_short_port("53:53/udp")[0]["protocol"] == "udp"
+    mapped = parse_short_port("53/udp:53")[0]
+    assert mapped["host_port"] == 53
+    assert mapped["protocol"] == "udp"
     assert parse_short_port("8080") == []
 
 
@@ -425,6 +428,11 @@ def test_long_syntax_and_ipv4_host():
     host_mode = parse_port_entry({"target": 8080, "mode": "host"})
     assert host_mode[0]["host_port"] == 8080
     assert host_mode[0]["container_port"] == 8080
+    assert parse_port_entry({"published": 0, "target": 8080, "mode": "host"})[0]["host_port"] == 8080
+    assert parse_port_entry({"published": "", "target": 8080, "mode": "host"})[0]["host_port"] == 8080
+    proto_key = parse_port_entry({"53/udp": 53})
+    assert proto_key[0]["host_port"] == 53
+    assert proto_key[0]["protocol"] == "udp"
     attrs = {
         "HostConfig": {
             "NetworkMode": "host",
@@ -760,3 +768,79 @@ def test_compose_scan_reports_file_cap(tmp_path):
     full = scan_compose_tree(str(tmp_path), max_files=10)
     assert full.truncated is False
     assert {p.port for p in full.ports} == {8001, 8002}
+
+
+def test_extends_reset_replaces_parent_ports(tmp_path):
+    (tmp_path / "compose.yml").write_text(
+        "services:\n"
+        "  base:\n    ports:\n      - '8080:80'\n      - '8081:80'\n"
+        "  web:\n    extends: base\n    ports: !reset\n      - '9090:80'\n",
+        encoding="utf-8",
+    )
+    ports = scan_compose_files(str(tmp_path))
+    web = {p.port for p in ports if p.service_name == "web"}
+    base = {p.port for p in ports if p.service_name == "base"}
+    assert web == {9090}
+    assert base == {8080, 8081}
+
+
+def test_missing_host_pid1_tcp_does_not_fall_through(monkeypatch):
+    from backend import port_scanner as ps
+    monkeypatch.setattr(ps.os.path, "exists", lambda path: path == "/host/proc")
+    monkeypatch.setattr(
+        ps, "_scan_with_ss",
+        lambda: [ListeningPort(port=80, protocol="tcp", ip="0.0.0.0")],
+    )
+    monkeypatch.setattr(
+        ps, "_scan_with_proc",
+        lambda: [ListeningPort(port=443, protocol="tcp", ip="0.0.0.0")],
+    )
+    assert ps.scan_listening_ports() == []
+
+
+def test_dual_stack_empty_hostport_copies_sibling():
+    attrs = {
+        "HostConfig": {"NetworkMode": "bridge", "PortBindings": {}},
+        "NetworkSettings": {"Ports": {
+            "80/tcp": [
+                {"HostIp": "0.0.0.0", "HostPort": "32768"},
+                {"HostIp": "::", "HostPort": ""},
+            ],
+        }},
+        "Config": {"ExposedPorts": {}},
+    }
+    ports = extract_ports(attrs)
+    ips = {p["host_ip"] for p in ports if p["host_port"] == 32768}
+    assert ips == {"0.0.0.0", "::"}
+
+
+def test_ephemeral_binding_filled_from_network_settings():
+    attrs = {
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {"80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "0"}]},
+        },
+        "NetworkSettings": {
+            "Ports": {"80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "32768"}]},
+        },
+        "Config": {"ExposedPorts": {}},
+    }
+    assert {p["host_port"] for p in extract_ports(attrs)} == {32768}
+
+
+def test_macvlan_secondary_and_prefixed_ipv6(monkeypatch):
+    monkeypatch.setattr(
+        "backend.docker_scanner._network_driver",
+        lambda client, nid: "ipvlan",
+    )
+    extra = _macvlan_ports(None, {
+        "NetworkSettings": {"Networks": {"lan": {
+            "NetworkID": "abc",
+            "IPAddress": "10.0.0.9",
+            "IPv6Address": "fd12::10/64",
+            "SecondaryIPAddresses": [{"Addr": "10.0.0.10/24"}],
+        }}},
+        "Config": {"ExposedPorts": {"80/tcp": {}}},
+    }, [])
+    ips = {row["host_ip"] for row in extra}
+    assert ips == {"10.0.0.9", "fd12::10", "10.0.0.10"}

@@ -93,6 +93,14 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Saving settings reset the toolbar range even when the form range was unchanged.
 - The Running chip ignored paused/restarting containers (the bind is still held).
 - Created/dead/removing containers were labeled exited in the detail drawer.
+- Compose `extends` plus `ports: !reset` still inherited the parent’s ports.
+- `/host/proc` without `1/net/tcp` fell through to `ss` / container `/proc`.
+- YAML `{53/udp: 53}` and short `53/udp:53` were dropped.
+- Swarm `mode: host` with `published: 0` / `""` dropped the mapping instead of using `target`.
+- A dual-stack publish with an empty HostPort on one family lost that bind IP.
+- macvlan/ipvlan secondary addresses and `IPv6Address` prefixes were ignored.
+- Numeric search painted locked-hidden hits as free, and kept synthetic free neighbors under the in-use filter.
+- `#/port/N` flashed a free detail before the lookup returned.
 
 ### Changed
 

@@ -1132,6 +1132,21 @@
     };
   }
 
+  function pendingStub(port) {
+    return {
+      port: port,
+      status: 'configured',
+      source_type: 'unknown',
+      known_service: knownCache[port] || null,
+      containers: [],
+      compose_configs: [],
+      urls: [],
+      conflict: false,
+      is_hidden: false,
+      _pending: true,
+    };
+  }
+
   function showPortDetail(port, fallback) {
     const local = portFromList(port);
     if (local) {
@@ -1140,7 +1155,7 @@
       return;
     }
     if (detailShownPort === port) return;
-    renderDetail(fallback && fallback.port === port ? fallback : freeStub(port));
+    renderDetail(fallback && fallback.port === port ? fallback : pendingStub(port));
     const gen = ++portDetailGen;
     detailShownPort = port;
     api('/api/ports/' + port + '?include_hidden=true').then(function (res) {
@@ -1218,6 +1233,7 @@
     const allPortNums = new Set(ports.map(function (p) { return p.port; }));
     const hitExists = allPortNums.has(hitPort);
     const hiddenNums = new Set((currentData && currentData.summary && currentData.summary.hidden_ports) || []);
+    const locked = !!(currentData && currentData.summary && currentData.summary.hidden_locked);
     const result = [];
 
     function synthetic(port, hidden) {
@@ -1228,26 +1244,42 @@
     }
 
     if (!hitExists) {
-      result.push(synthetic(hitPort, hiddenNums.has(hitPort)));
+      if (hiddenNums.has(hitPort)) {
+        result.push(synthetic(hitPort, true));
+      } else if (locked) {
+        prefetchKnown(hitPort);
+        result.push({
+          port: hitPort, status: 'configured', is_hidden: true,
+          _synthetic: true, _locked: true, known_service: getKnownForFree(hitPort),
+        });
+      } else {
+        result.push(synthetic(hitPort, false));
+      }
     }
 
     let beforeFree = 0, afterFree = 0;
     for (let p = hitPort - 1; p >= Math.max(1, hitPort - 50) && beforeFree < 3; p--) {
-      if (!allPortNums.has(p)) {
-        result.unshift(synthetic(p, hiddenNums.has(p)));
-        beforeFree++;
-      } else {
+      if (allPortNums.has(p)) {
         const entry = ports.find(function (x) { return x.port === p; });
         if (entry) result.unshift(entry);
+      } else if (hiddenNums.has(p)) {
+        result.unshift(synthetic(p, true));
+        beforeFree++;
+      } else if (!locked) {
+        result.unshift(synthetic(p, false));
+        beforeFree++;
       }
     }
     for (let p = hitPort + 1; p <= Math.min(65535, hitPort + 50) && afterFree < 3; p++) {
-      if (!allPortNums.has(p)) {
-        result.push(synthetic(p, hiddenNums.has(p)));
-        afterFree++;
-      } else {
+      if (allPortNums.has(p)) {
         const entry = ports.find(function (x) { return x.port === p; });
         if (entry) result.push(entry);
+      } else if (hiddenNums.has(p)) {
+        result.push(synthetic(p, true));
+        afterFree++;
+      } else if (!locked) {
+        result.push(synthetic(p, false));
+        afterFree++;
       }
     }
 
@@ -1304,7 +1336,7 @@
 
     if (searchPortNum !== null) {
       displayPorts = buildSearchContext(ports, searchPortNum).filter(function (p) {
-        if (p._synthetic || p.port === searchPortNum) return true;
+        if (p.port === searchPortNum) return true;
         return matchesFilter(p);
       });
     } else {
@@ -1434,6 +1466,9 @@
       '</div><button type="button" class="close-btn" data-close-detail aria-label="' +
       escapeHtml(t('detail.close')) + '">×</button></div>';
 
+    if (p._pending) {
+      html += '<p class="modal-hint">' + escapeHtml(t('detail.loading')) + '</p>';
+    } else {
     html += '<div class="row"><span class="key">' + escapeHtml(t('detail.status')) + '</span><span class="tag ' + p.status + '">' +
       escapeHtml(t('status.' + p.status) || p.status) + '</span></div>';
     if (p._missing) {
@@ -1554,6 +1589,7 @@
       html += '<button type="button" class="btn-delete" data-delete-port="' + p.port + '">' + escapeHtml(t('detail.delete')) + '</button>';
     }
     html += '</div>';
+    }
 
     const active = document.activeElement;
     const inDetail = active && detailContent.contains(active);

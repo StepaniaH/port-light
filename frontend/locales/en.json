@@ -97,6 +97,7 @@
     "actionFailed": "Could not update that port.",
     "notFound": "This port is not on the occupancy map.",
     "hiddenLocked": "This port is hidden. Unlock hidden ports to see it.",
+    "loading": "Reading occupancy…",
     "label": "Label",
     "saveLabel": "Save label",
     "copyPort": "Copy port number",

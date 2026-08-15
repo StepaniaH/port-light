@@ -97,6 +97,7 @@
     "actionFailed": "无法更新该端口。",
     "notFound": "占用图上没有这个端口。",
     "hiddenLocked": "该端口已隐藏。解锁隐藏端口后才能查看。",
+    "loading": "正在读取占用…",
     "label": "标签",
     "saveLabel": "保存标签",
     "copyPort": "复制端口号",

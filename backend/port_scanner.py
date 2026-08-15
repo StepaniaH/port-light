@@ -55,6 +55,8 @@ def listen_scan_source() -> str:
     """Which listen table ``scan_listening_ports`` will try first."""
     if os.path.exists("/host/proc/1/net/tcp"):
         return "host_proc"
+    if os.path.exists("/host/proc"):
+        return "none"
     if shutil.which("ss"):
         return "ss"
     if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
@@ -311,6 +313,8 @@ def _scan_with_host_proc(
     prefer_pids: Iterable[int] | None = None,
 ) -> list[ListeningPort] | None:
     if not os.path.exists("/host/proc/1/net/tcp"):
+        if os.path.exists("/host/proc"):
+            return []
         return None
     ports: list[ListeningPort] = []
     for proto, path in [

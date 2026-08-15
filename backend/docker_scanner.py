@@ -233,25 +233,26 @@ def extract_ports(attrs: dict) -> list[dict]:
             "source": source,
         })
 
-    bindings = (attrs.get("HostConfig") or {}).get("PortBindings") or {}
-    for spec, binding_list in bindings.items():
-        cp, protocol = _split_port_spec(spec)
-        if not binding_list:
-            continue
-        for b in binding_list:
-            host_port = (b or {}).get("HostPort")
-            if host_port:
-                _add(host_port, (b or {}).get("HostIp") or "0.0.0.0", cp, protocol)
+    def _add_bindings(spec_map):
+        for spec, binding_list in (spec_map or {}).items():
+            cp, protocol = _split_port_spec(spec)
+            assigned: list[tuple[int, str]] = []
+            pending_ips: list[str] = []
+            for b in binding_list or []:
+                hp = _usable_host_port((b or {}).get("HostPort"))
+                hip = (b or {}).get("HostIp") or "0.0.0.0"
+                if hp is None:
+                    pending_ips.append(hip)
+                    continue
+                assigned.append((hp, hip))
+                _add(hp, hip, cp, protocol)
+            if assigned and pending_ips:
+                hp = assigned[0][0]
+                for hip in pending_ips:
+                    _add(hp, hip, cp, protocol)
 
-    ns_ports = (attrs.get("NetworkSettings") or {}).get("Ports") or {}
-    for spec, binding_list in ns_ports.items():
-        cp, protocol = _split_port_spec(spec)
-        if not binding_list:
-            continue
-        for b in binding_list:
-            host_port = (b or {}).get("HostPort")
-            if host_port:
-                _add(host_port, (b or {}).get("HostIp") or "0.0.0.0", cp, protocol)
+    _add_bindings((attrs.get("HostConfig") or {}).get("PortBindings") or {})
+    _add_bindings((attrs.get("NetworkSettings") or {}).get("Ports") or {})
 
     network_mode = (attrs.get("HostConfig") or {}).get("NetworkMode") or ""
     if network_mode == "host":
@@ -296,11 +297,7 @@ def _macvlan_ports(client, attrs: dict, existing: list[dict]) -> list[dict]:
         nid = net.get("NetworkID") or name
         if _network_driver(client, nid) not in ("macvlan", "ipvlan"):
             continue
-        ips = []
-        for key in ("IPAddress", "GlobalIPv6Address"):
-            ip = (net.get(key) or "").strip()
-            if ip and ip not in ips:
-                ips.append(ip)
+        ips = _macvlan_ips(net)
         if not ips:
             continue
         for ip in ips:
@@ -321,6 +318,54 @@ def _macvlan_ports(client, attrs: dict, existing: list[dict]) -> list[dict]:
                     "source": "macvlan",
                 })
     return extra
+
+
+def _usable_host_port(raw) -> int | None:
+    if raw is None or raw is False:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        hp = int(text)
+    except (TypeError, ValueError):
+        return None
+    if hp < 1 or hp > 65535:
+        return None
+    return hp
+
+
+def _strip_net_ip(raw) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    if "/" in text:
+        text = text.split("/", 1)[0].strip()
+    return text
+
+
+def _macvlan_ips(net: dict) -> list[str]:
+    ips: list[str] = []
+    for key in ("IPAddress", "GlobalIPv6Address", "IPv6Address"):
+        ip = _strip_net_ip(net.get(key))
+        if ip and ip not in ips:
+            ips.append(ip)
+    for key in ("SecondaryIPAddresses", "SecondaryIPv6Addresses"):
+        extra = net.get(key) or []
+        if not isinstance(extra, list):
+            continue
+        for item in extra:
+            if isinstance(item, str):
+                ip = _strip_net_ip(item)
+            elif isinstance(item, dict):
+                ip = _strip_net_ip(
+                    item.get("Addr") or item.get("IPAddress") or item.get("IPv6Address"),
+                )
+            else:
+                continue
+            if ip and ip not in ips:
+                ips.append(ip)
+    return ips
 
 
 def _traefik_service_port(labels: dict | None) -> int | None:
