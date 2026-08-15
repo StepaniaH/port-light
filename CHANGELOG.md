@@ -4,6 +4,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.5.4 — 2026-08-15
+
 ### Added
 
 - Public bind-scope filter. Access ports listening on all interfaces get a warning in the detail drawer.

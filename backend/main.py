@@ -26,7 +26,7 @@ from .docker_scanner import docker_available, safe_http_url, scan_containers
 from .known_ports import get_known_port
 from .port_scanner import host_listen_trusted, listen_scan_source, scan_listening_ports
 
-VERSION = "0.5.3"
+VERSION = "0.5.4"
 
 app = FastAPI(title="Port-Light", version=VERSION)
 
