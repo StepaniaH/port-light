@@ -80,6 +80,13 @@ def test_favicon():
     assert res.status_code == 200
 
 
+def test_index_is_not_cached():
+    client = TestClient(app)
+    res = client.get("/")
+    assert res.status_code == 200
+    assert res.headers.get("cache-control") == "no-cache"
+
+
 def test_collect_urls_uses_url_host():
     from backend.main import _collect_urls
     known = {"name": "Jellyfin", "is_access_port": True}

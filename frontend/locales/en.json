@@ -237,6 +237,8 @@
   "grid": {
     "empty": "No ports match these filters.",
     "emptyNone": "No occupied or declared ports in this range.",
+    "refreshFailed": "Could not refresh the map.",
+    "skip": "Skip to ports",
     "copied": "Copied",
     "web": "web"
   },

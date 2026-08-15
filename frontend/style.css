@@ -96,6 +96,14 @@ body {
 
 html:not([data-i18n-ready]) body { visibility: hidden; }
 
+.skip-link {
+  position: absolute; left: -999px; top: 8px; z-index: 100;
+  padding: 8px 12px; border-radius: var(--radius-sm);
+  background: var(--accent); color: var(--btn-on-accent); text-decoration: none;
+  font-size: 0.85rem; font-weight: 600;
+}
+.skip-link:focus { left: 8px; }
+
 button, input, select { font: inherit; color: inherit; }
 
 #app { min-height: 100vh; min-height: 100dvh; }
@@ -161,6 +169,7 @@ a:focus-visible,
 }
 .scanner-dots .pill.ok { background: var(--free); }
 .scanner-dots .pill.bad { opacity: 0.55; }
+.sync-error { font-size: 0.72rem; color: var(--danger); white-space: nowrap; }
 
 .context-bar {
   display: flex; align-items: center; gap: 10px 14px;

@@ -9,15 +9,19 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Keyboard navigation on the language dropdown (arrows, Home, End).
 - Known-port names for Nginx Proxy Manager (81), SNMP, LDAP, syslog, and Homarr.
 - `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` on every response. API JSON is `Cache-Control: no-store`.
+- Skip link to the port grid.
 
 ### Fixed
 
 - UDP and localhost filter chips were not wired to the locale files.
+- HTML entry (`/`) is served with `Cache-Control: no-cache` so a new `?v=` actually loads.
 
 ### Changed
 
 - Name sort uses the active UI locale. Occupancy counts expose a group label. Empty-grid copy distinguishes “nothing in range” from “filters hid everything”.
-- In-flight `/api/ports` requests are aborted on the next refresh so a slow poll cannot overwrite a newer grid.
+- In-flight `/api/ports` requests are aborted on the next refresh so a slow poll cannot overwrite a newer grid. A failed refresh shows a short error next to the scanner dots instead of looking idle.
+- Docker socket client is reused across health checks and scans (5s availability cache).
+- Escape clears the search box before closing the detail drawer.
 
 ## 0.5.2 — 2026-08-15
 

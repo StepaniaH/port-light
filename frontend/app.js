@@ -390,6 +390,14 @@
       if (modalOpen()) { closeModals(); return; }
       if (closeLocaleMenu({ focusTrigger: true })) return;
       if (route.name === 'settings') { location.hash = '#/'; return; }
+      if (searchTerm || searchPortNum !== null) {
+        searchInput.value = '';
+        searchTerm = '';
+        searchPortNum = null;
+        searchInput.classList.remove('search-active');
+        render();
+        return;
+      }
       closeDetail();
       return;
     }
@@ -548,6 +556,14 @@
 
   let portsAbort = null;
 
+  function setSyncError(on) {
+    const el = document.getElementById('sync-error');
+    if (!el) return;
+    el.hidden = !on;
+    el.classList.toggle('hidden', !on);
+    if (on) el.textContent = t('grid.refreshFailed');
+  }
+
   async function fetchPorts() {
     if (portsAbort) portsAbort.abort();
     const ac = new AbortController();
@@ -556,19 +572,24 @@
       const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
       const res = await api(url, { signal: ac.signal });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      return await res.json();
+      return { ok: true, data: await res.json() };
     } catch (err) {
-      if (err && err.name === 'AbortError') return null;
+      if (err && err.name === 'AbortError') return { ok: false, stale: true };
       console.error('fetch error:', err);
-      return null;
+      return { ok: false, stale: false };
     }
   }
 
   function tick() {
     if (route.name === 'settings') return;
-    fetchPorts().then(function (data) {
-      if (!data || route.name === 'settings') return;
-      currentData = data;
+    fetchPorts().then(function (result) {
+      if (!result || result.stale || route.name === 'settings') return;
+      if (!result.ok) {
+        setSyncError(true);
+        return;
+      }
+      setSyncError(false);
+      currentData = result.data;
       render();
     });
     fetchHealth();

@@ -20,7 +20,7 @@ Browser  ──GET /──►  frontend/index.html
 
 The UI (`frontend/app.js`) filters, sorts, and searches **in the browser**. `include_hidden` is the exception: when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set, the server withholds those rows unless the request is authorized (`backend/auth.py`).
 
-Optional HTTP Basic Auth is applied as middleware to every path except `/api/health`.
+Optional HTTP Basic Auth is applied as middleware to every path except `/api/health`. Responses set `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy`. `/api/*` is `Cache-Control: no-store`; `/` is `no-cache` so cache-bust query strings on JS/CSS take effect.
 
 ## Listening ports
 

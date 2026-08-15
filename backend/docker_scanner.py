@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import threading
+import time
 from dataclasses import dataclass, field
 
 from .port_scanner import socket_inodes_for_pid
@@ -15,6 +17,55 @@ except ImportError:
 
 
 _TRAEFIK_HOST = re.compile(r"Host(?:Regexp)?\(\s*`([^`]+)`\s*\)", re.IGNORECASE)
+_LOCK = threading.Lock()
+_CLIENT = None
+_AVAIL = False
+_AVAIL_AT = 0.0
+_AVAIL_TTL = 5.0
+
+
+def _docker_client():
+    global _CLIENT
+    if not HAS_DOCKER:
+        return None
+    with _LOCK:
+        if _CLIENT is not None:
+            return _CLIENT
+        try:
+            _CLIENT = docker.from_env()
+            return _CLIENT
+        except Exception:
+            _CLIENT = None
+            return None
+
+
+def _drop_client() -> None:
+    global _CLIENT, _AVAIL, _AVAIL_AT
+    with _LOCK:
+        _CLIENT = None
+        _AVAIL = False
+        _AVAIL_AT = 0.0
+
+
+def docker_available() -> bool:
+    global _AVAIL, _AVAIL_AT
+    if not HAS_DOCKER:
+        return False
+    now = time.monotonic()
+    with _LOCK:
+        if now - _AVAIL_AT < _AVAIL_TTL:
+            return _AVAIL
+    client = _docker_client()
+    ok = False
+    if client is not None:
+        try:
+            ok = bool(client.ping())
+        except Exception:
+            _drop_client()
+            ok = False
+    with _LOCK:
+        _AVAIL, _AVAIL_AT = ok, time.monotonic()
+    return ok
 
 
 @dataclass
@@ -31,23 +82,15 @@ class ContainerInfo:
     socket_inodes: set[int] = field(default_factory=set)
 
 
-def docker_available() -> bool:
-    if not HAS_DOCKER:
-        return False
-    try:
-        return bool(docker.from_env().ping())
-    except Exception:
-        return False
-
-
 def scan_containers() -> list[ContainerInfo]:
-    if not HAS_DOCKER:
+    client = _docker_client()
+    if client is None:
         return []
 
     try:
-        client = docker.from_env()
         containers = client.containers.list(all=True)
     except Exception:
+        _drop_client()
         return []
 
     result: list[ContainerInfo] = []

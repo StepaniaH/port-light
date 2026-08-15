@@ -236,7 +236,10 @@ def unhide_port(port: int) -> dict:
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(_FRONTEND_DIR / "index.html")
+    return FileResponse(
+        _FRONTEND_DIR / "index.html",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/favicon.ico", include_in_schema=False)
