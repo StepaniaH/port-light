@@ -1,4 +1,4 @@
-fastapi>=0.104.0
+fastapi>=0.141.1
 uvicorn[standard]>=0.24.0
 docker>=7.0.0
 pyyaml>=6.0.3
