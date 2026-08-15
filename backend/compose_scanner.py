@@ -198,7 +198,10 @@ def _load_env_file(directory: Path) -> dict[str, str]:
 def _read_env_file(path: Path) -> dict[str, str]:
     env: dict[str, str] = {}
     try:
-        for line in path.read_text().splitlines():
+        text = path.read_text()
+        if text.startswith("\ufeff"):
+            text = text[1:]
+        for line in text.splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue

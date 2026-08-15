@@ -86,6 +86,7 @@
     "actionFailed": "Could not update that port.",
     "label": "Label",
     "saveLabel": "Save label",
+    "copyPort": "Copy port number",
     "publicBind": "All interfaces",
     "publicBindHint": "This port accepts connections from any address on the host."
   },

@@ -15,6 +15,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Host-network Compose `expose:` entries count as host ports.
 - `Content-Security-Policy` on every response.
 - `GET /api/ports` supports `If-None-Match` / `304`.
+- Click the port number in the detail drawer to copy it.
+- Unraid `net.unraid.docker.webui` labels become detail-panel URLs.
 
 ### Fixed
 
@@ -29,6 +31,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Compose `include.env_file` interpolates the included file.
 - `traefik.enable=false` no longer contributes Traefik Host URLs.
 - Long-syntax `published: "5353/udp"` was dropped instead of recorded as UDP.
+- A UTF-8 BOM on `.env` hid `export KEY=` lines.
 
 ### Changed
 

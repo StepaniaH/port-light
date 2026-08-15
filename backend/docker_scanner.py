@@ -19,6 +19,7 @@ except ImportError:
 
 _TRAEFIK_HOST_FN = re.compile(r"Host(?:SNI|Regexp)?\(\s*([^)]*)\)", re.IGNORECASE)
 _TRAEFIK_HOST_ARG = re.compile(r"""[`'"]([^`'"]+)[`'"]""")
+_UNRAID_PORT = re.compile(r"\[PORT:(\d+)\]", re.IGNORECASE)
 _LOCK = threading.Lock()
 _BAD_URL_SCHEMES = frozenset({"javascript", "data", "file", "vbscript", "blob", "about"})
 _CLIENT = None
@@ -218,6 +219,8 @@ def extract_label_urls(labels: dict) -> list[str]:
                 _add(host)
         elif lk in ("homepage.href", "wud.href"):
             _add(val)
+        elif lk == "net.unraid.docker.webui":
+            _add(expand_unraid_webui(val))
 
     return urls
 
@@ -226,6 +229,16 @@ def _label_is_off(val) -> bool:
     if val is False:
         return True
     return str(val).strip().lower() in ("false", "0", "no", "off")
+
+
+def expand_unraid_webui(val: str) -> str:
+    """Turn Unraid ``http://[IP]:[PORT:8096]/`` templates into a real URL."""
+    text = (val or "").strip()
+    text = _UNRAID_PORT.sub(r"\1", text)
+    text = text.replace("[IP]", "localhost").replace("[HOSTNAME]", "localhost")
+    if re.search(r"\[PORT\]", text, re.IGNORECASE):
+        return ""
+    return text
 
 
 def safe_http_url(url: str | None) -> str | None:

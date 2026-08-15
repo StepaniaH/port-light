@@ -86,6 +86,7 @@
     "actionFailed": "无法更新该端口。",
     "label": "标签",
     "saveLabel": "保存标签",
+    "copyPort": "复制端口号",
     "publicBind": "全部接口",
     "publicBindHint": "该端口接受主机上任意地址的连接。"
   },

@@ -235,6 +235,10 @@ def test_long_syntax_and_ipv4_host():
     })
     assert all("wiki.home.arpa" not in u for u in disabled)
     assert "http://wiki.lan:3000" in disabled
+    unraid = extract_label_urls({
+        "net.unraid.docker.webui": "http://[IP]:[PORT:8096]/",
+    })
+    assert "http://localhost:8096" in unraid
 
 
 def test_compose_override_file(tmp_path):
@@ -275,6 +279,18 @@ def test_host_network_expose(tmp_path):
     assert parse_expose_entry("53/udp")[0]["host_port"] == 53
     assert parse_expose_entry("8080:80") == []
     assert parse_expose_entry(53)[0]["protocol"] == "tcp"
+
+
+def test_env_file_strips_utf8_bom(tmp_path):
+    app = tmp_path / "web"
+    app.mkdir()
+    (app / ".env").write_bytes(b"\xef\xbb\xbfexport WEB_PORT=7777\n")
+    (app / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '${WEB_PORT}:80'\n",
+        encoding="utf-8",
+    )
+    numbers = {p.port for p in scan_compose_files(str(tmp_path))}
+    assert 7777 in numbers
 
 
 def test_label_urls_reject_javascript():

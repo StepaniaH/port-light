@@ -86,6 +86,7 @@
     "actionFailed": "無法更新該連接埠。",
     "label": "標籤",
     "saveLabel": "儲存標籤",
+    "copyPort": "複製連接埠號碼",
     "publicBind": "全部介面",
     "publicBindHint": "此連接埠接受主機上任意位址的連線。"
   },

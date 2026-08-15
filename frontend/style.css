@@ -295,7 +295,8 @@ a:focus-visible,
 .port-cell.search-near { opacity: 1; }
 .port-cell.conflict { box-shadow: inset 0 2px 0 var(--conflict); }
 
-.port-cell .copy-toast {
+.port-cell .copy-toast,
+.detail-copy-port .copy-toast {
   position: absolute; top: 6px; right: 6px;
   padding: 2px 7px; border-radius: 4px;
   background: var(--toast-bg); border: 1px solid var(--border);
@@ -303,7 +304,8 @@ a:focus-visible,
   opacity: 0; pointer-events: none;
   transition: opacity 0.25s ease;
 }
-.port-cell .copy-toast.show { opacity: 1; }
+.port-cell .copy-toast.show,
+.detail-copy-port .copy-toast.show { opacity: 1; }
 
 .empty {
   grid-column: 1 / -1; text-align: center; padding: 48px 16px; color: var(--text-dim);
@@ -329,6 +331,11 @@ a:focus-visible,
 .detail-head h2 {
   font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
 }
+.detail-copy-port {
+  position: relative; margin: 0; padding: 0; border: 0; background: transparent;
+  color: inherit; font: inherit; cursor: pointer; text-align: left;
+}
+.detail-copy-port:hover { color: var(--accent); }
 .detail-sub { font-size: 0.85rem; color: var(--text-dim); margin-top: 2px; }
 .close-btn {
   width: 32px; height: 32px; border: 0; background: transparent; color: var(--text-dim);
@@ -566,5 +573,5 @@ a:focus-visible,
 
 @media (prefers-reduced-motion: reduce) {
   .chip, .icon-btn, .port-cell, .switch .track, .switch .track::after,
-  .port-cell .copy-toast, .locale-menu { transition: none; }
+  .port-cell .copy-toast, .detail-copy-port .copy-toast, .locale-menu { transition: none; }
 }

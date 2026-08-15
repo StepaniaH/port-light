@@ -86,6 +86,7 @@
     "actionFailed": "このポートを更新できませんでした。",
     "label": "ラベル",
     "saveLabel": "ラベルを保存",
+    "copyPort": "ポート番号をコピー",
     "publicBind": "全インターフェース",
     "publicBindHint": "このポートはホスト上の任意のアドレスからの接続を受け付けます。"
   },

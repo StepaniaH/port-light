@@ -1275,7 +1275,8 @@
   function renderDetail(p) {
     setDetailOpen(true);
     const name = getCellLabel(p);
-    let html = '<div class="detail-head"><div><h2>' + p.port + '</h2>' +
+    let html = '<div class="detail-head"><div><h2><button type="button" class="detail-copy-port" data-copy-port="' +
+      p.port + '" title="' + escapeHtml(t('detail.copyPort')) + '">' + p.port + '</button></h2>' +
       (name ? '<div class="detail-sub">' + escapeHtml(name) + '</div>' : '') +
       '</div><button type="button" class="close-btn" data-close-detail aria-label="' +
       escapeHtml(t('detail.close')) + '">×</button></div>';
@@ -1389,6 +1390,7 @@
       else if (active.hasAttribute('data-hide-port')) keep = 'hide';
       else if (active.hasAttribute('data-unhide-port')) keep = 'unhide';
       else if (active.hasAttribute('data-delete-port')) keep = 'delete';
+      else if (active.hasAttribute('data-copy-port')) keep = 'copy';
       else if (active.hasAttribute('data-label-input')) keep = 'label';
     }
 
@@ -1401,6 +1403,14 @@
     if (showBtn) showBtn.addEventListener('click', function () { window._portLightUnhide(p.port); });
     const delBtn = detailContent.querySelector('[data-delete-port]');
     if (delBtn) delBtn.addEventListener('click', function () { window._portLightDeleteManual(p.port); });
+    const copyBtn = detailContent.querySelector('[data-copy-port]');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function () {
+        navigator.clipboard.writeText(String(p.port)).then(function () {
+          showCopyToast(copyBtn);
+        }).catch(function () {});
+      });
+    }
     const labelForm = detailContent.querySelector('[data-label-form]');
     if (labelForm) {
       labelForm.addEventListener('submit', function (e) {
@@ -1414,6 +1424,7 @@
       : keep === 'hide' ? hideBtn
       : keep === 'unhide' ? showBtn
       : keep === 'delete' ? delBtn
+      : keep === 'copy' ? copyBtn
       : keep === 'label' ? labelInput
       : (fromGrid ? closeBtn : null);
     if (focusEl) focusEl.focus({ preventScroll: true });
