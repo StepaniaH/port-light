@@ -20,11 +20,13 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - A truncated `port_light.json` is moved aside instead of being overwritten with an empty store.
 - Two Compose bind IPs on the same service were collapsed to one row.
 - Traefik `Host(\`a\`, \`b\`)` only kept the first hostname.
+- A string value in `custom_ports.json` no longer blows up the known-port table.
 
 ### Changed
 
 - Occupancy JSON is written atomically (tempfile + `os.replace`).
 - Compose conflict requires overlapping bind addresses, not just the same port number in two projects.
+- `URL_HOST` may be an IPv6 address; guessed links use `[addr]:port`.
 
 ## 0.5.3 — 2026-08-15
 

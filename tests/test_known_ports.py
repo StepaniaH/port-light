@@ -77,3 +77,19 @@ def test_custom_ports_override(tmp_path, monkeypatch):
     }))
     os.utime(path, (time.time() + 5, time.time() + 5))
     assert get_known_port(4242)["name"] == "Lab 2"
+
+
+def test_custom_ports_skips_non_objects(tmp_path, monkeypatch):
+    path = tmp_path / "custom_ports.json"
+    path.write_text(json.dumps({
+        "22": "not-an-object",
+        "4242": {
+            "name": "Lab",
+            "description": "custom",
+            "category": "dev",
+            "is_access_port": True,
+        },
+    }))
+    monkeypatch.setenv("CUSTOM_PORTS_FILE", str(path))
+    assert get_known_port(22)["name"] == "SSH"
+    assert get_known_port(4242)["name"] == "Lab"

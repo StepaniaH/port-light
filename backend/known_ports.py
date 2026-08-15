@@ -221,8 +221,13 @@ def _load_custom_ports() -> dict[int, dict]:
         return _custom_cache
     try:
         raw = json.loads(p.read_text())
-        parsed = {int(k): v for k, v in raw.items() if str(k).lstrip("-").isdigit()}
-    except (json.JSONDecodeError, ValueError, OSError):
+        parsed: dict[int, dict] = {}
+        if isinstance(raw, dict):
+            for key, value in raw.items():
+                if not str(key).lstrip("-").isdigit() or not isinstance(value, dict):
+                    continue
+                parsed[int(key)] = value
+    except (json.JSONDecodeError, ValueError, OSError, TypeError):
         parsed = {}
     _custom_cache, _custom_mtime, _custom_path = parsed, mtime, path
     return parsed

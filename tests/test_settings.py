@@ -47,6 +47,9 @@ def test_settings_rejects_bad_values(tmp_path, monkeypatch):
     assert ok.json()["values"]["locale"] == "ja"
     assert client.put("/api/settings", json={"nope": 1}).status_code == 400
     assert client.put("/api/settings", json={"url_host": "http://nas.lan"}).status_code == 400
+    v6 = client.put("/api/settings", json={"url_host": "[2001:db8::10]"})
+    assert v6.status_code == 200
+    assert v6.json()["values"]["url_host"] == "2001:db8::10"
 
 
 def test_manual_list_patch_and_known(tmp_path, monkeypatch):

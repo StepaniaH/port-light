@@ -1162,7 +1162,7 @@
               return c.name + ' ' + (c.compose_project || '') + ' ' + (c.compose_service || '') + ' ' + c.image;
             }),
             ...(p.compose_configs || []).map(function (c) {
-              return c.project_dir + ' ' + c.service_name + ' ' + c.compose_file;
+              return c.project_dir + ' ' + c.service_name + ' ' + c.compose_file + ' ' + (c.host_ip || '');
             }),
             p.protocol || '', p.bind_scope || '', (p.ips || []).join(' '),
             ...(p.urls || []),

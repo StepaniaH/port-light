@@ -522,6 +522,20 @@ _NO_HTTP_PORTS = frozenset({
 })
 
 
+def _host_for_url(host: str) -> str:
+    """Bracket IPv6 literals so guessed links parse as URLs."""
+    text = (host or "").strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+    try:
+        addr = ipaddress.ip_address(text)
+    except ValueError:
+        return host.strip() or "localhost"
+    if addr.version == 6:
+        return f"[{addr}]"
+    return str(addr)
+
+
 def _collect_urls(
     port: int,
     ips: list[str],
@@ -555,6 +569,7 @@ def _collect_urls(
             scheme = "https" if port in (443, 8443, 9443) or "HTTPS" in name else "http"
         if port in _NO_HTTP_PORTS:
             return urls
+        host = _host_for_url(host)
         guess = f"{scheme}://{host}:{port}"
         if guess not in seen:
             urls.append(guess)

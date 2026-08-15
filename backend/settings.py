@@ -9,6 +9,7 @@ the file and disable PUT — GitOps / compose-only hosts.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -165,9 +166,20 @@ def _coerce(spec: FieldSpec, raw: Any) -> Any:
     if len(text) > spec.max_length:
         raise ValueError(f"{spec.key} is too long")
     if spec.key == "url_host" and text:
-        if any(ch.isspace() for ch in text) or "/" in text or ":" in text:
-            raise ValueError("url_host must be a hostname without scheme, port, or path")
+        text = _coerce_url_host(text)
     return text
+
+
+def _coerce_url_host(text: str) -> str:
+    if any(ch.isspace() for ch in text) or "/" in text:
+        raise ValueError("url_host must be a hostname without scheme, port, or path")
+    inner = text[1:-1] if text.startswith("[") and text.endswith("]") else text
+    try:
+        return str(ipaddress.ip_address(inner))
+    except ValueError:
+        if ":" in text or "://" in text:
+            raise ValueError("url_host must be a hostname without scheme, port, or path") from None
+        return text
 
 
 def _parse_env(spec: FieldSpec) -> Any | None:

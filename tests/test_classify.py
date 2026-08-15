@@ -91,6 +91,11 @@ def test_collect_urls_guesses_http_not_ssh():
     assert _collect_urls(22, ["0.0.0.0"], [], ssh) == []
     assert _collect_urls(5060, ["0.0.0.0"], [], {"name": "SIP", "is_access_port": True}) == []
 
+    v6 = _collect_urls(
+        8096, ["0.0.0.0"], [], known_web, {"url_host": "2001:db8::1"},
+    )
+    assert "http://[2001:db8::1]:8096" in v6
+
 
 def test_classify_used_configured_hidden_conflict():
     listening = [
