@@ -53,6 +53,31 @@ def test_compose_include_and_depth(tmp_path):
     assert 3001 in numbers
 
 
+def test_include_env_file_and_export(tmp_path):
+    shared = tmp_path / "shared"
+    app = tmp_path / "apps" / "web"
+    shared.mkdir()
+    app.mkdir(parents=True)
+    (shared / "stack.env").write_text("export WEB_PORT=9080\n", encoding="utf-8")
+    (shared / "ports.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '${WEB_PORT}:80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - path: ../../shared/ports.yml\n    env_file: ../../shared/stack.env\n",
+        encoding="utf-8",
+    )
+    (app / ".env").write_text("export LOCAL_PORT=18080\n", encoding="utf-8")
+    (app / "compose.yml").write_text(
+        (app / "compose.yml").read_text(encoding="utf-8")
+        + "services:\n  local:\n    ports:\n      - '${LOCAL_PORT}:80'\n",
+        encoding="utf-8",
+    )
+    numbers = {p.port for p in scan_compose_files(str(tmp_path))}
+    assert 9080 in numbers
+    assert 18080 in numbers
+
+
 def test_env_default_substitution():
     out = substitute_vars("ports: '${WEB_PORT:-8080}:80'", {})
     assert "8080:80" in out
@@ -194,6 +219,19 @@ def test_long_syntax_and_ipv4_host():
     assert "https://wiki.lan" in urls
     assert "https://db.home.arpa" in urls
     assert "https://media.home.arpa" in urls
+    numbered = extract_label_urls({
+        "caddy_0": "photos.home.arpa",
+        "caddy_1": "files.home.arpa",
+    })
+    assert "https://photos.home.arpa" in numbered
+    assert "https://files.home.arpa" in numbered
+    disabled = extract_label_urls({
+        "traefik.enable": "false",
+        "traefik.http.routers.wiki.rule": "Host(`wiki.home.arpa`)",
+        "homepage.href": "http://wiki.lan:3000",
+    })
+    assert all("wiki.home.arpa" not in u for u in disabled)
+    assert "http://wiki.lan:3000" in disabled
 
 
 def test_compose_override_file(tmp_path):

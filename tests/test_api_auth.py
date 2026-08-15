@@ -17,6 +17,9 @@ def test_health_unauthenticated(monkeypatch):
     assert res.headers.get("referrer-policy") == "no-referrer"
     assert "camera=()" in (res.headers.get("permissions-policy") or "")
     assert res.headers.get("cache-control") == "no-store"
+    csp = res.headers.get("content-security-policy") or ""
+    assert "default-src 'self'" in csp
+    assert "frame-ancestors 'none'" in csp
     body = res.json()
     assert body["status"] == "ok"
     assert body["auth_required"] is True

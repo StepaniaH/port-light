@@ -662,7 +662,7 @@
     if (!root) return;
     const nodes = root.querySelectorAll('button, input, select, textarea, a[href]');
     const list = Array.prototype.filter.call(nodes, function (el) {
-      return !el.disabled && el.offsetParent !== null;
+      return !el.disabled && el.getClientRects().length > 0;
     });
     if (!list.length) return;
     const first = list[0];

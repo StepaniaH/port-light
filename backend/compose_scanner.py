@@ -86,7 +86,12 @@ def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> list[s
     return found
 
 
-def _parse_compose_file(filepath: str, scan_dir: str, seen_real: set[str]) -> list[ComposePort]:
+def _parse_compose_file(
+    filepath: str,
+    scan_dir: str,
+    seen_real: set[str],
+    extra_env: dict[str, str] | None = None,
+) -> list[ComposePort]:
     real = os.path.realpath(filepath)
     if real in seen_real:
         return []
@@ -98,7 +103,7 @@ def _parse_compose_file(filepath: str, scan_dir: str, seen_real: set[str]) -> li
     except OSError:
         return ports
 
-    env_vars = _load_env_file(Path(filepath).parent)
+    env_vars = {**_load_env_file(Path(filepath).parent), **(extra_env or {})}
     raw = substitute_vars(raw, env_vars)
 
     try:
@@ -109,8 +114,8 @@ def _parse_compose_file(filepath: str, scan_dir: str, seen_real: set[str]) -> li
         return ports
 
     parent = Path(filepath).parent
-    for inc in _include_paths(data.get("include"), parent):
-        ports.extend(_parse_compose_file(str(inc), scan_dir, seen_real))
+    for inc_path, inc_env in _include_specs(data.get("include"), parent):
+        ports.extend(_parse_compose_file(str(inc_path), scan_dir, seen_real, inc_env))
 
     if "services" not in data:
         return ports
@@ -150,40 +155,62 @@ def _parse_compose_file(filepath: str, scan_dir: str, seen_real: set[str]) -> li
     return ports
 
 
-def _include_paths(include, parent: Path) -> list[Path]:
+def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str]]]:
     if not include:
         return []
     if isinstance(include, str):
         include = [include]
     if not isinstance(include, list):
         return []
-    out: list[Path] = []
+    out: list[tuple[Path, dict[str, str]]] = []
     for item in include:
         path = None
+        extra: dict[str, str] = {}
         if isinstance(item, str):
             path = item
         elif isinstance(item, dict):
             path = item.get("path")
+            extra = _env_files_from_include(parent, item.get("env_file"))
         if not path:
             continue
         resolved = (parent / path).resolve()
         if resolved.is_file():
-            out.append(resolved)
+            out.append((resolved, extra))
     return out
 
 
+def _env_files_from_include(parent: Path, env_file) -> dict[str, str]:
+    names: list[str] = []
+    if isinstance(env_file, str):
+        names = [env_file]
+    elif isinstance(env_file, list):
+        names = [n for n in env_file if isinstance(n, str)]
+    merged: dict[str, str] = {}
+    for name in names:
+        merged.update(_read_env_file((parent / name).resolve()))
+    return merged
+
+
 def _load_env_file(directory: Path) -> dict[str, str]:
+    return _read_env_file(directory / ".env")
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
     env: dict[str, str] = {}
-    env_path = directory / ".env"
-    if not env_path.exists():
-        return env
     try:
-        for line in env_path.read_text().splitlines():
+        for line in path.read_text().splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
+            if line.startswith("export "):
+                line = line[7:].lstrip()
+            if "=" not in line:
+                continue
             key, _, val = line.partition("=")
-            env[key.strip()] = val.strip().strip("\"'")
+            key = key.strip()
+            if not key:
+                continue
+            env[key] = val.strip().strip("\"'")
     except OSError:
         pass
     return env

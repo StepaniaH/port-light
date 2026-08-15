@@ -13,6 +13,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Confirm before deleting a manual port.
 - Distinct known-port names (iSCSI, SIP, RTSP, Jaeger, OTLP, Zabbix, Git daemon, …).
 - Host-network Compose `expose:` entries count as host ports.
+- `Content-Security-Policy` on every response.
 
 ### Fixed
 
@@ -22,6 +23,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Two Compose bind IPs on the same service were collapsed to one row.
 - Traefik `Host(\`a\`, \`b\`)` only kept the first hostname.
 - A string value in `custom_ports.json` no longer blows up the known-port table.
+- Tab trap in the detail drawer skipped `position: fixed` controls.
+- Sibling `.env` lines that start with `export ` are understood.
+- Compose `include.env_file` interpolates the included file.
+- `traefik.enable=false` no longer contributes Traefik Host URLs.
 
 ### Changed
 

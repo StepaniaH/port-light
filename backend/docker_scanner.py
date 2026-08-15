@@ -189,6 +189,11 @@ def extract_label_urls(labels: dict) -> list[str]:
     """Traefik Host() / HostSNI() rules and Caddy site addresses."""
     urls: list[str] = []
     seen: set[str] = set()
+    labels = labels or {}
+    traefik_off = any(
+        str(key).lower() == "traefik.enable" and _label_is_off(val)
+        for key, val in labels.items()
+    )
 
     def _add(url: str):
         cleaned = safe_http_url(url)
@@ -196,16 +201,18 @@ def extract_label_urls(labels: dict) -> list[str]:
             seen.add(cleaned)
             urls.append(cleaned)
 
-    for key, val in (labels or {}).items():
+    for key, val in labels.items():
         if not val or not isinstance(val, str):
             continue
         lk = key.lower()
         if "traefik" in lk and lk.endswith(".rule"):
+            if traefik_off:
+                continue
             for args in _TRAEFIK_HOST_FN.findall(val):
                 for host in _TRAEFIK_HOST_ARG.findall(args):
                     if "*" not in host:
                         _add(host)
-        elif lk == "caddy":
+        elif lk == "caddy" or (lk.startswith("caddy_") and lk[6:].isdigit()):
             host = val.split()[0].strip()
             if host and not host.startswith("{") and "/" not in host:
                 _add(host)
@@ -213,6 +220,12 @@ def extract_label_urls(labels: dict) -> list[str]:
             _add(val)
 
     return urls
+
+
+def _label_is_off(val) -> bool:
+    if val is False:
+        return True
+    return str(val).strip().lower() in ("false", "0", "no", "off")
 
 
 def safe_http_url(url: str | None) -> str | None:

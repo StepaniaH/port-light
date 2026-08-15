@@ -20,7 +20,7 @@ Browser  ──GET /──►  frontend/index.html
 
 The UI (`frontend/app.js`) filters, sorts, and searches **in the browser**. `include_hidden` is the exception: when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set, the server withholds those rows unless the request is authorized (`backend/auth.py`).
 
-Optional HTTP Basic Auth is applied as middleware to every path except `/api/health`. Responses set `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`. `/api/*` is `Cache-Control: no-store`; `/static/*` is long-lived (`?v=` busts); `/` is `no-cache` so a new `?v=` actually loads.
+Optional HTTP Basic Auth is applied as middleware to every path except `/api/health`. Responses set `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Content-Security-Policy` (`script-src` allows the inline theme boot script). `/api/*` is `Cache-Control: no-store`; `/static/*` is long-lived (`?v=` busts); `/` is `no-cache` so a new `?v=` actually loads.
 
 ## Listening ports
 
@@ -41,7 +41,7 @@ UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate list
 - `Config.ExposedPorts` is treated as host ports (same number).
 - Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` and match `/proc/net/*` inodes, so anonymous listeners get a container name when `/proc` is mounted.
 
-Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` rules and a `caddy:` site label become `urls` on the port.
+Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` rules and a `caddy:` / `caddy_0` site label become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count).
 
 Stopped containers still contribute PortBindings — those become amber if nothing is listening.
 
@@ -49,7 +49,7 @@ Stopped containers still contribute PortBindings — those become amber if nothi
 
 `COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`. Files named `compose.yml` / `docker-compose.yml` (and the matching `.yaml` / `.override.yml` variants) are parsed.
 
-`include:` paths (string or `{ path: }`) are followed. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile.
+`include:` paths (string or `{ path: }`) are followed. `{ path, env_file }` interpolates the included file with those env files (Compose spec). Sibling `.env` lines may start with `export `. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile.
 
 Supported port syntax:
 
