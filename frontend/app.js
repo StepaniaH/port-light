@@ -255,6 +255,18 @@
 
   window.addEventListener('hashchange', applyRoute);
 
+  const skipLink = document.querySelector('.skip-link');
+  if (skipLink) {
+    skipLink.addEventListener('click', function (e) {
+      e.preventDefault();
+      const target = route.name === 'settings'
+        ? document.getElementById('settings-form')
+        : document.getElementById('grid');
+      if (!target) return;
+      target.focus();
+    });
+  }
+
   summary.addEventListener('click', function (e) {
     const btn = e.target.closest('button.stat');
     if (!btn) return;
@@ -1362,6 +1374,18 @@
         if (c.compose_project) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.project')) + '</span><span class="val">' + escapeHtml(c.compose_project) + '</span></div>';
         if (c.compose_service) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.service')) + '</span><span class="val">' + escapeHtml(c.compose_service) + '</span></div>';
         if (c.network_mode === 'host') html += '<div class="row"><span class="key">' + escapeHtml(t('detail.network')) + '</span><span class="val">host</span></div>';
+        if (c.bind_ips && c.bind_ips.length) {
+          html += '<div class="row"><span class="key">' + escapeHtml(t('detail.bind')) + '</span><span class="val">' +
+            escapeHtml(c.bind_ips.join(', ')) + '</span></div>';
+        }
+        if (c.protocol && c.protocol !== 'tcp') {
+          html += '<div class="row"><span class="key">' + escapeHtml(t('detail.protocol')) + '</span><span class="val">' +
+            escapeHtml(c.protocol) + '</span></div>';
+        }
+        if (c.container_port) {
+          html += '<div class="row"><span class="key">' + escapeHtml(t('detail.containerPort')) + '</span><span class="val">' +
+            c.container_port + '</span></div>';
+        }
       }
     }
 

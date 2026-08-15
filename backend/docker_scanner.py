@@ -17,9 +17,15 @@ except ImportError:
     HAS_DOCKER = False
 
 
-_TRAEFIK_HOST_FN = re.compile(r"Host(?:SNI|Regexp)?\(\s*([^)]*)\)", re.IGNORECASE)
+_TRAEFIK_HOST_FN = re.compile(r"Host(?:SNI|Regexp|Header)?\(\s*([^)]*)\)", re.IGNORECASE)
 _TRAEFIK_HOST_ARG = re.compile(r"""[`'"]([^`'"]+)[`'"]""")
 _UNRAID_PORT = re.compile(r"\[PORT:(\d+)\]", re.IGNORECASE)
+_CADDY_DIRECTIVES = frozenset({
+    "reverse_proxy", "file_server", "redir", "handle", "handle_path",
+    "route", "respond", "log", "encode", "root", "php_fastcgi",
+    "basicauth", "basic_auth", "header", "tls", "import", "bind",
+    "rewrite", "uri", "try_files", "templates", "metrics",
+})
 _LOCK = threading.Lock()
 _BAD_URL_SCHEMES = frozenset({"javascript", "data", "file", "vbscript", "blob", "about"})
 _CLIENT = None
@@ -126,7 +132,7 @@ def scan_containers() -> list[ContainerInfo]:
             compose_service=labels.get("com.docker.compose.service"),
             network_mode=network_mode or None,
             pid=pid,
-            urls=extract_label_urls(labels),
+            urls=extract_label_urls(labels, (attrs.get("Config") or {}).get("Env")),
             socket_inodes=inodes,
         ))
     return result
@@ -188,11 +194,12 @@ def extract_ports(attrs: dict) -> list[dict]:
     return ports
 
 
-def extract_label_urls(labels: dict) -> list[str]:
-    """Traefik Host() / HostSNI() rules and Caddy site addresses."""
+def extract_label_urls(labels: dict, env: list | None = None) -> list[str]:
+    """Traefik Host() / HostSNI() / HostHeader(), Caddy sites, nginx-proxy VIRTUAL_HOST."""
     urls: list[str] = []
     seen: set[str] = set()
     labels = labels or {}
+    env_map = _env_map(env)
     traefik_off = any(
         str(key).lower() == "traefik.enable" and _label_is_off(val)
         for key, val in labels.items()
@@ -217,14 +224,53 @@ def extract_label_urls(labels: dict) -> list[str]:
                         _add(host)
         elif lk == "caddy" or (lk.startswith("caddy_") and lk[6:].isdigit()):
             host = val.split()[0].strip()
-            if host and not host.startswith("{") and "/" not in host:
+            if _looks_like_hostname(host):
                 _add(host)
         elif lk in ("homepage.href", "wud.href"):
             _add(val)
         elif lk == "net.unraid.docker.webui":
             _add(expand_unraid_webui(val))
+        elif lk in ("virtual_host", "letsencrypt_host"):
+            for host in val.split(","):
+                host = host.strip()
+                if host and "*" not in host:
+                    _add(host)
+
+    for key in ("VIRTUAL_HOST", "LETSENCRYPT_HOST"):
+        val = env_map.get(key)
+        if not val:
+            continue
+        for host in val.split(","):
+            host = host.strip()
+            if host and "*" not in host:
+                _add(host)
 
     return urls
+
+
+def _env_map(env: list | None) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in env or []:
+        if not isinstance(item, str) or "=" not in item:
+            continue
+        key, _, val = item.partition("=")
+        if key:
+            out[key] = val
+    return out
+
+
+def _looks_like_hostname(host: str) -> bool:
+    text = (host or "").strip()
+    if not text or text.startswith("{") or "/" in text:
+        return False
+    if text.startswith("["):
+        return True
+    head = text.split(":", 1)[0].lower()
+    if not head or head in _CADDY_DIRECTIVES:
+        return False
+    if head in ("localhost", "127.0.0.1", "::1"):
+        return True
+    return "." in head
 
 
 def _label_is_off(val) -> bool:

@@ -332,7 +332,22 @@ def _classify(
     def _add_container(port: int, c, extra: dict | None = None) -> None:
         if port < 1 or port > 65535:
             return
-        payload = {
+        extra = extra or {}
+        hip = (extra.get("host_ip") or "").strip() or None
+        proto = extra.get("protocol") or None
+        cport = extra.get("container_port")
+        lst = container_map.setdefault(port, [])
+        existing = next((x for x in lst if x["name"] == c.name), None)
+        if existing:
+            if hip and hip not in existing["bind_ips"]:
+                existing["bind_ips"].append(hip)
+            if proto and proto not in existing.get("protocols", []):
+                existing.setdefault("protocols", []).append(proto)
+                existing["protocol"] = _proto_label(existing["protocols"])
+            if cport and not existing.get("container_port"):
+                existing["container_port"] = cport
+            return
+        lst.append({
             "name": c.name,
             "status": c.status,
             "image": c.image,
@@ -340,17 +355,19 @@ def _classify(
             "compose_service": c.compose_service,
             "network_mode": c.network_mode,
             "urls": list(c.urls or []),
-        }
-        if extra:
-            payload.update(extra)
-        lst = container_map.setdefault(port, [])
-        if any(x["name"] == c.name for x in lst):
-            return
-        lst.append(payload)
+            "bind_ips": [hip] if hip else [],
+            "protocols": [proto] if proto else [],
+            "protocol": proto,
+            "container_port": cport,
+        })
 
     for c in containers:
         for p in c.ports:
-            _add_container(p["host_port"], c)
+            _add_container(p["host_port"], c, {
+                "host_ip": p.get("host_ip"),
+                "protocol": p.get("protocol"),
+                "container_port": p.get("container_port"),
+            })
         if c.network_mode == "host" and c.socket_inodes:
             for inode in c.socket_inodes:
                 port = inode_to_port.get(inode)
@@ -410,7 +427,7 @@ def _classify(
 
         if is_listening or has_running:
             status = "used"
-        elif composes or is_manual:
+        elif composes or is_manual or ctors:
             status = "configured"
         else:
             status = "free"
@@ -433,6 +450,12 @@ def _classify(
         known = get_known_port(port)
         ips = list((lp_info.get("ips") if lp_info else None) or [])
         if not ips:
+            for c in ctors:
+                for hip in c.get("bind_ips") or []:
+                    hip = (hip or "").strip()
+                    if hip and hip not in ips:
+                        ips.append(hip)
+        if not ips:
             for c in composes:
                 hip = (c.get("host_ip") or "").strip()
                 if hip and hip not in ips:
@@ -441,16 +464,19 @@ def _classify(
             ips = [lp_info["ip"] if lp_info else "0.0.0.0"]
         ip = (lp_info["ip"] if lp_info else None) or ips[0]
         urls = _collect_urls(port, ips, ctors, known, options)
+        proto_bits = []
+        if lp_info:
+            proto_bits.extend(lp_info.get("protocols") or [lp_info["protocol"]])
+        else:
+            for c in ctors:
+                proto_bits.extend(c.get("protocols") or ([c.get("protocol")] if c.get("protocol") else []))
+            proto_bits.extend(c.get("protocol") or "tcp" for c in composes)
 
         port_list.append({
             "port": port,
             "status": status,
             "source_type": source_type,
-            "protocol": (
-                lp_info["protocol"] if lp_info
-                else _proto_label([c.get("protocol") or "tcp" for c in composes]) if composes
-                else "tcp"
-            ),
+            "protocol": _proto_label(proto_bits) if proto_bits else "tcp",
             "ip": ip,
             "ips": ips,
             "bind_scope": _bind_scope_many(ips),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from backend.compose_scanner import (
     expand_port_range,
     parse_expose_entry,
@@ -9,7 +11,13 @@ from backend.compose_scanner import (
     substitute_vars,
 )
 from backend.docker_scanner import extract_label_urls, extract_ports, safe_http_url
-from backend.port_scanner import normalize_ip, parse_proc_net_line, parse_ss_line
+from backend.port_scanner import (
+    ListeningPort,
+    _fill_process_names,
+    normalize_ip,
+    parse_proc_net_line,
+    parse_ss_line,
+)
 
 
 def test_parse_short_port_basic():
@@ -100,6 +108,28 @@ def test_compose_name_and_shared_include(tmp_path):
     ports = [p for p in scan_compose_files(str(tmp_path)) if p.port == 5432]
     assert {p.project_dir for p in ports} == {"wiki", "blog"}
     assert {p.project_name for p in ports} == {"wiki-stack", "blog-stack"}
+
+
+def test_include_path_list(tmp_path):
+    shared = tmp_path / "shared"
+    app = tmp_path / "app"
+    shared.mkdir()
+    app.mkdir()
+    (shared / "a.yml").write_text(
+        "services:\n  a:\n    ports:\n      - '7001:80'\n",
+        encoding="utf-8",
+    )
+    (shared / "b.yml").write_text(
+        "services:\n  b:\n    ports:\n      - '7002:80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - path:\n      - ../shared/a.yml\n      - ../shared/b.yml\n",
+        encoding="utf-8",
+    )
+    ports = [p for p in scan_compose_files(str(tmp_path)) if p.port in (7001, 7002)]
+    assert {p.port for p in ports} == {7001, 7002}
+    assert {p.project_dir for p in ports} == {"app"}
 
 
 def test_compose_extends_and_bom(tmp_path):
@@ -211,6 +241,19 @@ def test_ss_lines():
 def test_normalize_ip():
     assert normalize_ip("::ffff:127.0.0.1") == "127.0.0.1"
     assert normalize_ip("*") == "0.0.0.0"
+    assert normalize_ip("fe80::1%eth0") == "fe80::1"
+    assert normalize_ip("::ffff:c0a8:10a") == "192.168.1.10"
+
+
+def test_fill_process_names_from_proc(tmp_path):
+    fd = tmp_path / "42" / "fd"
+    fd.mkdir(parents=True)
+    (tmp_path / "42" / "comm").write_text("sshd\n", encoding="utf-8")
+    os.symlink("socket:[12345]", fd / "3")
+    lp = ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", inode=12345)
+    _fill_process_names([lp], str(tmp_path))
+    assert lp.process_name == "sshd"
+    assert lp.pid == 42
 
 
 def test_ss_ipv6_and_star():
@@ -326,6 +369,18 @@ def test_long_syntax_and_ipv4_host():
         "net.unraid.docker.webui": "http://[IP]:[PORT:8096]/",
     })
     assert "http://localhost:8096" in unraid
+    header = extract_label_urls({
+        "traefik.http.routers.x.rule": "HostHeader(`photos.home.arpa`)",
+    })
+    assert "https://photos.home.arpa" in header
+    caddy_dir = extract_label_urls({"caddy": "reverse_proxy localhost:8080"})
+    assert caddy_dir == []
+    proxied = extract_label_urls(
+        {},
+        ["VIRTUAL_HOST=wiki.lan,wiki.home.arpa", "LETSENCRYPT_HOST=wiki.lan"],
+    )
+    assert "https://wiki.lan" in proxied
+    assert "https://wiki.home.arpa" in proxied
 
 
 def test_compose_override_file(tmp_path):

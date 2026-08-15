@@ -21,6 +21,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Ctrl/Cmd+S saves the settings page.
 - Compose `extends` (same file or `file:`) contributes `ports` / host-network `expose`.
 - Text search looks at the whole occupancy map, not only the toolbar range.
+- nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (env or labels) become detail-panel URLs.
+- Traefik `HostHeader()`.
+- `/proc` inode walk fills process names when `ss` is not used (the usual `/host/proc` mount).
 
 ### Fixed
 
@@ -43,6 +46,11 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Compose `$$` is a literal `$`. A UTF-8 BOM no longer hides the compose file.
 - A junk row in `manual_ports` / `hidden_ports` no longer 500s occupancy.
 - Binding a specific public IP is `public` (the Public chip and access-port warning), not LAN. Guessed links stay on localhost unless `URL_HOST` is set.
+- A stopped container still claimed its published port as configured (it was painted free with the container name).
+- Two Docker bind IPs on the same container were collapsed; bind scope ignored Docker `HostIp`.
+- Compose `include.path` as a list crashed the scan.
+- Caddy `caddy: reverse_proxy …` was turned into a fake `https://reverse_proxy` link.
+- IPv6 zone ids (`fe80::1%eth0`) and hex-mapped `::ffff:c0a8:10a` now normalize.
 
 ### Changed
 

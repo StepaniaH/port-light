@@ -12,11 +12,13 @@ Falls back to local ``/proc/net/*`` if neither host proc nor ss work.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 import socket
 import struct
 import subprocess
+import time
 from dataclasses import asdict, dataclass
 
 
@@ -202,6 +204,7 @@ def _scan_with_host_proc() -> list[ListeningPort]:
         ("udp6", "/host/proc/1/net/udp6"),
     ]:
         ports.extend(_read_proc_net_file(path, proto))
+    _fill_process_names(ports, "/host/proc")
     return ports
 
 
@@ -214,6 +217,7 @@ def _scan_with_proc() -> list[ListeningPort]:
         ("udp6", "/proc/net/udp6"),
     ]:
         ports.extend(_read_proc_net_file(path, proto))
+    _fill_process_names(ports, "/proc")
     return ports
 
 
@@ -267,17 +271,97 @@ def parse_proc_net_line(line: str, protocol: str) -> ListeningPort | None:
 
 
 def normalize_ip(ip: str) -> str:
-    """Collapse IPv4-mapped IPv6 and wildcard forms."""
+    """Collapse IPv4-mapped IPv6, zone ids, and wildcard forms."""
     if not ip:
         return "0.0.0.0"
-    lowered = ip.lower()
-    if lowered in ("*",):
+    text = ip.strip()
+    if text in ("*",):
         return "0.0.0.0"
-    if lowered.startswith("::ffff:"):
-        return ip.split(":")[-1]
-    if lowered in ("0.0.0.0", "::", "::0"):
-        return "0.0.0.0" if lowered == "0.0.0.0" else "::"
-    return ip
+    if "%" in text:
+        text = text.split("%", 1)[0]
+    try:
+        addr = ipaddress.ip_address(text)
+    except ValueError:
+        return text
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        return str(addr.ipv4_mapped)
+    if addr.is_unspecified:
+        return "0.0.0.0" if addr.version == 4 else "::"
+    return str(addr)
+
+
+def _fill_process_names(
+    ports: list[ListeningPort],
+    proc_root: str,
+    budget_s: float = 0.75,
+) -> None:
+    """Fill process names from ``/proc/<pid>/fd`` → socket inodes."""
+    needed = {p.inode for p in ports if p.inode and not p.process_name}
+    if not needed:
+        return
+    owners = _inode_to_comm(needed, proc_root, budget_s)
+    for p in ports:
+        if p.process_name or not p.inode:
+            continue
+        info = owners.get(p.inode)
+        if info:
+            p.process_name, p.pid = info
+
+
+def _inode_to_comm(
+    needed: set[int],
+    proc_root: str,
+    budget_s: float,
+) -> dict[int, tuple[str, int]]:
+    found: dict[int, tuple[str, int]] = {}
+    start = time.monotonic()
+    try:
+        names = os.listdir(proc_root)
+    except OSError:
+        return found
+    for name in names:
+        if time.monotonic() - start > budget_s:
+            break
+        if not name.isdigit():
+            continue
+        pid = int(name)
+        fd_dir = os.path.join(proc_root, name, "fd")
+        try:
+            fds = os.listdir(fd_dir)
+        except OSError:
+            continue
+        hit = False
+        for fd in fds:
+            try:
+                target = os.readlink(os.path.join(fd_dir, fd))
+            except OSError:
+                continue
+            if not (target.startswith("socket:[") and target.endswith("]")):
+                continue
+            try:
+                ino = int(target[8:-1])
+            except ValueError:
+                continue
+            if ino in needed and ino not in found:
+                comm = _read_comm(proc_root, name)
+                if comm:
+                    found[ino] = (comm, pid)
+                    hit = True
+                    if len(found) >= len(needed):
+                        return found
+        if hit and len(found) >= len(needed):
+            return found
+    return found
+
+
+def _read_comm(proc_root: str, pid: str) -> str:
+    path = os.path.join(proc_root, pid, "comm")
+    try:
+        with open(path) as fh:
+            text = fh.read()
+    except OSError:
+        return ""
+    return text.splitlines()[0].strip()[:32] if text else ""
 
 
 def _parse_ipv6_hex(hex_str: str) -> str:

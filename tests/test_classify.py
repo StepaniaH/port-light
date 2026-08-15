@@ -152,6 +152,59 @@ def test_classify_skips_junk_manual_rows():
     assert out["summary"]["hidden"] == 1
 
 
+def test_exited_container_keeps_bind_ips():
+    containers = [
+        ContainerInfo(
+            name="wiki",
+            status="exited",
+            image="wiki",
+            ports=[
+                {"host_port": 8080, "host_ip": "127.0.0.1", "container_port": 80, "protocol": "tcp"},
+                {"host_port": 8080, "host_ip": "10.0.0.5", "container_port": 80, "protocol": "tcp"},
+            ],
+        ),
+        ContainerInfo(
+            name="dns",
+            status="exited",
+            image="coredns",
+            ports=[{"host_port": 53, "host_ip": "0.0.0.0", "container_port": 53, "protocol": "udp"}],
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    wiki = by_port[8080]
+    assert wiki["status"] == "configured"
+    assert wiki["bind_scope"] == "lan"
+    assert set(wiki["containers"][0]["bind_ips"]) == {"127.0.0.1", "10.0.0.5"}
+    dns = by_port[53]
+    assert dns["status"] == "configured"
+    assert dns["protocol"] == "udp"
+
+
+def test_container_tcp_and_udp_same_port():
+    containers = [
+        ContainerInfo(
+            name="dns",
+            status="exited",
+            image="coredns",
+            ports=[
+                {"host_port": 53, "host_ip": "0.0.0.0", "container_port": 53, "protocol": "udp"},
+                {"host_port": 53, "host_ip": "0.0.0.0", "container_port": 53, "protocol": "tcp"},
+            ],
+        ),
+    ]
+    row = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )["ports"][0]
+    assert set(row["protocol"].split(",")) == {"tcp", "udp"}
+
+
 def test_classify_used_configured_hidden_conflict():
     listening = [
         ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", process_name="sshd", inode=11),

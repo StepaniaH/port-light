@@ -187,18 +187,26 @@ def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str]]]:
         return []
     out: list[tuple[Path, dict[str, str]]] = []
     for item in include:
-        path = None
+        paths: list[str] = []
         extra: dict[str, str] = {}
         if isinstance(item, str):
-            path = item
+            paths = [item]
         elif isinstance(item, dict):
-            path = item.get("path")
             extra = _env_files_from_include(parent, item.get("env_file"))
-        if not path:
-            continue
-        resolved = (parent / path).resolve()
-        if resolved.is_file():
-            out.append((resolved, extra))
+            raw_path = item.get("path")
+            if isinstance(raw_path, str):
+                paths = [raw_path]
+            elif isinstance(raw_path, list):
+                paths = [p for p in raw_path if isinstance(p, str)]
+        for path in paths:
+            if not path:
+                continue
+            try:
+                resolved = (parent / path).resolve()
+            except (TypeError, ValueError, OSError):
+                continue
+            if resolved.is_file():
+                out.append((resolved, extra))
     return out
 
 
