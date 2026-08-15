@@ -16,6 +16,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 - UDP and localhost filter chips were not wired to the locale files.
 - HTML entry (`/`) is served with `Cache-Control: no-cache` so a new `?v=` actually loads.
+- Unlock-hidden used the wrong poll payload after refresh abort landed, so a wrong password could not be detected.
+- Adding a manual port now keeps the dialog open and shows an error if the request fails.
 
 ### Changed
 
@@ -23,6 +25,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - In-flight `/api/ports` requests are aborted on the next refresh so a slow poll cannot overwrite a newer grid. A failed refresh shows a short error next to the scanner dots instead of looking idle.
 - Docker socket client is reused across health checks and scans (5s availability cache).
 - Escape clears the search box before closing the detail drawer.
+- CI runs on Python 3.11 and 3.12.
 
 ## 0.5.2 — 2026-08-15
 

@@ -10,7 +10,7 @@ Open an issue first for new scanners (Podman, remote Docker), auth changes, or a
 
 ## Dev loop
 
-Python 3.12+. Docker is optional if you only touch parsers.
+Python 3.11+. Docker is optional if you only touch parsers.
 
 ```bash
 python -m venv .venv

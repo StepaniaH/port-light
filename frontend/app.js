@@ -338,6 +338,12 @@
     focusBack = document.activeElement;
     document.getElementById(id).classList.remove('hidden');
     document.documentElement.classList.add('modal-open');
+    const err = document.getElementById('add-error');
+    if (id === 'add-modal' && err) {
+      err.hidden = true;
+      err.classList.add('hidden');
+      err.textContent = '';
+    }
     const input = document.getElementById(id).querySelector('input');
     if (input) input.focus();
   }
@@ -582,17 +588,23 @@
 
   function tick() {
     if (route.name === 'settings') return;
-    fetchPorts().then(function (result) {
-      if (!result || result.stale || route.name === 'settings') return;
-      if (!result.ok) {
-        setSyncError(true);
-        return;
-      }
-      setSyncError(false);
-      currentData = result.data;
+    loadPorts().then(function (data) {
+      if (!data || route.name === 'settings') return;
+      currentData = data;
       render();
     });
     fetchHealth();
+  }
+
+  async function loadPorts() {
+    const result = await fetchPorts();
+    if (!result || result.stale) return null;
+    if (!result.ok || !result.data) {
+      setSyncError(true);
+      return null;
+    }
+    setSyncError(false);
+    return result.data;
   }
 
   function setupRefresh() {
@@ -1200,15 +1212,18 @@
   }
 
   window._portLightHide = async function (port) {
-    await api('/api/hidden/' + port, { method: 'POST' });
+    const res = await api('/api/hidden/' + port, { method: 'POST' });
+    if (!res.ok) { setSyncError(true); return; }
     tick();
   };
   window._portLightUnhide = async function (port) {
-    await api('/api/hidden/' + port, { method: 'DELETE' });
+    const res = await api('/api/hidden/' + port, { method: 'DELETE' });
+    if (!res.ok) { setSyncError(true); return; }
     tick();
   };
   window._portLightDeleteManual = async function (port) {
-    await api('/api/manual-ports/' + port, { method: 'DELETE' });
+    const res = await api('/api/manual-ports/' + port, { method: 'DELETE' });
+    if (!res.ok) { setSyncError(true); return; }
     closeDetail();
     tick();
   };
@@ -1216,13 +1231,28 @@
   async function addManualPort() {
     const port = parseInt(document.getElementById('add-port').value, 10);
     const label = document.getElementById('add-label').value.trim();
-    if (!port || port < 1 || port > 65535) return;
+    const errEl = document.getElementById('add-error');
+    function showAddError(msg) {
+      if (!errEl) return;
+      errEl.hidden = false;
+      errEl.classList.remove('hidden');
+      errEl.textContent = msg;
+    }
+    if (!port || port < 1 || port > 65535) {
+      showAddError(t('modal.invalidPort'));
+      return;
+    }
 
-    await api('/api/manual-ports', {
+    const res = await api('/api/manual-ports', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ port: port, label: label, machine: 'localhost' }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(function () { return {}; });
+      showAddError(errorText(body, res.status) || t('modal.addFailed'));
+      return;
+    }
 
     closeModals();
     document.getElementById('add-port').value = '';
@@ -1236,7 +1266,7 @@
     hiddenUnlock = password;
     sessionStorage.setItem('port-light-hidden-unlock', password);
     showHidden = true;
-    const data = await fetchPorts();
+    const data = await loadPorts();
     if (!data) return;
     if (data.summary && data.summary.hidden_locked) {
       hiddenUnlock = '';

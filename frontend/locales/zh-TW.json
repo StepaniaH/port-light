@@ -93,7 +93,9 @@
     "unhideHint": "若主機設了解鎖密碼，請在此輸入。否則點眼睛按鈕即可把隱藏的連接埠納入一覽。",
     "unlockPassword": "解鎖密碼",
     "unlock": "解鎖",
-    "wrongPassword": "密碼錯誤"
+    "wrongPassword": "密碼錯誤",
+    "invalidPort": "請輸入 1 到 65535 之間的連接埠。",
+    "addFailed": "無法新增該連接埠。"
   },
   "settings": {
     "title": "設定",

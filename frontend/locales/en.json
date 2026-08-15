@@ -93,7 +93,9 @@
     "unhideHint": "Enter the unlock password if the host requires one. Otherwise the eye button just includes hidden ports in the grid.",
     "unlockPassword": "Unlock password",
     "unlock": "Unlock",
-    "wrongPassword": "Wrong password"
+    "wrongPassword": "Wrong password",
+    "invalidPort": "Enter a port between 1 and 65535.",
+    "addFailed": "Could not add that port."
   },
   "settings": {
     "title": "Settings",

@@ -391,6 +391,7 @@ a:focus-visible,
 }
 .modal-content input:focus { outline: none; box-shadow: var(--focus); border-color: var(--accent); }
 .modal-hint { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 14px; line-height: 1.45; }
+.modal-hint.is-error { color: var(--danger); }
 .modal-hint code, .origin-hint, .field-help code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.78em;

@@ -93,7 +93,9 @@
     "unhideHint": "ホストで解除パスワードを設定している場合は入力してください。未設定なら、目のボタンで非表示ポートを一覧に含めます。",
     "unlockPassword": "解除パスワード",
     "unlock": "解除",
-    "wrongPassword": "パスワードが違います"
+    "wrongPassword": "パスワードが違います",
+    "invalidPort": "1 から 65535 のポート番号を入力してください。",
+    "addFailed": "ポートを追加できませんでした。"
   },
   "settings": {
     "title": "設定",
