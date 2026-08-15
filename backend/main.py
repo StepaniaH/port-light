@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
+import json
 import os
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -34,6 +36,8 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
     response.headers.setdefault(
         "Permissions-Policy",
         "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
@@ -138,6 +142,12 @@ def _occupancy(
     )
 
 
+def _json_etag(payload: dict) -> tuple[str, str]:
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    return body, f'"{digest}"'
+
+
 @app.get("/api/settings")
 def get_settings() -> dict:
     return app_settings.snapshot()
@@ -159,8 +169,13 @@ def get_ports(
     range_start: int | None = Query(default=None, ge=1, le=65535),
     range_end: int | None = Query(default=None, ge=1, le=65535),
     include_hidden: bool = Query(default=False),
-) -> dict:
-    return _occupancy(request, range_start, range_end, include_hidden)
+) -> Response:
+    payload = _occupancy(request, range_start, range_end, include_hidden)
+    body, etag = _json_etag(payload)
+    headers = {"ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 @app.get("/api/ports/{port}")

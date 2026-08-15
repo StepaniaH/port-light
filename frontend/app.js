@@ -74,6 +74,8 @@
   let focusBack = null;
   let pendingGridFocus = null;
   let occupancyKey = '';
+  let portsEtag = '';
+  let portsEtagUrl = '';
 
   const appEl = document.getElementById('app');
   const grid = document.getElementById('grid');
@@ -701,8 +703,14 @@
     grid.setAttribute('aria-busy', 'true');
     try {
       const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
-      const res = await api(url, { signal: ac.signal });
+      const headers = {};
+      if (portsEtag && portsEtagUrl === url) headers['If-None-Match'] = portsEtag;
+      const res = await api(url, { signal: ac.signal, headers: headers });
+      if (res.status === 304) return { ok: true, unchanged: true };
       if (!res.ok) throw new Error('HTTP ' + res.status);
+      const etag = res.headers.get('etag');
+      portsEtag = etag || '';
+      portsEtagUrl = url;
       return { ok: true, data: await res.json() };
     } catch (err) {
       if (err && err.name === 'AbortError') return { ok: false, stale: true };
@@ -717,6 +725,7 @@
     if (route.name === 'settings') return;
     loadPorts().then(function (data) {
       if (!data || route.name === 'settings') return;
+      if (data === currentData && occupancyKey) return;
       currentData = data;
       const key = JSON.stringify({ ports: data.ports, summary: data.summary });
       if (key !== occupancyKey) {
@@ -731,6 +740,11 @@
   async function loadPorts() {
     const result = await fetchPorts();
     if (!result || result.stale) return null;
+    if (result.unchanged) {
+      setSyncError(false);
+      markRefreshed();
+      return currentData;
+    }
     if (!result.ok || !result.data) {
       setSyncError(true);
       return null;

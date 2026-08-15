@@ -20,6 +20,8 @@ def test_health_unauthenticated(monkeypatch):
     csp = res.headers.get("content-security-policy") or ""
     assert "default-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp
+    assert res.headers.get("cross-origin-opener-policy") == "same-origin"
+    assert res.headers.get("cross-origin-resource-policy") == "same-origin"
     body = res.json()
     assert body["status"] == "ok"
     assert body["auth_required"] is True
@@ -72,6 +74,23 @@ def test_static_assets_are_cacheable(monkeypatch):
     html = client.get("/")
     assert html.status_code == 200
     assert html.headers.get("cache-control") == "no-cache"
+
+
+def test_ports_etag_not_modified(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    client = TestClient(app)
+    first = client.get("/api/ports")
+    assert first.status_code == 200
+    etag = first.headers.get("etag")
+    assert etag
+    again = client.get("/api/ports", headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    client.post("/api/manual-ports", json={"port": 4242, "label": "lab"})
+    changed = client.get("/api/ports", headers={"If-None-Match": etag})
+    assert changed.status_code == 200
+    assert changed.json()["ports"]
 
 
 def test_manual_port_roundtrip_and_lookup(monkeypatch, tmp_path):

@@ -195,6 +195,9 @@ def test_long_syntax_and_ipv4_host():
     assert v6["host_ip"] == "::1"
     long_ip = parse_port_entry({"published": 9000, "target": 80, "host_ip": "10.0.0.5"})
     assert long_ip[0]["host_ip"] == "10.0.0.5"
+    slash = parse_port_entry({"published": "5353/udp", "target": 53})
+    assert slash[0]["host_port"] == 5353
+    assert slash[0]["protocol"] == "udp"
     assert parse_port_entry("not-a-port") == []
     assert parse_port_entry({"target": 80}) == []
     attrs = {

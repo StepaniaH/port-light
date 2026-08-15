@@ -241,12 +241,17 @@ def parse_port_entry(entry) -> list[dict]:
     if isinstance(entry, dict):
         host = entry.get("published")
         target = entry.get("target")
-        proto = entry.get("protocol", "tcp")
+        proto = entry.get("protocol") or "tcp"
         host_ip = entry.get("host_ip") or None
         if host is None:
             return []
+        host_s = str(host)
+        if isinstance(host, str) and "/" in host_s:
+            host_s, slash_proto = host_s.rsplit("/", 1)
+            if "protocol" not in entry and slash_proto:
+                proto = slash_proto
         try:
-            host_ports = expand_port_range(str(host))
+            host_ports = expand_port_range(host_s)
             container_port = int(str(target).split("-")[0]) if target is not None else None
         except (ValueError, TypeError):
             return []

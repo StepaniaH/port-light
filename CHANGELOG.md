@@ -14,6 +14,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Distinct known-port names (iSCSI, SIP, RTSP, Jaeger, OTLP, Zabbix, Git daemon, …).
 - Host-network Compose `expose:` entries count as host ports.
 - `Content-Security-Policy` on every response.
+- `GET /api/ports` supports `If-None-Match` / `304`.
 
 ### Fixed
 
@@ -27,6 +28,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Sibling `.env` lines that start with `export ` are understood.
 - Compose `include.env_file` interpolates the included file.
 - `traefik.enable=false` no longer contributes Traefik Host URLs.
+- Long-syntax `published: "5353/udp"` was dropped instead of recorded as UDP.
 
 ### Changed
 
