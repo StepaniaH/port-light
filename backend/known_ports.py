@@ -233,6 +233,19 @@ def _load_custom_ports() -> dict[int, dict]:
     return parsed
 
 
+def _as_bool(val, default: bool = False) -> bool:
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return default
+    text = str(val).strip().lower()
+    if text in ("1", "true", "yes", "on"):
+        return True
+    if text in ("0", "false", "no", "off", ""):
+        return False
+    return default
+
+
 def get_known_port(port: int) -> dict | None:
     """Return known service info for *port*, or None.
 
@@ -244,9 +257,9 @@ def get_known_port(port: int) -> dict | None:
     entry = merged.get(port)
     if entry:
         return {
-            "name": entry.get("name", "Unknown"),
-            "description": entry.get("description", ""),
-            "category": entry.get("category", "unknown"),
-            "is_access_port": entry.get("is_access_port", False),
+            "name": str(entry.get("name") or "Unknown"),
+            "description": str(entry.get("description") or ""),
+            "category": str(entry.get("category") or "unknown"),
+            "is_access_port": _as_bool(entry.get("is_access_port"), False),
         }
     return None

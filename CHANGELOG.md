@@ -53,6 +53,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - IPv6 zone ids (`fe80::1%eth0`) and hex-mapped `::ffff:c0a8:10a` now normalize.
 - Compose top-level `env_file` (and `path:` mappings) interpolates published ports.
 - `ss` `tcp4` / `udp4` rows were dropped.
+- Custom `is_access_port: "false"` was treated as true.
 
 ### Changed
 

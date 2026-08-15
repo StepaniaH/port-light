@@ -93,3 +93,24 @@ def test_custom_ports_skips_non_objects(tmp_path, monkeypatch):
     monkeypatch.setenv("CUSTOM_PORTS_FILE", str(path))
     assert get_known_port(22)["name"] == "SSH"
     assert get_known_port(4242)["name"] == "Lab"
+
+
+def test_custom_ports_coerces_access_flag(tmp_path, monkeypatch):
+    path = tmp_path / "custom_ports.json"
+    path.write_text(json.dumps({
+        "22": {
+            "name": "Jump",
+            "description": "override",
+            "category": "system",
+            "is_access_port": "false",
+        },
+        "4242": {
+            "name": "Lab",
+            "description": "custom",
+            "category": "dev",
+            "is_access_port": "true",
+        },
+    }))
+    monkeypatch.setenv("CUSTOM_PORTS_FILE", str(path))
+    assert get_known_port(22)["is_access_port"] is False
+    assert get_known_port(4242)["is_access_port"] is True
