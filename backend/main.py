@@ -356,6 +356,9 @@ def _classify(
             "compose_service": c.compose_service,
             "network_mode": c.network_mode,
             "urls": list(c.urls or []),
+            "vhost_urls": list(c.vhost_urls or []),
+            "vhost_port": c.vhost_port,
+            "vhost_fallback": _vhost_fallback(c),
             "bind_ips": [hip] if hip else [],
             "protocols": [proto] if proto else [],
             "protocol": proto,
@@ -465,6 +468,8 @@ def _classify(
             ips = [lp_info["ip"] if lp_info else "0.0.0.0"]
         ip = (lp_info["ip"] if lp_info else None) or ips[0]
         urls = _collect_urls(port, ips, ctors, known, options)
+        for c in ctors:
+            c.pop("vhost_fallback", None)
         proto_bits = []
         if lp_info:
             proto_bits.extend(lp_info.get("protocols") or [lp_info["protocol"]])
@@ -648,6 +653,14 @@ def _guess_url_host(ips: list[str], configured: str) -> str:
     return "localhost"
 
 
+def _vhost_fallback(c) -> bool:
+    """True when VIRTUAL_PORT does not match any published container port."""
+    vport = c.vhost_port
+    if not vport or not c.vhost_urls:
+        return True
+    return vport not in {p.get("container_port") for p in c.ports or []}
+
+
 def _collect_urls(
     port: int,
     ips: list[str],
@@ -663,6 +676,17 @@ def _collect_urls(
             if u and u not in seen:
                 seen.add(u)
                 urls.append(u)
+        vurls = c.get("vhost_urls") or []
+        if not vurls:
+            continue
+        vport = c.get("vhost_port")
+        cport = c.get("container_port")
+        if c.get("vhost_fallback") or vport is None or cport == vport:
+            for raw in vurls:
+                u = safe_http_url(raw)
+                if u and u not in seen:
+                    seen.add(u)
+                    urls.append(u)
     opts = options or {}
     if opts.get("guess_urls") is False:
         return urls

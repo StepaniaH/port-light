@@ -96,6 +96,8 @@ class ContainerInfo:
     network_mode: str | None = None
     pid: int | None = None
     urls: list[str] = field(default_factory=list)
+    vhost_urls: list[str] = field(default_factory=list)
+    vhost_port: int | None = None
     socket_inodes: set[int] = field(default_factory=set)
 
 
@@ -123,6 +125,8 @@ def scan_containers() -> list[ContainerInfo]:
         if network_mode == "host" and pid:
             inodes = socket_inodes_for_pid(pid)
 
+        env = (attrs.get("Config") or {}).get("Env")
+        vurls, vport = extract_nginx_vhosts(labels, env)
         result.append(ContainerInfo(
             name=c.name,
             status=c.status,
@@ -132,7 +136,9 @@ def scan_containers() -> list[ContainerInfo]:
             compose_service=labels.get("com.docker.compose.service"),
             network_mode=network_mode or None,
             pid=pid,
-            urls=extract_label_urls(labels, (attrs.get("Config") or {}).get("Env")),
+            urls=extract_label_urls(labels, env, include_nginx=False),
+            vhost_urls=vurls,
+            vhost_port=vport,
             socket_inodes=inodes,
         ))
     return result
@@ -194,7 +200,12 @@ def extract_ports(attrs: dict) -> list[dict]:
     return ports
 
 
-def extract_label_urls(labels: dict, env: list | None = None) -> list[str]:
+def extract_label_urls(
+    labels: dict,
+    env: list | None = None,
+    *,
+    include_nginx: bool = True,
+) -> list[str]:
     """Traefik Host() / HostSNI() / HostHeader(), Caddy sites, nginx-proxy VIRTUAL_HOST."""
     urls: list[str] = []
     seen: set[str] = set()
@@ -230,12 +241,42 @@ def extract_label_urls(labels: dict, env: list | None = None) -> list[str]:
             _add(val)
         elif lk == "net.unraid.docker.webui":
             _add(expand_unraid_webui(val))
-        elif lk in ("virtual_host", "letsencrypt_host"):
-            for host in val.split(","):
-                host = host.strip()
-                if host and "*" not in host:
-                    _add(host)
 
+    if include_nginx:
+        for url in _nginx_vhost_urls(labels, env_map):
+            _add(url)
+
+    return urls
+
+
+def extract_nginx_vhosts(
+    labels: dict | None,
+    env: list | None = None,
+) -> tuple[list[str], int | None]:
+    """nginx-proxy VIRTUAL_HOST / LETSENCRYPT_HOST plus optional VIRTUAL_PORT."""
+    env_map = _env_map(env)
+    labels = labels or {}
+    urls: list[str] = []
+    seen: set[str] = set()
+    for raw in _nginx_vhost_urls(labels, env_map):
+        cleaned = safe_http_url(raw)
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            urls.append(cleaned)
+    return urls, _nginx_virtual_port(labels, env_map, bool(urls))
+
+
+def _nginx_vhost_urls(labels: dict, env_map: dict[str, str]) -> list[str]:
+    out: list[str] = []
+    for key, val in labels.items():
+        if not val or not isinstance(val, str):
+            continue
+        if str(key).lower() not in ("virtual_host", "letsencrypt_host"):
+            continue
+        for host in val.split(","):
+            host = host.strip()
+            if host and "*" not in host:
+                out.append(host)
     for key in ("VIRTUAL_HOST", "LETSENCRYPT_HOST"):
         val = env_map.get(key)
         if not val:
@@ -243,9 +284,26 @@ def extract_label_urls(labels: dict, env: list | None = None) -> list[str]:
         for host in val.split(","):
             host = host.strip()
             if host and "*" not in host:
-                _add(host)
+                out.append(host)
+    return out
 
-    return urls
+
+def _nginx_virtual_port(labels: dict, env_map: dict[str, str], has_vhost: bool) -> int | None:
+    candidates = (
+        env_map.get("VIRTUAL_PORT"),
+        labels.get("VIRTUAL_PORT"),
+        labels.get("virtual_port"),
+    )
+    for raw in candidates:
+        if raw is None or raw is False:
+            continue
+        try:
+            port = int(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+        if 1 <= port <= 65535:
+            return port
+    return 80 if has_vhost else None
 
 
 def _env_map(env: list | None) -> dict[str, str]:

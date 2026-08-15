@@ -10,7 +10,7 @@ from backend.compose_scanner import (
     scan_compose_files,
     substitute_vars,
 )
-from backend.docker_scanner import extract_label_urls, extract_ports, safe_http_url
+from backend.docker_scanner import extract_label_urls, extract_nginx_vhosts, extract_ports, safe_http_url
 from backend.port_scanner import (
     ListeningPort,
     _fill_process_names,
@@ -431,6 +431,19 @@ def test_long_syntax_and_ipv4_host():
     )
     assert "https://wiki.lan" in proxied
     assert "https://wiki.home.arpa" in proxied
+    vurls, vport = extract_nginx_vhosts(
+        {},
+        ["VIRTUAL_HOST=wiki.lan", "VIRTUAL_PORT=8080"],
+    )
+    assert vurls == ["https://wiki.lan"]
+    assert vport == 8080
+    defaulted, default_port = extract_nginx_vhosts({}, ["VIRTUAL_HOST=wiki.lan"])
+    assert defaulted == ["https://wiki.lan"]
+    assert default_port == 80
+    assert extract_label_urls(
+        {"VIRTUAL_HOST": "wiki.lan"},
+        include_nginx=False,
+    ) == []
 
 
 def test_compose_override_file(tmp_path):

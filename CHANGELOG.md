@@ -21,7 +21,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Ctrl/Cmd+S saves the settings page.
 - Compose `extends` (same file or `file:`) contributes `ports` / host-network `expose`.
 - Text search looks at the whole occupancy map, not only the toolbar range.
-- nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (env or labels) become detail-panel URLs.
+- nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (env or labels) become detail-panel URLs. `VIRTUAL_PORT` picks which published mapping gets the link (default 80; a lone mismatched publish still gets it).
 - Traefik `HostHeader()`.
 - `/proc` inode walk fills process names when `ss` is not used (the usual `/host/proc` mount).
 

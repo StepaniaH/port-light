@@ -43,7 +43,7 @@ UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate list
 - `Config.ExposedPorts` is treated as host ports (same number).
 - Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` and match `/proc/net/*` inodes, so anonymous listeners get a container name when `/proc` is mounted.
 
-Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` / `HostHeader(\`…\`)` rules, a `caddy:` / `caddy_0` site address (not `reverse_proxy` directives), nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST`, and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]`) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count).
+Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` / `HostHeader(\`…\`)` rules, a `caddy:` / `caddy_0` site address (not `reverse_proxy` directives), nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (on the published mapping whose container port is `VIRTUAL_PORT`, default 80), and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]`) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count).
 
 Stopped containers still contribute PortBindings — those become amber if nothing is listening.
 

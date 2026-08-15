@@ -326,6 +326,49 @@ def test_paused_container_is_used():
     assert by_port[3000]["status"] == "used"
 
 
+def test_nginx_vhost_follows_virtual_port():
+    containers = [
+        ContainerInfo(
+            name="wiki",
+            status="running",
+            image="wiki",
+            ports=[
+                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
+                {"host_port": 9000, "host_ip": "0.0.0.0", "container_port": 9000, "protocol": "tcp"},
+            ],
+            vhost_urls=["https://wiki.lan"],
+            vhost_port=80,
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert "https://wiki.lan" in by_port[8080]["urls"]
+    assert "https://wiki.lan" not in by_port[9000]["urls"]
+
+    lone = [
+        ContainerInfo(
+            name="app",
+            status="running",
+            image="app",
+            ports=[{"host_port": 9000, "host_ip": "0.0.0.0", "container_port": 9000, "protocol": "tcp"}],
+            vhost_urls=["https://app.lan"],
+            vhost_port=80,
+        ),
+    ]
+    out = _classify(
+        [], lone, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    assert "https://app.lan" in out["ports"][0]["urls"]
+
+
 def test_compose_same_project_is_not_conflict():
     compose = [
         ComposePort(port=8096, compose_file="media/compose.yml", project_dir="media", service_name="jellyfin"),
