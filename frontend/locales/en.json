@@ -80,7 +80,8 @@
     "conflictHint": "Declared in {n} files.",
     "hide": "Hide from grid",
     "unhide": "Unhide",
-    "delete": "Delete"
+    "delete": "Delete",
+    "actionFailed": "Could not update that port."
   },
   "modal": {
     "addTitle": "Add port",
@@ -242,7 +243,8 @@
     "refreshFailed": "Could not refresh the map.",
     "skip": "Skip to ports",
     "copied": "Copied",
-    "web": "web"
+    "web": "web",
+    "aria": "Port occupancy grid"
   },
   "sourceType": {
     "docker": "Docker",

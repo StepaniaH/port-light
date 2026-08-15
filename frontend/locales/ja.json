@@ -80,7 +80,8 @@
     "conflictHint": "{n} 個のファイルで定義されています。",
     "hide": "一覧から隠す",
     "unhide": "再表示",
-    "delete": "削除"
+    "delete": "削除",
+    "actionFailed": "このポートを更新できませんでした。"
   },
   "modal": {
     "addTitle": "ポートを追加",
@@ -241,7 +242,8 @@
     "refreshFailed": "ポートマップを更新できませんでした。",
     "skip": "ポート一覧へ",
     "copied": "コピーしました",
-    "web": "Web"
+    "web": "Web",
+    "aria": "ポート占用グリッド"
   },
   "sourceType": {
     "docker": "Docker",

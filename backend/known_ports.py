@@ -79,6 +79,8 @@ KNOWN_PORTS: dict[int, dict] = {
 
     # ── Web / Proxy ───────────────────────────────────────────
     1080: {"name": "SOCKS",        "description": "SOCKS proxy",                                     "category": "proxy",     "is_access_port": False},
+    8118: {"name": "Privoxy",      "description": "Privoxy HTTP proxy",                              "category": "proxy",     "is_access_port": False},
+    9050: {"name": "Tor SOCKS",    "description": "Tor SOCKS proxy",                                 "category": "proxy",     "is_access_port": False},
     3000: {"name": "Grafana",      "description": "Grafana (also a common app port)",               "category": "selfhosted","is_access_port": True},
     3001: {"name": "Uptime Kuma",  "description": "Uptime Kuma (also a common app port)",            "category": "selfhosted","is_access_port": True},
     4000: {"name": "Web App",      "description": "Common web app port",                             "category": "web",       "is_access_port": True},
@@ -88,6 +90,8 @@ KNOWN_PORTS: dict[int, dict] = {
     8000: {"name": "HTTP Alt",     "description": "Alternate HTTP (Django / Paperless / many apps)", "category": "web",       "is_access_port": True},
     8080: {"name": "HTTP Alt",     "description": "Alternate HTTP / reverse proxy / qBittorrent",    "category": "web",       "is_access_port": True},
     8443: {"name": "HTTPS Alt",    "description": "Alternate HTTPS / UniFi controller",              "category": "web",       "is_access_port": True},
+    8843: {"name": "UniFi HTTPS",  "description": "UniFi guest portal HTTPS",                        "category": "infra",     "is_access_port": True},
+    8880: {"name": "UniFi HTTP",   "description": "UniFi HTTP redirect",                             "category": "infra",     "is_access_port": True},
     9000: {"name": "Portainer HTTP","description": "Portainer HTTP (also a common admin port)",      "category": "selfhosted","is_access_port": True},
     9001: {"name": "Web App",      "description": "Common admin / app port",                         "category": "web",       "is_access_port": True},
 
@@ -105,6 +109,7 @@ KNOWN_PORTS: dict[int, dict] = {
     9443:   {"name": "Portainer",    "description": "Portainer HTTPS",                               "category": "selfhosted","is_access_port": True},
     22000:  {"name": "Syncthing",    "description": "Syncthing sync protocol",                      "category": "selfhosted","is_access_port": False},
     21027:  {"name": "Syncthing",    "description": "Syncthing discovery",                          "category": "selfhosted","is_access_port": False},
+    51413:  {"name": "Transmission", "description": "Transmission BitTorrent peer",                 "category": "selfhosted","is_access_port": False},
     5055:   {"name": "Overseerr",    "description": "Overseerr request manager",                    "category": "selfhosted","is_access_port": True},
     11434:  {"name": "Ollama",       "description": "Ollama LLM inference server",                   "category": "selfhosted","is_access_port": True},
     2100:   {"name": "Port-Light",   "description": "Port-Light dashboard",                          "category": "selfhosted","is_access_port": True},
@@ -151,8 +156,12 @@ KNOWN_PORTS: dict[int, dict] = {
     2375:   {"name": "Docker API",   "description": "Docker daemon API (insecure)",                  "category": "infra",     "is_access_port": False},
     2376:   {"name": "Docker API",   "description": "Docker daemon API (TLS)",                       "category": "infra",     "is_access_port": False},
     2377:   {"name": "Docker Swarm", "description": "Docker Swarm management",                       "category": "infra",     "is_access_port": False},
+    2379:   {"name": "etcd",         "description": "etcd client API",                               "category": "infra",     "is_access_port": False},
+    2181:   {"name": "ZooKeeper",    "description": "Apache ZooKeeper",                              "category": "infra",     "is_access_port": False},
     7946:   {"name": "Docker Swarm", "description": "Docker Swarm node communication",               "category": "infra",     "is_access_port": False},
     4789:   {"name": "VXLAN",        "description": "Docker Swarm overlay network",                  "category": "infra",     "is_access_port": False},
+    8291:   {"name": "Winbox",       "description": "MikroTik Winbox",                               "category": "infra",     "is_access_port": True},
+    8728:   {"name": "RouterOS API", "description": "MikroTik RouterOS API",                         "category": "infra",     "is_access_port": False},
     20048:  {"name": "NFS mountd",   "description": "NFS mountd",                                    "category": "infra",     "is_access_port": False},
 
     # ── Monitoring (internal) ─────────────────────────────────
@@ -170,6 +179,8 @@ KNOWN_PORTS: dict[int, dict] = {
     27015: {"name": "Steam",         "description": "Steam game server",                             "category": "gaming",    "is_access_port": True},
     25565: {"name": "Minecraft",     "description": "Minecraft server",                              "category": "gaming",    "is_access_port": True},
     25575: {"name": "Minecraft RCON","description": "Minecraft RCON",                                "category": "gaming",    "is_access_port": False},
+    8211:  {"name": "Palworld",      "description": "Palworld",                                      "category": "gaming",    "is_access_port": True},
+    9987:  {"name": "TeamSpeak",     "description": "TeamSpeak 3 voice",                             "category": "gaming",    "is_access_port": True},
 }
 
 

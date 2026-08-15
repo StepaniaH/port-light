@@ -269,7 +269,8 @@ a:focus-visible,
 }
 .port-cell .port-label {
   font-size: 0.75rem; color: var(--text-dim);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2; overflow: hidden; line-height: 1.25; word-break: break-word;
 }
 .port-cell .cell-meta {
   margin-top: auto; display: flex; align-items: center; gap: 6px; min-height: 14px;
@@ -363,6 +364,7 @@ a:focus-visible,
 .info-box.conflict-box { background: var(--conflict-box-bg); border-color: var(--conflict-box-border); color: var(--conflict); }
 
 .action-row { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.detail-error { margin-top: 12px; font-size: 0.8rem; color: var(--danger); }
 .action-row button {
   height: 32px; padding: 0 12px; border-radius: var(--radius-sm); cursor: pointer;
   border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 0.8rem;

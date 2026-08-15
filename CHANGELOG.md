@@ -7,8 +7,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Added
 
 - Keyboard navigation on the language dropdown (arrows, Home, End).
+- Arrow keys, Home, and End move between occupancy cards; Enter still opens the detail panel.
 - Known-port names for Nginx Proxy Manager (81), SNMP, LDAP, syslog, and Homarr.
-- `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` on every response. API JSON is `Cache-Control: no-store`.
+- Almost-unique defaults: TeamSpeak, Palworld, etcd, ZooKeeper, UniFi 8843/8880, Winbox, RouterOS API, Tor SOCKS, Privoxy, Transmission peer.
+- `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` on every response. API JSON is `Cache-Control: no-store`. `/static/` is a long-lived immutable cache (`?v=` busts).
 - Skip link to the port grid.
 - README screenshot of the redesigned grid chrome.
 
@@ -18,14 +20,16 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - HTML entry (`/`) is served with `Cache-Control: no-cache` so a new `?v=` actually loads.
 - Unlock-hidden used the wrong poll payload after refresh abort landed, so a wrong password could not be detected.
 - Adding a manual port now keeps the dialog open and shows an error if the request fails.
+- Hide, unhide, and delete failures show in the detail panel, not only next to the scanner dots.
 
 ### Changed
 
 - Name sort uses the active UI locale. Occupancy counts expose a group label. Empty-grid copy distinguishes “nothing in range” from “filters hid everything”.
 - In-flight `/api/ports` requests are aborted on the next refresh so a slow poll cannot overwrite a newer grid. A failed refresh shows a short error next to the scanner dots instead of looking idle.
-- Docker socket client is reused across health checks and scans (5s availability cache).
+- Docker socket client is reused across health checks and scans (5s availability cache). A successful container list marks Docker available so the next health check can skip `ping`.
+- Card labels wrap to two lines instead of a single ellipsis. The full string stays on `title`.
 - Escape clears the search box before closing the detail drawer.
-- CI runs on Python 3.11 and 3.12.
+- CI runs on Python 3.11 and 3.12. Ruff floor is `>=0.16.2`.
 
 ## 0.5.2 — 2026-08-15
 

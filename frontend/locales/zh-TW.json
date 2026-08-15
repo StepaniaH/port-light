@@ -80,7 +80,8 @@
     "conflictHint": "在 {n} 個檔案中宣告。",
     "hide": "從一覽隱藏",
     "unhide": "取消隱藏",
-    "delete": "刪除"
+    "delete": "刪除",
+    "actionFailed": "無法更新該連接埠。"
   },
   "modal": {
     "addTitle": "新增連接埠",
@@ -241,7 +242,8 @@
     "refreshFailed": "無法重新整理占用圖。",
     "skip": "跳至連接埠列表",
     "copied": "已複製",
-    "web": "網頁"
+    "web": "網頁",
+    "aria": "連接埠占用一覽"
   },
   "sourceType": {
     "docker": "Docker",

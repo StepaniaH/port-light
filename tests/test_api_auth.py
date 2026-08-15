@@ -54,3 +54,17 @@ def test_include_hidden_gated(monkeypatch, tmp_path):
     hidden = [p for p in opened.json()["ports"] if p["port"] == 8096]
     assert len(hidden) == 1
     assert hidden[0]["is_hidden"] is True
+
+
+def test_static_assets_are_cacheable(monkeypatch):
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    client = TestClient(app)
+    css = client.get("/static/style.css")
+    assert css.status_code == 200
+    cache = css.headers.get("cache-control", "")
+    assert "max-age=31536000" in cache
+    assert "immutable" in cache
+    html = client.get("/")
+    assert html.status_code == 200
+    assert html.headers.get("cache-control") == "no-cache"

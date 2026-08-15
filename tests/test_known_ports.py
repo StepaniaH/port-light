@@ -32,6 +32,11 @@ def test_homelab_defaults(monkeypatch, tmp_path):
     assert get_known_port(9696)["name"] == "Prowlarr"
     assert get_known_port(81)["name"] == "NPM"
     assert get_known_port(7575)["name"] == "Homarr"
+    assert get_known_port(9987)["name"] == "TeamSpeak"
+    assert get_known_port(2379)["name"] == "etcd"
+    assert get_known_port(8211)["name"] == "Palworld"
+    assert get_known_port(8291)["name"] == "Winbox"
+    assert get_known_port(51413)["is_access_port"] is False
     assert get_known_port(22)["is_access_port"] is True
     assert get_known_port(5432)["is_access_port"] is False
     assert get_known_port(1) is None

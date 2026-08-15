@@ -455,6 +455,75 @@
   });
   detailBackdrop.addEventListener('click', function () { closeDetail(); });
 
+  function gridCells() {
+    return Array.prototype.slice.call(grid.querySelectorAll('.port-cell'));
+  }
+
+  function cellsByRow(cells) {
+    const rows = [];
+    let lastTop = null;
+    let row = [];
+    for (let i = 0; i < cells.length; i++) {
+      const top = Math.round(cells[i].getBoundingClientRect().top);
+      if (lastTop === null || Math.abs(top - lastTop) > 16) {
+        row = [];
+        rows.push(row);
+        lastTop = top;
+      }
+      row.push(cells[i]);
+    }
+    return rows;
+  }
+
+  function moveGridFocus(key) {
+    const cells = gridCells();
+    if (!cells.length) return;
+    const current = document.activeElement;
+    const idx = cells.indexOf(current);
+    if (idx < 0) return;
+    let next = null;
+    if (key === 'ArrowLeft') next = cells[Math.max(0, idx - 1)];
+    else if (key === 'ArrowRight') next = cells[Math.min(cells.length - 1, idx + 1)];
+    else if (key === 'Home') next = cells[0];
+    else if (key === 'End') next = cells[cells.length - 1];
+    else if (key === 'ArrowUp' || key === 'ArrowDown') {
+      const rows = cellsByRow(cells);
+      let foundR = -1;
+      let foundC = -1;
+      for (let r = 0; r < rows.length; r++) {
+        const c = rows[r].indexOf(current);
+        if (c >= 0) { foundR = r; foundC = c; break; }
+      }
+      if (foundR < 0) return;
+      const destR = key === 'ArrowDown' ? foundR + 1 : foundR - 1;
+      if (destR < 0 || destR >= rows.length) return;
+      const destRow = rows[destR];
+      const from = current.getBoundingClientRect();
+      const fromMid = (from.left + from.right) / 2;
+      next = destRow[Math.min(foundC, destRow.length - 1)];
+      let best = Infinity;
+      for (let c = 0; c < destRow.length; c++) {
+        const box = destRow[c].getBoundingClientRect();
+        const d = Math.abs((box.left + box.right) / 2 - fromMid);
+        if (d < best) { best = d; next = destRow[c]; }
+      }
+    }
+    if (next && next !== current) next.focus();
+  }
+
+  grid.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' &&
+        e.key !== 'ArrowDown' && e.key !== 'Home' && e.key !== 'End') return;
+    if (e.target === grid) {
+      const first = grid.querySelector('.port-cell');
+      if (first) { e.preventDefault(); first.focus(); }
+      return;
+    }
+    if (!e.target || !e.target.classList || !e.target.classList.contains('port-cell')) return;
+    e.preventDefault();
+    moveGridFocus(e.key);
+  });
+
   document.getElementById('settings-form').addEventListener('submit', function (e) {
     e.preventDefault();
     saveSettingsPage();
@@ -1027,6 +1096,12 @@
 
     displayPorts = sortPorts(displayPorts.slice());
 
+    let restorePort = null;
+    if (document.activeElement && document.activeElement.classList &&
+        document.activeElement.classList.contains('port-cell')) {
+      restorePort = document.activeElement.getAttribute('data-port');
+    }
+
     if (displayPorts.length === 0) {
       const inRange = (currentData.ports || []).filter(function (p) {
         return p.port >= rangeStart && p.port <= rangeEnd && (showHidden || !p.is_hidden);
@@ -1084,6 +1159,10 @@
         }
       });
     });
+    if (restorePort) {
+      const again = grid.querySelector('.port-cell[data-port="' + restorePort + '"]');
+      if (again) again.focus({ preventScroll: true });
+    }
   }
 
   function showCopyToast(cell) {
@@ -1211,21 +1290,40 @@
     if (wasOpen && currentData && route.name !== 'settings') render();
   }
 
-  window._portLightHide = async function (port) {
-    const res = await api('/api/hidden/' + port, { method: 'POST' });
-    if (!res.ok) { setSyncError(true); return; }
-    tick();
+  function showDetailError(msg) {
+    const old = detailContent.querySelector('.detail-error');
+    if (old) old.remove();
+    const p = document.createElement('p');
+    p.className = 'detail-error';
+    p.setAttribute('role', 'alert');
+    p.textContent = msg;
+    const row = detailContent.querySelector('.action-row');
+    if (row) detailContent.insertBefore(p, row);
+    else detailContent.appendChild(p);
+    setSyncError(true);
+  }
+
+  async function mutateDetail(url, opts, afterOk) {
+    try {
+      const res = await api(url, opts);
+      if (!res.ok) { showDetailError(t('detail.actionFailed')); return; }
+      afterOk();
+    } catch (err) {
+      showDetailError(t('detail.actionFailed'));
+    }
+  }
+
+  window._portLightHide = function (port) {
+    mutateDetail('/api/hidden/' + port, { method: 'POST' }, tick);
   };
-  window._portLightUnhide = async function (port) {
-    const res = await api('/api/hidden/' + port, { method: 'DELETE' });
-    if (!res.ok) { setSyncError(true); return; }
-    tick();
+  window._portLightUnhide = function (port) {
+    mutateDetail('/api/hidden/' + port, { method: 'DELETE' }, tick);
   };
-  window._portLightDeleteManual = async function (port) {
-    const res = await api('/api/manual-ports/' + port, { method: 'DELETE' });
-    if (!res.ok) { setSyncError(true); return; }
-    closeDetail();
-    tick();
+  window._portLightDeleteManual = function (port) {
+    mutateDetail('/api/manual-ports/' + port, { method: 'DELETE' }, function () {
+      closeDetail();
+      tick();
+    });
   };
 
   async function addManualPort() {

@@ -39,12 +39,19 @@ def _docker_client():
             return None
 
 
+def _mark_available(ok: bool) -> None:
+    global _AVAIL, _AVAIL_AT
+    with _LOCK:
+        _AVAIL = ok
+        _AVAIL_AT = time.monotonic()
+
+
 def _drop_client() -> None:
     global _CLIENT, _AVAIL, _AVAIL_AT
     with _LOCK:
         _CLIENT = None
         _AVAIL = False
-        _AVAIL_AT = 0.0
+        _AVAIL_AT = time.monotonic()
 
 
 def docker_available() -> bool:
@@ -92,6 +99,7 @@ def scan_containers() -> list[ContainerInfo]:
     except Exception:
         _drop_client()
         return []
+    _mark_available(True)
 
     result: list[ContainerInfo] = []
     for c in containers:

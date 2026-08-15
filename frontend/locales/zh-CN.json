@@ -80,7 +80,8 @@
     "conflictHint": "在 {n} 个文件中声明。",
     "hide": "从网格隐藏",
     "unhide": "取消隐藏",
-    "delete": "删除"
+    "delete": "删除",
+    "actionFailed": "无法更新该端口。"
   },
   "modal": {
     "addTitle": "添加端口",
@@ -241,7 +242,8 @@
     "refreshFailed": "无法刷新占用图。",
     "skip": "跳到端口列表",
     "copied": "已复制",
-    "web": "网页"
+    "web": "网页",
+    "aria": "端口占用网格"
   },
   "sourceType": {
     "docker": "Docker",
