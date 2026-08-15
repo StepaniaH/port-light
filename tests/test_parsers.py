@@ -891,6 +891,50 @@ def test_compose_macvlan_and_ns_host(tmp_path):
     assert vpn[0].protocol == "udp"
 
 
+def test_compose_macvlan_from_include_and_extends(tmp_path):
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / "networks.yml").write_text(
+        "networks:\n  lan:\n    driver: ipvlan\n",
+        encoding="utf-8",
+    )
+    (stack / "base.yml").write_text(
+        "services:\n  cam:\n    expose:\n      - '80'\n",
+        encoding="utf-8",
+    )
+    (stack / "compose.yml").write_text(
+        "include:\n  - networks.yml\n"
+        "services:\n"
+        "  cam:\n"
+        "    extends:\n"
+        "      file: base.yml\n"
+        "      service: cam\n"
+        "    networks:\n"
+        "      lan:\n        ipv4_address: 10.0.0.9\n",
+        encoding="utf-8",
+    )
+    ports = scan_compose_files(str(stack))
+    cam = [p for p in ports if p.service_name == "cam"]
+    assert {(p.port, p.host_ip) for p in cam} == {(80, "10.0.0.9")}
+
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "common.yml").write_text(
+        "networks:\n  lan:\n    driver: macvlan\n"
+        "services:\n"
+        "  cam:\n    expose:\n      - '8080'\n"
+        "    networks:\n      lan:\n        ipv4_address: 192.168.1.50\n",
+        encoding="utf-8",
+    )
+    (other / "compose.yml").write_text(
+        "services:\n  cam:\n    extends:\n      file: common.yml\n      service: cam\n",
+        encoding="utf-8",
+    )
+    inherited = scan_compose_files(str(other))
+    row = [p for p in inherited if p.port == 8080]
+    assert any(p.host_ip == "192.168.1.50" for p in row)
+
+
 def test_host_netns_mode_paths():
     assert is_host_netns_mode("host") is True
     assert is_host_netns_mode("ns:/proc/1/ns/net") is True

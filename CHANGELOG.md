@@ -30,7 +30,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Swarm `mode: host` without `published` uses `target` as the host port.
 - `/api/health` reports `listen_source` (`host_proc` / `ss` / `proc`). The Host pill is green for host-network `ss`, not only `/host/proc`.
 - Occupancy summary includes `compose_truncated` / `compose_files` when the Compose walk hits `COMPOSE_SCAN_MAX_FILES`, and `hidden_ports` (unlocked) so numeric search does not paint a hidden cell free.
-- Compose macvlan/ipvlan `ipv4_address` / `ipv6_address` plus `expose` / published `target` count as LAN occupancy when Docker is not running.
+- Compose macvlan/ipvlan `ipv4_address` / `ipv6_address` plus `expose` / published `target` count as LAN occupancy when Docker is not running. Driver definitions may live in `include:` / `extends.file`; child `networks:` overlays the parent.
 - `network_mode: ns:/proc/1/ns/net` (and a `ns:` path that is the host pid 1 netns) is treated like `host`.
 
 ### Fixed

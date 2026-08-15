@@ -57,6 +57,66 @@ def _load_yaml(text: str):
     return yaml.load(text, Loader=_ComposeLoader)
 
 
+def _compose_dict(filepath: str, extra_env: dict[str, str] | None = None) -> dict | None:
+    raw = _read_text(Path(filepath))
+    if raw is None:
+        return None
+    env_vars = {**_load_env_file(Path(filepath).parent), **(extra_env or {})}
+    try:
+        data = _load_yaml(substitute_vars(raw, env_vars))
+    except yaml.YAMLError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _macvlan_names_tree(
+    filepath: str,
+    extra_env: dict[str, str] | None,
+    chain: frozenset[str],
+) -> set[str]:
+    real = os.path.realpath(filepath)
+    if real in chain:
+        return set()
+    data = _compose_dict(filepath, extra_env)
+    if not data:
+        return set()
+    names = _macvlan_network_names(data)
+    parent = Path(filepath).parent
+    nested = chain | {real}
+    for inc_path, inc_env in _include_specs(data.get("include"), parent):
+        names |= _macvlan_names_tree(str(inc_path), inc_env, nested)
+    return names
+
+
+def _extends_macvlan_names(
+    svc_cfg: dict,
+    filepath: str,
+    env_vars: dict[str, str],
+    local_services: dict,
+    chain: frozenset[tuple[str, str]],
+) -> set[str]:
+    names: set[str] = set()
+    ref = _extends_ref(svc_cfg.get("extends"), filepath)
+    if ref is None or ref in chain:
+        return names
+    ref_file, ref_svc = ref
+    if os.path.realpath(ref_file) == os.path.realpath(filepath):
+        other_path = filepath
+        other_local = local_services
+        other = other_local.get(ref_svc) if isinstance(other_local, dict) else None
+    else:
+        other_path = ref_file
+        merged_env = {**_load_env_file(Path(ref_file).parent), **env_vars}
+        names |= _macvlan_names_tree(ref_file, merged_env, frozenset())
+        other_local = _services_from_file(ref_file, merged_env)
+        other = other_local.get(ref_svc)
+    if isinstance(other, dict):
+        names |= _extends_macvlan_names(
+            other, other_path, env_vars, other_local, chain | {ref},
+        )
+    return names
+
+
 def _read_text(path: Path) -> str | None:
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -287,23 +347,27 @@ def _parse_compose_file(
         fallback_name = parent.name
     this_name = _project_display_name(data.get("name"), project_name or fallback_name)
 
+    macvlan_names = _macvlan_network_names(data)
     for inc_path, inc_env in _include_specs(data.get("include"), parent):
         ports.extend(_parse_compose_file(
             str(inc_path), scan_dir, chain, inc_env,
             project_dir=this_dir,
             project_name=this_name,
         ))
+        macvlan_names |= _macvlan_names_tree(str(inc_path), inc_env, chain)
 
     local_services = data.get("services")
     if not isinstance(local_services, dict):
         return ports
 
     rel_path = os.path.relpath(filepath, scan_dir)
-    macvlan_names = _macvlan_network_names(data)
 
     for svc_name, svc_cfg in local_services.items():
         if not isinstance(svc_cfg, dict):
             continue
+        lan_names = macvlan_names | _extends_macvlan_names(
+            svc_cfg, filepath, env_vars, local_services, frozenset(),
+        )
         svc_cfg = _resolve_extends(
             svc_cfg, filepath, env_vars, frozenset(), local_services,
         )
@@ -342,7 +406,7 @@ def _parse_compose_file(
                         network_mode=net,
                     ))
             continue
-        lan_ips = _service_macvlan_ips(svc_cfg, macvlan_names)
+        lan_ips = _service_macvlan_ips(svc_cfg, lan_names)
         if not lan_ips:
             continue
         lan_rows: list[dict] = []
@@ -536,6 +600,18 @@ def _overlay_port_fields(base: dict, child: dict) -> dict:
                 merged.append(val)
         if merged:
             out[key] = merged
+    child_nets_raw = child.get("networks")
+    if isinstance(child_nets_raw, _ComposeTag) and child_nets_raw.name in ("reset", "override"):
+        out["networks"] = _unwrap_compose(child_nets_raw.value)
+    elif child_nets_raw is not None:
+        child_nets = _unwrap_compose(child_nets_raw)
+        base_nets = _unwrap_compose(out.get("networks"))
+        if isinstance(base_nets, dict) and isinstance(child_nets, dict):
+            merged_nets = dict(base_nets)
+            merged_nets.update(child_nets)
+            out["networks"] = merged_nets
+        else:
+            out["networks"] = child_nets
     return out
 
 
