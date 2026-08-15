@@ -272,6 +272,22 @@ def test_classify_used_configured_hidden_conflict():
     assert hidden[0]["source_type"] == "manual"
 
 
+def test_summary_counts_respect_range():
+    listening = [
+        ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", process_name="sshd"),
+        ListeningPort(port=8096, protocol="tcp", ip="0.0.0.0"),
+    ]
+    out = _classify(
+        listening, [], [], [], hidden_ports=[],
+        range_start=8000, range_end=9000,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert {p["port"] for p in out["ports"]} == {22, 8096}
+    assert out["summary"]["used"] == 1
+    assert out["summary"]["configured"] == 0
+    assert out["summary"]["free"] == 9000 - 8000 + 1 - 1
+
+
 def test_compose_same_project_is_not_conflict():
     compose = [
         ComposePort(port=8096, compose_file="media/compose.yml", project_dir="media", service_name="jellyfin"),

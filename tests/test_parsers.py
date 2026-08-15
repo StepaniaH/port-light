@@ -14,6 +14,7 @@ from backend.docker_scanner import extract_label_urls, extract_ports, safe_http_
 from backend.port_scanner import (
     ListeningPort,
     _fill_process_names,
+    host_proc_available,
     normalize_ip,
     parse_proc_net_line,
     parse_ss_line,
@@ -285,6 +286,24 @@ def test_fill_process_names_from_proc(tmp_path):
     _fill_process_names([lp], str(tmp_path))
     assert lp.process_name == "sshd"
     assert lp.pid == 42
+
+
+def test_host_proc_available_skips_container_namespace(monkeypatch):
+    monkeypatch.setattr(
+        "backend.port_scanner.os.path.exists",
+        lambda path: path in ("/proc/net/tcp", "/.dockerenv"),
+    )
+    assert host_proc_available() is False
+    monkeypatch.setattr(
+        "backend.port_scanner.os.path.exists",
+        lambda path: path == "/host/proc/1/net/tcp",
+    )
+    assert host_proc_available() is True
+    monkeypatch.setattr(
+        "backend.port_scanner.os.path.exists",
+        lambda path: path == "/proc/net/tcp",
+    )
+    assert host_proc_available() is True
 
 
 def test_ss_ipv6_and_star():

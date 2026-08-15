@@ -39,7 +39,14 @@ _SS_PROC_RE = re.compile(r'users:\(\("([^"]+)",pid=(\d+)')
 
 
 def host_proc_available() -> bool:
-    return os.path.exists("/host/proc/1/net/tcp") or os.path.exists("/proc/net/tcp")
+    """True when we can read the *host* listen table, not a container netns."""
+    if os.path.exists("/host/proc/1/net/tcp"):
+        return True
+    if os.path.exists("/host/proc"):
+        return False
+    if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+        return False
+    return os.path.exists("/proc/net/tcp")
 
 
 def scan_listening_ports() -> list[ListeningPort]:

@@ -76,6 +76,10 @@
   let occupancyKey = '';
   let portsEtag = '';
   let portsEtagUrl = '';
+  let portDetailGen = 0;
+  let detailShownPort = null;
+  const knownCache = {};
+  const knownInflight = {};
 
   const appEl = document.getElementById('app');
   const grid = document.getElementById('grid');
@@ -246,6 +250,7 @@
     if (route.name === 'port') {
       selectedPort = route.port;
       if (currentData) render();
+      else showPortDetail(route.port);
       return;
     }
     closeDetail(true);
@@ -1079,10 +1084,76 @@
     renderSummary(currentData.summary);
     renderGrid(currentData.ports);
     if (selectedPort !== null) {
-      const entry = currentData.ports.find(function (p) { return p.port === selectedPort; });
+      const entry = portFromList(selectedPort);
       if (entry) renderDetail(entry);
-      else if (route.name !== 'port') closeDetail(true);
+      else if (route.name === 'port') showPortDetail(selectedPort);
+      else closeDetail(true);
     }
+  }
+
+  function portFromList(port) {
+    if (!currentData || !currentData.ports) return null;
+    return currentData.ports.find(function (p) { return p.port === port; }) || null;
+  }
+
+  function freeStub(port) {
+    return {
+      port: port,
+      status: 'free',
+      source_type: 'unknown',
+      known_service: knownCache[port] || null,
+      containers: [],
+      compose_configs: [],
+      urls: [],
+      conflict: false,
+      is_hidden: false,
+    };
+  }
+
+  function showPortDetail(port, fallback) {
+    const local = portFromList(port);
+    if (local) {
+      detailShownPort = port;
+      renderDetail(local);
+      return;
+    }
+    if (detailShownPort === port) return;
+    renderDetail(fallback && fallback.port === port ? fallback : freeStub(port));
+    const gen = ++portDetailGen;
+    detailShownPort = port;
+    api('/api/ports/' + port + '?include_hidden=' + showHidden).then(function (res) {
+      if (!res.ok) return null;
+      return res.json();
+    }).then(function (row) {
+      if (!row || gen !== portDetailGen || selectedPort !== port) return;
+      if (row.known_service) knownCache[port] = row.known_service;
+      renderDetail(row);
+    }).catch(function () {});
+  }
+
+  function prefetchKnown(port) {
+    if (knownCache[port] !== undefined || knownInflight[port]) return;
+    knownInflight[port] = true;
+    api('/api/known-ports/' + port).then(function (res) {
+      if (res.status === 404) {
+        knownCache[port] = null;
+        return null;
+      }
+      if (!res.ok) return null;
+      return res.json();
+    }).then(function (body) {
+      delete knownInflight[port];
+      if (!body) return;
+      knownCache[port] = {
+        name: body.name,
+        description: body.description,
+        category: body.category,
+        is_access_port: body.is_access_port,
+      };
+      if (currentData) render();
+    }).catch(function () {
+      delete knownInflight[port];
+    });
   }
 
   function renderSummary(s) {
@@ -1116,6 +1187,7 @@
     const result = [];
 
     if (!hitExists) {
+      prefetchKnown(hitPort);
       result.push({ port: hitPort, status: 'free', _synthetic: true, known_service: getKnownForFree(hitPort) });
     }
 
@@ -1154,10 +1226,9 @@
   }
 
   function getKnownForFree(port) {
-    if (currentData && currentData.ports) {
-      const found = currentData.ports.find(function (p) { return p.port === port; });
-      if (found && found.known_service) return found.known_service;
-    }
+    if (knownCache[port]) return knownCache[port];
+    const found = portFromList(port);
+    if (found && found.known_service) return found.known_service;
     return null;
   }
 
@@ -1276,7 +1347,7 @@
           location.hash = '#/port/' + port;
         } else {
           const entry = displayPorts.find(function (p) { return p.port === port; });
-          if (entry) renderDetail(entry);
+          showPortDetail(port, entry);
         }
         if (settings.copy_on_click) {
           navigator.clipboard.writeText(String(port)).then(function () {
@@ -1480,6 +1551,8 @@
     const wasOpen = !detailPanel.classList.contains('hidden') || selectedPort !== null;
     setDetailOpen(false);
     selectedPort = null;
+    detailShownPort = null;
+    portDetailGen += 1;
     if (!skipHash && route.name === 'port') {
       location.hash = '#/';
       return;

@@ -77,19 +77,63 @@ def _save(data: dict) -> None:
 
 # ── Manual ports ──────────────────────────────────────────────
 
+def _entry_port(entry) -> int | None:
+    if not isinstance(entry, dict):
+        return None
+    try:
+        port = int(entry.get("port"))
+    except (TypeError, ValueError):
+        return None
+    if port < 1 or port > 65535:
+        return None
+    return port
+
+
+def _entry_machine(entry) -> str:
+    if not isinstance(entry, dict):
+        return "localhost"
+    return str(entry.get("machine") or "localhost")
+
+
+def _hidden_port(value) -> int | None:
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return None
+    if port < 1 or port > 65535:
+        return None
+    return port
+
+
 def get_manual_ports() -> list[dict]:
     data = _load()
-    return data.get("manual_ports", [])
+    out: list[dict] = []
+    for entry in data.get("manual_ports") or []:
+        port = _entry_port(entry)
+        if port is None:
+            continue
+        out.append({
+            "port": port,
+            "label": str(entry.get("label") or ""),
+            "machine": _entry_machine(entry),
+        })
+    return out
 
 
 def add_manual_port(port: int, label: str = "", machine: str = "localhost") -> dict:
     with _LOCK:
         data = _load()
         mp = data.setdefault("manual_ports", [])
-        # Remove existing entry for same port+machine
-        mp[:] = [e for e in mp if not (e["port"] == port and e.get("machine") == machine)]
+        kept: list[dict] = []
+        for entry in mp:
+            if _entry_port(entry) is None:
+                continue
+            if _entry_port(entry) == port and _entry_machine(entry) == machine:
+                continue
+            kept.append(entry)
         entry = {"port": port, "label": label, "machine": machine}
-        mp.append(entry)
+        kept.append(entry)
+        data["manual_ports"] = kept
         _save(data)
         return entry
 
@@ -98,9 +142,16 @@ def remove_manual_port(port: int, machine: str = "localhost") -> bool:
     with _LOCK:
         data = _load()
         mp = data.get("manual_ports", [])
-        before = len(mp)
-        mp[:] = [e for e in mp if not (e["port"] == port and e.get("machine") == machine)]
-        if len(mp) < before:
+        kept: list[dict] = []
+        removed = False
+        for entry in mp:
+            if _entry_port(entry) == port and _entry_machine(entry) == machine:
+                removed = True
+                continue
+            if _entry_port(entry) is not None:
+                kept.append(entry)
+        if removed:
+            data["manual_ports"] = kept
             _save(data)
             return True
         return False
@@ -110,29 +161,44 @@ def remove_manual_port(port: int, machine: str = "localhost") -> bool:
 
 def get_hidden_ports() -> list[int]:
     data = _load()
-    return data.get("hidden_ports", [])
+    out: list[int] = []
+    seen: set[int] = set()
+    for raw in data.get("hidden_ports") or []:
+        port = _hidden_port(raw)
+        if port is None or port in seen:
+            continue
+        seen.add(port)
+        out.append(port)
+    return out
 
 
 def add_hidden_port(port: int) -> bool:
     with _LOCK:
         data = _load()
-        hp = data.setdefault("hidden_ports", [])
-        if port not in hp:
-            hp.append(port)
-            _save(data)
-            return True
-        return False
+        hp = [_hidden_port(p) for p in data.get("hidden_ports") or []]
+        hp = [p for p in hp if p is not None]
+        if port in hp:
+            if data.get("hidden_ports") != hp:
+                data["hidden_ports"] = hp
+                _save(data)
+            return False
+        hp.append(port)
+        data["hidden_ports"] = hp
+        _save(data)
+        return True
 
 
 def remove_hidden_port(port: int) -> bool:
     with _LOCK:
         data = _load()
-        hp = data.get("hidden_ports", [])
-        if port in hp:
-            hp.remove(port)
-            _save(data)
-            return True
-        return False
+        hp = [_hidden_port(p) for p in data.get("hidden_ports") or []]
+        hp = [p for p in hp if p is not None]
+        if port not in hp:
+            return False
+        hp.remove(port)
+        data["hidden_ports"] = hp
+        _save(data)
+        return True
 
 
 def update_manual_port(port: int, label: str, machine: str = "localhost") -> dict | None:
@@ -140,7 +206,9 @@ def update_manual_port(port: int, label: str, machine: str = "localhost") -> dic
         data = _load()
         mp = data.get("manual_ports", [])
         for entry in mp:
-            if entry["port"] == port and entry.get("machine", "localhost") == machine:
+            if not isinstance(entry, dict):
+                continue
+            if _entry_port(entry) == port and _entry_machine(entry) == machine:
                 entry["label"] = label
                 _save(data)
                 return entry
@@ -172,9 +240,8 @@ def update_stored_settings(patch: dict) -> dict:
 
 def get_machines() -> list[dict]:
     data = _load()
-    machines = data.get("machines", [])
-    # Ensure localhost always exists
-    if not any(m["name"] == "localhost" for m in machines):
+    machines = [m for m in data.get("machines", []) if isinstance(m, dict) and m.get("name")]
+    if not any(m.get("name") == "localhost" for m in machines):
         machines.insert(0, {"name": "localhost", "host": "127.0.0.1", "note": "This machine"})
     return machines
 
@@ -183,7 +250,7 @@ def add_machine(name: str, host: str, note: str = "") -> dict:
     with _LOCK:
         data = _load()
         machines = data.setdefault("machines", [])
-        machines[:] = [m for m in machines if m["name"] != name]
+        machines[:] = [m for m in machines if isinstance(m, dict) and m.get("name") != name]
         entry = {"name": name, "host": host, "note": note}
         machines.append(entry)
         _save(data)
@@ -195,7 +262,7 @@ def remove_machine(name: str) -> bool:
         data = _load()
         machines = data.get("machines", [])
         before = len(machines)
-        machines[:] = [m for m in machines if m["name"] != name]
+        machines[:] = [m for m in machines if isinstance(m, dict) and m.get("name") != name]
         if len(machines) < before:
             _save(data)
             return True

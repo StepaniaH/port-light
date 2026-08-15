@@ -197,6 +197,7 @@ def get_port(
         "port": port,
         "status": "free",
         "source_type": "unknown",
+        "protocol": "tcp",
         "known_service": known,
         "is_hidden": False,
         "conflict": False,
@@ -492,8 +493,14 @@ def _classify(
             "urls": urls,
         })
 
-    used = sum(1 for p in port_list if p["status"] == "used")
-    configured = sum(1 for p in port_list if p["status"] == "configured")
+    used = sum(
+        1 for p in port_list
+        if p["status"] == "used" and range_start <= p["port"] <= range_end
+    )
+    configured = sum(
+        1 for p in port_list
+        if p["status"] == "configured" and range_start <= p["port"] <= range_end
+    )
     occupied = {p["port"] for p in port_list}
     free = sum(1 for n in range(range_start, range_end + 1) if n not in occupied)
 

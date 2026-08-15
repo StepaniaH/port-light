@@ -54,6 +54,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Compose top-level `env_file` (and `path:` mappings) interpolates published ports.
 - `ss` `tcp4` / `udp4` rows were dropped.
 - Custom `is_access_port: "false"` was treated as true.
+- Free occupancy cells and `#/port/N` never opened the detail drawer (only used/configured rows were in the payload).
+- Legend `used` / `configured` counted every occupied port while `free` used the toolbar range.
+- A junk row in `manual_ports` still 500'd POST/PATCH/DELETE.
+- Host scanner health was green whenever `/proc/net/tcp` existed, including a bridge container without `/host/proc`.
 
 ### Changed
 

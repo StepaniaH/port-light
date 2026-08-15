@@ -27,8 +27,10 @@ Optional HTTP Basic Auth is applied as middleware to every path except `/api/hea
 Order of attempts:
 
 1. **`/host/proc/1/net/{tcp,tcp6,udp,udp6}`** — used in the published Docker image when `/proc` is mounted at `/host/proc`. `/host/proc/net` is the *container* namespace. PID 1 is the host init network namespace.
-2. **`ss -tulnpH`** — bare metal or `network_mode: host`. This is the only path that fills `process_name` / `pid`.
-3. **Local `/proc/net/*`** — last resort (usually the container’s own listeners).
+2. **`ss -tulnpH`** (then `ss -tulnp`) — bare metal or `network_mode: host`.
+3. **Local `/proc/net/*`** — last resort (usually the container’s own listeners). `/host/proc` inode → `/proc/<pid>/comm` fills process names when ss is not used.
+
+The Host scanner pill is green only for `/host/proc/1/net/tcp`, or local `/proc/net/tcp` on a non-container host. A bridge container without that mount stays red even though `/proc/net/tcp` exists.
 
 UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, or `tcp,udp`), and `bind_scope` (`public` / `lan` / `localhost`).
 
@@ -41,7 +43,7 @@ UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate list
 - `Config.ExposedPorts` is treated as host ports (same number).
 - Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` and match `/proc/net/*` inodes, so anonymous listeners get a container name when `/proc` is mounted.
 
-Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` rules, a `caddy:` / `caddy_0` site label, and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]`) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count).
+Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` / `HostHeader(\`…\`)` rules, a `caddy:` / `caddy_0` site address (not `reverse_proxy` directives), nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST`, and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]`) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count).
 
 Stopped containers still contribute PortBindings — those become amber if nothing is listening.
 
@@ -49,7 +51,7 @@ Stopped containers still contribute PortBindings — those become amber if nothi
 
 `COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`. Files named `compose.yml` / `docker-compose.yml` (and the matching `.yaml` / `.override.yml` variants) are parsed.
 
-`include:` paths (string or `{ path: }`) are followed. `{ path, env_file }` interpolates the included file with those env files (Compose spec). Sibling `.env` lines may start with `export `. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile.
+`include:` paths (string, `{ path: }`, or `{ path: [a.yml, b.yml] }`) are followed. `{ path, env_file }` interpolates the included file with those env files (Compose spec; `env_file.path` mappings too). Top-level `env_file` interpolates the compose file itself. Sibling `.env` lines may start with `export `. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile.
 
 Supported port syntax:
 
@@ -68,8 +70,8 @@ For each port in the union of listeners ∪ Docker mappings ∪ Compose ∪ manu
 | Status | Rule |
 |--------|------|
 | `used` | Listening, or a Docker mapping whose container status is `running` |
-| `configured` | Compose declaration or manual entry, and not `used` |
-| `free` | Not in the union — only synthesized in the UI during numeric search |
+| `configured` | Compose, manual, or a stopped Docker publish, and not `used` |
+| `free` | Not in the union — synthesized in the UI during numeric search; `#/port/N` loads `GET /api/ports/{N}` |
 
 `source_type` is a rough tag for filters (`docker` / `system` / `host` / `manual`). System vs host uses the known-port category, not the OS.
 
@@ -87,7 +89,7 @@ The `machines` array may still exist in older `port_light.json` files. It is not
 
 ## Frontend
 
-No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`; `frontend/i18n.js` sets `html lang`. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
+No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail (free ports load `GET /api/ports/{N}`). Skip-to-content focuses `#grid` or `#settings-form`. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`; `frontend/i18n.js` sets `html lang`. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
 
 ## Why not Kubernetes / remote Docker
 

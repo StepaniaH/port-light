@@ -109,3 +109,7 @@ def test_manual_port_roundtrip_and_lookup(monkeypatch, tmp_path):
     known = client.get("/api/known-ports/22")
     assert known.status_code == 200
     assert known.json()["name"] == "SSH"
+    free = client.get("/api/ports/1")
+    assert free.status_code == 200
+    assert free.json()["status"] == "free"
+    assert free.json()["port"] == 1
