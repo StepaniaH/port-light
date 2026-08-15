@@ -17,7 +17,8 @@ except ImportError:
     HAS_DOCKER = False
 
 
-_TRAEFIK_HOST = re.compile(r"Host(?:Regexp)?\(\s*`([^`]+)`\s*\)", re.IGNORECASE)
+_TRAEFIK_HOST_FN = re.compile(r"Host(?:SNI|Regexp)?\(\s*([^)]*)\)", re.IGNORECASE)
+_TRAEFIK_HOST_ARG = re.compile(r"""[`'"]([^`'"]+)[`'"]""")
 _LOCK = threading.Lock()
 _BAD_URL_SCHEMES = frozenset({"javascript", "data", "file", "vbscript", "blob", "about"})
 _CLIENT = None
@@ -185,7 +186,7 @@ def extract_ports(attrs: dict) -> list[dict]:
 
 
 def extract_label_urls(labels: dict) -> list[str]:
-    """Traefik Host() rules and Caddy site addresses."""
+    """Traefik Host() / HostSNI() rules and Caddy site addresses."""
     urls: list[str] = []
     seen: set[str] = set()
 
@@ -200,9 +201,10 @@ def extract_label_urls(labels: dict) -> list[str]:
             continue
         lk = key.lower()
         if "traefik" in lk and lk.endswith(".rule"):
-            for host in _TRAEFIK_HOST.findall(val):
-                if "*" not in host:
-                    _add(host)
+            for args in _TRAEFIK_HOST_FN.findall(val):
+                for host in _TRAEFIK_HOST_ARG.findall(args):
+                    if "*" not in host:
+                        _add(host)
         elif lk == "caddy":
             host = val.split()[0].strip()
             if host and not host.startswith("{") and "/" not in host:

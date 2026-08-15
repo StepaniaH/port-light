@@ -41,6 +41,10 @@ def test_homelab_defaults(monkeypatch, tmp_path):
     assert get_known_port(51413)["is_access_port"] is False
     assert get_known_port(22)["is_access_port"] is True
     assert get_known_port(5432)["is_access_port"] is False
+    assert get_known_port(3260)["name"] == "iSCSI"
+    assert get_known_port(16686)["name"] == "Jaeger"
+    assert get_known_port(5060)["name"] == "SIP"
+    assert get_known_port(1984)["name"] == "Changedetection"
     assert get_known_port(1) is None
 
 

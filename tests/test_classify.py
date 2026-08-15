@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from backend.compose_scanner import ComposePort
 from backend.docker_scanner import ContainerInfo
-from backend.main import _bind_scope, _bind_scope_many, _classify, _collect_urls, _proto_label
+from backend.main import (
+    _bind_scope,
+    _bind_scope_many,
+    _classify,
+    _collect_urls,
+    _compose_conflict,
+    _proto_label,
+)
 from backend.port_scanner import ListeningPort
 
 
@@ -18,7 +25,52 @@ def test_bind_scope():
     assert _bind_scope_many(["127.0.0.1", "0.0.0.0"]) == "public"
     assert _bind_scope_many(["127.0.0.1", "10.0.0.5"]) == "lan"
     assert _bind_scope_many(["127.0.0.1"]) == "localhost"
-    assert _bind_scope_many([]) == "public"
+    assert _bind_scope("[::1]") == "localhost"
+    assert _bind_scope("[::]") == "public"
+
+
+def test_compose_conflict_uses_bind_overlap():
+    overlapping = [
+        {"project_dir": "a", "host_ip": "127.0.0.1"},
+        {"project_dir": "b", "host_ip": "0.0.0.0"},
+    ]
+    disjoint = [
+        {"project_dir": "a", "host_ip": "127.0.0.1"},
+        {"project_dir": "b", "host_ip": "10.0.0.5"},
+    ]
+    same_stack = [
+        {"project_dir": "media", "host_ip": "127.0.0.1"},
+        {"project_dir": "media", "host_ip": "0.0.0.0"},
+    ]
+    assert _compose_conflict(overlapping) is True
+    assert _compose_conflict(disjoint) is False
+    assert _compose_conflict(same_stack) is False
+
+
+def test_compose_keeps_distinct_host_ips():
+    compose = [
+        ComposePort(
+            port=8080, compose_file="web/compose.yml", project_dir="web",
+            service_name="app", host_ip="127.0.0.1",
+        ),
+        ComposePort(
+            port=8080, compose_file="web/compose.yml", project_dir="web",
+            service_name="app", host_ip="10.0.0.5",
+        ),
+        ComposePort(
+            port=8080, compose_file="other/compose.yml", project_dir="other",
+            service_name="app", host_ip="192.168.1.10",
+        ),
+    ]
+    out = _classify(
+        [], [], compose, [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    row = out["ports"][0]
+    assert len(row["compose_configs"]) == 3
+    assert row["conflict"] is False
+    assert row["bind_scope"] == "lan"
 
 
 def test_proto_label():
@@ -37,6 +89,7 @@ def test_collect_urls_guesses_http_not_ssh():
 
     ssh = {"name": "SSH", "is_access_port": True}
     assert _collect_urls(22, ["0.0.0.0"], [], ssh) == []
+    assert _collect_urls(5060, ["0.0.0.0"], [], {"name": "SIP", "is_access_port": True}) == []
 
 
 def test_classify_used_configured_hidden_conflict():

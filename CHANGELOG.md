@@ -9,16 +9,22 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Public bind-scope filter. Access ports listening on all interfaces get a warning in the detail drawer.
 - Manual ports can be renamed from the detail drawer.
 - Last successful refresh time next to the scanner dots.
+- Arrow keys on occupancy counts and kind chips.
+- Confirm before deleting a manual port.
+- Distinct known-port names (iSCSI, SIP, RTSP, Jaeger, OTLP, Zabbix, Git daemon, …).
 
 ### Fixed
 
 - Compose `127.0.0.1:host:container` (and long-syntax `host_ip`) now feeds bind scope when nothing is listening yet.
 - `${VAR:-default}` treats an empty value as unset. `${VAR-default}` is also understood.
 - A truncated `port_light.json` is moved aside instead of being overwritten with an empty store.
+- Two Compose bind IPs on the same service were collapsed to one row.
+- Traefik `Host(\`a\`, \`b\`)` only kept the first hostname.
 
 ### Changed
 
 - Occupancy JSON is written atomically (tempfile + `os.replace`).
+- Compose conflict requires overlapping bind addresses, not just the same port number in two projects.
 
 ## 0.5.3 — 2026-08-15
 

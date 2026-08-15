@@ -325,7 +325,7 @@ def _classify(
     compose_map: dict[int, list[dict]] = {}
     compose_seen: set[tuple] = set()
     for cp in compose_ports:
-        key = (cp.project_dir, cp.port, cp.service_name)
+        key = (cp.project_dir, cp.port, cp.service_name, cp.host_ip or "", cp.protocol)
         if key in compose_seen:
             continue
         compose_seen.add(key)
@@ -411,7 +411,7 @@ def _classify(
             "machine": manual["machine"] if manual else "localhost",
             "known_service": known,
             "is_hidden": port in hidden_ports,
-            "conflict": len({c["project_dir"] for c in composes}) > 1,
+            "conflict": _compose_conflict(composes),
             "urls": urls,
         })
 
@@ -443,13 +443,59 @@ def _proto_label(protocols: list[str]) -> str:
     return ",".join(bases) if bases else "tcp"
 
 
+def _strip_bind_ip(ip: str | None) -> str:
+    text = (ip or "").strip()
+    if text.startswith("[") and text.endswith("]") and ":" in text:
+        text = text[1:-1]
+    return text.split("%", 1)[0]
+
+
+def _bind_key(ip: str | None) -> str:
+    """Wildcard (`*`) or a canonical address. Empty Compose host_ip is 0.0.0.0."""
+    text = _strip_bind_ip(ip)
+    if not text or text in ("*", "0.0.0.0", "::", "::0"):
+        return "*"
+    if text == "localhost":
+        return "127.0.0.1"
+    try:
+        addr = ipaddress.ip_address(text)
+    except ValueError:
+        return text
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
+    if addr.is_unspecified:
+        return "*"
+    return str(addr)
+
+
+def _binds_overlap(a: str | None, b: str | None) -> bool:
+    ka, kb = _bind_key(a), _bind_key(b)
+    return ka == "*" or kb == "*" or ka == kb
+
+
+def _compose_conflict(composes: list[dict]) -> bool:
+    """True when two Compose projects publish the same port on overlapping bind IPs."""
+    by_dir: dict[str, list[str | None]] = {}
+    for row in composes:
+        by_dir.setdefault(row.get("project_dir") or "", []).append(row.get("host_ip"))
+    dirs = list(by_dir.values())
+    if len(dirs) < 2:
+        return False
+    for i, ips_a in enumerate(dirs):
+        for ips_b in dirs[i + 1 :]:
+            if any(_binds_overlap(a, b) for a in ips_a for b in ips_b):
+                return True
+    return False
+
+
 def _bind_scope(ip: str) -> str:
-    if not ip or ip in ("*",):
+    text = _strip_bind_ip(ip)
+    if not text or text in ("*",):
         return "public"
-    if ip == "localhost":
+    if text == "localhost":
         return "localhost"
     try:
-        addr = ipaddress.ip_address(ip.split("%", 1)[0])
+        addr = ipaddress.ip_address(text)
     except ValueError:
         return "lan"
     if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
@@ -468,6 +514,12 @@ def _bind_scope_many(ips: list[str]) -> str:
     if "lan" in scopes:
         return "lan"
     return "localhost"
+
+
+_NO_HTTP_PORTS = frozenset({
+    22, 23, 25, 53, 110, 143, 445, 554, 1194, 1935, 3260, 3389, 5060, 5061,
+    5222, 5357, 5900, 8554, 9418, 10050, 10051, 4317, 51820,
+})
 
 
 def _collect_urls(
@@ -501,7 +553,7 @@ def _collect_urls(
             scheme = scheme_pref
         else:
             scheme = "https" if port in (443, 8443, 9443) or "HTTPS" in name else "http"
-        if port in (22, 23, 25, 53, 110, 143, 445, 3389, 5900, 1194, 51820):
+        if port in _NO_HTTP_PORTS:
             return urls
         guess = f"{scheme}://{host}:{port}"
         if guess not in seen:

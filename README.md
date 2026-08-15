@@ -41,10 +41,10 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 
 - Container / service names on the cards
 - Search by port number, with nearby free alternatives if it is taken
-- Occupancy counts filter in-use / configured; kind chips for running, system, Docker, web, UDP, localhost, hidden
+- Occupancy counts filter in-use / configured; kind chips for running, system, Docker, web, UDP, localhost, public, hidden
 - Sort by port, name, or status; clamp the visible range
 - Manual entries for things the scanners miss
-- Compose conflict warning when the same host port is declared in more than one file
+- Compose conflict warning when two projects publish the same host port on overlapping bind addresses
 - Built-in names for common homelab ports (SSH, Jellyfin, Postgres, …), plus a local override file
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click

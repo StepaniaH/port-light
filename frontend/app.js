@@ -285,6 +285,27 @@
     render();
   });
 
+  function moveChipFocus(container, key) {
+    const chips = Array.prototype.slice.call(container.querySelectorAll('button'));
+    const idx = chips.indexOf(document.activeElement);
+    if (idx < 0) return false;
+    let next = idx;
+    if (key === 'ArrowRight' || key === 'ArrowDown') next = Math.min(chips.length - 1, idx + 1);
+    else if (key === 'ArrowLeft' || key === 'ArrowUp') next = Math.max(0, idx - 1);
+    else if (key === 'Home') next = 0;
+    else if (key === 'End') next = chips.length - 1;
+    else return false;
+    if (chips[next]) chips[next].focus();
+    return true;
+  }
+
+  document.getElementById('filters').addEventListener('keydown', function (e) {
+    if (moveChipFocus(this, e.key)) e.preventDefault();
+  });
+  summary.addEventListener('keydown', function (e) {
+    if (moveChipFocus(this, e.key)) e.preventDefault();
+  });
+
   function ensureHiddenVisible() {
     if (showHidden) return true;
     if (meta.hidden_unlock_required && !hiddenUnlock) {
@@ -1283,8 +1304,11 @@
     }
 
     if (p.conflict) {
+      const projectCount = Array.from(new Set((p.compose_configs || []).map(function (c) {
+        return c.project_dir;
+      }))).length;
       html += '<div class="info-box conflict-box"><span class="info-name">' + escapeHtml(t('detail.conflict')) +
-        '</span> — ' + escapeHtml(t('detail.conflictHint', { n: p.compose_configs.length })) + '</div>';
+        '</span> — ' + escapeHtml(t('detail.conflictHint', { n: projectCount })) + '</div>';
     }
 
     if (p.bind_scope === 'public' && p.known_service && p.known_service.is_access_port) {
@@ -1313,6 +1337,7 @@
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.project')) + '</span><span class="val">' + escapeHtml(cc.project_dir) + '</span></div>';
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.service')) + '</span><span class="val">' + escapeHtml(cc.service_name) + '</span></div>';
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.file')) + '</span><span class="val">' + escapeHtml(cc.compose_file) + '</span></div>';
+        if (cc.host_ip) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.bind')) + '</span><span class="val">' + escapeHtml(cc.host_ip) + '</span></div>';
         if (cc.container_port) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.containerPort')) + '</span><span class="val">' + cc.container_port + '</span></div>';
       }
     }
@@ -1433,6 +1458,7 @@
     mutateDetail('/api/hidden/' + port, { method: 'DELETE' }, tick);
   };
   window._portLightDeleteManual = function (port) {
+    if (!window.confirm(t('detail.deleteConfirm', { port: port }))) return;
     mutateDetail('/api/manual-ports/' + port, { method: 'DELETE' }, function () {
       closeDetail();
       tick();

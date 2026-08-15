@@ -41,7 +41,7 @@ UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate list
 - `Config.ExposedPorts` is treated as host ports (same number).
 - Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` and match `/proc/net/*` inodes, so anonymous listeners get a container name when `/proc` is mounted.
 
-Traefik `Host(\`…\`)` rules and a `caddy:` site label become `urls` on the port.
+Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` rules and a `caddy:` site label become `urls` on the port.
 
 Stopped containers still contribute PortBindings — those become amber if nothing is listening.
 
@@ -55,10 +55,10 @@ Supported port syntax:
 
 - Short: `8080:80`, `0.0.0.0:8080:80`, `127.0.0.1:8080:80`, `8080:80/tcp`
 - Long: `{ published, target, protocol, host_ip }`
-- `${VAR}` / `$VAR` / `${VAR:-default}` from the sibling `.env` plus process environment
+- `${VAR}` / `$VAR` / `${VAR:-default}` / `${VAR-default}` from the sibling `.env` plus process environment
 - Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 128 ports per mapping
 
-A host port listed in more than one **project directory** is marked `conflict: true`. Two files in the same stack (`compose.yml` plus `compose.override.yml`) are not a conflict. That flag is a Compose-declaration clash, not a runtime bind failure.
+A host port listed in more than one **project directory** is marked `conflict: true` only when the bind addresses overlap (`0.0.0.0` / `::` overlaps everything; `127.0.0.1` and `10.0.0.5` do not). Two files in the same stack (`compose.yml` plus `compose.override.yml`) are not a conflict. That flag is a Compose-declaration clash, not a runtime bind failure. Distinct `host_ip` mappings for the same service are kept as separate `compose_configs` rows.
 
 ## Classification
 

@@ -185,10 +185,13 @@ def test_long_syntax_and_ipv4_host():
     assert (80, "tcp") in mapped
 
     urls = extract_label_urls({
-        "traefik.http.routers.wiki.rule": "Host(`wiki.home.arpa`)",
+        "traefik.http.routers.wiki.rule": "Host(`wiki.home.arpa`, `wiki.lan`)",
+        "traefik.tcp.routers.db.rule": "HostSNI(`db.home.arpa`)",
         "caddy": "media.home.arpa",
     })
     assert "https://wiki.home.arpa" in urls
+    assert "https://wiki.lan" in urls
+    assert "https://db.home.arpa" in urls
     assert "https://media.home.arpa" in urls
 
 

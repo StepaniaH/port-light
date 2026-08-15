@@ -41,6 +41,7 @@ KNOWN_PORTS: dict[int, dict] = {
     389:  {"name": "LDAP",          "description": "Directory service",                             "category": "system",    "is_access_port": False},
     443:  {"name": "HTTPS",         "description": "Encrypted web server",                           "category": "web",       "is_access_port": True},
     445:  {"name": "SMB",           "description": "Windows file sharing / Samba",                   "category": "system",    "is_access_port": True},
+    554:  {"name": "RTSP",          "description": "Real Time Streaming Protocol (cameras)",        "category": "system",    "is_access_port": False},
     465:  {"name": "SMTPS",         "description": "Email sending over SSL",                         "category": "system",    "is_access_port": False},
     514:  {"name": "Syslog",        "description": "Syslog",                                         "category": "system",    "is_access_port": False},
     515:  {"name": "LPR",           "description": "Line Printer Remote (printing)",                 "category": "system",    "is_access_port": False},
@@ -50,6 +51,7 @@ KNOWN_PORTS: dict[int, dict] = {
     636:  {"name": "LDAPS",         "description": "Encrypted LDAP",                                 "category": "system",    "is_access_port": False},
     853:  {"name": "DoT",           "description": "DNS over TLS",                                   "category": "system",    "is_access_port": False},
     873:  {"name": "rsync",         "description": "rsync file synchronization",                     "category": "system",    "is_access_port": False},
+    9418: {"name": "Git",           "description": "Git daemon",                                     "category": "system",    "is_access_port": False},
     993:  {"name": "IMAPS",         "description": "Encrypted IMAP",                                 "category": "system",    "is_access_port": False},
     995:  {"name": "POP3S",         "description": "Encrypted POP3",                                 "category": "system",    "is_access_port": False},
 
@@ -58,6 +60,8 @@ KNOWN_PORTS: dict[int, dict] = {
     2222:  {"name": "SSH Alt",       "description": "Alternate SSH",                                 "category": "system",    "is_access_port": True},
     3389:  {"name": "RDP",           "description": "Windows Remote Desktop",                        "category": "vpn",       "is_access_port": True},
     51820: {"name": "WireGuard",     "description": "WireGuard VPN",                                 "category": "vpn",       "is_access_port": True},
+    5060:  {"name": "SIP",           "description": "SIP (Asterisk / FreePBX)",                      "category": "system",    "is_access_port": True},
+    5061:  {"name": "SIPS",          "description": "SIP over TLS",                                  "category": "system",    "is_access_port": True},
     41641: {"name": "Tailscale",     "description": "Tailscale (default UDP)",                       "category": "vpn",       "is_access_port": False},
     5800:  {"name": "VNC HTTP",      "description": "VNC web interface",                             "category": "vpn",       "is_access_port": True},
     5900:  {"name": "VNC",           "description": "VNC remote desktop",                            "category": "vpn",       "is_access_port": True},
@@ -73,6 +77,7 @@ KNOWN_PORTS: dict[int, dict] = {
 
     # ── Message queues (internal) ─────────────────────────────
     1883:   {"name": "MQTT",         "description": "MQTT broker",                                   "category": "message",   "is_access_port": False},
+    5222:   {"name": "XMPP",         "description": "XMPP client (Prosody / ejabberd)",              "category": "message",   "is_access_port": True},
     8883:   {"name": "MQTT TLS",     "description": "MQTT over TLS",                                 "category": "message",   "is_access_port": False},
     5672:   {"name": "RabbitMQ",     "description": "RabbitMQ AMQP",                                 "category": "message",   "is_access_port": False},
     9092:   {"name": "Kafka",        "description": "Kafka broker",                                  "category": "message",   "is_access_port": False},
@@ -99,6 +104,8 @@ KNOWN_PORTS: dict[int, dict] = {
 
     # ── Self-hosted / Homelab (standard ports only) ───────────
     1900:   {"name": "DLNA",         "description": "UPnP / DLNA media discovery",                   "category": "selfhosted","is_access_port": False},
+    1935:   {"name": "RTMP",         "description": "RTMP ingest (OBS / media servers)",             "category": "selfhosted","is_access_port": False},
+    1984:   {"name": "Changedetection","description": "changedetection.io",                           "category": "selfhosted","is_access_port": True},
     4533:   {"name": "Navidrome",    "description": "Navidrome music server (default)",              "category": "selfhosted","is_access_port": True},
     7878:   {"name": "Radarr",       "description": "Radarr movie manager",                         "category": "selfhosted","is_access_port": True},
     8081:   {"name": "AdGuard",      "description": "AdGuard Home web UI",                           "category": "selfhosted","is_access_port": True},
@@ -129,6 +136,7 @@ KNOWN_PORTS: dict[int, dict] = {
     8082:   {"name": "Duplicati",    "description": "Duplicati web UI",                              "category": "selfhosted","is_access_port": True},
     8112:   {"name": "Deluge",       "description": "Deluge web UI",                                 "category": "selfhosted","is_access_port": True},
     8200:   {"name": "ReadyMedia",   "description": "ReadyMedia / MiniDLNA",                         "category": "selfhosted","is_access_port": False},
+    8554:   {"name": "RTSP Alt",     "description": "go2rtc / Frigate RTSP",                         "category": "selfhosted","is_access_port": False},
     8265:   {"name": "Tdarr",        "description": "Tdarr server",                                  "category": "selfhosted","is_access_port": True},
     8686:   {"name": "Lidarr",       "description": "Lidarr music manager",                          "category": "selfhosted","is_access_port": True},
     9696:   {"name": "Prowlarr",     "description": "Prowlarr (current default)",                    "category": "selfhosted","is_access_port": True},
@@ -139,6 +147,9 @@ KNOWN_PORTS: dict[int, dict] = {
     15777:  {"name": "Tdarr UI",     "description": "Tdarr web UI",                                  "category": "selfhosted","is_access_port": True},
     13378:  {"name": "RDTClient",    "description": "rdtclient",                                     "category": "selfhosted","is_access_port": True},
     9093:   {"name": "Alertmanager", "description": "Prometheus Alertmanager",                       "category": "infra",     "is_access_port": True},
+    16686:  {"name": "Jaeger",       "description": "Jaeger UI",                                     "category": "infra",     "is_access_port": True},
+    4317:   {"name": "OTLP gRPC",    "description": "OpenTelemetry OTLP gRPC",                       "category": "infra",     "is_access_port": False},
+    4318:   {"name": "OTLP HTTP",    "description": "OpenTelemetry OTLP HTTP",                       "category": "infra",     "is_access_port": False},
     3100:   {"name": "Loki",         "description": "Grafana Loki",                                  "category": "infra",     "is_access_port": False},
     8086:   {"name": "InfluxDB",     "description": "InfluxDB",                                      "category": "database",  "is_access_port": False},
     9200:   {"name": "Elasticsearch","description": "Elasticsearch",                                 "category": "database",  "is_access_port": False},
@@ -149,6 +160,7 @@ KNOWN_PORTS: dict[int, dict] = {
     5984:   {"name": "CouchDB",      "description": "CouchDB",                                       "category": "database",  "is_access_port": False},
     3478:   {"name": "STUN",         "description": "STUN / UniFi STUN",                             "category": "infra",     "is_access_port": False},
     5353:   {"name": "mDNS",         "description": "Multicast DNS / Bonjour",                       "category": "infra",     "is_access_port": False},
+    5357:   {"name": "WSD",          "description": "Web Services Discovery (Windows / NAS)",        "category": "infra",     "is_access_port": False},
     6443:   {"name": "Kubernetes",   "description": "Kubernetes API",                                "category": "infra",     "is_access_port": False},
     10000:  {"name": "Webmin",       "description": "Webmin",                                        "category": "infra",     "is_access_port": True},
     19132:  {"name": "MC Bedrock",   "description": "Minecraft Bedrock",                             "category": "gaming",    "is_access_port": True},
@@ -156,6 +168,7 @@ KNOWN_PORTS: dict[int, dict] = {
     7777:   {"name": "Game server",  "description": "Common game server port",                       "category": "gaming",    "is_access_port": True},
     # ── Infrastructure (internal) ─────────────────────────────
     2049:   {"name": "NFS",          "description": "Network File System",                           "category": "infra",     "is_access_port": False},
+    3260:   {"name": "iSCSI",        "description": "iSCSI (TrueNAS / SAN)",                         "category": "infra",     "is_access_port": False},
     2375:   {"name": "Docker API",   "description": "Docker daemon API (insecure)",                  "category": "infra",     "is_access_port": False},
     2376:   {"name": "Docker API",   "description": "Docker daemon API (TLS)",                       "category": "infra",     "is_access_port": False},
     2377:   {"name": "Docker Swarm", "description": "Docker Swarm management",                       "category": "infra",     "is_access_port": False},
@@ -171,6 +184,8 @@ KNOWN_PORTS: dict[int, dict] = {
     9090:   {"name": "Prometheus",   "description": "Prometheus monitoring",                         "category": "infra",     "is_access_port": False},
     9091:   {"name": "Pushgateway",  "description": "Prometheus pushgateway",                        "category": "infra",     "is_access_port": False},
     9100:   {"name": "Node Exporter","description": "Prometheus node exporter",                      "category": "infra",     "is_access_port": False},
+    10050:  {"name": "Zabbix agent", "description": "Zabbix agent",                                  "category": "infra",     "is_access_port": False},
+    10051:  {"name": "Zabbix",       "description": "Zabbix server / proxy",                         "category": "infra",     "is_access_port": False},
 
     # ── Development ───────────────────────────────────────────
     4200:  {"name": "Angular",       "description": "Angular dev server",                            "category": "dev",       "is_access_port": True},
