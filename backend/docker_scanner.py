@@ -177,15 +177,36 @@ def _network_is_host_netns(
     if ref in seen:
         return False
     seen.add(ref)
-    target = by_name.get(ref) or by_id.get(ref)
-    if target is None:
-        for key, info in by_id.items():
-            if key.startswith(ref) or ref.startswith(key):
-                target = info
-                break
+    target = _resolve_container_ref(ref, by_name, by_id)
     if target is None:
         return False
     return _network_is_host_netns(target.network_mode, by_name, by_id, seen)
+
+
+def _resolve_container_ref(
+    ref: str,
+    by_name: dict[str, ContainerInfo],
+    by_id: dict[str, ContainerInfo],
+) -> ContainerInfo | None:
+    if ref in by_name:
+        return by_name[ref]
+    if ref in by_id:
+        return by_id[ref]
+    if len(ref) < 12:
+        return None
+    matches: list[ContainerInfo] = []
+    seen: set[str] = set()
+    for key, info in by_id.items():
+        if not key.startswith(ref):
+            continue
+        cid = info.container_id or key
+        if cid in seen:
+            continue
+        seen.add(cid)
+        matches.append(info)
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 def _attach_host_netns_sockets(
@@ -643,8 +664,10 @@ def _label_is_off(val) -> bool:
 def expand_unraid_webui(val: str, ports: list[dict] | None = None) -> str:
     """Turn Unraid ``http://[IP]:[PORT:8096]/`` templates into a real URL."""
     text = (val or "").strip()
+    missing = False
 
     def _host_port(match: re.Match) -> str:
+        nonlocal missing
         n = int(match.group(1))
         for row in ports or []:
             try:
@@ -654,9 +677,14 @@ def expand_unraid_webui(val: str, ports: list[dict] | None = None) -> str:
                 continue
             if cp == n and 1 <= hp <= 65535:
                 return str(hp)
-        return str(n)
+        if ports is None:
+            return str(n)
+        missing = True
+        return ""
 
     text = _UNRAID_PORT.sub(_host_port, text)
+    if missing:
+        return ""
     text = text.replace("[IP]", "localhost").replace("[HOSTNAME]", "localhost")
     if re.search(r"\[PORT\]", text, re.IGNORECASE):
         return ""

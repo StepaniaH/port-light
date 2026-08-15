@@ -22,8 +22,12 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `include.project_directory` re-roots `.env` / `env_file`; nested includes inherit the parent interpolation env.
 - `compose.override.yml` `ports: !reset` replaces the base file’s ports instead of unioning both.
 - `ss` uses `-n` so `:ssh` / `:http` still count; a loopback listen no longer hides a public Docker/Compose bind.
-- Traefik/homepage URLs attach to the app publish, not every sidecar; Caddy `*.home.arpa` is not a live link.
-- Unraid `[PORT:n]` uses the host mapping when the container port was remapped.
+- Traefik/homepage URLs attach to the app publish, not every sidecar; unmatched `VIRTUAL_PORT` / label port fall through to 80/443/8080/8443 or the lowest mapping; Caddy `*.home.arpa` is not a live link.
+- Unraid `[PORT:n]` uses the host mapping when the container port was remapped; it is dropped when mappings are known and `n` is not published.
+- Host-network inode-only Traefik/homepage URLs stay on 80/443/8080/8443 (or the lowest attributed listen), not every sidecar.
+- Included Compose files are not scanned as their own stack; `external: true` networks with a static IP plus `expose` are LAN occupancy when Docker is down.
+- Host-network Compose leftover `ports:` is ignored (Docker ignores it); `expose:` still counts.
+- `container:` joiners match a unique id prefix of at least 12 characters, not a short prefix of another container.
 - Discarding a detail hide/label error no longer lights the map-sync banner; empty-grid search keeps focus in the search box.
 - The Hidden chip is restored with `include_hidden`; unlock failures stay in the modal instead of sticking a password in session storage.
 - Desktop detail no longer traps Tab; numeric search neighbors are capped; settings segmented controls and the port-copy control have accessible names.

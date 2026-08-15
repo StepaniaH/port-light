@@ -16,6 +16,7 @@ from backend.docker_scanner import (
     _attach_host_netns_sockets,
     _macvlan_ports,
     _network_is_host_netns,
+    _resolve_container_ref,
     extract_label_urls,
     extract_nginx_vhosts,
     extract_ports,
@@ -618,12 +619,14 @@ def test_compose_occupancy_gaps(tmp_path):
     (sidecar / "compose.yml").write_text(
         "services:\n"
         "  vpn:\n    network_mode: host\n    ports:\n      - '51820:51820/udp'\n"
+        "    expose:\n      - '41641/udp'\n"
         "  helper:\n    network_mode: service:vpn\n    ports:\n      - '9999:80'\n",
         encoding="utf-8",
     )
     ns_ports = {p.port for p in scan_compose_files(str(tmp_path / "ns"))}
-    assert 51820 in ns_ports
+    assert 51820 not in ns_ports
     assert 9999 not in ns_ports
+    assert 41641 in ns_ports
 
     tagged = tmp_path / "tags"
     tagged.mkdir()
@@ -1139,3 +1142,68 @@ def test_host_netns_joiner_gets_expose():
         {"fff111aaa222": {"8080/tcp": {}}},
     )
     assert any(p["host_port"] == 8080 and p["source"] == "expose" for p in helper.ports)
+
+
+def test_included_compose_yml_is_not_its_own_stack(tmp_path):
+    shared = tmp_path / "shared"
+    wiki = tmp_path / "wiki"
+    blog = tmp_path / "blog"
+    shared.mkdir()
+    wiki.mkdir()
+    blog.mkdir()
+    (shared / "compose.yml").write_text(
+        "services:\n  db:\n    ports:\n      - '5432:5432'\n",
+        encoding="utf-8",
+    )
+    (wiki / "compose.yml").write_text(
+        "include:\n  - ../shared/compose.yml\n",
+        encoding="utf-8",
+    )
+    (blog / "compose.yml").write_text(
+        "include:\n  - ../shared/compose.yml\n",
+        encoding="utf-8",
+    )
+    ports = [p for p in scan_compose_files(str(tmp_path)) if p.port == 5432]
+    assert {p.project_dir for p in ports} == {"wiki", "blog"}
+
+
+def test_external_macvlan_static_ip(tmp_path):
+    app = tmp_path / "cam"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "networks:\n  lan:\n    external: true\n"
+        "services:\n  cam:\n    networks:\n      lan:\n        ipv4_address: 192.168.1.50\n"
+        "    expose:\n      - '80'\n",
+        encoding="utf-8",
+    )
+    lan = {(p.port, p.host_ip) for p in scan_compose_files(str(tmp_path))}
+    assert (80, "192.168.1.50") in lan
+
+
+def test_unraid_unmapped_webui_port_is_dropped():
+    assert extract_label_urls(
+        {"net.unraid.docker.webui": "http://[IP]:[PORT:8096]/"},
+        ports=[{"host_port": 18096, "container_port": 80}],
+    ) == []
+
+
+def test_joiner_prefix_match_requires_unique_id():
+    host = ContainerInfo(
+        name="vpn", status="running", image="vpn",
+        network_mode="host", container_id="aaaaaaaaaaaa1111",
+    )
+    other = ContainerInfo(
+        name="web", status="running", image="web",
+        network_mode="bridge", container_id="aaaaaaabbbbb2222",
+    )
+    by_name = {"vpn": host, "web": other}
+    by_id = {
+        host.container_id: host, host.container_id[:12]: host,
+        other.container_id: other, other.container_id[:12]: other,
+    }
+    assert _resolve_container_ref("aaaa", by_name, by_id) is None
+    assert _resolve_container_ref("aaaaaaaaaaaa", by_name, by_id) is host
+    assert _resolve_container_ref("aaaaaaaaaaaa11", by_name, by_id) is host
+    assert _resolve_container_ref("aaaaaaabbbbb", by_name, by_id) is other
+    assert _network_is_host_netns("container:aaaaaaaaaaaa11", by_name, by_id) is True
+    assert _network_is_host_netns("container:aaaaaaabbbbb", by_name, by_id) is False

@@ -227,9 +227,18 @@ def _macvlan_network_names(data: dict) -> set[str]:
         if not isinstance(cfg, dict):
             continue
         driver = str(_unwrap_compose(cfg.get("driver")) or "").lower()
-        if driver in ("macvlan", "ipvlan"):
+        if driver in ("macvlan", "ipvlan") or _network_is_external(cfg):
             names.add(str(name))
     return names
+
+
+def _network_is_external(cfg: dict) -> bool:
+    ext = _unwrap_compose(cfg.get("external"))
+    if ext is True:
+        return True
+    if isinstance(ext, str) and ext.strip().lower() in ("true", "yes"):
+        return True
+    return isinstance(ext, dict)
 
 
 def _service_macvlan_ips(svc_cfg: dict, macvlan_names: set[str]) -> list[str]:
@@ -313,11 +322,14 @@ def scan_compose_tree(
     files_cap = max_files if max_files is not None else _env_int("COMPOSE_SCAN_MAX_FILES", 400)
 
     files, truncated = _find_compose_files(scan_dir, depth, files_cap)
+    included: set[str] = set()
+    for filepath in files:
+        included |= _included_reals(filepath)
     ports: list[ComposePort] = []
     seen_walk: set[str] = set()
     for filepath in files:
         real = os.path.realpath(filepath)
-        if real in seen_walk:
+        if real in seen_walk or real in included:
             continue
         seen_walk.add(real)
         ports.extend(_parse_compose_file(filepath, scan_dir, frozenset()))
@@ -384,6 +396,73 @@ def _sibling_override_path(filepath: str) -> str | None:
     return None
 
 
+def _compose_doc(
+    filepath: str,
+    extra_env: dict[str, str] | None = None,
+    env_base: Path | None = None,
+) -> tuple[dict, dict[str, str], Path] | None:
+    """Load one Compose file: project env, top-level env_file, sibling override."""
+    raw = _read_text(Path(filepath))
+    if raw is None:
+        return None
+    parent = Path(filepath).parent
+    env_root = env_base if env_base is not None else parent
+    env_vars = {**_load_env_file(env_root), **(extra_env or {})}
+    try:
+        data = _load_yaml(substitute_vars(raw, env_vars))
+    except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    extra_file_env = _env_files_from_include(env_root, data.get("env_file"))
+    if extra_file_env:
+        env_vars = {**env_vars, **extra_file_env}
+        try:
+            data = _load_yaml(substitute_vars(raw, env_vars))
+        except yaml.YAMLError:
+            return None
+        if not isinstance(data, dict):
+            return None
+    ov_path = _sibling_override_path(filepath)
+    if ov_path:
+        ov_raw = _read_text(Path(ov_path))
+        if ov_raw is not None:
+            try:
+                ov_data = _load_yaml(substitute_vars(ov_raw, env_vars))
+            except yaml.YAMLError:
+                ov_data = None
+            if isinstance(ov_data, dict):
+                data = _overlay_compose_docs(data, ov_data)
+    return data, env_vars, parent
+
+
+def _included_reals(
+    filepath: str,
+    extra_env: dict[str, str] | None = None,
+    chain: frozenset[str] = frozenset(),
+    env_base: Path | None = None,
+) -> set[str]:
+    """Realpaths reached via ``include:`` (not scanned as their own stack)."""
+    real = os.path.realpath(filepath)
+    if real in chain:
+        return set()
+    loaded = _compose_doc(filepath, extra_env, env_base)
+    if loaded is None:
+        return set()
+    data, env_vars, parent = loaded
+    out: set[str] = set()
+    for inc_path, inc_env, inc_base in _include_specs(data.get("include"), parent):
+        nested = os.path.realpath(inc_path)
+        out.add(nested)
+        out |= _included_reals(
+            str(inc_path),
+            {**env_vars, **inc_env},
+            chain | {real},
+            inc_base if inc_base is not None else env_base,
+        )
+    return out
+
+
 def _parse_compose_file(
     filepath: str,
     scan_dir: str,
@@ -399,42 +478,10 @@ def _parse_compose_file(
     chain = chain | {real}
 
     ports: list[ComposePort] = []
-    raw = _read_text(Path(filepath))
-    if raw is None:
+    loaded = _compose_doc(filepath, extra_env, env_base)
+    if loaded is None:
         return ports
-
-    parent = Path(filepath).parent
-    env_root = env_base if env_base is not None else parent
-    env_vars = {**_load_env_file(env_root), **(extra_env or {})}
-    interpolated = substitute_vars(raw, env_vars)
-    try:
-        data = _load_yaml(interpolated)
-    except yaml.YAMLError:
-        return ports
-    if not isinstance(data, dict):
-        return ports
-
-    extra_file_env = _env_files_from_include(env_root, data.get("env_file"))
-    if extra_file_env:
-        env_vars = {**env_vars, **extra_file_env}
-        interpolated = substitute_vars(raw, env_vars)
-        try:
-            data = _load_yaml(interpolated)
-        except yaml.YAMLError:
-            return ports
-        if not isinstance(data, dict):
-            return ports
-
-    ov_path = _sibling_override_path(filepath)
-    if ov_path:
-        ov_raw = _read_text(Path(ov_path))
-        if ov_raw is not None:
-            try:
-                ov_data = _load_yaml(substitute_vars(ov_raw, env_vars))
-            except yaml.YAMLError:
-                ov_data = None
-            if isinstance(ov_data, dict):
-                data = _overlay_compose_docs(data, ov_data)
+    data, env_vars, parent = loaded
 
     this_dir = project_dir if project_dir is not None else _project_dir_key(parent, scan_dir)
     fallback_name = Path(this_dir).name
@@ -472,10 +519,12 @@ def _parse_compose_file(
         net = str(_unwrap_compose(svc_cfg.get("network_mode")) or "").strip().lower() or None
         if _is_shared_netns(net):
             continue
-        entries = _port_entries(svc_cfg.get("ports"))
-        deploy = _unwrap_compose(svc_cfg.get("deploy"))
-        if isinstance(deploy, dict):
-            entries.extend(_port_entries(deploy.get("ports")))
+        entries: list = []
+        if not _is_host_network(net):
+            entries = _port_entries(svc_cfg.get("ports"))
+            deploy = _unwrap_compose(svc_cfg.get("deploy"))
+            if isinstance(deploy, dict):
+                entries.extend(_port_entries(deploy.get("ports")))
         for entry in entries:
             for p in parse_port_entry(entry):
                 ports.append(ComposePort(

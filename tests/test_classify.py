@@ -627,6 +627,83 @@ def test_label_urls_do_not_paint_sidecar_ports():
     assert "https://app.lan" not in by_port[5432]["urls"]
 
 
+def test_vhost_mismatch_does_not_paint_sidecars():
+    containers = [
+        ContainerInfo(
+            name="app",
+            status="running",
+            image="app",
+            vhost_urls=["https://app.lan"],
+            vhost_port=3000,
+            ports=[
+                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
+                {"host_port": 5432, "host_ip": "0.0.0.0", "container_port": 5432, "protocol": "tcp"},
+            ],
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert "https://app.lan" in by_port[8080]["urls"]
+    assert "https://app.lan" not in by_port[5432]["urls"]
+
+
+def test_unmatched_label_port_falls_back_to_web_mapping():
+    containers = [
+        ContainerInfo(
+            name="wiki",
+            status="running",
+            image="wiki",
+            urls=["https://wiki.lan"],
+            label_port=3000,
+            ports=[
+                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
+                {"host_port": 9000, "host_ip": "0.0.0.0", "container_port": 9000, "protocol": "tcp"},
+            ],
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert "https://wiki.lan" in by_port[8080]["urls"]
+    assert "https://wiki.lan" not in by_port[9000]["urls"]
+
+
+def test_inode_only_host_net_urls_stay_on_web_port():
+    containers = [
+        ContainerInfo(
+            name="proxy",
+            status="running",
+            image="traefik",
+            urls=["https://app.lan"],
+            ports=[],
+            network_mode="host",
+            socket_inodes={1, 2},
+        ),
+    ]
+    listening = [
+        ListeningPort(port=80, protocol="tcp", ip="0.0.0.0", inode=1),
+        ListeningPort(port=5432, protocol="tcp", ip="0.0.0.0", inode=2),
+    ]
+    out = _classify(
+        listening, containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert "https://app.lan" in by_port[80]["urls"]
+    assert "https://app.lan" not in by_port[5432]["urls"]
+
+
 def test_meta_unauthenticated(monkeypatch):
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)

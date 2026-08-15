@@ -467,7 +467,7 @@ def _classify(
             "urls": list(c.urls or []),
             "vhost_urls": list(c.vhost_urls or []),
             "vhost_port": c.vhost_port,
-            "vhost_fallback": _vhost_fallback(c),
+            "vhost_host_ports": _vhost_url_host_ports(c),
             "label_port": c.label_port,
             "label_host_ports": _label_url_host_ports(c),
             "expose_only": extra.get("source") == "expose",
@@ -497,6 +497,8 @@ def _classify(
             for port, rec in listening_map.items():
                 if rec.get("pid") in pids:
                     _add_container(port, c)
+
+    _finalize_inode_url_hosts(container_map)
 
     compose_map: dict[int, list[dict]] = {}
     compose_seen: set[tuple] = set()
@@ -590,7 +592,7 @@ def _classify(
         ip = (lp_info["ip"] if lp_info else None) or ips[0]
         urls = _collect_urls(port, ips, ctors, known, options)
         for c in ctors:
-            c.pop("vhost_fallback", None)
+            c.pop("vhost_host_ports", None)
             c.pop("label_host_ports", None)
             c.pop("expose_only", None)
         proto_bits = []
@@ -795,6 +797,26 @@ def _guess_url_host(ips: list[str], configured: str) -> str:
     return "localhost"
 
 
+_WEB_URL_PORTS = (80, 443, 8080, 8443)
+
+
+def _fallback_url_hosts(
+    hosts: list[int],
+    cport_to_hosts: dict[int, list[int]],
+) -> list[int] | None:
+    web_hosts: list[int] = []
+    for web in _WEB_URL_PORTS:
+        web_hosts.extend(cport_to_hosts.get(web) or [])
+    if web_hosts:
+        return list(dict.fromkeys(web_hosts))
+    uniq = list(dict.fromkeys(hosts))
+    if len(uniq) == 1:
+        return uniq
+    if uniq:
+        return [min(uniq)]
+    return None
+
+
 def _label_url_host_ports(c) -> list[int] | None:
     """Host ports that should receive Traefik/homepage URLs. None = inode-only."""
     mappings = [p for p in (c.ports or []) if p.get("host_port")]
@@ -821,27 +843,55 @@ def _label_url_host_ports(c) -> list[int] | None:
             matched = None
         if matched:
             return list(dict.fromkeys(matched))
-        uniq = list(dict.fromkeys(hosts))
-        return uniq if len(uniq) == 1 else []
-    web_hosts: list[int] = []
-    for web in (80, 443, 8080, 8443):
-        web_hosts.extend(cport_to_hosts.get(web) or [])
-    if web_hosts:
-        return list(dict.fromkeys(web_hosts))
-    uniq = list(dict.fromkeys(hosts))
-    if len(uniq) == 1:
-        return uniq
-    if uniq:
-        return [min(uniq)]
-    return None
+    return _fallback_url_hosts(hosts, cport_to_hosts)
 
 
-def _vhost_fallback(c) -> bool:
-    """True when VIRTUAL_PORT does not match any published container port."""
-    vport = c.vhost_port
-    if not vport or not c.vhost_urls:
-        return True
-    return vport not in {p.get("container_port") for p in c.ports or []}
+def _vhost_url_host_ports(c) -> list[int] | None:
+    """Host ports that should receive nginx-proxy VIRTUAL_HOST URLs."""
+    if not getattr(c, "vhost_urls", None):
+        return []
+    mappings = [p for p in (c.ports or []) if p.get("host_port")]
+    hosts: list[int] = []
+    cport_to_hosts: dict[int, list[int]] = {}
+    for p in mappings:
+        try:
+            hp = int(p["host_port"])
+        except (TypeError, ValueError):
+            continue
+        hosts.append(hp)
+        cp = p.get("container_port")
+        if cp is None:
+            continue
+        try:
+            cport_to_hosts.setdefault(int(cp), []).append(hp)
+        except (TypeError, ValueError):
+            continue
+    vport = getattr(c, "vhost_port", None)
+    if vport:
+        try:
+            matched = cport_to_hosts.get(int(vport))
+        except (TypeError, ValueError):
+            matched = None
+        if matched:
+            return list(dict.fromkeys(matched))
+    return _fallback_url_hosts(hosts, cport_to_hosts)
+
+
+def _finalize_inode_url_hosts(container_map: dict[int, list[dict]]) -> None:
+    """Host-net inode rows have empty ``c.ports``; pick web / lowest attributed port."""
+    by_name: dict[str, list[int]] = {}
+    for port, lst in container_map.items():
+        for c in lst:
+            by_name.setdefault(c["name"], []).append(port)
+    for _port, lst in container_map.items():
+        for c in lst:
+            hosts = list(dict.fromkeys(by_name.get(c["name"]) or []))
+            web = [h for h in hosts if h in _WEB_URL_PORTS]
+            picked = web or (hosts if len(hosts) <= 1 else [min(hosts)])
+            if c.get("label_host_ports") is None:
+                c["label_host_ports"] = picked
+            if c.get("vhost_host_ports") is None:
+                c["vhost_host_ports"] = picked
 
 
 def _collect_urls(
@@ -867,9 +917,14 @@ def _collect_urls(
         vurls = c.get("vhost_urls") or []
         if not vurls:
             continue
-        vport = c.get("vhost_port")
-        cport = c.get("container_port")
-        if c.get("vhost_fallback") or vport is None or cport == vport:
+        wanted_vhost = c.get("vhost_host_ports")
+        if wanted_vhost is None:
+            vport = c.get("vhost_port")
+            cport = c.get("container_port")
+            attach_vhost = vport is None or cport == vport
+        else:
+            attach_vhost = port in wanted_vhost
+        if attach_vhost:
             for raw in vurls:
                 u = safe_http_url(raw)
                 if u and u not in seen:
