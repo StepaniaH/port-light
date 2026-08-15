@@ -51,6 +51,8 @@
     "configured": "定義済み",
     "free": "空き",
     "running": "実行中",
+    "paused": "一時停止",
+    "restarting": "再起動中",
     "exited": "終了"
   },
   "detail": {

@@ -360,6 +360,7 @@ a:focus-visible,
 .tag.configured { background: var(--tag-configured-bg); color: var(--configured); }
 .tag.free { background: var(--free-bg); color: var(--free); }
 .tag.running { background: var(--tag-running-bg); color: var(--free); }
+.tag.paused, .tag.restarting { background: var(--tag-configured-bg); color: var(--configured); }
 .tag.exited { background: var(--tag-exited-bg); color: var(--danger); }
 .tag.scope { background: var(--card); border: 1px solid var(--border); color: var(--text-dim); }
 

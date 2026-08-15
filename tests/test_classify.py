@@ -288,6 +288,44 @@ def test_summary_counts_respect_range():
     assert out["summary"]["free"] == 9000 - 8000 + 1 - 1
 
 
+def test_hidden_used_port_is_not_free():
+    out = _classify(
+        [ListeningPort(port=8096, protocol="tcp", ip="0.0.0.0")],
+        [], [], [], hidden_ports=[8096],
+        range_start=8096, range_end=8096,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert out["ports"] == []
+    assert out["summary"]["used"] == 0
+    assert out["summary"]["free"] == 0
+    assert out["summary"]["hidden"] == 1
+
+
+def test_paused_container_is_used():
+    containers = [
+        ContainerInfo(
+            name="wiki",
+            status="paused",
+            image="wiki",
+            ports=[{"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"}],
+        ),
+        ContainerInfo(
+            name="api",
+            status="restarting",
+            image="api",
+            ports=[{"host_port": 3000, "host_ip": "0.0.0.0", "container_port": 3000, "protocol": "tcp"}],
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert by_port[8080]["status"] == "used"
+    assert by_port[3000]["status"] == "used"
+
+
 def test_compose_same_project_is_not_conflict():
     compose = [
         ComposePort(port=8096, compose_file="media/compose.yml", project_dir="media", service_name="jellyfin"),

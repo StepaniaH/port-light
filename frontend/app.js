@@ -217,7 +217,8 @@
     const parts = raw.split('/').filter(Boolean);
     if (parts[0] === 'settings') return { name: 'settings' };
     if (parts[0] === 'port' && /^\d+$/.test(parts[1] || '')) {
-      return { name: 'port', port: parseInt(parts[1], 10) };
+      const n = parseInt(parts[1], 10);
+      if (n >= 1 && n <= 65535) return { name: 'port', port: n };
     }
     return { name: 'grid' };
   }
@@ -1439,7 +1440,8 @@
       html += '<div class="section-title">' + escapeHtml(t('detail.containers')) + '</div>';
       for (let i = 0; i < p.containers.length; i++) {
         const c = p.containers[i];
-        const tag = c.status === 'running' ? 'running' : 'exited';
+        const tag = (c.status === 'running' || c.status === 'paused' || c.status === 'restarting')
+          ? c.status : 'exited';
         html += '<div class="row"><span class="key">' + escapeHtml(c.name) + '</span><span class="tag ' + tag + '">' +
           escapeHtml(t('status.' + tag) || c.status) + '</span></div>';
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.image')) + '</span><span class="val">' + escapeHtml(c.image) + '</span></div>';

@@ -51,6 +51,8 @@
     "configured": "已設定",
     "free": "閒置",
     "running": "執行中",
+    "paused": "已暫停",
+    "restarting": "重啟中",
     "exited": "已結束"
   },
   "detail": {

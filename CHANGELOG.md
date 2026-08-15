@@ -58,6 +58,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Legend `used` / `configured` counted every occupied port while `free` used the toolbar range.
 - A junk row in `manual_ports` still 500'd POST/PATCH/DELETE.
 - Host scanner health was green whenever `/proc/net/tcp` existed, including a bridge container without `/host/proc`.
+- A hidden port still counted as free in the legend.
+- A paused or restarting container was painted configured (the host bind is still held).
 
 ### Changed
 

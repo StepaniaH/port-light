@@ -423,10 +423,10 @@ def _classify(
         manual = manual_map.get(port)
 
         is_listening = port in listening_map
-        has_running = any(c["status"] == "running" for c in ctors)
+        has_live = any(c["status"] in ("running", "paused", "restarting") for c in ctors)
         is_manual = manual is not None
 
-        if is_listening or has_running:
+        if is_listening or has_live:
             status = "used"
         elif composes or is_manual or ctors:
             status = "configured"
@@ -502,6 +502,7 @@ def _classify(
         if p["status"] == "configured" and range_start <= p["port"] <= range_end
     )
     occupied = {p["port"] for p in port_list}
+    occupied.update(hidden_ports)
     free = sum(1 for n in range(range_start, range_end + 1) if n not in occupied)
 
     return {

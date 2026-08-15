@@ -51,6 +51,8 @@
     "configured": "configured",
     "free": "free",
     "running": "running",
+    "paused": "paused",
+    "restarting": "restarting",
     "exited": "exited"
   },
   "detail": {

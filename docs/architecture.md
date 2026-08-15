@@ -69,7 +69,7 @@ For each port in the union of listeners ∪ Docker mappings ∪ Compose ∪ manu
 
 | Status | Rule |
 |--------|------|
-| `used` | Listening, or a Docker mapping whose container status is `running` |
+| `used` | Listening, or a Docker mapping whose container is `running` / `paused` / `restarting` |
 | `configured` | Compose, manual, or a stopped Docker publish, and not `used` |
 | `free` | Not in the union — synthesized in the UI during numeric search; `#/port/N` loads `GET /api/ports/{N}` |
 
