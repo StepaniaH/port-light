@@ -50,3 +50,10 @@ def test_junk_store_rows_do_not_break_writes(tmp_path, monkeypatch):
     assert port_store.add_hidden_port(22) is False
     assert port_store.remove_manual_port(9) is True
     assert {e["port"] for e in port_store.get_manual_ports()} == {11}
+    (tmp_path / "port_light.json").write_text(json.dumps({
+        "manual_ports": ["nope", {"port": 12, "label": "old"}],
+    }), encoding="utf-8")
+    updated = port_store.update_manual_port(12, "new")
+    assert updated["label"] == "new"
+    saved = json.loads((tmp_path / "port_light.json").read_text(encoding="utf-8"))
+    assert saved["manual_ports"] == [{"port": 12, "label": "new"}]

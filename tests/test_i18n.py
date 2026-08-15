@@ -91,6 +91,8 @@ def test_markup_i18n_keys_exist_in_english():
     assert "filter.localhost" in keys
     for key in sorted(keys):
         _lookup(english, key)
+    for prefix in sorted(set(re.findall(r"""\btx\(\s*['"]([a-zA-Z0-9_.]+)['"]""", js))):
+        assert isinstance(english.get(prefix), dict), prefix
 
 
 def test_cache_bust_matches_index():

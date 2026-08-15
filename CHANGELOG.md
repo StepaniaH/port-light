@@ -79,6 +79,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Tab from the occupancy grid was trapped in the drawer on desktop.
 - Escape cleared search before closing the detail drawer.
 - Numeric search neighbors could exceed port 65535; digit search ignored kind filters for occupied neighbors.
+- The hidden-port legend counted ports outside the toolbar range.
+- Docker IPv6 `HostIp` values like `[::1]` were stored with brackets.
+- Compose `include: ../shared/*.yml` globs were ignored.
 
 ### Changed
 

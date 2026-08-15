@@ -302,6 +302,17 @@ def test_hidden_used_port_is_not_free():
     assert out["summary"]["hidden"] == 1
 
 
+def test_hidden_outside_range_is_omitted_from_legend():
+    out = _classify(
+        [ListeningPort(port=22, protocol="tcp", ip="0.0.0.0")],
+        [], [], [], hidden_ports=[22],
+        range_start=8000, range_end=9000,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert out["summary"]["hidden"] == 0
+    assert out["summary"]["used"] == 0
+
+
 def test_paused_container_is_used():
     containers = [
         ContainerInfo(

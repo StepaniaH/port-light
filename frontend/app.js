@@ -1212,6 +1212,7 @@
     let beforeFree = 0, afterFree = 0;
     for (let p = hitPort - 1; p >= Math.max(1, hitPort - 50) && beforeFree < 3; p--) {
       if (!allPortNums.has(p)) {
+        prefetchKnown(p);
         result.unshift({ port: p, status: 'free', _synthetic: true, known_service: getKnownForFree(p) });
         beforeFree++;
       } else {
@@ -1221,6 +1222,7 @@
     }
     for (let p = hitPort + 1; p <= Math.min(65535, hitPort + 50) && afterFree < 3; p++) {
       if (!allPortNums.has(p)) {
+        prefetchKnown(p);
         result.push({ port: p, status: 'free', _synthetic: true, known_service: getKnownForFree(p) });
         afterFree++;
       } else {

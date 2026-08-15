@@ -205,13 +205,20 @@ def update_manual_port(port: int, label: str, machine: str = "localhost") -> dic
     with _LOCK:
         data = _load()
         mp = data.get("manual_ports", [])
+        kept: list = []
+        found = None
         for entry in mp:
-            if not isinstance(entry, dict):
+            if _entry_port(entry) is None:
                 continue
             if _entry_port(entry) == port and _entry_machine(entry) == machine:
+                entry = dict(entry) if isinstance(entry, dict) else {"port": port, "machine": machine}
                 entry["label"] = label
-                _save(data)
-                return entry
+                found = entry
+            kept.append(entry)
+        if found:
+            data["manual_ports"] = kept
+            _save(data)
+            return found
         return None
 
 

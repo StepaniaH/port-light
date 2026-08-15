@@ -164,6 +164,8 @@ def extract_ports(attrs: dict) -> list[dict]:
         if hp < 1 or hp > 65535:
             return
         host_ip = host_ip or "0.0.0.0"
+        if isinstance(host_ip, str) and host_ip.startswith("[") and host_ip.endswith("]") and ":" in host_ip:
+            host_ip = host_ip[1:-1]
         protocol = str(protocol or "tcp").lower()
         key = (hp, host_ip, cp, protocol)
         if key in seen:

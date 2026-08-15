@@ -160,6 +160,27 @@ def test_include_path_list(tmp_path):
     assert {p.project_dir for p in ports} == {"app"}
 
 
+def test_include_path_glob(tmp_path):
+    shared = tmp_path / "shared"
+    app = tmp_path / "app"
+    shared.mkdir()
+    app.mkdir()
+    (shared / "a.yml").write_text(
+        "services:\n  a:\n    ports:\n      - '7101:80'\n",
+        encoding="utf-8",
+    )
+    (shared / "b.yml").write_text(
+        "services:\n  b:\n    ports:\n      - '7102:80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - ../shared/*.yml\n",
+        encoding="utf-8",
+    )
+    ports = {p.port for p in scan_compose_files(str(tmp_path)) if p.port in (7101, 7102)}
+    assert ports == {7101, 7102}
+
+
 def test_compose_extends_and_bom(tmp_path):
     common = tmp_path / "common.yml"
     common.write_text(
@@ -351,6 +372,17 @@ def test_extract_port_bindings_and_homepage():
     ports = extract_ports(attrs)
     assert ports[0]["host_port"] == 8096
     assert ports[0]["host_ip"] == "127.0.0.1"
+    v6 = extract_ports({
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {
+                "80/tcp": [{"HostIp": "[::1]", "HostPort": "8080"}],
+            },
+        },
+        "NetworkSettings": {"Ports": {}},
+        "Config": {"ExposedPorts": {}},
+    })
+    assert v6[0]["host_ip"] == "::1"
     urls = extract_label_urls({
         "homepage.href": "http://photos.lan:2283",
         "traefik.http.routers.x.rule": "HostRegexp(`*.home.arpa`)",

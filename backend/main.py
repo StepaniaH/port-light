@@ -521,6 +521,7 @@ def _classify(
         1 for p in port_list
         if p["status"] == "configured" and range_start <= p["port"] <= range_end
     )
+    hidden_in_range = sum(1 for p in hidden_ports if range_start <= p <= range_end)
     occupied = {p["port"] for p in port_list}
     occupied.update(hidden_ports)
     free = sum(1 for n in range(range_start, range_end + 1) if n not in occupied)
@@ -531,7 +532,7 @@ def _classify(
             "used": used,
             "configured": configured,
             "free": free,
-            "hidden": len(hidden_ports),
+            "hidden": hidden_in_range,
             "hidden_locked": hidden_locked,
             "range_start": range_start,
             "range_end": range_end,

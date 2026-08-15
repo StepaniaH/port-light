@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob as _glob
 import os
 import re
 from dataclasses import dataclass
@@ -154,8 +155,8 @@ def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> list[s
         if depth > max_depth:
             dirs.clear()
             continue
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith(".")]
-        for name in files:
+        dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS and not d.startswith("."))
+        for name in sorted(files):
             if _is_compose_filename(name):
                 found.append(os.path.join(root, name))
                 if len(found) >= max_files:
@@ -296,11 +297,16 @@ def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str]]]:
             if not path:
                 continue
             try:
-                resolved = (parent / path).resolve()
+                if any(ch in path for ch in "*?["):
+                    pattern = os.path.normpath(os.path.join(str(parent), path))
+                    candidates = [Path(p).resolve() for p in _glob.glob(pattern)]
+                else:
+                    candidates = [(parent / path).resolve()]
             except (TypeError, ValueError, OSError):
                 continue
-            if resolved.is_file():
-                out.append((resolved, extra))
+            for resolved in candidates:
+                if resolved.is_file():
+                    out.append((resolved, extra))
     return out
 
 
@@ -400,6 +406,8 @@ def _overlay_port_fields(base: dict, child: dict) -> dict:
             val = src.get(key)
             if isinstance(val, list):
                 merged.extend(val)
+            elif isinstance(val, dict):
+                merged.extend(_port_entries(val))
             elif val is not None and val is not False:
                 merged.append(val)
         if merged:
