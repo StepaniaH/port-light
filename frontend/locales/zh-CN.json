@@ -299,6 +299,9 @@
     "aria": "端口占用网格",
     "updated": "更新于 {time}"
   },
+  "error": {
+    "httpStatus": "请求失败（HTTP {status}）。"
+  },
   "sourceType": {
     "docker": "Docker",
     "system": "系统",

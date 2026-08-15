@@ -29,8 +29,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Host-network Compose leftover `ports:` is ignored (Docker ignores it); `expose:` still counts.
 - `container:` joiners match a unique id prefix of at least 12 characters, not a short prefix of another container.
 - Discarding a detail hide/label error no longer lights the map-sync banner; empty-grid search keeps focus in the search box.
-- The Hidden chip is restored with `include_hidden`; unlock failures stay in the modal instead of sticking a password in session storage.
-- Desktop detail no longer traps Tab; numeric search neighbors are capped; settings segmented controls and the port-copy control have accessible names.
+- The Hidden chip is restored with `include_hidden`; unlock failures stay in the modal instead of sticking a password in session storage; unlock does not race the occupancy poll.
+- Desktop detail no longer traps Tab; Close is auto-focused only when the drawer opens; numeric search neighbors are capped; settings segmented controls and the port-copy control have accessible names.
+- Turning the Hidden eye on persists `showHidden`; a manual-port label draft restores only for the same port; the last-refresh time and sync-error banner remeasure the sticky header.
 
 ### Performance
 

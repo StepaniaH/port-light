@@ -61,7 +61,7 @@
     "restarting": "再起動中",
     "exited": "終了",
     "created": "作成済み",
-    "dead": "dead",
+    "dead": "デッド",
     "removing": "削除中"
   },
   "detail": {
@@ -298,6 +298,9 @@
     "web": "Web",
     "aria": "ポート占用グリッド",
     "updated": "{time} に更新"
+  },
+  "error": {
+    "httpStatus": "リクエストに失敗しました（HTTP {status}）。"
   },
   "sourceType": {
     "docker": "Docker",

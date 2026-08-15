@@ -299,6 +299,9 @@
     "aria": "Port occupancy grid",
     "updated": "Updated {time}"
   },
+  "error": {
+    "httpStatus": "Request failed (HTTP {status})."
+  },
   "sourceType": {
     "docker": "Docker",
     "system": "System",

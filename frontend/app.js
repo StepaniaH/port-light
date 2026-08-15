@@ -34,7 +34,7 @@
       }).filter(Boolean);
       if (parts.length) return parts.join('; ');
     }
-    return 'HTTP ' + status;
+    return t('error.httpStatus', { status: status });
   }
 
   let currentData = null;
@@ -379,6 +379,7 @@
     }
     showHidden = true;
     syncHiddenButton();
+    saveView();
     tick();
     return 'loading';
   }
@@ -491,6 +492,7 @@
     }
     showHidden = true;
     syncHiddenButton();
+    saveView();
     tick();
   });
   document.getElementById('unhide-cancel').addEventListener('click', closeModals);
@@ -835,6 +837,7 @@
     el.hidden = false;
     el.dateTime = new Date().toISOString();
     el.textContent = t('grid.updated', { time: time });
+    syncHeaderHeight();
   }
 
   function setSyncError(on) {
@@ -843,13 +846,17 @@
     el.hidden = !on;
     el.classList.toggle('hidden', !on);
     if (on) el.textContent = t('grid.refreshFailed');
+    syncHeaderHeight();
   }
 
-  async function fetchPorts() {
-    if (portsAbort) portsAbort.abort();
+  async function fetchPorts(opts) {
+    const isolated = !!(opts && opts.isolated);
+    if (!isolated && portsAbort) portsAbort.abort();
     const ac = new AbortController();
-    portsAbort = ac;
-    grid.setAttribute('aria-busy', currentData ? 'false' : 'true');
+    if (!isolated) {
+      portsAbort = ac;
+      grid.setAttribute('aria-busy', currentData ? 'false' : 'true');
+    }
     try {
       const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
       const headers = {};
@@ -866,12 +873,13 @@
       console.error('fetch error:', err);
       return { ok: false, stale: false };
     } finally {
-      if (portsAbort === ac) grid.setAttribute('aria-busy', 'false');
+      if (!isolated && portsAbort === ac) grid.setAttribute('aria-busy', 'false');
     }
   }
 
   function tick() {
     if (route.name === 'settings') return;
+    if (modalOpen()) return;
     loadPorts().then(function (data) {
       if (!data || route.name === 'settings') return;
       if (data === currentData && occupancyKey) return;
@@ -886,8 +894,8 @@
     });
   }
 
-  async function loadPorts() {
-    const result = await fetchPorts();
+  async function loadPorts(opts) {
+    const result = await fetchPorts(opts);
     if (!result || result.stale) return null;
     if (result.unchanged) {
       setSyncError(false);
@@ -1672,6 +1680,7 @@
   }
 
   function renderDetail(p) {
+    const opening = detailPanel.classList.contains('hidden');
     setDetailOpen(true);
     const name = getCellLabel(p);
     let html = '<div class="detail-head"><div><h2><button type="button" class="detail-copy-port" data-copy-port="' +
@@ -1807,10 +1816,12 @@
     }
 
     const prevLabel = detailContent.querySelector('[data-label-input]');
-    const prevDraft = prevLabel ? prevLabel.value : null;
-    const prevStart = prevLabel ? prevLabel.selectionStart : null;
-    const prevEnd = prevLabel ? prevLabel.selectionEnd : null;
-    const labelDirty = prevDraft != null && prevDraft !== (p.manual_label || '');
+    const prevForm = prevLabel && prevLabel.closest('[data-label-form]');
+    const samePort = !!(prevForm && prevForm.getAttribute('data-label-form') === String(p.port));
+    const prevDraft = samePort && prevLabel ? prevLabel.value : null;
+    const prevStart = samePort && prevLabel ? prevLabel.selectionStart : null;
+    const prevEnd = samePort && prevLabel ? prevLabel.selectionEnd : null;
+    const labelDirty = samePort && prevDraft != null && prevDraft !== (p.manual_label || '');
 
     const active = document.activeElement;
     const inDetail = active && detailContent.contains(active);
@@ -1864,7 +1875,7 @@
       : keep === 'label' ? labelInput
       : closeBtn;
     if (keep && focusEl) focusEl.focus({ preventScroll: true });
-    else if (closeBtn && !detailPanel.contains(document.activeElement)) {
+    else if (opening && closeBtn && !detailPanel.contains(document.activeElement)) {
       closeBtn.focus({ preventScroll: true });
     }
   }
@@ -1977,7 +1988,8 @@
     const prevUnlock = hiddenUnlock;
     const prevShow = showHidden;
     hiddenUnlock = password;
-    const data = await loadPorts();
+    showHidden = true;
+    const data = await loadPorts({ isolated: true });
     if (!data || (data.summary && data.summary.hidden_locked)) {
       hiddenUnlock = prevUnlock;
       showHidden = prevShow;
@@ -2007,6 +2019,7 @@
     saveView();
     if (followup) followup();
     else render();
+    unhideBtn.focus({ preventScroll: true });
   }
 
   function escapeHtml(text) {

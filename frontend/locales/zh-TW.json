@@ -299,6 +299,9 @@
     "aria": "連接埠占用一覽",
     "updated": "更新於 {time}"
   },
+  "error": {
+    "httpStatus": "請求失敗（HTTP {status}）。"
+  },
   "sourceType": {
     "docker": "Docker",
     "system": "系統",
