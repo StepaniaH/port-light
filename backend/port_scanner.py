@@ -122,11 +122,14 @@ def parse_ss_line(line: str) -> ListeningPort | None:
     """Parse one ``ss -tulnpH`` line. Exported for tests."""
     stripped = line.strip()
     protocol = "tcp"
-    if stripped.startswith(("tcp ", "tcp6 ", "udp ", "udp6 ")):
-        protocol, _, rest = stripped.partition(" ")
-        stripped = rest
-    else:
-        rest = stripped
+    for prefix in ("tcp6 ", "udp6 ", "tcp4 ", "udp4 ", "tcp ", "udp "):
+        if stripped.startswith(prefix):
+            token = prefix.strip()
+            protocol = "udp" if token.startswith("udp") else "tcp"
+            if token.endswith("6"):
+                protocol = protocol + "6"
+            stripped = stripped[len(prefix):]
+            break
 
     parts = stripped.split()
     if len(parts) < 4:

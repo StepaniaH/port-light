@@ -1204,7 +1204,8 @@
             p.known_service ? p.known_service.name : '',
             p.known_service ? p.known_service.description : '',
             ...(p.containers || []).map(function (c) {
-              return c.name + ' ' + (c.compose_project || '') + ' ' + (c.compose_service || '') + ' ' + c.image;
+              return c.name + ' ' + (c.compose_project || '') + ' ' + (c.compose_service || '') +
+                ' ' + c.image + ' ' + (c.bind_ips || []).join(' ') + ' ' + (c.protocol || '');
             }),
             ...(p.compose_configs || []).map(function (c) {
               return (c.project_name || '') + ' ' + (c.project_dir || '') + ' ' +

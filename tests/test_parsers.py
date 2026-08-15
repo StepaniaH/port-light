@@ -91,6 +91,33 @@ def test_include_env_file_and_export(tmp_path):
     assert {p.project_dir for p in web} == {"web"}
 
 
+def test_top_level_env_file_and_path_mapping(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "ports.env").write_text("WEB_PORT=9100\n", encoding="utf-8")
+    (app / "compose.yml").write_text(
+        "env_file:\n  - path: ports.env\n"
+        "services:\n  web:\n    ports:\n      - '${WEB_PORT}:80'\n",
+        encoding="utf-8",
+    )
+    assert 9100 in {p.port for p in scan_compose_files(str(tmp_path))}
+
+    shared = tmp_path / "shared"
+    other = tmp_path / "other"
+    shared.mkdir()
+    other.mkdir()
+    (shared / "stack.env").write_text("DB_PORT=9101\n", encoding="utf-8")
+    (shared / "ports.yml").write_text(
+        "services:\n  db:\n    ports:\n      - '${DB_PORT}:5432'\n",
+        encoding="utf-8",
+    )
+    (other / "compose.yml").write_text(
+        "include:\n  - path: ../shared/ports.yml\n    env_file:\n      path: ../shared/stack.env\n",
+        encoding="utf-8",
+    )
+    assert 9101 in {p.port for p in scan_compose_files(str(tmp_path))}
+
+
 def test_compose_name_and_shared_include(tmp_path):
     shared = tmp_path / "shared"
     shared.mkdir()
@@ -236,6 +263,10 @@ def test_ss_lines():
     assert up is not None
     assert up.port == 53
     assert up.protocol == "udp"
+    tcp4 = parse_ss_line("tcp4 LISTEN 0 128 127.0.0.1:22 0.0.0.0:*")
+    assert tcp4 is not None
+    assert tcp4.port == 22
+    assert tcp4.ip == "127.0.0.1"
 
 
 def test_normalize_ip():

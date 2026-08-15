@@ -51,6 +51,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Compose `include.path` as a list crashed the scan.
 - Caddy `caddy: reverse_proxy …` was turned into a fake `https://reverse_proxy` link.
 - IPv6 zone ids (`fe80::1%eth0`) and hex-mapped `::ffff:c0a8:10a` now normalize.
+- Compose top-level `env_file` (and `path:` mappings) interpolates published ports.
+- `ss` `tcp4` / `udp4` rows were dropped.
 
 ### Changed
 

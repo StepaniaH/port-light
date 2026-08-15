@@ -110,16 +110,26 @@ def _parse_compose_file(
         raw = raw[1:]
 
     env_vars = {**_load_env_file(Path(filepath).parent), **(extra_env or {})}
-    raw = substitute_vars(raw, env_vars)
-
+    interpolated = substitute_vars(raw, env_vars)
     try:
-        data = yaml.safe_load(raw)
+        data = yaml.safe_load(interpolated)
     except yaml.YAMLError:
         return ports
     if not isinstance(data, dict):
         return ports
 
     parent = Path(filepath).parent
+    extra_file_env = _env_files_from_include(parent, data.get("env_file"))
+    if extra_file_env:
+        env_vars = {**env_vars, **extra_file_env}
+        interpolated = substitute_vars(raw, env_vars)
+        try:
+            data = yaml.safe_load(interpolated)
+        except yaml.YAMLError:
+            return ports
+        if not isinstance(data, dict):
+            return ports
+
     this_dir = project_dir if project_dir is not None else parent.name
     raw_name = data.get("name")
     this_name = (
@@ -210,14 +220,28 @@ def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str]]]:
     return out
 
 
-def _env_files_from_include(parent: Path, env_file) -> dict[str, str]:
+def _env_file_paths(env_file) -> list[str]:
     names: list[str] = []
     if isinstance(env_file, str):
-        names = [env_file]
-    elif isinstance(env_file, list):
-        names = [n for n in env_file if isinstance(n, str)]
+        return [env_file]
+    if isinstance(env_file, dict):
+        path = env_file.get("path")
+        return [path] if isinstance(path, str) else []
+    if not isinstance(env_file, list):
+        return []
+    for item in env_file:
+        if isinstance(item, str):
+            names.append(item)
+        elif isinstance(item, dict):
+            path = item.get("path")
+            if isinstance(path, str):
+                names.append(path)
+    return names
+
+
+def _env_files_from_include(parent: Path, env_file) -> dict[str, str]:
     merged: dict[str, str] = {}
-    for name in names:
+    for name in _env_file_paths(env_file):
         merged.update(_read_env_file((parent / name).resolve()))
     return merged
 
