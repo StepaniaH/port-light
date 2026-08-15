@@ -170,7 +170,7 @@
       },
       "theme": {
         "label": "主题",
-        "help": "系统跟随浏览器配色。"
+        "help": "系统跟随浏览器。「Gruvbox」等是命名配色预设。"
       },
       "grid_density": {
         "label": "网格密度",
@@ -239,6 +239,19 @@
     "system": "系统",
     "dark": "深色",
     "light": "浅色",
+    "gruvbox": "Gruvbox",
+    "gruvbox-light": "Gruvbox 浅色",
+    "catppuccin": "Catppuccin",
+    "catppuccin-latte": "Catppuccin Latte",
+    "nord": "Nord",
+    "dracula": "Dracula",
+    "tokyo-night": "Tokyo Night",
+    "one-dark": "One Dark",
+    "solarized": "Solarized",
+    "solarized-light": "Solarized 浅色",
+    "everforest": "Everforest",
+    "rose-pine": "Rosé Pine",
+    "kanagawa": "Kanagawa",
     "comfortable": "舒适",
     "compact": "紧凑",
     "http": "HTTP",

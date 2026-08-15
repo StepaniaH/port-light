@@ -170,7 +170,7 @@
       },
       "theme": {
         "label": "Theme",
-        "help": "System follows the browser color scheme."
+        "help": "System follows the browser. Named palettes are presets."
       },
       "grid_density": {
         "label": "Grid density",
@@ -239,6 +239,19 @@
     "system": "System",
     "dark": "Dark",
     "light": "Light",
+    "gruvbox": "Gruvbox",
+    "gruvbox-light": "Gruvbox Light",
+    "catppuccin": "Catppuccin",
+    "catppuccin-latte": "Catppuccin Latte",
+    "nord": "Nord",
+    "dracula": "Dracula",
+    "tokyo-night": "Tokyo Night",
+    "one-dark": "One Dark",
+    "solarized": "Solarized",
+    "solarized-light": "Solarized Light",
+    "everforest": "Everforest",
+    "rose-pine": "Rosé Pine",
+    "kanagawa": "Kanagawa",
     "comfortable": "Comfortable",
     "compact": "Compact",
     "http": "HTTP",

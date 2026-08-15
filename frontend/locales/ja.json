@@ -170,7 +170,7 @@
       },
       "theme": {
         "label": "テーマ",
-        "help": "システムはブラウザの配色に合わせます。"
+        "help": "システムはブラウザに合わせます。Gruvbox などは配色プリセットです。"
       },
       "grid_density": {
         "label": "グリッド密度",
@@ -239,6 +239,19 @@
     "system": "システム",
     "dark": "ダーク",
     "light": "ライト",
+    "gruvbox": "Gruvbox",
+    "gruvbox-light": "Gruvbox Light",
+    "catppuccin": "Catppuccin",
+    "catppuccin-latte": "Catppuccin Latte",
+    "nord": "Nord",
+    "dracula": "Dracula",
+    "tokyo-night": "Tokyo Night",
+    "one-dark": "One Dark",
+    "solarized": "Solarized",
+    "solarized-light": "Solarized Light",
+    "everforest": "Everforest",
+    "rose-pine": "Rosé Pine",
+    "kanagawa": "Kanagawa",
     "comfortable": "標準",
     "compact": "コンパクト",
     "http": "HTTP",

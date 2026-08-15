@@ -1006,6 +1006,24 @@
       '<div class="locale-menu" id="locale-menu" role="listbox" aria-label="' + label + '">' + rows + '</div></div>';
   }
 
+  function renderThemePicker(choices, value, disabled) {
+    const current = choices.indexOf(value) >= 0 ? value : 'system';
+    const label = escapeHtml(t('settings.fields.theme.label'));
+    const cards = choices.map(function (c) {
+      const on = c === current;
+      const preview = c === 'system'
+        ? '<span class="theme-swatch-preview is-system" aria-hidden="true">' +
+          '<span class="theme-swatch-half dark"></span><span class="theme-swatch-half light"></span></span>'
+        : '<span class="theme-swatch-preview" aria-hidden="true"><i class="used"></i><i class="configured"></i><i class="free"></i></span>';
+      return '<label class="theme-swatch" data-theme-preview="' + escapeHtml(c) + '">' +
+        '<input type="radio" name="theme" value="' + escapeHtml(c) + '"' +
+        (on ? ' checked' : '') + disabled + '>' + preview +
+        '<span class="theme-swatch-name" data-i18n="choice.' + c + '">' +
+        escapeHtml(choiceLabel(c)) + '</span></label>';
+    }).join('');
+    return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' + cards + '</div>';
+  }
+
   function renderField(f, value, readonly) {
     const disabled = readonly ? ' disabled' : '';
     let control = '';
@@ -1016,6 +1034,8 @@
         (value ? ' checked' : '') + disabled + '><span class="track"></span></span>';
     } else if (f.key === 'locale') {
       control = renderLocaleList(f.choices || [], value, disabled);
+    } else if (f.key === 'theme') {
+      control = renderThemePicker(f.choices || [], value, disabled);
     } else if (f.type === 'choice') {
       const choices = f.choices || [];
       control = '<div class="segmented" role="radiogroup">' +
@@ -1032,7 +1052,8 @@
       control = '<input type="text" name="' + f.key + '" value="' + escapeHtml(String(value || '')) +
         '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + disabled + '>';
     }
-    return '<' + tag + ' class="setting-row"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
+    const wide = f.key === 'theme' ? ' is-wide' : '';
+    return '<' + tag + ' class="setting-row' + wide + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
       '</span></span><span class="setting-control">' + control + originHint(f) +
       '</span></' + tag + '>';

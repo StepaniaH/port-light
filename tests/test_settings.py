@@ -41,6 +41,9 @@ def test_settings_rejects_bad_values(tmp_path, monkeypatch):
     monkeypatch.delenv("PORT_LIGHT_SETTINGS_SOURCE", raising=False)
     client = TestClient(app)
     assert client.put("/api/settings", json={"theme": "neon"}).status_code == 400
+    palette = client.put("/api/settings", json={"theme": "gruvbox"})
+    assert palette.status_code == 200
+    assert palette.json()["values"]["theme"] == "gruvbox"
     assert client.put("/api/settings", json={"locale": "fr"}).status_code == 400
     ok = client.put("/api/settings", json={"locale": "ja"})
     assert ok.status_code == 200

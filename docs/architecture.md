@@ -94,7 +94,7 @@ The `machines` array may still exist in older `port_light.json` files. It is not
 
 ## Frontend
 
-No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail (free ports load `GET /api/ports/{N}`). Skip-to-content focuses `#grid` or `#settings-form`. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`; `frontend/i18n.js` sets `html lang`. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned. Hidden occupancy cells keep used/configured color at reduced opacity (chrome `.hidden` is `display: none`).
+No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail (free ports load `GET /api/ports/{N}`). Skip-to-content focuses `#grid` or `#settings-form`. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. Theme is `system` / `dark` / `light` or a named palette (`gruvbox`, `catppuccin`, `nord`, …) applied as `data-theme` on `html`. UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`; `frontend/i18n.js` sets `html lang`. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned. Hidden occupancy cells keep used/configured color at reduced opacity (chrome `.hidden` is `display: none`).
 
 ## Why not Kubernetes / remote Docker
 

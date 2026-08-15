@@ -48,7 +48,7 @@
 - 常见 homelab 端口内置名称（SSH、Jellyfin、Postgres 等），可用本地文件覆盖
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
-- 深色 / 浅色 / 跟随系统、紧凑网格、界面语言（English / 简体中文 / 繁體中文 / 日本語）等：设置页可改，也可以写在 Compose 环境变量里
+- 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；紧凑网格、界面语言（English / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
 - 前端是原生 HTML/CSS/JS，没有 npm，没有构建步骤
@@ -106,7 +106,7 @@ docker compose up -d
 | `PORT_RANGE_END` | `9999` | 上述区间的结束（不会把网格填满绿格） |
 | `PORT_LIGHT_DATA_DIR` | `/data` | 手动端口、隐藏列表、已保存设置（JSON） |
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称（只能用环境变量） |
-| `THEME` | `system` | `system` / `dark` / `light` |
+| `THEME` | `system` | `system` / `dark` / `light`，或命名配色（`gruvbox`、`catppuccin`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`solarized`、`everforest`、`rose-pine`、`kanagawa`，以及 `*-light` / `catppuccin-latte`） |
 | `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
 | `GRID_DENSITY` | `comfortable` | `comfortable` 或 `compact` |
 | `REFRESH_MS` | `5000` | 自动刷新间隔 |

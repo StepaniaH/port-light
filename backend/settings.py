@@ -46,8 +46,15 @@ FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         "theme", "choice", "THEME", "system", "appearance", "Theme",
-        "System follows the browser color scheme.",
-        choices=("system", "dark", "light"),
+        "System follows the browser. Named palettes are presets.",
+        choices=(
+            "system", "dark", "light",
+            "gruvbox", "gruvbox-light",
+            "catppuccin", "catppuccin-latte",
+            "nord", "dracula", "tokyo-night", "one-dark",
+            "solarized", "solarized-light",
+            "everforest", "rose-pine", "kanagawa",
+        ),
     ),
     FieldSpec(
         "grid_density", "choice", "GRID_DENSITY", "comfortable", "appearance", "Grid density",

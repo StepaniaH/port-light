@@ -11,7 +11,7 @@ Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and
 ## Shipped in 0.5.2
 
 - Settings page (`#/settings`): Compose env or Web UI, file overlay in the data volume
-- Light / system / dark theme
+- Light / system / dark theme, plus named palettes on Settings
 - Four UI locales (en, zh-CN, zh-TW, ja)
 - Broader known-port table
 - Unraid XML template, Podman notes, image healthcheck
