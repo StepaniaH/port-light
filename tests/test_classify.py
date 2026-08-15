@@ -133,6 +133,19 @@ def test_compose_project_name_and_port_zero():
     assert out["ports"][0]["compose_configs"][0]["project_name"] == "web-stack"
 
 
+def test_classify_skips_junk_manual_rows():
+    out = _classify(
+        [], [], [],
+        ["nope", {"port": "9090", "label": "lab"}, {"label": "missing"}],
+        hidden_ports=["22", "nope", 0],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert [row["port"] for row in out["ports"]] == [9090]
+    assert out["ports"][0]["manual_label"] == "lab"
+    assert out["summary"]["hidden"] == 1
+
+
 def test_classify_used_configured_hidden_conflict():
     listening = [
         ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", process_name="sshd", inode=11),

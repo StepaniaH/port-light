@@ -19,6 +19,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Unraid `net.unraid.docker.webui` labels become detail-panel URLs.
 - Compose top-level `name:` is the project label in the detail drawer (conflicts still key off the folder).
 - Ctrl/Cmd+S saves the settings page.
+- Compose `extends` (same file or `file:`) contributes `ports` / host-network `expose`.
 
 ### Fixed
 
@@ -38,6 +39,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Included Compose files were tagged as their own folder, so two stacks sharing `include:` looked like a conflict with `shared/` — or the second stack lost the ports entirely.
 - Host port `0` / `65536` publishes (ephemeral / junk) no longer become occupancy cells.
 - `ss` without `-H` (BusyBox / older iproute) is used when `ss -tulnpH` fails.
+- Compose `$$` is a literal `$`. A UTF-8 BOM no longer hides the compose file.
+- A junk row in `manual_ports` / `hidden_ports` no longer 500s occupancy.
 
 ### Changed
 

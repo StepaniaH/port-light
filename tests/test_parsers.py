@@ -102,6 +102,40 @@ def test_compose_name_and_shared_include(tmp_path):
     assert {p.project_name for p in ports} == {"wiki-stack", "blog-stack"}
 
 
+def test_compose_extends_and_bom(tmp_path):
+    common = tmp_path / "common.yml"
+    common.write_text(
+        "services:\n  base:\n    ports:\n      - '8080:80'\n",
+        encoding="utf-8",
+    )
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "\ufeffservices:\n"
+        "  web:\n"
+        "    extends:\n"
+        "      file: ../common.yml\n"
+        "      service: base\n"
+        "    ports:\n"
+        "      - '8443:443'\n"
+        "  dns:\n"
+        "    extends: hosttmpl\n"
+        "  hosttmpl:\n"
+        "    network_mode: host\n"
+        "    expose:\n"
+        "      - '53/udp'\n",
+        encoding="utf-8",
+    )
+    ports = scan_compose_files(str(tmp_path))
+    web = {p.port for p in ports if p.service_name == "web"}
+    assert web == {8080, 8443}
+    dns = [p for p in ports if p.service_name == "dns"]
+    assert {p.port for p in dns} == {53}
+    assert dns[0].protocol == "udp"
+    assert dns[0].network_mode == "host"
+    assert {p.project_dir for p in ports if p.service_name == "web"} == {"app"}
+
+
 def test_ephemeral_and_invalid_host_ports():
     assert parse_short_port("0:80") == []
     assert parse_short_port("65536:80") == []
@@ -136,6 +170,8 @@ def test_env_empty_uses_colon_default_only(monkeypatch):
     assert "8080:80" in colon
     hyphen = substitute_vars("ports: '${WEB_PORT-9090}:80'", {})
     assert hyphen == "ports: ':80'"
+    assert substitute_vars("cmd: echo $$HOME", {}) == "cmd: echo $HOME"
+    assert substitute_vars("x: $${unset}", {}) == "x: ${unset}"
 
 
 def test_proc_tcp_and_udp():

@@ -21,7 +21,7 @@ _COMPOSE_NAMES = frozenset({
 })
 _MAX_RANGE = 128
 
-_VAR_RE = re.compile(r"\$\{([^}]+)\}|\$(\w+)")
+_VAR_RE = re.compile(r"\$\$|\$\{([^}]+)\}|\$(\w+)")
 
 
 @dataclass
@@ -106,6 +106,8 @@ def _parse_compose_file(
         raw = Path(filepath).read_text()
     except OSError:
         return ports
+    if raw.startswith("\ufeff"):
+        raw = raw[1:]
 
     env_vars = {**_load_env_file(Path(filepath).parent), **(extra_env or {})}
     raw = substitute_vars(raw, env_vars)
@@ -133,14 +135,18 @@ def _parse_compose_file(
             project_name=this_name,
         ))
 
-    if "services" not in data:
+    local_services = data.get("services")
+    if not isinstance(local_services, dict):
         return ports
 
     rel_path = os.path.relpath(filepath, scan_dir)
 
-    for svc_name, svc_cfg in data.get("services", {}).items():
+    for svc_name, svc_cfg in local_services.items():
         if not isinstance(svc_cfg, dict):
             continue
+        svc_cfg = _resolve_extends(
+            svc_cfg, filepath, env_vars, frozenset(), local_services,
+        )
         net = str(svc_cfg.get("network_mode") or "").strip().lower() or None
         for entry in svc_cfg.get("ports") or []:
             for p in parse_port_entry(entry):
@@ -236,10 +242,96 @@ def _read_env_file(path: Path) -> dict[str, str]:
     return env
 
 
+def _extends_ref(ext, filepath: str) -> tuple[str, str] | None:
+    if isinstance(ext, str) and ext.strip():
+        return os.path.realpath(filepath), ext.strip()
+    if not isinstance(ext, dict):
+        return None
+    svc = ext.get("service")
+    if not isinstance(svc, str) or not svc.strip():
+        return None
+    svc = svc.strip()
+    f = ext.get("file")
+    if not f:
+        return os.path.realpath(filepath), svc
+    if not isinstance(f, str):
+        return None
+    resolved = (Path(filepath).parent / f).resolve()
+    if not resolved.is_file():
+        return None
+    return str(resolved), svc
+
+
+def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
+    try:
+        raw = Path(filepath).read_text()
+    except OSError:
+        return {}
+    if raw.startswith("\ufeff"):
+        raw = raw[1:]
+    raw = substitute_vars(raw, env_vars)
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    svcs = data.get("services")
+    return svcs if isinstance(svcs, dict) else {}
+
+
+def _overlay_port_fields(base: dict, child: dict) -> dict:
+    out = dict(base)
+    if child.get("network_mode"):
+        out["network_mode"] = child["network_mode"]
+    for key in ("ports", "expose"):
+        merged: list = []
+        for src in (base, child):
+            val = src.get(key)
+            if isinstance(val, list):
+                merged.extend(val)
+            elif val is not None and val is not False:
+                merged.append(val)
+        if merged:
+            out[key] = merged
+    return out
+
+
+def _resolve_extends(
+    svc_cfg: dict,
+    filepath: str,
+    env_vars: dict[str, str],
+    chain: frozenset[tuple[str, str]],
+    local_services: dict,
+) -> dict:
+    ref = _extends_ref(svc_cfg.get("extends"), filepath)
+    if ref is None:
+        return svc_cfg
+    if ref in chain:
+        return svc_cfg
+    ref_file, ref_svc = ref
+    if os.path.realpath(ref_file) == os.path.realpath(filepath):
+        other_local = local_services
+        other_path = filepath
+        other = other_local.get(ref_svc) if isinstance(other_local, dict) else None
+    else:
+        other_path = ref_file
+        other_local = _services_from_file(ref_file, env_vars)
+        other = other_local.get(ref_svc)
+    if not isinstance(other, dict):
+        return svc_cfg
+    base = _resolve_extends(
+        other, other_path, env_vars, chain | {ref}, other_local,
+    )
+    return _overlay_port_fields(base, svc_cfg)
+
+
 def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
     merged = {**os.environ, **env_vars}
 
     def _replacer(m: re.Match) -> str:
+        if m.group(0) == "$$":
+            return "$"
         name = m.group(1) or m.group(2)
         if ":-" in name:
             var, _, default = name.partition(":-")

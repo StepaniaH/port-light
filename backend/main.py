@@ -290,6 +290,16 @@ def _classify(
     hidden_locked: bool,
     options: dict | None = None,
 ) -> dict:
+    hidden: set[int] = set()
+    for raw in hidden_ports or []:
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= n <= 65535:
+            hidden.add(n)
+    hidden_ports = list(hidden)
+
     listening_map: dict[int, dict] = {}
     inode_to_port: dict[int, int] = {}
     for lp in listening:
@@ -369,9 +379,17 @@ def _classify(
 
     manual_map: dict[int, dict] = {}
     for mp in manual_ports:
-        manual_map[mp["port"]] = {
-            "label": mp.get("label", ""),
-            "machine": mp.get("machine", "localhost"),
+        if not isinstance(mp, dict):
+            continue
+        try:
+            port = int(mp["port"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if port < 1 or port > 65535:
+            continue
+        manual_map[port] = {
+            "label": mp.get("label", "") or "",
+            "machine": mp.get("machine", "localhost") or "localhost",
         }
 
     all_ports = set(listening_map) | set(container_map) | set(compose_map) | set(manual_map)
