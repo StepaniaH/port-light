@@ -124,6 +124,23 @@ def test_compose_same_project_is_not_conflict():
     assert by_port[5432]["conflict"] is True
 
 
+def test_compose_host_ip_sets_localhost_scope():
+    compose = [
+        ComposePort(
+            port=8080, compose_file="web/compose.yml", project_dir="web",
+            service_name="app", host_ip="127.0.0.1",
+        ),
+    ]
+    out = _classify(
+        [], [], compose, [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    row = out["ports"][0]
+    assert row["bind_scope"] == "localhost"
+    assert row["ip"] == "127.0.0.1"
+
+
 def test_collect_urls_drops_javascript():
     urls = _collect_urls(
         8096, ["0.0.0.0"],

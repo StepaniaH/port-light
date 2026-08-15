@@ -25,6 +25,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
+    "public": "公開",
     "hidden": "非表示",
     "kinds": "種類",
     "sort": "並び替え",
@@ -81,7 +82,11 @@
     "hide": "一覧から隠す",
     "unhide": "再表示",
     "delete": "削除",
-    "actionFailed": "このポートを更新できませんでした。"
+    "actionFailed": "このポートを更新できませんでした。",
+    "label": "ラベル",
+    "saveLabel": "ラベルを保存",
+    "publicBind": "全インターフェース",
+    "publicBindHint": "このポートはホスト上の任意のアドレスからの接続を受け付けます。"
   },
   "modal": {
     "addTitle": "ポートを追加",
@@ -243,7 +248,8 @@
     "skip": "ポート一覧へ",
     "copied": "コピーしました",
     "web": "Web",
-    "aria": "ポート占用グリッド"
+    "aria": "ポート占用グリッド",
+    "updated": "{time} に更新"
   },
   "sourceType": {
     "docker": "Docker",

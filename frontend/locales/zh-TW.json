@@ -25,6 +25,7 @@
     "access": "網頁",
     "udp": "UDP",
     "localhost": "localhost",
+    "public": "公網",
     "hidden": "隱藏",
     "kinds": "類型",
     "sort": "排序",
@@ -81,7 +82,11 @@
     "hide": "從一覽隱藏",
     "unhide": "取消隱藏",
     "delete": "刪除",
-    "actionFailed": "無法更新該連接埠。"
+    "actionFailed": "無法更新該連接埠。",
+    "label": "標籤",
+    "saveLabel": "儲存標籤",
+    "publicBind": "全部介面",
+    "publicBindHint": "此連接埠接受主機上任意位址的連線。"
   },
   "modal": {
     "addTitle": "新增連接埠",
@@ -243,7 +248,8 @@
     "skip": "跳至連接埠列表",
     "copied": "已複製",
     "web": "網頁",
-    "aria": "連接埠占用一覽"
+    "aria": "連接埠占用一覽",
+    "updated": "更新於 {time}"
   },
   "sourceType": {
     "docker": "Docker",

@@ -13,9 +13,11 @@ from backend.port_scanner import normalize_ip, parse_proc_net_line, parse_ss_lin
 
 def test_parse_short_port_basic():
     assert parse_short_port("8080:80") == [
-        {"host_port": 8080, "container_port": 80, "protocol": "tcp"}
+        {"host_port": 8080, "container_port": 80, "protocol": "tcp", "host_ip": None}
     ]
-    assert parse_short_port("0.0.0.0:443:8443/tcp")[0]["host_port"] == 443
+    bound = parse_short_port("0.0.0.0:443:8443/tcp")[0]
+    assert bound["host_port"] == 443
+    assert bound["host_ip"] == "0.0.0.0"
     assert parse_short_port("53:53/udp")[0]["protocol"] == "udp"
     assert parse_short_port("8080") == []
 
@@ -53,6 +55,16 @@ def test_compose_include_and_depth(tmp_path):
 def test_env_default_substitution():
     out = substitute_vars("ports: '${WEB_PORT:-8080}:80'", {})
     assert "8080:80" in out
+    hyphen = substitute_vars("ports: '${NO_SUCH-9090}:80'", {})
+    assert "9090:80" in hyphen
+
+
+def test_env_empty_uses_colon_default_only(monkeypatch):
+    monkeypatch.setenv("WEB_PORT", "")
+    colon = substitute_vars("ports: '${WEB_PORT:-8080}:80'", {})
+    assert "8080:80" in colon
+    hyphen = substitute_vars("ports: '${WEB_PORT-9090}:80'", {})
+    assert hyphen == "ports: ':80'"
 
 
 def test_proc_tcp_and_udp():
@@ -151,6 +163,12 @@ def test_env_var_without_default(monkeypatch):
 
 def test_long_syntax_and_ipv4_host():
     assert parse_short_port("127.0.0.1:8080:80")[0]["host_port"] == 8080
+    assert parse_short_port("127.0.0.1:8080:80")[0]["host_ip"] == "127.0.0.1"
+    v6 = parse_short_port("[::1]:8080:80")[0]
+    assert v6["host_port"] == 8080
+    assert v6["host_ip"] == "::1"
+    long_ip = parse_port_entry({"published": 9000, "target": 80, "host_ip": "10.0.0.5"})
+    assert long_ip[0]["host_ip"] == "10.0.0.5"
     assert parse_port_entry("not-a-port") == []
     assert parse_port_entry({"target": 80}) == []
     attrs = {

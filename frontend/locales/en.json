@@ -25,6 +25,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
+    "public": "Public",
     "hidden": "Hidden",
     "kinds": "Kind",
     "sort": "Sort",
@@ -81,7 +82,11 @@
     "hide": "Hide from grid",
     "unhide": "Unhide",
     "delete": "Delete",
-    "actionFailed": "Could not update that port."
+    "actionFailed": "Could not update that port.",
+    "label": "Label",
+    "saveLabel": "Save label",
+    "publicBind": "All interfaces",
+    "publicBindHint": "This port accepts connections from any address on the host."
   },
   "modal": {
     "addTitle": "Add port",
@@ -243,7 +248,8 @@
     "skip": "Skip to ports",
     "copied": "Copied",
     "web": "web",
-    "aria": "Port occupancy grid"
+    "aria": "Port occupancy grid",
+    "updated": "Updated {time}"
   },
   "sourceType": {
     "docker": "Docker",

@@ -32,6 +32,7 @@ class ComposePort:
     service_name: str
     container_port: int | None = None
     protocol: str = "tcp"
+    host_ip: str | None = None
 
 
 def scan_compose_files(
@@ -128,6 +129,7 @@ def _parse_compose_file(filepath: str, scan_dir: str, seen_real: set[str]) -> li
                     service_name=svc_name,
                     container_port=p.get("container_port"),
                     protocol=p.get("protocol", "tcp"),
+                    host_ip=p.get("host_ip"),
                 ))
     return ports
 
@@ -178,7 +180,13 @@ def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
         name = m.group(1) or m.group(2)
         if ":-" in name:
             var, _, default = name.partition(":-")
-            return merged.get(var, default)
+            val = merged.get(var)
+            if val is None or val == "":
+                return default
+            return val
+        if "-" in name:
+            var, _, default = name.partition("-")
+            return merged[var] if var in merged else default
         return merged.get(name, m.group(0))
 
     return _VAR_RE.sub(_replacer, text)
@@ -191,6 +199,7 @@ def parse_port_entry(entry) -> list[dict]:
         host = entry.get("published")
         target = entry.get("target")
         proto = entry.get("protocol", "tcp")
+        host_ip = entry.get("host_ip") or None
         if host is None:
             return []
         try:
@@ -199,7 +208,12 @@ def parse_port_entry(entry) -> list[dict]:
         except (ValueError, TypeError):
             return []
         return [
-            {"host_port": hp, "container_port": container_port, "protocol": proto}
+            {
+                "host_port": hp,
+                "container_port": container_port,
+                "protocol": proto,
+                "host_ip": host_ip,
+            }
             for hp in host_ports
         ]
     return []
@@ -210,12 +224,21 @@ def parse_short_port(entry: str) -> list[dict]:
     if "/" in entry:
         entry, protocol = entry.rsplit("/", 1)
     entry = entry.strip()
+    host_ip = None
+    if entry.startswith("["):
+        end = entry.find("]")
+        if end == -1:
+            return []
+        host_ip = entry[1:end] or None
+        entry = entry[end + 1:].lstrip(":")
     parts = entry.split(":")
     if len(parts) == 1:
         return []
     if len(parts) == 2:
         host_spec, container_spec = parts
     else:
+        if host_ip is None:
+            host_ip = ":".join(parts[:-2]) or None
         host_spec, container_spec = parts[-2], parts[-1]
     try:
         host_ports = expand_port_range(host_spec)
@@ -223,7 +246,12 @@ def parse_short_port(entry: str) -> list[dict]:
     except ValueError:
         return []
     return [
-        {"host_port": hp, "container_port": container_port, "protocol": protocol}
+        {
+            "host_port": hp,
+            "container_port": container_port,
+            "protocol": protocol,
+            "host_ip": host_ip,
+        }
         for hp in host_ports
     ]
 

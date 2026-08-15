@@ -170,6 +170,7 @@ a:focus-visible,
 .scanner-dots .pill.ok { background: var(--free); }
 .scanner-dots .pill.bad { opacity: 0.55; }
 .sync-error { font-size: 0.72rem; color: var(--danger); white-space: nowrap; }
+.sync-age { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .context-bar {
   display: flex; align-items: center; gap: 10px 14px;
@@ -364,6 +365,9 @@ a:focus-visible,
 .info-box.conflict-box { background: var(--conflict-box-bg); border-color: var(--conflict-box-border); color: var(--conflict); }
 
 .action-row { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.detail-label-form { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.detail-label-form .key { color: var(--text-dim); font-size: 0.8rem; }
+.detail-label-form input { min-width: 0; flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--elevated); }
 .detail-error { margin-top: 12px; font-size: 0.8rem; color: var(--danger); }
 .action-row button {
   height: 32px; padding: 0 12px; border-radius: var(--radius-sm); cursor: pointer;

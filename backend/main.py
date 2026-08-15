@@ -335,6 +335,7 @@ def _classify(
             "compose_file": cp.compose_file,
             "container_port": cp.container_port,
             "protocol": cp.protocol,
+            "host_ip": cp.host_ip,
         })
 
     manual_map: dict[int, dict] = {}
@@ -383,10 +384,15 @@ def _classify(
             source_type = "unknown"
 
         known = get_known_port(port)
-        ips = (lp_info.get("ips") if lp_info else None) or []
+        ips = list((lp_info.get("ips") if lp_info else None) or [])
+        if not ips:
+            for c in composes:
+                hip = (c.get("host_ip") or "").strip()
+                if hip and hip not in ips:
+                    ips.append(hip)
         if not ips:
             ips = [lp_info["ip"] if lp_info else "0.0.0.0"]
-        ip = lp_info["ip"] if lp_info else ips[0]
+        ip = (lp_info["ip"] if lp_info else None) or ips[0]
         urls = _collect_urls(port, ips, ctors, known, options)
 
         port_list.append({

@@ -107,6 +107,9 @@
     localhost: function (p) {
       return p.bind_scope === 'localhost';
     },
+    public: function (p) {
+      return p.bind_scope === 'public';
+    },
     hidden: function (p) {
       return !!p.is_hidden;
     },
@@ -413,18 +416,11 @@
     }
     if (e.key === 'Tab' && modalOpen()) {
       const modal = document.querySelector('.modal:not(.hidden) .modal-content') || document.querySelector('.modal:not(.hidden)');
-      const nodes = modal ? modal.querySelectorAll('button, input, select, textarea, a[href]') : [];
-      const list = Array.prototype.filter.call(nodes, function (el) { return !el.disabled && el.offsetParent !== null; });
-      if (!list.length) return;
-      const first = list[0];
-      const last = list[list.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      trapTab(e, modal);
+      return;
+    }
+    if (e.key === 'Tab' && !detailPanel.classList.contains('hidden')) {
+      trapTab(e, detailPanel);
       return;
     }
     if (e.target && e.target.classList && e.target.classList.contains('locale-trigger') &&
@@ -641,6 +637,34 @@
 
   let portsAbort = null;
 
+  function trapTab(e, root) {
+    if (!root) return;
+    const nodes = root.querySelectorAll('button, input, select, textarea, a[href]');
+    const list = Array.prototype.filter.call(nodes, function (el) {
+      return !el.disabled && el.offsetParent !== null;
+    });
+    if (!list.length) return;
+    const first = list[0];
+    const last = list[list.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  function markRefreshed() {
+    const el = document.getElementById('sync-age');
+    if (!el) return;
+    const loc = window.PortLightI18n ? PortLightI18n.locale() : undefined;
+    const time = new Date().toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    el.hidden = false;
+    el.dateTime = new Date().toISOString();
+    el.textContent = t('grid.updated', { time: time });
+  }
+
   function setSyncError(on) {
     const el = document.getElementById('sync-error');
     if (!el) return;
@@ -653,6 +677,7 @@
     if (portsAbort) portsAbort.abort();
     const ac = new AbortController();
     portsAbort = ac;
+    grid.setAttribute('aria-busy', 'true');
     try {
       const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
       const res = await api(url, { signal: ac.signal });
@@ -662,6 +687,8 @@
       if (err && err.name === 'AbortError') return { ok: false, stale: true };
       console.error('fetch error:', err);
       return { ok: false, stale: false };
+    } finally {
+      if (portsAbort === ac) grid.setAttribute('aria-busy', 'false');
     }
   }
 
@@ -688,6 +715,7 @@
       return null;
     }
     setSyncError(false);
+    markRefreshed();
     return result.data;
   }
 
@@ -1259,6 +1287,11 @@
         '</span> — ' + escapeHtml(t('detail.conflictHint', { n: p.compose_configs.length })) + '</div>';
     }
 
+    if (p.bind_scope === 'public' && p.known_service && p.known_service.is_access_port) {
+      html += '<div class="info-box conflict-box"><span class="info-name">' +
+        escapeHtml(t('detail.publicBind')) + '</span> — ' + escapeHtml(t('detail.publicBindHint')) + '</div>';
+    }
+
     if (p.containers && p.containers.length > 0) {
       html += '<div class="section-title">' + escapeHtml(t('detail.containers')) + '</div>';
       for (let i = 0; i < p.containers.length; i++) {
@@ -1288,6 +1321,13 @@
       html += '<div class="info-box"><span class="info-name">' + escapeHtml(t('detail.manual')) + '</span> — ' + escapeHtml(p.manual_label) + '</div>';
     }
 
+    if (p.manual_label != null || p.source_type === 'manual') {
+      html += '<form class="detail-label-form" data-label-form="' + p.port + '"><label><span class="key">' +
+        escapeHtml(t('detail.label')) + '</span><input type="text" maxlength="80" value="' +
+        escapeHtml(p.manual_label || '') + '" data-label-input></label><button type="submit" class="btn-secondary">' +
+        escapeHtml(t('detail.saveLabel')) + '</button></form>';
+    }
+
     html += '<div class="action-row">';
     if (p.is_hidden) {
       html += '<button type="button" class="btn-unhide" data-unhide-port="' + p.port + '">' + escapeHtml(t('detail.unhide')) + '</button>';
@@ -1308,6 +1348,7 @@
       else if (active.hasAttribute('data-hide-port')) keep = 'hide';
       else if (active.hasAttribute('data-unhide-port')) keep = 'unhide';
       else if (active.hasAttribute('data-delete-port')) keep = 'delete';
+      else if (active.hasAttribute('data-label-input')) keep = 'label';
     }
 
     detailContent.innerHTML = html;
@@ -1319,10 +1360,20 @@
     if (showBtn) showBtn.addEventListener('click', function () { window._portLightUnhide(p.port); });
     const delBtn = detailContent.querySelector('[data-delete-port]');
     if (delBtn) delBtn.addEventListener('click', function () { window._portLightDeleteManual(p.port); });
+    const labelForm = detailContent.querySelector('[data-label-form]');
+    if (labelForm) {
+      labelForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const input = labelForm.querySelector('[data-label-input]');
+        window._portLightSaveLabel(p.port, input ? input.value : '');
+      });
+    }
+    const labelInput = detailContent.querySelector('[data-label-input]');
     const focusEl = keep === 'close' ? closeBtn
       : keep === 'hide' ? hideBtn
       : keep === 'unhide' ? showBtn
       : keep === 'delete' ? delBtn
+      : keep === 'label' ? labelInput
       : (fromGrid ? closeBtn : null);
     if (focusEl) focusEl.focus({ preventScroll: true });
   }
@@ -1386,6 +1437,13 @@
       closeDetail();
       tick();
     });
+  };
+  window._portLightSaveLabel = function (port, label) {
+    mutateDetail('/api/manual-ports/' + port, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: String(label || '').trim().slice(0, 80) }),
+    }, tick);
   };
 
   async function addManualPort() {

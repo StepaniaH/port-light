@@ -25,6 +25,7 @@
     "access": "网页",
     "udp": "UDP",
     "localhost": "localhost",
+    "public": "公网",
     "hidden": "隐藏",
     "kinds": "类型",
     "sort": "排序",
@@ -81,7 +82,11 @@
     "hide": "从网格隐藏",
     "unhide": "取消隐藏",
     "delete": "删除",
-    "actionFailed": "无法更新该端口。"
+    "actionFailed": "无法更新该端口。",
+    "label": "标签",
+    "saveLabel": "保存标签",
+    "publicBind": "全部接口",
+    "publicBindHint": "该端口接受主机上任意地址的连接。"
   },
   "modal": {
     "addTitle": "添加端口",
@@ -243,7 +248,8 @@
     "skip": "跳到端口列表",
     "copied": "已复制",
     "web": "网页",
-    "aria": "端口占用网格"
+    "aria": "端口占用网格",
+    "updated": "更新于 {time}"
   },
   "sourceType": {
     "docker": "Docker",

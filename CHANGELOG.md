@@ -4,6 +4,22 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Added
+
+- Public bind-scope filter. Access ports listening on all interfaces get a warning in the detail drawer.
+- Manual ports can be renamed from the detail drawer.
+- Last successful refresh time next to the scanner dots.
+
+### Fixed
+
+- Compose `127.0.0.1:host:container` (and long-syntax `host_ip`) now feeds bind scope when nothing is listening yet.
+- `${VAR:-default}` treats an empty value as unset. `${VAR-default}` is also understood.
+- A truncated `port_light.json` is moved aside instead of being overwritten with an empty store.
+
+### Changed
+
+- Occupancy JSON is written atomically (tempfile + `os.replace`).
+
 ## 0.5.3 — 2026-08-15
 
 ### Added

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import threading
 from pathlib import Path
 
@@ -43,14 +44,35 @@ def _load() -> dict:
         return {"manual_ports": [], "hidden_ports": [], "machines": []}
     try:
         return json.loads(f.read_text())
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError:
+        corrupt = f.parent / (f.name + ".corrupt")
+        try:
+            os.replace(f, corrupt)
+        except OSError:
+            pass
+        return {"manual_ports": [], "hidden_ports": [], "machines": []}
+    except OSError:
         return {"manual_ports": [], "hidden_ports": [], "machines": []}
 
 
 def _save(data: dict) -> None:
     d = _data_dir()
     d.mkdir(parents=True, exist_ok=True)
-    _data_file().write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    target = _data_file()
+    fd, tmp_name = tempfile.mkstemp(prefix=".port_light.", suffix=".tmp", dir=str(d))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_name, target)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 # ── Manual ports ──────────────────────────────────────────────

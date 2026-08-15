@@ -53,8 +53,8 @@ Stopped containers still contribute PortBindings — those become amber if nothi
 
 Supported port syntax:
 
-- Short: `8080:80`, `0.0.0.0:8080:80`, `8080:80/tcp`
-- Long: `{ published, target, protocol }`
+- Short: `8080:80`, `0.0.0.0:8080:80`, `127.0.0.1:8080:80`, `8080:80/tcp`
+- Long: `{ published, target, protocol, host_ip }`
 - `${VAR}` / `$VAR` / `${VAR:-default}` from the sibling `.env` plus process environment
 - Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 128 ports per mapping
 

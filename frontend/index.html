@@ -15,7 +15,7 @@
       if (s.grid_density) document.documentElement.setAttribute('data-density', s.grid_density);
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=22">
+  <link rel="stylesheet" href="/static/style.css?v=23">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -35,6 +35,7 @@
         <div class="app-actions">
           <div id="scanner-pills" class="scanner-dots" data-i18n-aria="scanner.label"></div>
           <span id="sync-error" class="sync-error hidden" hidden role="status" aria-live="polite"></span>
+          <time id="sync-age" class="sync-age" hidden></time>
           <button type="button" id="btn-refresh" class="icon-btn" data-i18n-title="action.refresh">
             <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
               <path d="M13.2 8A5.2 5.2 0 1 1 8 2.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -61,6 +62,7 @@
           <button type="button" class="chip" data-filter="access" aria-pressed="false" data-i18n="filter.access">Web</button>
           <button type="button" class="chip" data-filter="udp" aria-pressed="false" data-i18n="filter.udp">UDP</button>
           <button type="button" class="chip" data-filter="localhost" aria-pressed="false" data-i18n="filter.localhost">localhost</button>
+          <button type="button" class="chip" data-filter="public" aria-pressed="false" data-i18n="filter.public">Public</button>
           <button type="button" class="chip" data-filter="hidden" aria-pressed="false" data-i18n="filter.hidden">Hidden</button>
         </div>
         <div class="filter-aside">
@@ -148,7 +150,7 @@
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=22"></script>
-  <script src="/static/app.js?v=22"></script>
+  <script src="/static/i18n.js?v=23"></script>
+  <script src="/static/app.js?v=23"></script>
 </body>
 </html>
