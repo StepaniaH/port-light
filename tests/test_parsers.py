@@ -51,6 +51,9 @@ def test_compose_include_and_depth(tmp_path):
     assert 5432 in numbers
     assert 3000 in numbers
     assert 3001 in numbers
+    db = [p for p in ports if p.port == 5432]
+    assert {p.project_dir for p in db} == {"wiki"}
+    assert {p.project_name for p in db} == {"wiki"}
 
 
 def test_include_env_file_and_export(tmp_path):
@@ -76,6 +79,48 @@ def test_include_env_file_and_export(tmp_path):
     numbers = {p.port for p in scan_compose_files(str(tmp_path))}
     assert 9080 in numbers
     assert 18080 in numbers
+    web = [p for p in scan_compose_files(str(tmp_path)) if p.port == 9080]
+    assert {p.project_dir for p in web} == {"web"}
+
+
+def test_compose_name_and_shared_include(tmp_path):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "ports.yml").write_text(
+        "services:\n  db:\n    ports:\n      - '5432:5432'\n",
+        encoding="utf-8",
+    )
+    for folder, name in (("wiki", "wiki-stack"), ("blog", "blog-stack")):
+        d = tmp_path / folder
+        d.mkdir()
+        (d / "compose.yml").write_text(
+            f"name: {name}\ninclude:\n  - ../shared/ports.yml\n",
+            encoding="utf-8",
+        )
+    ports = [p for p in scan_compose_files(str(tmp_path)) if p.port == 5432]
+    assert {p.project_dir for p in ports} == {"wiki", "blog"}
+    assert {p.project_name for p in ports} == {"wiki-stack", "blog-stack"}
+
+
+def test_ephemeral_and_invalid_host_ports():
+    assert parse_short_port("0:80") == []
+    assert parse_short_port("65536:80") == []
+    assert parse_port_entry({"published": 0, "target": 80}) == []
+    assert parse_expose_entry(0) == []
+    assert parse_expose_entry("0") == []
+    hosts = parse_short_port("0-2:80")
+    assert [p["host_port"] for p in hosts] == [1, 2]
+    attrs = {
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {
+                "80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "0"}],
+            },
+        },
+        "NetworkSettings": {"Ports": {}},
+        "Config": {"ExposedPorts": {}},
+    }
+    assert extract_ports(attrs) == []
 
 
 def test_env_default_substitution():
@@ -141,6 +186,12 @@ def test_ss_ipv6_and_star():
     star = parse_ss_line("tcp LISTEN 0 128 *:22 *:*")
     assert star is not None
     assert star.port == 22
+    assert parse_ss_line("tcp LISTEN 0 128 0.0.0.0:0 0.0.0.0:*") is None
+    zero = (
+        "   0: 00000000:0000 00000000:0000 0A 00000000:00000000 "
+        "00:00000000 00000000     0        0 1 1 0000000000000000 00"
+    )
+    assert parse_proc_net_line(zero, "tcp") is None
     assert star.ip == "0.0.0.0"
 
 

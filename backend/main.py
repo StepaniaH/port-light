@@ -293,6 +293,8 @@ def _classify(
     listening_map: dict[int, dict] = {}
     inode_to_port: dict[int, int] = {}
     for lp in listening:
+        if lp.port < 1 or lp.port > 65535:
+            continue
         if lp.inode:
             inode_to_port[lp.inode] = lp.port
         rec = listening_map.get(lp.port)
@@ -318,6 +320,8 @@ def _classify(
     container_map: dict[int, list[dict]] = {}
 
     def _add_container(port: int, c, extra: dict | None = None) -> None:
+        if port < 1 or port > 65535:
+            return
         payload = {
             "name": c.name,
             "status": c.status,
@@ -346,12 +350,15 @@ def _classify(
     compose_map: dict[int, list[dict]] = {}
     compose_seen: set[tuple] = set()
     for cp in compose_ports:
+        if cp.port < 1 or cp.port > 65535:
+            continue
         key = (cp.project_dir, cp.port, cp.service_name, cp.host_ip or "", cp.protocol)
         if key in compose_seen:
             continue
         compose_seen.add(key)
         compose_map.setdefault(cp.port, []).append({
             "project_dir": cp.project_dir,
+            "project_name": cp.project_name or cp.project_dir,
             "service_name": cp.service_name,
             "compose_file": cp.compose_file,
             "container_port": cp.container_port,

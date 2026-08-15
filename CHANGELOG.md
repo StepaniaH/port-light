@@ -17,6 +17,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `GET /api/ports` supports `If-None-Match` / `304`.
 - Click the port number in the detail drawer to copy it.
 - Unraid `net.unraid.docker.webui` labels become detail-panel URLs.
+- Compose top-level `name:` is the project label in the detail drawer (conflicts still key off the folder).
+- Ctrl/Cmd+S saves the settings page.
 
 ### Fixed
 
@@ -33,6 +35,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Long-syntax `published: "5353/udp"` was dropped instead of recorded as UDP.
 - A UTF-8 BOM on `.env` hid `export KEY=` lines.
 - Guessed access URLs used `localhost` even when the port was bound to a LAN address only.
+- Included Compose files were tagged as their own folder, so two stacks sharing `include:` looked like a conflict with `shared/` — or the second stack lost the ports entirely.
+- Host port `0` / `65536` publishes (ephemeral / junk) no longer become occupancy cells.
+- `ss` without `-H` (BusyBox / older iproute) is used when `ss -tulnpH` fails.
 
 ### Changed
 

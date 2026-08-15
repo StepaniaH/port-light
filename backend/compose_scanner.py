@@ -34,6 +34,7 @@ class ComposePort:
     protocol: str = "tcp"
     host_ip: str | None = None
     network_mode: str | None = None
+    project_name: str | None = None
 
 
 def scan_compose_files(
@@ -49,12 +50,13 @@ def scan_compose_files(
     files_cap = max_files if max_files is not None else _env_int("COMPOSE_SCAN_MAX_FILES", 400)
 
     files = _find_compose_files(scan_dir, depth, files_cap)
-    seen_real: set[str] = set()
+    seen_walk: set[str] = set()
     for filepath in files:
         real = os.path.realpath(filepath)
-        if real in seen_real:
+        if real in seen_walk:
             continue
-        ports.extend(_parse_compose_file(filepath, scan_dir, seen_real))
+        seen_walk.add(real)
+        ports.extend(_parse_compose_file(filepath, scan_dir, frozenset()))
     return ports
 
 
@@ -89,13 +91,15 @@ def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> list[s
 def _parse_compose_file(
     filepath: str,
     scan_dir: str,
-    seen_real: set[str],
+    chain: frozenset[str],
     extra_env: dict[str, str] | None = None,
+    project_dir: str | None = None,
+    project_name: str | None = None,
 ) -> list[ComposePort]:
     real = os.path.realpath(filepath)
-    if real in seen_real:
+    if real in chain:
         return []
-    seen_real.add(real)
+    chain = chain | {real}
 
     ports: list[ComposePort] = []
     try:
@@ -114,14 +118,25 @@ def _parse_compose_file(
         return ports
 
     parent = Path(filepath).parent
+    this_dir = project_dir if project_dir is not None else parent.name
+    raw_name = data.get("name")
+    this_name = (
+        raw_name.strip()
+        if isinstance(raw_name, str) and raw_name.strip()
+        else (project_name or this_dir)
+    )
+
     for inc_path, inc_env in _include_specs(data.get("include"), parent):
-        ports.extend(_parse_compose_file(str(inc_path), scan_dir, seen_real, inc_env))
+        ports.extend(_parse_compose_file(
+            str(inc_path), scan_dir, chain, inc_env,
+            project_dir=this_dir,
+            project_name=this_name,
+        ))
 
     if "services" not in data:
         return ports
 
     rel_path = os.path.relpath(filepath, scan_dir)
-    project_dir = parent.name
 
     for svc_name, svc_cfg in data.get("services", {}).items():
         if not isinstance(svc_cfg, dict):
@@ -132,7 +147,8 @@ def _parse_compose_file(
                 ports.append(ComposePort(
                     port=p["host_port"],
                     compose_file=rel_path,
-                    project_dir=project_dir,
+                    project_dir=this_dir,
+                    project_name=this_name,
                     service_name=svc_name,
                     container_port=p.get("container_port"),
                     protocol=p.get("protocol", "tcp"),
@@ -145,7 +161,8 @@ def _parse_compose_file(
                     ports.append(ComposePort(
                         port=p["host_port"],
                         compose_file=rel_path,
-                        project_dir=project_dir,
+                        project_dir=this_dir,
+                        project_name=this_name,
                         service_name=svc_name,
                         container_port=p.get("container_port"),
                         protocol=p.get("protocol", "tcp"),
@@ -266,6 +283,7 @@ def parse_port_entry(entry) -> list[dict]:
                 "host_ip": host_ip,
             }
             for hp in host_ports
+            if 1 <= hp <= 65535
         ]
     return []
 
@@ -342,6 +360,7 @@ def parse_short_port(entry: str) -> list[dict]:
             "host_ip": host_ip,
         }
         for hp in host_ports
+        if 1 <= hp <= 65535
     ]
 
 

@@ -460,6 +460,14 @@
       if (e.key === 'End') { e.preventDefault(); moveLocaleHighlight('end'); return; }
       if (e.key === 'Tab') { closeLocaleMenu(); return; }
     }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
+      if (route.name === 'settings' && !(settingsDoc && settingsDoc.readonly)) {
+        e.preventDefault();
+        const form = document.getElementById('settings-form');
+        if (form) form.requestSubmit();
+      }
+      return;
+    }
     if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -1176,7 +1184,8 @@
               return c.name + ' ' + (c.compose_project || '') + ' ' + (c.compose_service || '') + ' ' + c.image;
             }),
             ...(p.compose_configs || []).map(function (c) {
-              return c.project_dir + ' ' + c.service_name + ' ' + c.compose_file + ' ' + (c.host_ip || '');
+              return (c.project_name || '') + ' ' + (c.project_dir || '') + ' ' +
+                c.service_name + ' ' + c.compose_file + ' ' + (c.host_ip || '');
             }),
             p.protocol || '', p.bind_scope || '', (p.ips || []).join(' '),
             ...(p.urls || []),
@@ -1349,7 +1358,7 @@
       html += '<div class="section-title">' + escapeHtml(t('detail.compose')) + '</div>';
       for (let i = 0; i < p.compose_configs.length; i++) {
         const cc = p.compose_configs[i];
-        html += '<div class="row"><span class="key">' + escapeHtml(t('detail.project')) + '</span><span class="val">' + escapeHtml(cc.project_dir) + '</span></div>';
+        html += '<div class="row"><span class="key">' + escapeHtml(t('detail.project')) + '</span><span class="val">' + escapeHtml(cc.project_name || cc.project_dir) + '</span></div>';
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.service')) + '</span><span class="val">' + escapeHtml(cc.service_name) + '</span></div>';
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.file')) + '</span><span class="val">' + escapeHtml(cc.compose_file) + '</span></div>';
         if (cc.host_ip) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.bind')) + '</span><span class="val">' + escapeHtml(cc.host_ip) + '</span></div>';

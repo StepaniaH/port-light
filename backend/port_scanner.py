@@ -94,18 +94,26 @@ def socket_inodes_for_pid(pid: int, proc_root: str = "/host/proc") -> set[int]:
 
 
 def _scan_with_ss() -> list[ListeningPort]:
-    result = subprocess.run(
-        ["ss", "-tulnpH"],
-        capture_output=True, text=True, timeout=5,
-    )
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, "ss")
-    ports: list[ListeningPort] = []
-    for line in result.stdout.strip().splitlines():
-        parsed = parse_ss_line(line)
-        if parsed:
-            ports.append(parsed)
-    return ports
+    last_error: Exception | None = None
+    for args in (["ss", "-tulnpH"], ["ss", "-tulnp"]):
+        try:
+            result = subprocess.run(
+                args, capture_output=True, text=True, timeout=5,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            raise exc
+        if result.returncode != 0:
+            last_error = subprocess.CalledProcessError(result.returncode, args)
+            continue
+        ports: list[ListeningPort] = []
+        for line in result.stdout.strip().splitlines():
+            parsed = parse_ss_line(line)
+            if parsed:
+                ports.append(parsed)
+        return ports
+    if last_error:
+        raise last_error
+    return []
 
 
 def parse_ss_line(line: str) -> ListeningPort | None:
@@ -131,7 +139,7 @@ def parse_ss_line(line: str) -> ListeningPort | None:
 
     local_spec = parts[3]
     ip, port, family = _split_local_spec(local_spec)
-    if port is None:
+    if port is None or port < 1 or port > 65535:
         return None
     if family == "tcp6" or (protocol.endswith("6") and family == "tcp"):
         if proto_base == "udp":
@@ -239,6 +247,8 @@ def parse_proc_net_line(line: str, protocol: str) -> ListeningPort | None:
 
     ip_hex, port_hex = parts[1].split(":")
     port = int(port_hex, 16)
+    if port < 1 or port > 65535:
+        return None
     if protocol.endswith("6"):
         ip = _parse_ipv6_hex(ip_hex)
     else:

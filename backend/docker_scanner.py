@@ -143,6 +143,8 @@ def extract_ports(attrs: dict) -> list[dict]:
             cp = int(container_port) if container_port is not None else None
         except (TypeError, ValueError):
             return
+        if hp < 1 or hp > 65535:
+            return
         host_ip = host_ip or "0.0.0.0"
         key = (hp, host_ip, cp, protocol)
         if key in seen:

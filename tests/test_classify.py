@@ -110,6 +110,29 @@ def test_collect_urls_guesses_http_not_ssh():
     assert "http://nas.lan:8096" in still_override
 
 
+def test_compose_project_name_and_port_zero():
+    compose = [
+        ComposePort(
+            port=8080, compose_file="web/compose.yml", project_dir="web",
+            project_name="web-stack", service_name="app",
+        ),
+        ComposePort(
+            port=0, compose_file="web/compose.yml", project_dir="web",
+            service_name="ephemeral",
+        ),
+    ]
+    out = _classify(
+        [ListeningPort(port=0, protocol="tcp", ip="0.0.0.0")],
+        [], compose, [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    ports = {row["port"] for row in out["ports"]}
+    assert 0 not in ports
+    assert 8080 in ports
+    assert out["ports"][0]["compose_configs"][0]["project_name"] == "web-stack"
+
+
 def test_classify_used_configured_hidden_conflict():
     listening = [
         ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", process_name="sshd", inode=11),
