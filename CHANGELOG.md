@@ -9,6 +9,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Settings splits into Appearance, Occupancy, and Advanced, so theme palettes are not on the same scroll as Compose scan depth and host paths.
 - FastAPI / Pydantic / pytest minimums, and GitHub Actions `checkout` / `setup-python` / QEMU / docker-login majors.
 - Occupancy Settings shows the toolbar range (the range the map is using). Turning auto-refresh off dims the interval field.
+- Known-port table: Transmission on 9091 (access), plus n8n, Proxmox, wg-easy, Frigate, Calibre-Web, Homebridge, Komga, Actual, Technitium, Z-Wave JS UI.
 
 ### Fixed
 
@@ -17,6 +18,12 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Compose `${VAR}` interpolation no longer reads Port-Light's own environment (`HOSTNAME`, `PORT_RANGE_*`, …).
 - Turning on the Hidden chip no longer renders an empty grid before the include-hidden payload arrives.
 - Switching language on Settings updates the unsaved status string; the host "settings source" row is translated.
+- Unquoted Compose `22:22` / `8080:22` is occupancy, not a dropped YAML 1.1 sexagesimal integer.
+- `include.project_directory` re-roots `.env` / `env_file`; nested includes inherit the parent interpolation env.
+- `compose.override.yml` `ports: !reset` replaces the base file’s ports instead of unioning both.
+- `ss` uses `-n` so `:ssh` / `:http` still count; a loopback listen no longer hides a public Docker/Compose bind.
+- Traefik/homepage URLs attach to the app publish, not every sidecar; Caddy `*.home.arpa` is not a live link.
+- Unraid `[PORT:n]` uses the host mapping when the container port was remapped.
 
 ### Performance
 
@@ -24,6 +31,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Docker / listen / Compose scans are reused for a couple of seconds so `#/port/N` does not walk the trees again after the grid poll.
 - Unchanged occupancy polls return `304` without classifying or hashing the map again.
 - Known-port prefetch during numeric search coalesces to one grid render.
+- Concurrent occupancy polls share one in-flight Docker / listen / Compose scan.
 
 ## 0.5.4 — 2026-08-15
 

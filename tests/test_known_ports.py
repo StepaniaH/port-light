@@ -46,6 +46,12 @@ def test_homelab_defaults(monkeypatch, tmp_path):
     assert get_known_port(16686)["name"] == "Jaeger"
     assert get_known_port(5060)["name"] == "SIP"
     assert get_known_port(1984)["name"] == "Changedetection"
+    assert get_known_port(9091)["name"] == "Transmission"
+    assert get_known_port(9091)["is_access_port"] is True
+    assert get_known_port(5678)["name"] == "n8n"
+    assert get_known_port(8006)["name"] == "Proxmox"
+    assert get_known_port(51821)["name"] == "wg-easy"
+    assert get_known_port(8971)["name"] == "Frigate"
     assert get_known_port(1) is None
 
 

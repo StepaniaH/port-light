@@ -105,6 +105,8 @@ def test_collect_urls_guesses_http_not_ssh():
     assert _collect_urls(22, ["0.0.0.0"], [], ssh) == []
     assert _collect_urls(5060, ["0.0.0.0"], [], {"name": "SIP", "is_access_port": True}) == []
     assert _collect_urls(41641, ["0.0.0.0"], [], {"name": "Tailscale", "is_access_port": True}) == []
+    assert _collect_urls(21, ["0.0.0.0"], [], {"name": "FTP", "is_access_port": True}) == []
+    assert _collect_urls(25565, ["0.0.0.0"], [], {"name": "Minecraft", "is_access_port": True}) == []
 
     v6 = _collect_urls(
         8096, ["0.0.0.0"], [], known_web, {"url_host": "2001:db8::1"},
@@ -580,6 +582,49 @@ def test_hidden_ports_listed_when_unlocked():
         include_hidden=False, hidden_locked=True,
     )
     assert locked["summary"]["hidden_ports"] == []
+
+
+def test_listen_ips_union_docker_bind_scope():
+    listening = [ListeningPort(port=8080, protocol="tcp", ip="127.0.0.1")]
+    containers = [
+        ContainerInfo(
+            name="wiki",
+            status="running",
+            image="wiki",
+            ports=[{"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"}],
+        ),
+    ]
+    row = _classify(
+        listening, containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )["ports"][0]
+    assert set(row["ips"]) >= {"127.0.0.1", "0.0.0.0"}
+    assert row["bind_scope"] == "public"
+
+
+def test_label_urls_do_not_paint_sidecar_ports():
+    containers = [
+        ContainerInfo(
+            name="app",
+            status="running",
+            image="app",
+            urls=["https://app.lan"],
+            ports=[
+                {"host_port": 3000, "host_ip": "0.0.0.0", "container_port": 3000, "protocol": "tcp"},
+                {"host_port": 5432, "host_ip": "0.0.0.0", "container_port": 5432, "protocol": "tcp"},
+            ],
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert "https://app.lan" in by_port[3000]["urls"]
+    assert "https://app.lan" not in by_port[5432]["urls"]
 
 
 def test_meta_unauthenticated(monkeypatch):

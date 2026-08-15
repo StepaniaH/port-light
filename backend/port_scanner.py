@@ -4,7 +4,7 @@ When running in a Docker container with ``/host/proc`` mounted (read-only),
 reads the host's ``/host/proc/1/net/{tcp,tcp6,udp,udp6}``. PID 1 is the host
 init network namespace; ``/host/proc/net`` is the *container* namespace.
 
-When running on bare metal or with ``network_mode: host``, uses ``ss -tulnpH``
+When running on bare metal or with ``network_mode: host``, uses ``ss -tulnphH``
 which can fill process names.
 
 Falls back to local ``/proc/net/*`` if neither host proc nor ss work.
@@ -150,7 +150,7 @@ def socket_inodes_for_pid(pid: int, proc_root: str = "/host/proc") -> set[int]:
 def descendant_pids(
     pid: int,
     proc_root: str = "/host/proc",
-    max_pids: int = 32,
+    max_pids: int = 256,
 ) -> list[int]:
     """Breadth-first child PIDs via ``/proc/<pid>/task/*/children``."""
     if pid <= 0:
@@ -173,7 +173,7 @@ def descendant_pids(
 def socket_inodes_for_tree(
     pid: int,
     proc_root: str = "/host/proc",
-    max_pids: int = 32,
+    max_pids: int = 256,
 ) -> set[int]:
     """Socket inodes for a process and its descendants (host-network workers)."""
     inodes: set[int] = set()
@@ -211,7 +211,12 @@ def _read_children(pid: int, proc_root: str) -> list[int]:
 
 def _scan_with_ss() -> list[ListeningPort]:
     last_error: Exception | None = None
-    for args in (["ss", "-tulnpH"], ["ss", "-tulnp"]):
+    for args in (
+        ["ss", "-tulnphH"],
+        ["ss", "-tulnph"],
+        ["ss", "-tulnpH"],
+        ["ss", "-tulnp"],
+    ):
         try:
             result = subprocess.run(
                 args, capture_output=True, text=True, timeout=5,
@@ -233,7 +238,7 @@ def _scan_with_ss() -> list[ListeningPort]:
 
 
 def parse_ss_line(line: str) -> ListeningPort | None:
-    """Parse one ``ss -tulnpH`` line. Exported for tests."""
+    """Parse one ``ss -tulnphH`` line. Exported for tests."""
     stripped = line.strip()
     protocol = "tcp"
     for prefix in ("tcp6 ", "udp6 ", "tcp4 ", "udp4 ", "tcp ", "udp "):
@@ -257,7 +262,7 @@ def parse_ss_line(line: str) -> ListeningPort | None:
         return None
 
     local_spec = parts[3]
-    ip, port, family = _split_local_spec(local_spec)
+    ip, port, family = _split_local_spec(local_spec, proto_base)
     if port is None or port < 1 or port > 65535:
         return None
     if family == "tcp6" or (protocol.endswith("6") and family == "tcp"):
@@ -288,7 +293,7 @@ def parse_ss_line(line: str) -> ListeningPort | None:
     )
 
 
-def _split_local_spec(local_spec: str) -> tuple[str, int | None, str]:
+def _split_local_spec(local_spec: str, proto: str = "tcp") -> tuple[str, int | None, str]:
     if "]" in local_spec:
         addr_part, _, port_part = local_spec.rpartition("]")
         ip = addr_part.strip("[]")
@@ -306,7 +311,10 @@ def _split_local_spec(local_spec: str) -> tuple[str, int | None, str]:
     try:
         port = int(port_str)
     except ValueError:
-        return ip, None, family
+        try:
+            port = socket.getservbyname(port_str, proto if proto in ("tcp", "udp") else "tcp")
+        except (OSError, TypeError):
+            return ip, None, family
     if ip in ("*", "0.0.0.0"):
         ip = "0.0.0.0"
         family = "tcp"

@@ -52,16 +52,60 @@ def _unknown_compose_tag(loader, tag_suffix, node):
 
 _ComposeLoader.add_multi_constructor("!", _unknown_compose_tag)
 
+# Compose uses YAML 1.2. PyYAML's 1.1 sexagesimal ints turn unquoted
+# ``22:22`` / ``8080:22`` into numbers and we drop them as unpublished.
+_ComposeLoader.yaml_implicit_resolvers = {
+    key: list(resolvers)
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_INT_NO_SEXAGESIMAL = re.compile(
+    r"""^(?:[-+]?0b[0-1_]+
+        |[-+]?0[0-7_]+
+        |[-+]?(?:0|[1-9][0-9_]*)
+        |[-+]?0x[0-9a-fA-F_]+)$""",
+    re.X,
+)
+for _ch, _resolvers in list(_ComposeLoader.yaml_implicit_resolvers.items()):
+    _ComposeLoader.yaml_implicit_resolvers[_ch] = [
+        (tag, regexp) for tag, regexp in _resolvers
+        if tag != "tag:yaml.org,2002:int"
+    ]
+    if not _ComposeLoader.yaml_implicit_resolvers[_ch]:
+        del _ComposeLoader.yaml_implicit_resolvers[_ch]
+_ComposeLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:int",
+    _INT_NO_SEXAGESIMAL,
+    list("-+0123456789"),
+)
+
+_AUTO_OVERRIDE_NAMES = frozenset({
+    "compose.override.yml", "compose.override.yaml",
+    "docker-compose.override.yml", "docker-compose.override.yaml",
+})
+
 
 def _load_yaml(text: str):
-    return yaml.load(text, Loader=_ComposeLoader)
+    docs = [doc for doc in yaml.load_all(text, Loader=_ComposeLoader) if doc is not None]
+    if not docs:
+        return None
+    merged = None
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        merged = doc if merged is None else _overlay_compose_docs(merged, doc)
+    return merged
 
 
-def _compose_dict(filepath: str, extra_env: dict[str, str] | None = None) -> dict | None:
+def _compose_dict(
+    filepath: str,
+    extra_env: dict[str, str] | None = None,
+    env_base: Path | None = None,
+) -> dict | None:
     raw = _read_text(Path(filepath))
     if raw is None:
         return None
-    env_vars = {**_load_env_file(Path(filepath).parent), **(extra_env or {})}
+    env_root = env_base if env_base is not None else Path(filepath).parent
+    env_vars = {**_load_env_file(env_root), **(extra_env or {})}
     try:
         data = _load_yaml(substitute_vars(raw, env_vars))
     except yaml.YAMLError:
@@ -73,18 +117,24 @@ def _macvlan_names_tree(
     filepath: str,
     extra_env: dict[str, str] | None,
     chain: frozenset[str],
+    env_base: Path | None = None,
 ) -> set[str]:
     real = os.path.realpath(filepath)
     if real in chain:
         return set()
-    data = _compose_dict(filepath, extra_env)
+    data = _compose_dict(filepath, extra_env, env_base)
     if not data:
         return set()
     names = _macvlan_network_names(data)
     parent = Path(filepath).parent
     nested = chain | {real}
-    for inc_path, inc_env in _include_specs(data.get("include"), parent):
-        names |= _macvlan_names_tree(str(inc_path), inc_env, nested)
+    for inc_path, inc_env, inc_base in _include_specs(data.get("include"), parent):
+        names |= _macvlan_names_tree(
+            str(inc_path),
+            {**(extra_env or {}), **inc_env},
+            nested,
+            inc_base or env_base,
+        )
     return names
 
 
@@ -295,11 +345,43 @@ def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> tuple[
             continue
         dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS and not d.startswith("."))
         for name in sorted(files):
-            if _is_compose_filename(name):
-                if len(found) >= max_files:
-                    return found, True
-                found.append(os.path.join(root, name))
+            if not _is_compose_filename(name):
+                continue
+            if _is_auto_override_name(name) and _auto_override_has_base(root, name):
+                continue
+            if len(found) >= max_files:
+                return found, True
+            found.append(os.path.join(root, name))
     return found, False
+
+
+def _is_auto_override_name(name: str) -> bool:
+    return name.lower() in _AUTO_OVERRIDE_NAMES
+
+
+def _auto_override_has_base(root: str, name: str) -> bool:
+    lower = name.lower()
+    if lower.startswith("docker-compose.override."):
+        stems = ("docker-compose.yml", "docker-compose.yaml")
+    else:
+        stems = ("compose.yml", "compose.yaml")
+    return any(os.path.isfile(os.path.join(root, s)) for s in stems)
+
+
+def _sibling_override_path(filepath: str) -> str | None:
+    parent = os.path.dirname(filepath)
+    name = os.path.basename(filepath).lower()
+    if name in ("compose.yml", "compose.yaml"):
+        candidates = ("compose.override.yml", "compose.override.yaml")
+    elif name in ("docker-compose.yml", "docker-compose.yaml"):
+        candidates = ("docker-compose.override.yml", "docker-compose.override.yaml")
+    else:
+        return None
+    for cand in candidates:
+        path = os.path.join(parent, cand)
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 def _parse_compose_file(
@@ -309,6 +391,7 @@ def _parse_compose_file(
     extra_env: dict[str, str] | None = None,
     project_dir: str | None = None,
     project_name: str | None = None,
+    env_base: Path | None = None,
 ) -> list[ComposePort]:
     real = os.path.realpath(filepath)
     if real in chain:
@@ -320,7 +403,9 @@ def _parse_compose_file(
     if raw is None:
         return ports
 
-    env_vars = {**_load_env_file(Path(filepath).parent), **(extra_env or {})}
+    parent = Path(filepath).parent
+    env_root = env_base if env_base is not None else parent
+    env_vars = {**_load_env_file(env_root), **(extra_env or {})}
     interpolated = substitute_vars(raw, env_vars)
     try:
         data = _load_yaml(interpolated)
@@ -329,8 +414,7 @@ def _parse_compose_file(
     if not isinstance(data, dict):
         return ports
 
-    parent = Path(filepath).parent
-    extra_file_env = _env_files_from_include(parent, data.get("env_file"))
+    extra_file_env = _env_files_from_include(env_root, data.get("env_file"))
     if extra_file_env:
         env_vars = {**env_vars, **extra_file_env}
         interpolated = substitute_vars(raw, env_vars)
@@ -341,6 +425,17 @@ def _parse_compose_file(
         if not isinstance(data, dict):
             return ports
 
+    ov_path = _sibling_override_path(filepath)
+    if ov_path:
+        ov_raw = _read_text(Path(ov_path))
+        if ov_raw is not None:
+            try:
+                ov_data = _load_yaml(substitute_vars(ov_raw, env_vars))
+            except yaml.YAMLError:
+                ov_data = None
+            if isinstance(ov_data, dict):
+                data = _overlay_compose_docs(data, ov_data)
+
     this_dir = project_dir if project_dir is not None else _project_dir_key(parent, scan_dir)
     fallback_name = Path(this_dir).name
     if not fallback_name or fallback_name in (".", ".."):
@@ -348,13 +443,16 @@ def _parse_compose_file(
     this_name = _project_display_name(data.get("name"), project_name or fallback_name)
 
     macvlan_names = _macvlan_network_names(data)
-    for inc_path, inc_env in _include_specs(data.get("include"), parent):
+    for inc_path, inc_env, inc_base in _include_specs(data.get("include"), parent):
+        nested_env = {**env_vars, **inc_env}
+        nested_base = inc_base if inc_base is not None else env_base
         ports.extend(_parse_compose_file(
-            str(inc_path), scan_dir, chain, inc_env,
+            str(inc_path), scan_dir, chain, nested_env,
             project_dir=this_dir,
             project_name=this_name,
+            env_base=nested_base,
         ))
-        macvlan_names |= _macvlan_names_tree(str(inc_path), inc_env, chain)
+        macvlan_names |= _macvlan_names_tree(str(inc_path), nested_env, chain, nested_base)
 
     local_services = data.get("services")
     if not isinstance(local_services, dict):
@@ -448,17 +546,18 @@ def _parse_compose_file(
     return ports
 
 
-def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str]]]:
+def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str], Path | None]]:
     if not include:
         return []
     if isinstance(include, str):
         include = [include]
     if not isinstance(include, list):
         return []
-    out: list[tuple[Path, dict[str, str]]] = []
+    out: list[tuple[Path, dict[str, str], Path | None]] = []
     for item in include:
         paths: list[str] = []
         extra: dict[str, str] = {}
+        env_base: Path | None = None
         if isinstance(item, str):
             paths = [item]
         elif isinstance(item, dict):
@@ -471,6 +570,7 @@ def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str]]]:
                     proj_dir = None
                 if proj_dir is not None and proj_dir.is_dir():
                     extra = {**_load_env_file(proj_dir), **extra}
+                    env_base = proj_dir
             raw_path = item.get("path")
             if isinstance(raw_path, str):
                 paths = [raw_path]
@@ -489,7 +589,7 @@ def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str]]]:
                 continue
             for resolved in candidates:
                 if resolved.is_file():
-                    out.append((resolved, extra))
+                    out.append((resolved, extra, env_base))
     return out
 
 
@@ -615,6 +715,59 @@ def _overlay_port_fields(base: dict, child: dict) -> dict:
     return out
 
 
+def _overlay_compose_docs(base: dict, child: dict) -> dict:
+    """Merge a Compose override (or a later YAML document) onto *base*."""
+    out = dict(base)
+    child_name = child.get("name")
+    if isinstance(child_name, str) and child_name.strip():
+        out["name"] = child_name
+    for key in ("include", "env_file"):
+        extra = child.get(key)
+        if extra is None:
+            continue
+        existing = out.get(key)
+        if existing is None:
+            out[key] = extra
+        elif isinstance(existing, list) and isinstance(extra, list):
+            out[key] = [*existing, *extra]
+        elif isinstance(existing, list):
+            out[key] = [*existing, extra]
+        elif isinstance(extra, list):
+            out[key] = [existing, *extra]
+        else:
+            out[key] = [existing, extra]
+    child_nets = child.get("networks")
+    if child_nets is not None:
+        out["networks"] = _overlay_port_fields(
+            {"networks": out.get("networks")}, {"networks": child_nets},
+        ).get("networks")
+    base_svcs = _unwrap_compose(out.get("services"))
+    child_svcs = _unwrap_compose(child.get("services"))
+    if isinstance(child_svcs, dict):
+        merged = dict(base_svcs) if isinstance(base_svcs, dict) else {}
+        for name, cfg in child_svcs.items():
+            prev = merged.get(name)
+            if isinstance(prev, dict) and isinstance(cfg, dict):
+                merged[name] = _overlay_port_fields(prev, cfg)
+            else:
+                merged[name] = cfg
+        out["services"] = merged
+    return out
+
+
+def _normalize_host_ip(host_ip) -> str | None:
+    if host_ip is None:
+        return None
+    text = str(host_ip).strip()
+    if not text:
+        return None
+    if text.startswith("[") and text.endswith("]") and ":" in text:
+        text = text[1:-1]
+    if "%" in text:
+        text = text.split("%", 1)[0]
+    return text or None
+
+
 def _resolve_extends(
     svc_cfg: dict,
     filepath: str,
@@ -709,7 +862,7 @@ def parse_port_entry(entry) -> list[dict]:
         host = entry.get("published")
         target = entry.get("target")
         proto = _norm_proto(entry.get("protocol") or "tcp")
-        host_ip = entry.get("host_ip") or None
+        host_ip = _normalize_host_ip(entry.get("host_ip"))
         mode = str(entry.get("mode") or "").strip().lower()
         if isinstance(target, str) and "/" in target:
             t_s, t_proto = target.rsplit("/", 1)
@@ -722,6 +875,8 @@ def parse_port_entry(entry) -> list[dict]:
                 host = target
             else:
                 return []
+        if target is None and mode != "host":
+            return []
         host_s = str(host)
         if isinstance(host, str) and "/" in host_s:
             host_s, slash_proto = host_s.rsplit("/", 1)
@@ -749,7 +904,10 @@ def parse_expose_entry(entry) -> list[dict]:
     """Host-network ``expose``: the container port is the host port."""
     if isinstance(entry, bool) or entry is None:
         return []
-    if isinstance(entry, int):
+    if isinstance(entry, (int, float)) and not isinstance(entry, bool):
+        if isinstance(entry, float) and not entry.is_integer():
+            return []
+        entry = int(entry)
         if 1 <= entry <= 65535:
             return [{
                 "host_port": entry,
@@ -810,7 +968,11 @@ def parse_short_port(entry: str) -> list[dict]:
         host_spec, container_spec = parts
     else:
         if host_ip is None:
-            host_ip = ":".join(parts[:-2]) or None
+            head = parts[0]
+            joined = ":".join(parts[:-2])
+            if head.isdigit() and "." not in joined:
+                return []
+            host_ip = joined or None
         host_spec, container_spec = parts[-2], parts[-1]
     try:
         host_ports = expand_port_range(host_spec)

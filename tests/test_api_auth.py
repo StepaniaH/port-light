@@ -140,6 +140,7 @@ def test_occupancy_scan_snapshot_reused_until_store_write(monkeypatch, tmp_path)
     from backend.compose_scanner import ComposeScan
 
     main._occ_snap = None
+    main._occ_building = False
     n = {"c": 0}
 
     def fake_containers():
@@ -166,6 +167,7 @@ def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
     from backend.compose_scanner import ComposeScan
 
     main._occ_snap = None
+    main._occ_building = False
     n = {"k": 0}
     real = main._classify
 
@@ -187,5 +189,49 @@ def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
     row = client.get("/api/ports/2100")
     assert row.status_code == 200
     assert n["k"] == 1
+
+
+def test_concurrent_polls_share_one_scan(monkeypatch, tmp_path):
+    import threading
+    import time
+
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    import backend.main as main
+    from backend.compose_scanner import ComposeScan
+
+    main._occ_snap = None
+    main._occ_building = False
+    n = {"c": 0}
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_containers():
+        n["c"] += 1
+        started.set()
+        release.wait(timeout=2)
+        time.sleep(0.05)
+        return []
+
+    monkeypatch.setattr(main, "scan_containers", fake_containers)
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
+    client = TestClient(app)
+    results = []
+
+    def worker():
+        results.append(client.get("/api/ports").status_code)
+
+    t1 = threading.Thread(target=worker)
+    t2 = threading.Thread(target=worker)
+    t1.start()
+    assert started.wait(timeout=2)
+    t2.start()
+    release.set()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+    assert results == [200, 200]
+    assert n["c"] == 1
 
 

@@ -34,6 +34,8 @@ _AVAIL_AT = 0.0
 _AVAIL_TTL = 5.0
 _NET_DRIVER: dict[str, str] = {}
 _NET_DRIVER_MAX = 256
+_LAST_PUBLISH: dict[str, list[dict]] = {}
+_LAST_PUBLISH_MAX = 256
 _TRAEFIK_BAD_HOST = re.compile(r"[\\^$+*?()\[\]{}|]")
 
 
@@ -121,6 +123,7 @@ def scan_containers() -> list[ContainerInfo]:
     _mark_available(True)
 
     result: list[ContainerInfo] = []
+    exposed_by_id: dict[str, dict] = {}
     for c in containers:
         labels = c.labels or {}
         attrs = c.attrs or {}
@@ -143,13 +146,15 @@ def scan_containers() -> list[ContainerInfo]:
             compose_service=labels.get("com.docker.compose.service"),
             network_mode=network_mode or None,
             pid=pid,
-            urls=extract_label_urls(labels, env, include_nginx=False),
+            urls=extract_label_urls(labels, env, include_nginx=False, ports=ports),
             vhost_urls=vurls,
             vhost_port=vport,
             label_port=_traefik_service_port(labels),
             container_id=cid,
         ))
-    _attach_host_netns_sockets(result)
+        if cid:
+            exposed_by_id[cid] = (attrs.get("Config") or {}).get("ExposedPorts") or {}
+    _attach_host_netns_sockets(result, exposed_by_id)
     return result
 
 
@@ -183,7 +188,10 @@ def _network_is_host_netns(
     return _network_is_host_netns(target.network_mode, by_name, by_id, seen)
 
 
-def _attach_host_netns_sockets(containers: list[ContainerInfo]) -> None:
+def _attach_host_netns_sockets(
+    containers: list[ContainerInfo],
+    exposed_by_id: dict[str, dict] | None = None,
+) -> None:
     by_name = {c.name: c for c in containers if c.name}
     by_id: dict[str, ContainerInfo] = {}
     for c in containers:
@@ -191,15 +199,41 @@ def _attach_host_netns_sockets(containers: list[ContainerInfo]) -> None:
             continue
         by_id[c.container_id] = c
         by_id[c.container_id[:12]] = c
+    exposed_by_id = exposed_by_id or {}
     for c in containers:
-        if not c.pid:
-            continue
         if not _network_is_host_netns(c.network_mode, by_name, by_id):
+            continue
+        if (c.network_mode or "").startswith("container:"):
+            _add_expose_ports(c.ports, exposed_by_id.get(c.container_id) or {})
+        if not c.pid:
             continue
         c.pids = set(descendant_pids(c.pid))
         if c.pid:
             c.pids.add(c.pid)
         c.socket_inodes = socket_inodes_for_tree(c.pid)
+
+
+def _add_expose_ports(ports: list[dict], exposed: dict) -> None:
+    seen = {
+        (p["host_port"], p.get("host_ip"), p.get("container_port"), p.get("protocol"))
+        for p in ports
+    }
+    for spec in exposed or {}:
+        cp, protocol = _split_port_spec(spec)
+        if cp is None:
+            continue
+        protocol = str(protocol or "tcp").lower()
+        key = (cp, "0.0.0.0", cp, protocol)
+        if key in seen:
+            continue
+        seen.add(key)
+        ports.append({
+            "host_port": cp,
+            "host_ip": "0.0.0.0",
+            "container_port": cp,
+            "protocol": protocol,
+            "source": "expose",
+        })
 
 
 def extract_ports(attrs: dict) -> list[dict]:
@@ -264,7 +298,30 @@ def extract_ports(attrs: dict) -> list[dict]:
             if cp is not None:
                 _add(cp, "0.0.0.0", cp, protocol, "expose")
 
+    cid = str(attrs.get("Id") or "")
+    status = str((attrs.get("State") or {}).get("Status") or "").lower()
+    published = [p for p in ports if p.get("source") != "expose"]
+    if published and cid:
+        _remember_publish(cid, published)
+        return ports
+    if cid and status not in ("running", "paused", "restarting"):
+        recalled = _recall_publish(cid)
+        if recalled:
+            return recalled + [p for p in ports if p.get("source") == "expose"]
     return ports
+
+
+def _remember_publish(cid: str, ports: list[dict]) -> None:
+    with _LOCK:
+        if len(_LAST_PUBLISH) >= _LAST_PUBLISH_MAX:
+            _LAST_PUBLISH.clear()
+        _LAST_PUBLISH[cid] = [dict(p) for p in ports]
+
+
+def _recall_publish(cid: str) -> list[dict]:
+    with _LOCK:
+        rows = _LAST_PUBLISH.get(cid)
+    return [dict(p) for p in rows] if rows else []
 
 
 def _network_driver(client, net_id: str) -> str:
@@ -436,6 +493,7 @@ def extract_label_urls(
     env: list | None = None,
     *,
     include_nginx: bool = True,
+    ports: list[dict] | None = None,
 ) -> list[str]:
     """Traefik Host() / HostSNI() / HostHeader(), Caddy sites, nginx-proxy VIRTUAL_HOST."""
     urls: list[str] = []
@@ -473,7 +531,9 @@ def extract_label_urls(
         elif lk == "caddy" or (lk.startswith("caddy_") and lk[6:].isdigit()):
             raw = val.strip()
             if raw.lower().startswith(("http://", "https://")):
-                _add(raw.split()[0].rstrip("/"))
+                first = raw.split()[0].rstrip("/")
+                if "*" not in first:
+                    _add(first)
             else:
                 host = raw.split()[0].strip()
                 if _looks_like_hostname(host):
@@ -481,7 +541,7 @@ def extract_label_urls(
         elif lk in ("homepage.href", "wud.href"):
             _add(val)
         elif lk == "net.unraid.docker.webui":
-            _add(expand_unraid_webui(val))
+            _add(expand_unraid_webui(val, ports))
 
     if include_nginx:
         for url in _nginx_vhost_urls(labels, env_map):
@@ -562,6 +622,8 @@ def _looks_like_hostname(host: str) -> bool:
     text = (host or "").strip()
     if not text or text.startswith("{") or "/" in text:
         return False
+    if "*" in text:
+        return False
     if text.startswith("["):
         return True
     head = text.split(":", 1)[0].lower()
@@ -578,10 +640,23 @@ def _label_is_off(val) -> bool:
     return str(val).strip().lower() in ("false", "0", "no", "off")
 
 
-def expand_unraid_webui(val: str) -> str:
+def expand_unraid_webui(val: str, ports: list[dict] | None = None) -> str:
     """Turn Unraid ``http://[IP]:[PORT:8096]/`` templates into a real URL."""
     text = (val or "").strip()
-    text = _UNRAID_PORT.sub(r"\1", text)
+
+    def _host_port(match: re.Match) -> str:
+        n = int(match.group(1))
+        for row in ports or []:
+            try:
+                cp = int(row.get("container_port"))
+                hp = int(row.get("host_port"))
+            except (TypeError, ValueError):
+                continue
+            if cp == n and 1 <= hp <= 65535:
+                return str(hp)
+        return str(n)
+
+    text = _UNRAID_PORT.sub(_host_port, text)
     text = text.replace("[IP]", "localhost").replace("[HOSTNAME]", "localhost")
     if re.search(r"\[PORT\]", text, re.IGNORECASE):
         return ""

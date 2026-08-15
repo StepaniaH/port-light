@@ -18,7 +18,7 @@ Browser  ──GET /──►  frontend/index.html
 5. `backend/main.py` `_classify()` — union, status, source type, conflicts
 6. `backend/known_ports.py` — names and access/internal flags
 
-Those three scanners plus the store snapshot are reused for about two seconds, so `GET /api/ports/{N}` (opening a free cell) does not walk Docker / `/proc` / Compose again. Classified JSON for the same range and hidden flags is reused too, so a `304` poll does not rebuild the occupancy table. A store write bumps a generation and drops the snapshot. The UI (`frontend/app.js`) filters, sorts, and searches **in the browser**. `include_hidden` is the exception: when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set, the server withholds those rows unless the request is authorized (`backend/auth.py`).
+Those three scanners plus the store snapshot are reused for about two seconds, so `GET /api/ports/{N}` (opening a free cell) does not walk Docker / `/proc` / Compose again. Concurrent polls share one in-flight scan. Classified JSON for the same range and hidden flags is reused too, so a `304` poll does not rebuild the occupancy table. A store write bumps a generation and drops the snapshot. The UI (`frontend/app.js`) filters, sorts, and searches **in the browser**. `include_hidden` is the exception: when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set, the server withholds those rows unless the request is authorized (`backend/auth.py`).
 
 Optional HTTP Basic Auth is applied as middleware to every path except `/api/health`. Responses set `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, and `Content-Security-Policy` (`script-src` allows the inline theme boot script). `/api/*` is `Cache-Control: no-store`; `/static/*` is long-lived (`?v=` busts); `/` is `no-cache` so a new `?v=` actually loads. `GET /api/ports` sends an `ETag`; an unchanged occupancy map returns `304`.
 
@@ -27,26 +27,26 @@ Optional HTTP Basic Auth is applied as middleware to every path except `/api/hea
 Order of attempts:
 
 1. **`/host/proc/1/net/{tcp,tcp6,udp,udp6}`** — used in the published Docker image when `/proc` is mounted at `/host/proc`. `/host/proc/net` is the *container* namespace. PID 1 is the host init network namespace.
-2. **`ss -tulnpH`** (then `ss -tulnp`) — bare metal or `network_mode: host`.
+2. **`ss -tulnphH`** (then `-tulnph`, then the older `-tulnpH` / `-tulnp`) — bare metal or `network_mode: host`. `-n` keeps well-known ports numeric (`:ssh` is otherwise dropped). Service names are resolved as a fallback.
 3. **Local `/proc/net/*`** — last resort (usually the container’s own listeners). `/host/proc` inode → `/proc/<pid>/comm` fills process names when ss is not used.
 
 The Host scanner pill is green for `/host/proc/1/net/tcp`, local `/proc/net/tcp` on a non-container host, or `ss` when the process looks like host netns (`docker0` / several host NICs). A bridge container without that mount stays red even though `/proc/net/tcp` exists. If the listen table is not trusted, the scan returns no listeners (no `ss` / local `/proc` fall-through). `/api/health` includes `listen_source`: `host_proc`, `ss`, `proc`, or `none`.
 
-UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, `sctp`, or a comma union — listen, Docker, and Compose protocols are unioned; SCTP does not clash with TCP), and `bind_scope` (`public` / `lan` / `link` / `localhost`). An empty `/host/proc` listen table is authoritative (no fall-through into the container netns). If `/host/proc` is mounted but `/host/proc/1/net/tcp` is missing, the listen scan also stops (no `ss` / local `/proc` fall-through). `ss` `tcp6`/`udp6` `*:port` is `::`, not `0.0.0.0`.
+UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, `sctp`, or a comma union — listen, Docker, and Compose protocols are unioned; SCTP does not clash with TCP), and `bind_scope` (`public` / `lan` / `link` / `localhost`). Bind scope unions listen addresses with Docker `HostIp` and Compose `host_ip` (a loopback listen does not hide a `0.0.0.0` publish). An empty `/host/proc` listen table is authoritative (no fall-through into the container netns). If `/host/proc` is mounted but `/host/proc/1/net/tcp` is missing, the listen scan also stops (no `ss` / local `/proc` fall-through). `ss` `tcp6`/`udp6` `*:port` is `::`, not `0.0.0.0`.
 
 ## Docker
 
-`docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings`, then `NetworkSettings.Ports`. Empty / `0` HostPort on one address family reuses a sibling assignment on the same spec (typical dual-stack `-P`). Unassigned ephemeral publishes stay off the map until Docker fills `NetworkSettings.Ports`.
+`docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings`, then `NetworkSettings.Ports`. Empty / `0` HostPort on one address family reuses a sibling assignment on the same spec (typical dual-stack `-P`). Unassigned ephemeral publishes stay off the map until Docker fills `NetworkSettings.Ports`. After a host port has been assigned, a later stopped inspect with `HostPort: 0` keeps the last mapping in process memory so amber occupancy does not vanish across a restart flicker.
 
 `network_mode: host` and `network_mode: ns:/proc/1/ns/net` (or any `ns:` path that is the same inode as host pid 1):
 
 - `Config.ExposedPorts` is **configured** occupancy (declared), not in-use, unless something is actually listening or the container pid/inode matches a listen row.
-- Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` **and descendant PIDs** (`task/*/children`), or listen rows whose `pid` is in that tree, so worker processes still get a container name.
-- `network_mode: container:…` joiners of a host-network target are treated the same way (shared netns). Joiners of a bridge container are not matched by inode (inode numbers are per-netns). Arbitrary `ns:/var/run/docker/netns/<id>` is host only when it actually is the host netns.
+- Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` **and descendant PIDs** (`task/*/children`, cap 256), or listen rows whose `pid` is in that tree, so worker processes still get a container name.
+- `network_mode: container:…` joiners of a host-network target are treated the same way (shared netns), including that joiner's `ExposedPorts`. Joiners of a bridge container are not matched by inode (inode numbers are per-netns). Arbitrary `ns:/var/run/docker/netns/<id>` is host only when it actually is the host netns.
 
 macvlan/ipvlan networks: `ExposedPorts` plus the network IPv4/IPv6 addresses (including `IPv6Address` prefixes and secondary addresses) are treated as LAN occupancy (Docker does not publish those on the host).
 
-Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` / `HostHeader(\`…\`)` rules (http when the router entrypoint is `web`/`http` without TLS; regexp templates are dropped), a `caddy:` / `caddy_0` site address (including `http://…`), nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (on the published mapping whose container port is `VIRTUAL_PORT`, default 80), and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]`) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count). Label URLs attach to the Traefik loadbalancer port or to 80/443/8080/8443 when several mappings exist.
+Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` / `HostHeader(\`…\`)` rules (http when the router entrypoint is `web`/`http` without TLS; regexp templates are dropped), a `caddy:` / `caddy_0` site address (including `http://…`; wildcards are dropped), nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (on the published mapping whose container port is `VIRTUAL_PORT`, default 80), and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]` resolved to the host port when that container port is published) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count). Label URLs attach to the Traefik loadbalancer port, else 80/443/8080/8443, else the lowest host port when several mappings exist (not every sidecar).
 
 Stopped containers still contribute PortBindings — those become amber if nothing is listening.
 
@@ -54,7 +54,9 @@ Stopped containers still contribute PortBindings — those become amber if nothi
 
 `COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`. Hitting the cap sets `summary.compose_truncated` (the Compose pill turns amber). Files matching `compose*.yml|yaml` and `docker-compose*.yml|yaml` are parsed (including `compose.prod.yml`). A non-UTF-8 or tagged (`!reset` / `!override`) file still loads; `extends` plus `ports: !reset` **replaces** the parent ports instead of merging them.
 
-`include:` paths (string, `{ path: }`, `{ path: [a.yml, b.yml] }`, or a glob like `../shared/*.yml`) are followed. `{ path, env_file }` interpolates the included file with those env files (Compose spec; `env_file.path` mappings too). `{ project_directory }` contributes that directory’s `.env`. Top-level `env_file` interpolates the compose file itself. Sibling `.env` lines may start with `export `. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile. `network_mode: service:…` / `container:…` ports are ignored (they belong to the target service).
+`include:` paths (string, `{ path: }`, `{ path: [a.yml, b.yml] }`, or a glob like `../shared/*.yml`) are followed. `{ path, env_file }` interpolates the included file with those env files (Compose spec; `env_file.path` mappings too) and that env is inherited by nested `include:`s. `{ project_directory }` is the working directory for the included file’s `.env` / `env_file` (not the included file’s parent). Top-level `env_file` interpolates the compose file itself. Sibling `.env` lines may start with `export `. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile. `network_mode: service:…` / `container:…` ports are ignored (they belong to the target service).
+
+A sibling `compose.override.yml` / `docker-compose.override.yml` is merged onto the matching base file (`ports: !reset` replaces). Override files are not scanned on their own when the base exists. Multi-document YAML (`---`) is merged the same way. Unquoted `22:22` stays a port mapping (YAML 1.2 integers; PyYAML sexagesimal is disabled). Long-syntax `host_ip: "[::1]"` drops the brackets. `published` without `target` is ignored unless `mode: host`.
 
 Supported port syntax:
 
@@ -66,7 +68,7 @@ Supported port syntax:
 - `network_mode: host` (or host `ns:`) plus `expose:` — those container ports are host ports (bridge `expose` is ignored)
 - Compose macvlan/ipvlan `ipv4_address` / `ipv6_address` plus `expose` and/or published `target` — LAN occupancy on that address (bridge static IPs are not host occupancy). The macvlan/ipvlan driver may be declared in an `include:` file or an `extends.file`; child `networks:` overlays the parent.
 
-Conflict keys use the Compose folder **relative to the scan root** (`apps/wiki` vs `other/wiki`), not the basename. `name:` is display-only. Two files in the same stack (`compose.yml` plus `compose.override.yml`) are not a conflict.
+Conflict keys use the Compose folder **relative to the scan root** (`apps/wiki` vs `other/wiki`), not the basename. `name:` is display-only. Two files in the same stack (`compose.yml` plus `compose.override.yml`) are merged before occupancy, so they are not a conflict.
 
 ## Classification
 

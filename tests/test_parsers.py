@@ -13,6 +13,7 @@ from backend.compose_scanner import (
 )
 from backend.docker_scanner import (
     ContainerInfo,
+    _attach_host_netns_sockets,
     _macvlan_ports,
     _network_is_host_netns,
     extract_label_urls,
@@ -976,3 +977,165 @@ def test_scan_containers_marks_client_missing(monkeypatch):
     monkeypatch.setattr(ds, "_mark_available", lambda ok: marked.append(ok))
     assert ds.scan_containers() == []
     assert marked == [False]
+
+
+def test_unquoted_sexagesimal_ports_stay_strings(tmp_path):
+    app = tmp_path / "ssh"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "services:\n"
+        "  openssh:\n"
+        "    ports:\n"
+        "      - 22:22\n"
+        "      - 8080:22\n"
+        "      - 25:25\n",
+        encoding="utf-8",
+    )
+    numbers = {p.port for p in scan_compose_files(str(tmp_path))}
+    assert numbers == {22, 25, 8080}
+
+
+def test_compose_multidoc_and_long_syntax_edges(tmp_path):
+    app = tmp_path / "stack"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "services:\n  a:\n    ports:\n      - '8001:80'\n"
+        "---\n"
+        "services:\n  b:\n    ports:\n      - '8002:80'\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(tmp_path))} == {8001, 8002}
+    assert parse_port_entry({"published": 8080, "host_ip": "[::1]", "target": 80})[0]["host_ip"] == "::1"
+    assert parse_port_entry({"published": 8080}) == []
+    assert parse_short_port("8080:80:80") == []
+    assert parse_expose_entry(53.0)[0]["host_port"] == 53
+    assert parse_expose_entry(53.5) == []
+
+
+def test_include_project_directory_and_nested_env(tmp_path):
+    project = tmp_path / "project"
+    lib = tmp_path / "lib"
+    app = tmp_path / "app"
+    commons = tmp_path / "commons"
+    for d in (project, lib, app, commons):
+        d.mkdir()
+    (project / "local.env").write_text("PORT=7002\n", encoding="utf-8")
+    (lib / "local.env").write_text("PORT=9999\n", encoding="utf-8")
+    (lib / "svc.yml").write_text(
+        "env_file: local.env\nservices:\n  w:\n    ports:\n      - '${PORT}:80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - path: ../lib/svc.yml\n    project_directory: ../project\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(app))} == {7002}
+
+    (commons / "stack.env").write_text("P=7103\n", encoding="utf-8")
+    (commons / "ports.yml").write_text(
+        "services:\n  nested:\n    ports:\n      - '${P}:80'\n",
+        encoding="utf-8",
+    )
+    (commons / "stack.yml").write_text(
+        "include:\n  - ports.yml\n",
+        encoding="utf-8",
+    )
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "compose.yml").write_text(
+        "include:\n  - path: ../commons/stack.yml\n    env_file: ../commons/stack.env\n",
+        encoding="utf-8",
+    )
+    assert 7103 in {p.port for p in scan_compose_files(str(other))}
+
+    (app / ".env").write_text("PORT=2222\n", encoding="utf-8")
+    (commons / ".env").write_text("OTHER=9999\n", encoding="utf-8")
+    (commons / "only.yml").write_text(
+        "services:\n  x:\n    ports:\n      - '${PORT}:80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - path: ../commons/only.yml\n    project_directory: .\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(app))} == {2222}
+
+
+def test_compose_override_reset_replaces_base_ports(tmp_path):
+    app = tmp_path / "media"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '8080:80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.override.yml").write_text(
+        "services:\n  web:\n    ports: !reset\n      - '9090:80'\n",
+        encoding="utf-8",
+    )
+    numbers = {p.port for p in scan_compose_files(str(tmp_path))}
+    assert numbers == {9090}
+    lone = tmp_path / "orphan"
+    lone.mkdir()
+    (lone / "compose.override.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '7070:80'\n",
+        encoding="utf-8",
+    )
+    assert 7070 in {p.port for p in scan_compose_files(str(lone))}
+
+
+def test_ss_service_name_and_caddy_wildcard():
+    ssh = parse_ss_line("tcp LISTEN 0 128 0.0.0.0:ssh 0.0.0.0:*")
+    assert ssh is not None
+    assert ssh.port == 22
+    assert extract_label_urls({"caddy": "*.home.arpa"}) == []
+    assert extract_label_urls({"caddy": "https://*.home.arpa"}) == []
+    mapped = extract_label_urls(
+        {"net.unraid.docker.webui": "http://[IP]:[PORT:8096]/"},
+        ports=[{"host_port": 18096, "container_port": 8096}],
+    )
+    assert "http://localhost:18096" in mapped
+
+
+def test_stopped_ephemeral_keeps_last_host_port():
+    running = {
+        "Id": "deadbeefstopped1",
+        "State": {"Status": "running"},
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {"80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "32768"}]},
+        },
+        "NetworkSettings": {
+            "Ports": {"80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "32768"}]},
+        },
+        "Config": {"ExposedPorts": {}},
+    }
+    assert extract_ports(running)[0]["host_port"] == 32768
+    stopped = {
+        "Id": "deadbeefstopped1",
+        "State": {"Status": "exited"},
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {"80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "0"}]},
+        },
+        "NetworkSettings": {"Ports": None},
+        "Config": {"ExposedPorts": {}},
+    }
+    recalled = extract_ports(stopped)
+    assert recalled[0]["host_port"] == 32768
+
+
+def test_host_netns_joiner_gets_expose():
+    vpn = ContainerInfo(
+        name="vpn", status="running", image="vpn",
+        network_mode="host", container_id="abc123def456",
+    )
+    helper = ContainerInfo(
+        name="helper", status="running", image="helper",
+        network_mode="container:vpn", container_id="fff111aaa222",
+        ports=[],
+    )
+    _attach_host_netns_sockets(
+        [vpn, helper],
+        {"fff111aaa222": {"8080/tcp": {}}},
+    )
+    assert any(p["host_port"] == 8080 and p["source"] == "expose" for p in helper.ports)

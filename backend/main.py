@@ -34,7 +34,9 @@ app = FastAPI(title="Port-Light", version=VERSION)
 
 _OCC_TTL = 2.0
 _occ_lock = threading.Lock()
+_occ_wait = threading.Condition(_occ_lock)
 _occ_snap: dict | None = None
+_occ_building = False
 
 
 async def security_headers_middleware(request: Request, call_next):
@@ -138,36 +140,49 @@ def _scan_snapshot(values: dict) -> dict:
 
     Opening `#/port/N` otherwise re-walks the same trees the grid just polled.
     Store writes bump ``store_generation`` so a hide / rename is visible immediately.
+    Concurrent polls share one in-flight scan instead of walking twice.
     """
-    global _occ_snap
+    global _occ_snap, _occ_building
     key = _scan_key(values)
     now = time.monotonic()
-    with _occ_lock:
+    with _occ_wait:
         snap = _occ_snap
         if snap and snap["key"] == key and now - snap["at"] < _OCC_TTL:
             return snap
-    containers = scan_containers()
-    prefer: list[int] = []
-    for c in containers:
-        prefer.extend(c.pids or [])
-        if c.pid:
-            prefer.append(c.pid)
-    snap = {
-        "at": time.monotonic(),
-        "key": key,
-        "containers": containers,
-        "listening": scan_listening_ports(prefer_pids=prefer),
-        "compose_scan": scan_compose_tree(
-            _compose_dir(),
-            max_depth=values["compose_scan_depth"],
-            max_files=values["compose_scan_max_files"],
-        ),
-        "user_state": port_store.occupancy_user_state(),
-        "packed": {},
-    }
-    with _occ_lock:
-        _occ_snap = snap
-    return snap
+        while _occ_building:
+            _occ_wait.wait(timeout=5)
+            snap = _occ_snap
+            now = time.monotonic()
+            if snap and snap["key"] == key and now - snap["at"] < _OCC_TTL:
+                return snap
+        _occ_building = True
+    try:
+        containers = scan_containers()
+        prefer: list[int] = []
+        for c in containers:
+            prefer.extend(c.pids or [])
+            if c.pid:
+                prefer.append(c.pid)
+        snap = {
+            "at": time.monotonic(),
+            "key": key,
+            "containers": containers,
+            "listening": scan_listening_ports(prefer_pids=prefer),
+            "compose_scan": scan_compose_tree(
+                _compose_dir(),
+                max_depth=values["compose_scan_depth"],
+                max_files=values["compose_scan_max_files"],
+            ),
+            "user_state": port_store.occupancy_user_state(),
+            "packed": {},
+        }
+        with _occ_wait:
+            _occ_snap = snap
+            return snap
+    finally:
+        with _occ_wait:
+            _occ_building = False
+            _occ_wait.notify_all()
 
 
 def _packed_occupancy(
@@ -454,7 +469,7 @@ def _classify(
             "vhost_port": c.vhost_port,
             "vhost_fallback": _vhost_fallback(c),
             "label_port": c.label_port,
-            "label_fallback": _label_url_fallback(c),
+            "label_host_ports": _label_url_host_ports(c),
             "expose_only": extra.get("source") == "expose",
             "bind_ips": [hip] if hip else [],
             "protocols": [proto] if proto else [],
@@ -561,24 +576,22 @@ def _classify(
 
         known = get_known_port(port)
         ips = list((lp_info.get("ips") if lp_info else None) or [])
-        if not ips:
-            for c in ctors:
-                for hip in c.get("bind_ips") or []:
-                    hip = (hip or "").strip()
-                    if hip and hip not in ips:
-                        ips.append(hip)
-        if not ips:
-            for c in composes:
-                hip = (c.get("host_ip") or "").strip()
+        for c in ctors:
+            for hip in c.get("bind_ips") or []:
+                hip = (hip or "").strip()
                 if hip and hip not in ips:
                     ips.append(hip)
+        for c in composes:
+            hip = (c.get("host_ip") or "").strip()
+            if hip and hip not in ips:
+                ips.append(hip)
         if not ips:
             ips = [lp_info["ip"] if lp_info else "0.0.0.0"]
         ip = (lp_info["ip"] if lp_info else None) or ips[0]
         urls = _collect_urls(port, ips, ctors, known, options)
         for c in ctors:
             c.pop("vhost_fallback", None)
-            c.pop("label_fallback", None)
+            c.pop("label_host_ports", None)
             c.pop("expose_only", None)
         proto_bits = []
         if lp_info:
@@ -748,8 +761,9 @@ def _bind_scope_many(ips: list[str]) -> str:
 
 
 _NO_HTTP_PORTS = frozenset({
-    22, 23, 25, 53, 110, 143, 445, 554, 1194, 1935, 3260, 3389, 5060, 5061,
-    5222, 5357, 5900, 8554, 9418, 10050, 10051, 4317, 41641, 51820,
+    21, 22, 23, 25, 53, 110, 143, 445, 548, 554, 1194, 1935, 2456, 3260, 3389,
+    5060, 5061, 5222, 5357, 5900, 7777, 8211, 8554, 9418, 9987, 10050, 10051,
+    4317, 19132, 25565, 27015, 41641, 51820,
 })
 
 
@@ -781,16 +795,45 @@ def _guess_url_host(ips: list[str], configured: str) -> str:
     return "localhost"
 
 
-def _label_url_fallback(c) -> bool:
+def _label_url_host_ports(c) -> list[int] | None:
+    """Host ports that should receive Traefik/homepage URLs. None = inode-only."""
+    mappings = [p for p in (c.ports or []) if p.get("host_port")]
+    hosts: list[int] = []
+    cport_to_hosts: dict[int, list[int]] = {}
+    for p in mappings:
+        try:
+            hp = int(p["host_port"])
+        except (TypeError, ValueError):
+            continue
+        hosts.append(hp)
+        cp = p.get("container_port")
+        if cp is None:
+            continue
+        try:
+            cport_to_hosts.setdefault(int(cp), []).append(hp)
+        except (TypeError, ValueError):
+            continue
     lport = getattr(c, "label_port", None)
-    cports = {p.get("container_port") for p in (c.ports or [])}
-    cports.discard(None)
     if lport:
-        return lport not in cports
-    web = cports & {80, 443, 8080, 8443}
-    if web:
-        return False
-    return True
+        try:
+            matched = cport_to_hosts.get(int(lport))
+        except (TypeError, ValueError):
+            matched = None
+        if matched:
+            return list(dict.fromkeys(matched))
+        uniq = list(dict.fromkeys(hosts))
+        return uniq if len(uniq) == 1 else []
+    web_hosts: list[int] = []
+    for web in (80, 443, 8080, 8443):
+        web_hosts.extend(cport_to_hosts.get(web) or [])
+    if web_hosts:
+        return list(dict.fromkeys(web_hosts))
+    uniq = list(dict.fromkeys(hosts))
+    if len(uniq) == 1:
+        return uniq
+    if uniq:
+        return [min(uniq)]
+    return None
 
 
 def _vhost_fallback(c) -> bool:
@@ -813,13 +856,8 @@ def _collect_urls(
     for c in containers:
         label_urls = c.get("urls") or []
         if label_urls:
-            cport = c.get("container_port")
-            lport = c.get("label_port")
-            attach = bool(c.get("label_fallback"))
-            if lport is not None:
-                attach = attach or cport == lport
-            elif cport in (80, 443, 8080, 8443) or cport is None:
-                attach = True
+            wanted = c.get("label_host_ports")
+            attach = wanted is None or port in wanted
             if attach:
                 for raw in label_urls:
                     u = safe_http_url(raw)
