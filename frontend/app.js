@@ -66,6 +66,14 @@
   };
   let settingsDoc = null;
   let settingsDirty = false;
+  let settingsPanel = 'appearance';
+  const SETTINGS_PANELS = ['appearance', 'occupancy', 'advanced'];
+  const CARD_FIELD_KEYS = {
+    show_status_text: true,
+    show_access_badge: true,
+    show_protocol_badge: true,
+  };
+  const CORE_THEMES = ['system', 'dark', 'light'];
   let refreshTimer = null;
   let meta = { hidden_unlock_required: false, hidden_ports_withheld: false, version: '', settings_readonly: false };
   let hiddenUnlock = sessionStorage.getItem('port-light-hidden-unlock') || '';
@@ -217,7 +225,13 @@
   function parseRoute() {
     const raw = (location.hash || '#/').replace(/^#\/?/, '');
     const parts = raw.split('/').filter(Boolean);
-    if (parts[0] === 'settings') return { name: 'settings' };
+    if (parts[0] === 'settings') {
+      let section = parts[1];
+      if (SETTINGS_PANELS.indexOf(section) < 0) {
+        section = route.name === 'settings' && settingsPanel ? settingsPanel : 'appearance';
+      }
+      return { name: 'settings', section: section };
+    }
     if (parts[0] === 'port' && /^\d+$/.test(parts[1] || '')) {
       const n = parseInt(parts[1], 10);
       if (n >= 1 && n <= 65535) return { name: 'port', port: n };
@@ -229,7 +243,7 @@
     const next = parseRoute();
     if (settingsDirty && route.name === 'settings' && next.name !== 'settings') {
       if (!window.confirm(t('settings.discard'))) {
-        location.hash = '#/settings';
+        location.hash = '#/settings/' + settingsPanel;
         return;
       }
       settingsDirty = false;
@@ -246,6 +260,13 @@
     if (onSettings) {
       pendingGridFocus = null;
       closeDetail(true);
+      settingsPanel = route.section || 'appearance';
+      const want = '#/settings/' + settingsPanel;
+      if ((location.hash || '') !== want) history.replaceState(null, '', want);
+      if (prev === 'settings') {
+        showSettingsPanel(settingsPanel);
+        return;
+      }
       loadSettingsPage();
       return;
     }
@@ -601,6 +622,27 @@
     e.preventDefault();
     saveSettingsPage();
   });
+  document.getElementById('settings-nav').addEventListener('click', function (e) {
+    const btn = e.target.closest('[role="tab"][data-settings-panel]');
+    if (!btn) return;
+    e.preventDefault();
+    goSettingsPanel(btn.getAttribute('data-settings-panel'));
+  });
+  document.getElementById('settings-nav').addEventListener('keydown', function (e) {
+    const btn = e.target.closest('[role="tab"][data-settings-panel]');
+    if (!btn) return;
+    let i = SETTINGS_PANELS.indexOf(btn.getAttribute('data-settings-panel'));
+    if (i < 0) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') i = (i + 1) % SETTINGS_PANELS.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') i = (i - 1 + SETTINGS_PANELS.length) % SETTINGS_PANELS.length;
+    else if (e.key === 'Home') i = 0;
+    else if (e.key === 'End') i = SETTINGS_PANELS.length - 1;
+    else return;
+    e.preventDefault();
+    goSettingsPanel(SETTINGS_PANELS[i]);
+    const nextBtn = document.getElementById('settings-tab-' + SETTINGS_PANELS[i]);
+    if (nextBtn) nextBtn.focus();
+  });
   document.getElementById('settings-fields').addEventListener('change', function (e) {
     const field = e.target && e.target.name;
     if (field === 'theme' || field === 'grid_density' || field === 'locale') {
@@ -844,6 +886,37 @@
     return t('choice.' + c);
   }
 
+  function settingsCard(titleKey, blurbKey, rowsHtml) {
+    return '<section class="settings-card"><header class="settings-card-head"><h2 data-i18n="' + titleKey + '">' +
+      escapeHtml(t(titleKey)) + '</h2><p data-i18n="' + blurbKey + '">' +
+      escapeHtml(t(blurbKey)) + '</p></header><div class="settings-card-body">' + rowsHtml + '</div></section>';
+  }
+
+  function settingsPanelHtml(id, inner) {
+    return '<div class="settings-panel" id="settings-panel-' + id + '" role="tabpanel" data-settings-panel="' + id +
+      '" aria-labelledby="settings-tab-' + id + '">' + inner + '</div>';
+  }
+
+  function showSettingsPanel(id) {
+    if (SETTINGS_PANELS.indexOf(id) < 0) id = 'appearance';
+    settingsPanel = id;
+    document.querySelectorAll('#settings-nav [role="tab"]').forEach(function (btn) {
+      const on = btn.getAttribute('data-settings-panel') === id;
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      btn.tabIndex = on ? 0 : -1;
+    });
+    document.querySelectorAll('#settings-fields .settings-panel').forEach(function (panel) {
+      panel.hidden = panel.getAttribute('data-settings-panel') !== id;
+    });
+  }
+
+  function goSettingsPanel(id) {
+    if (SETTINGS_PANELS.indexOf(id) < 0) return;
+    showSettingsPanel(id);
+    const next = '#/settings/' + id;
+    if ((location.hash || '') !== next) location.hash = next;
+  }
+
   function renderSettingsForm(doc) {
     const values = doc.values || {};
     const fields = doc.fields || [];
@@ -857,35 +930,54 @@
     lead.textContent = t(doc.readonly ? 'settings.leadReadonly' : 'settings.lead');
     saveBtn.disabled = !!doc.readonly;
 
-    const groups = [];
     const byGroup = {};
+    const groupOrder = [];
     fields.forEach(function (f) {
       if (!byGroup[f.group]) {
         byGroup[f.group] = [];
-        groups.push(f.group);
+        groupOrder.push(f.group);
       }
       byGroup[f.group].push(f);
     });
-
-    host.innerHTML = groups.map(function (g) {
-      const rows = byGroup[g].map(function (f) {
+    function rowsFor(list) {
+      return (list || []).map(function (f) {
         return renderField(f, values[f.key], doc.readonly);
       }).join('');
-      return '<section class="settings-card"><header class="settings-card-head"><h2 data-i18n="settings.groups.' + g + '.title">' +
-        escapeHtml(t('settings.groups.' + g + '.title')) + '</h2><p data-i18n="settings.groups.' + g + '.blurb">' +
-        escapeHtml(t('settings.groups.' + g + '.blurb')) +
-        '</p></header><div class="settings-card-body">' + rows + '</div></section>';
+    }
+
+    const appearanceFields = byGroup.appearance || [];
+    const lookFields = appearanceFields.filter(function (f) { return !CARD_FIELD_KEYS[f.key]; });
+    const cardFields = appearanceFields.filter(function (f) { return CARD_FIELD_KEYS[f.key]; });
+    const knownGroups = { appearance: true, grid: true, scanning: true, links: true };
+    const extraAdvanced = groupOrder.filter(function (g) { return !knownGroups[g]; }).map(function (g) {
+      return settingsCard('settings.groups.' + g + '.title', 'settings.groups.' + g + '.blurb', rowsFor(byGroup[g]));
     }).join('');
 
+    host.innerHTML =
+      settingsPanelHtml('appearance',
+        settingsCard('settings.groups.appearance.title', 'settings.groups.appearance.blurb', rowsFor(lookFields)) +
+        settingsCard('settings.cards.title', 'settings.cards.blurb', rowsFor(cardFields))) +
+      settingsPanelHtml('occupancy',
+        settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || []))) +
+      settingsPanelHtml('advanced',
+        settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
+        settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
+        extraAdvanced +
+        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div>'));
+
     const env = doc.env_only || {};
-    document.getElementById('settings-env-only').innerHTML = [
-      kvRow('settings.host.composeScanDir', env.compose_scan_dir),
-      kvRow('settings.host.customPortsFile', env.custom_ports_file),
-      kvRow('settings.host.dataDir', env.data_dir),
-      kvRow('settings.host.basicAuth', env.auth_required ? t('settings.on') : t('settings.off'), env.auth_required ? 'settings.on' : 'settings.off'),
-      kvRow('settings.host.hiddenUnlock', env.hidden_unlock_required ? t('settings.on') : t('settings.off'), env.hidden_unlock_required ? 'settings.on' : 'settings.off'),
-      kvRow('settings.host.settingsSource', doc.source),
-    ].join('');
+    const envHost = document.getElementById('settings-env-only');
+    if (envHost) {
+      envHost.innerHTML = [
+        kvRow('settings.host.composeScanDir', env.compose_scan_dir),
+        kvRow('settings.host.customPortsFile', env.custom_ports_file),
+        kvRow('settings.host.dataDir', env.data_dir),
+        kvRow('settings.host.basicAuth', env.auth_required ? t('settings.on') : t('settings.off'), env.auth_required ? 'settings.on' : 'settings.off'),
+        kvRow('settings.host.hiddenUnlock', env.hidden_unlock_required ? t('settings.on') : t('settings.off'), env.hidden_unlock_required ? 'settings.on' : 'settings.off'),
+        kvRow('settings.host.settingsSource', doc.source),
+      ].join('');
+    }
+    showSettingsPanel(route.section || settingsPanel);
   }
 
   function kvRow(labelKey, value, valueKey) {
@@ -1009,7 +1101,7 @@
   function renderThemePicker(choices, value, disabled) {
     const current = choices.indexOf(value) >= 0 ? value : 'system';
     const label = escapeHtml(t('settings.fields.theme.label'));
-    const cards = choices.map(function (c) {
+    function swatch(c) {
       const on = c === current;
       const preview = c === 'system'
         ? '<span class="theme-swatch-preview is-system" aria-hidden="true">' +
@@ -1020,8 +1112,17 @@
         (on ? ' checked' : '') + disabled + '>' + preview +
         '<span class="theme-swatch-name" data-i18n="choice.' + c + '">' +
         escapeHtml(choiceLabel(c)) + '</span></label>';
-    }).join('');
-    return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' + cards + '</div>';
+    }
+    const core = CORE_THEMES.filter(function (c) { return choices.indexOf(c) >= 0; });
+    const palettes = choices.filter(function (c) { return CORE_THEMES.indexOf(c) < 0; });
+    return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' +
+      '<div class="theme-picker-core">' + core.map(swatch).join('') + '</div>' +
+      (palettes.length
+        ? '<p class="theme-picker-label" data-i18n="settings.theme.palettes">' +
+          escapeHtml(t('settings.theme.palettes')) + '</p>' +
+          '<div class="theme-picker-palettes">' + palettes.map(swatch).join('') + '</div>'
+        : '') +
+      '</div>';
   }
 
   function renderField(f, value, readonly) {

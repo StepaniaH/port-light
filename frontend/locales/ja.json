@@ -129,13 +129,26 @@
     "unsaved": "未保存の変更があります",
     "discard": "保存していない設定を破棄しますか？",
     "mustBeNumber": "{label} は数値にしてください",
+    "nav": {
+      "label": "設定の分類",
+      "appearance": "外観",
+      "occupancy": "ポートマップ",
+      "advanced": "詳細"
+    },
+    "theme": {
+      "palettes": "パレット"
+    },
+    "cards": {
+      "title": "カード",
+      "blurb": "各占有カードの状態テキストとバッジ。"
+    },
     "groups": {
       "appearance": {
         "title": "外観",
-        "blurb": "言語、テーマ、カードに出す情報量。"
+        "blurb": "言語、配色、カードの密度。"
       },
       "grid": {
-        "title": "グリッド",
+        "title": "ポートマップ",
         "blurb": "更新間隔と、空き数に使うポート範囲。"
       },
       "scanning": {

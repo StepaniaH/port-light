@@ -129,13 +129,26 @@
     "unsaved": "有未保存的更改",
     "discard": "放弃未保存的设置？",
     "mustBeNumber": "{label}必须是数字",
+    "nav": {
+      "label": "设置分类",
+      "appearance": "外观",
+      "occupancy": "占用图",
+      "advanced": "高级"
+    },
+    "theme": {
+      "palettes": "配色"
+    },
+    "cards": {
+      "title": "卡片",
+      "blurb": "每张占用卡片上的状态文字和标记。"
+    },
     "groups": {
       "appearance": {
         "title": "外观",
-        "blurb": "语言、主题，以及卡片上显示多少信息。"
+        "blurb": "语言、配色，以及卡片排得多密。"
       },
       "grid": {
-        "title": "网格",
+        "title": "占用图",
         "blurb": "刷新间隔，以及空闲计数所用的端口范围。"
       },
       "scanning": {

@@ -15,7 +15,7 @@
       if (s.grid_density) document.documentElement.setAttribute('data-density', s.grid_density);
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=42">
+  <link rel="stylesheet" href="/static/style.css?v=43">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -98,14 +98,12 @@
           <h1 data-i18n="settings.title">Settings</h1>
           <p class="settings-lead" id="settings-lead"></p>
         </div>
+        <nav id="settings-nav" class="settings-nav" role="tablist" data-i18n-aria="settings.nav.label">
+          <button type="button" role="tab" id="settings-tab-appearance" data-settings-panel="appearance" aria-controls="settings-panel-appearance" aria-selected="true" tabindex="0" data-i18n="settings.nav.appearance">Appearance</button>
+          <button type="button" role="tab" id="settings-tab-occupancy" data-settings-panel="occupancy" aria-controls="settings-panel-occupancy" aria-selected="false" tabindex="-1" data-i18n="settings.nav.occupancy">Occupancy</button>
+          <button type="button" role="tab" id="settings-tab-advanced" data-settings-panel="advanced" aria-controls="settings-panel-advanced" aria-selected="false" tabindex="-1" data-i18n="settings.nav.advanced">Advanced</button>
+        </nav>
         <div id="settings-fields"></div>
-        <section class="settings-card">
-          <header class="settings-card-head">
-            <h2 data-i18n="settings.host.title">Host</h2>
-            <p data-i18n="settings.host.blurb">Paths and passwords stay in the container environment. This page cannot change them.</p>
-          </header>
-          <div id="settings-env-only" class="settings-card-body"></div>
-        </section>
         <div class="settings-footer">
           <span id="settings-status"></span>
           <button type="submit" class="btn-primary" id="settings-save" data-i18n="settings.save">Save</button>
@@ -150,7 +148,7 @@
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=42"></script>
-  <script src="/static/app.js?v=42"></script>
+  <script src="/static/i18n.js?v=43"></script>
+  <script src="/static/app.js?v=43"></script>
 </body>
 </html>

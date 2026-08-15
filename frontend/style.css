@@ -724,9 +724,28 @@ a:focus-visible,
 .settings-page {
   max-width: 760px; margin: 0 auto; padding: 24px 20px 96px;
 }
-.page-intro { margin-bottom: 20px; }
+.page-intro { margin-bottom: 12px; }
 .page-intro h1 { font-size: 1.35rem; font-weight: 650; letter-spacing: -0.03em; }
 .settings-lead { margin-top: 6px; color: var(--text-dim); font-size: 0.88rem; max-width: 40rem; }
+
+.settings-nav {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  position: sticky; top: var(--header-h, 52px); z-index: 6;
+  margin: 0 -4px 16px; padding: 8px 4px 10px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+}
+.settings-nav [role="tab"] {
+  height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--card); color: var(--text-dim); font-size: 0.8rem; font-weight: 550;
+  cursor: pointer;
+}
+.settings-nav [role="tab"]:hover { color: var(--text); }
+.settings-nav [role="tab"][aria-selected="true"] {
+  background: var(--chip-active-bg); border-color: var(--accent); color: var(--accent);
+}
+.settings-nav [role="tab"]:focus-visible { outline: none; box-shadow: var(--focus); }
+.settings-panel[hidden] { display: none; }
 
 .settings-card {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -745,11 +764,18 @@ a:focus-visible,
 .setting-row.is-wide { flex-direction: column; align-items: stretch; gap: 10px; }
 .setting-row.is-wide .setting-control { align-items: stretch; }
 
-.theme-picker {
+.theme-picker { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.theme-picker-core {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+}
+.theme-picker-core .theme-swatch-preview { height: 52px; }
+.theme-picker-label {
+  margin: 2px 0 0; font-size: 0.75rem; font-weight: 650; color: var(--text-dim);
+}
+.theme-picker-palettes {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   gap: 8px;
-  width: 100%;
 }
 .theme-swatch {
   display: flex; flex-direction: column; gap: 6px;
@@ -953,7 +979,7 @@ a:focus-visible,
   .setting-row input[type="text"],
   .setting-row select,
   .locale-dropdown { width: 100%; }
-  .theme-picker { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+  .theme-picker-palettes { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
   .setting-control .segmented { width: 100%; }
   .setting-control .segmented .seg-opt { flex: 1; }
   #grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }

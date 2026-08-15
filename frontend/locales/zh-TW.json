@@ -129,13 +129,26 @@
     "unsaved": "有未儲存的變更",
     "discard": "放棄未儲存的設定？",
     "mustBeNumber": "{label}必須是數字",
+    "nav": {
+      "label": "設定分類",
+      "appearance": "外觀",
+      "occupancy": "佔用圖",
+      "advanced": "進階"
+    },
+    "theme": {
+      "palettes": "配色"
+    },
+    "cards": {
+      "title": "卡片",
+      "blurb": "每張佔用卡片上的狀態文字與標記。"
+    },
     "groups": {
       "appearance": {
         "title": "外觀",
-        "blurb": "語言、主題，以及卡片上顯示多少資訊。"
+        "blurb": "語言、配色，以及卡片排得多密。"
       },
       "grid": {
-        "title": "網格",
+        "title": "佔用圖",
         "blurb": "重新整理間隔，以及閒置計數所用的連接埠範圍。"
       },
       "scanning": {

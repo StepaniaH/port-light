@@ -6,6 +6,13 @@ from backend.main import app
 from backend import settings as app_settings
 
 
+def test_settings_field_groups_match_the_settings_panes():
+    assert {spec.group for spec in app_settings.FIELDS} <= {
+        "appearance", "grid", "scanning", "links",
+    }
+
+
+
 def test_settings_file_overrides_env(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("THEME", "dark")

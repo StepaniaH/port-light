@@ -129,13 +129,26 @@
     "unsaved": "Unsaved changes",
     "discard": "Discard unsaved settings?",
     "mustBeNumber": "{label} must be a number",
+    "nav": {
+      "label": "Settings sections",
+      "appearance": "Appearance",
+      "occupancy": "Occupancy",
+      "advanced": "Advanced"
+    },
+    "theme": {
+      "palettes": "Palettes"
+    },
+    "cards": {
+      "title": "Cards",
+      "blurb": "Status text and badges on each occupancy cell."
+    },
     "groups": {
       "appearance": {
         "title": "Appearance",
-        "blurb": "Language, theme, and how much each card shows."
+        "blurb": "Language, colors, and how tight the occupancy cards sit."
       },
       "grid": {
-        "title": "Grid",
+        "title": "Occupancy",
         "blurb": "Refresh interval and the range used for the free count."
       },
       "scanning": {
