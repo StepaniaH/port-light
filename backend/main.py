@@ -566,6 +566,8 @@ def _bind_scope(ip: str) -> str:
         return "public"
     if addr.is_loopback:
         return "localhost"
+    if addr.is_global:
+        return "public"
     return "lan"
 
 

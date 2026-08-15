@@ -27,6 +27,9 @@ def test_bind_scope():
     assert _bind_scope_many(["127.0.0.1"]) == "localhost"
     assert _bind_scope("[::1]") == "localhost"
     assert _bind_scope("[::]") == "public"
+    assert _bind_scope("8.8.8.8") == "public"
+    assert _bind_scope("169.254.1.1") == "lan"
+    assert _bind_scope_many(["8.8.8.8", "127.0.0.1"]) == "public"
 
 
 def test_compose_conflict_uses_bind_overlap():
@@ -108,6 +111,9 @@ def test_collect_urls_guesses_http_not_ssh():
         8096, ["192.168.1.10"], [], known_web, {"url_host": "nas.lan"},
     )
     assert "http://nas.lan:8096" in still_override
+    wan = _collect_urls(8096, ["8.8.8.8"], [], known_web)
+    assert "http://localhost:8096" in wan
+    assert "http://8.8.8.8:8096" not in wan
 
 
 def test_compose_project_name_and_port_zero():

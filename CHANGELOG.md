@@ -20,6 +20,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Compose top-level `name:` is the project label in the detail drawer (conflicts still key off the folder).
 - Ctrl/Cmd+S saves the settings page.
 - Compose `extends` (same file or `file:`) contributes `ports` / host-network `expose`.
+- Text search looks at the whole occupancy map, not only the toolbar range.
 
 ### Fixed
 
@@ -41,6 +42,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `ss` without `-H` (BusyBox / older iproute) is used when `ss -tulnpH` fails.
 - Compose `$$` is a literal `$`. A UTF-8 BOM no longer hides the compose file.
 - A junk row in `manual_ports` / `hidden_ports` no longer 500s occupancy.
+- Binding a specific public IP is `public` (the Public chip and access-port warning), not LAN. Guessed links stay on localhost unless `URL_HOST` is set.
 
 ### Changed
 

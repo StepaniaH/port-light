@@ -336,12 +336,23 @@
     const val = e.target.value.trim();
     searchTerm = val.toLowerCase();
     searchPortNum = /^\d+$/.test(val) ? parseInt(val, 10) : null;
+    if (searchPortNum !== null && (searchPortNum < 1 || searchPortNum > 65535)) {
+      searchPortNum = null;
+    }
     searchInput.classList.toggle('search-active', !!val);
     render();
   });
 
   rangeStartInput.addEventListener('change', updateRange);
   rangeEndInput.addEventListener('change', updateRange);
+  rangeStartInput.addEventListener('keydown', applyRangeOnEnter);
+  rangeEndInput.addEventListener('keydown', applyRangeOnEnter);
+
+  function applyRangeOnEnter(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    updateRange();
+  }
 
   function updateRange() {
     let s = parseInt(rangeStartInput.value, 10);
@@ -1172,7 +1183,7 @@
       displayPorts = buildSearchContext(ports, searchPortNum);
     } else {
       displayPorts = ports.filter(function (p) {
-        if (p.port < rangeStart || p.port > rangeEnd) return false;
+        if (!searchTerm && (p.port < rangeStart || p.port > rangeEnd)) return false;
         if (!showHidden && p.is_hidden) return false;
         if (!matchesFilter(p)) return false;
         if (searchTerm) {
