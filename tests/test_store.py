@@ -57,3 +57,12 @@ def test_junk_store_rows_do_not_break_writes(tmp_path, monkeypatch):
     assert updated["label"] == "new"
     saved = json.loads((tmp_path / "port_light.json").read_text(encoding="utf-8"))
     assert saved["manual_ports"] == [{"port": 12, "label": "new"}]
+
+
+def test_occupancy_user_state_is_one_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    port_store.add_manual_port(9, "lab")
+    port_store.add_hidden_port(22)
+    manuals, hidden = port_store.occupancy_user_state()
+    assert manuals[0]["port"] == 9
+    assert hidden == [22]

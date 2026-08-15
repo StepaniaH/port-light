@@ -105,8 +105,7 @@ def _hidden_port(value) -> int | None:
     return port
 
 
-def get_manual_ports() -> list[dict]:
-    data = _load()
+def _manuals_from(data: dict) -> list[dict]:
     out: list[dict] = []
     for entry in data.get("manual_ports") or []:
         port = _entry_port(entry)
@@ -118,6 +117,29 @@ def get_manual_ports() -> list[dict]:
             "machine": _entry_machine(entry),
         })
     return out
+
+
+def _hidden_from(data: dict) -> list[int]:
+    out: list[int] = []
+    seen: set[int] = set()
+    for raw in data.get("hidden_ports") or []:
+        port = _hidden_port(raw)
+        if port is None or port in seen:
+            continue
+        seen.add(port)
+        out.append(port)
+    return out
+
+
+def get_manual_ports() -> list[dict]:
+    return _manuals_from(_load())
+
+
+def occupancy_user_state() -> tuple[list[dict], list[int]]:
+    """One locked snapshot so occupancy does not tear across two reads."""
+    with _LOCK:
+        data = _load()
+    return _manuals_from(data), _hidden_from(data)
 
 
 def add_manual_port(port: int, label: str = "", machine: str = "localhost") -> dict:
@@ -160,16 +182,7 @@ def remove_manual_port(port: int, machine: str = "localhost") -> bool:
 # ── Hidden ports ──────────────────────────────────────────────
 
 def get_hidden_ports() -> list[int]:
-    data = _load()
-    out: list[int] = []
-    seen: set[int] = set()
-    for raw in data.get("hidden_ports") or []:
-        port = _hidden_port(raw)
-        if port is None or port in seen:
-            continue
-        seen.add(port)
-        out.append(port)
-    return out
+    return _hidden_from(_load())
 
 
 def add_hidden_port(port: int) -> bool:

@@ -30,19 +30,19 @@ Order of attempts:
 2. **`ss -tulnpH`** (then `ss -tulnp`) — bare metal or `network_mode: host`.
 3. **Local `/proc/net/*`** — last resort (usually the container’s own listeners). `/host/proc` inode → `/proc/<pid>/comm` fills process names when ss is not used.
 
-The Host scanner pill is green for `/host/proc/1/net/tcp`, local `/proc/net/tcp` on a non-container host, or `ss` when the process looks like host netns (`docker0` / several host NICs). A bridge container without that mount stays red even though `/proc/net/tcp` exists. `/api/health` includes `listen_source`: `host_proc`, `ss`, `proc`, or `none`.
+The Host scanner pill is green for `/host/proc/1/net/tcp`, local `/proc/net/tcp` on a non-container host, or `ss` when the process looks like host netns (`docker0` / several host NICs). A bridge container without that mount stays red even though `/proc/net/tcp` exists. If the listen table is not trusted, the scan returns no listeners (no `ss` / local `/proc` fall-through). `/api/health` includes `listen_source`: `host_proc`, `ss`, `proc`, or `none`.
 
-UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, or `tcp,udp` — listen, Docker, and Compose protocols are unioned), and `bind_scope` (`public` / `lan` / `link` / `localhost`). An empty `/host/proc` listen table is authoritative (no fall-through into the container netns). If `/host/proc` is mounted but `/host/proc/1/net/tcp` is missing, the listen scan also stops (no `ss` / local `/proc` fall-through).
+UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, `sctp`, or a comma union — listen, Docker, and Compose protocols are unioned; SCTP does not clash with TCP), and `bind_scope` (`public` / `lan` / `link` / `localhost`). An empty `/host/proc` listen table is authoritative (no fall-through into the container netns). If `/host/proc` is mounted but `/host/proc/1/net/tcp` is missing, the listen scan also stops (no `ss` / local `/proc` fall-through). `ss` `tcp6`/`udp6` `*:port` is `::`, not `0.0.0.0`.
 
 ## Docker
 
 `docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings`, then `NetworkSettings.Ports`. Empty / `0` HostPort on one address family reuses a sibling assignment on the same spec (typical dual-stack `-P`). Unassigned ephemeral publishes stay off the map until Docker fills `NetworkSettings.Ports`.
 
-`network_mode: host`:
+`network_mode: host` and `network_mode: ns:/proc/1/ns/net` (or any `ns:` path that is the same inode as host pid 1):
 
 - `Config.ExposedPorts` is **configured** occupancy (declared), not in-use, unless something is actually listening or the container pid/inode matches a listen row.
 - Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` **and descendant PIDs** (`task/*/children`), or listen rows whose `pid` is in that tree, so worker processes still get a container name.
-- `network_mode: container:…` joiners of a host-network target are treated the same way (shared netns). Joiners of a bridge container are not matched by inode (inode numbers are per-netns).
+- `network_mode: container:…` joiners of a host-network target are treated the same way (shared netns). Joiners of a bridge container are not matched by inode (inode numbers are per-netns). Arbitrary `ns:/var/run/docker/netns/<id>` is host only when it actually is the host netns.
 
 macvlan/ipvlan networks: `ExposedPorts` plus the network IPv4/IPv6 addresses (including `IPv6Address` prefixes and secondary addresses) are treated as LAN occupancy (Docker does not publish those on the host).
 
@@ -59,11 +59,12 @@ Stopped containers still contribute PortBindings — those become amber if nothi
 Supported port syntax:
 
 - Short: `8080:80`, `0.0.0.0:8080:80`, `127.0.0.1:8080:80`, `8080:80/tcp`, YAML `{8080: 80}` / `{53/udp: 53}` / `53/udp:53`
-- Long: `{ published, target, protocol, host_ip, mode }` (`mode: host` without a usable `published` uses `target` as the host port; published may be `"5353/udp"`)
+- Long: `{ published, target, protocol, host_ip, mode }` (`mode: host` without a usable `published` uses `target` as the host port; published or target may be `"5353/udp"` / `"53/udp"`)
 - Swarm `deploy.ports`
 - `${VAR}` / `$VAR` / `${VAR:-default}` / `${VAR-default}` / `${VAR:?err}` / `${VAR?err}` from the sibling `.env` plus process environment
 - Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 128 ports per mapping
-- `network_mode: host` plus `expose:` — those container ports are host ports (bridge `expose` is ignored)
+- `network_mode: host` (or host `ns:`) plus `expose:` — those container ports are host ports (bridge `expose` is ignored)
+- Compose macvlan/ipvlan `ipv4_address` / `ipv6_address` plus `expose` and/or published `target` — LAN occupancy on that address (bridge static IPs are not host occupancy)
 
 Conflict keys use the Compose folder **relative to the scan root** (`apps/wiki` vs `other/wiki`), not the basename. `name:` is display-only. Two files in the same stack (`compose.yml` plus `compose.override.yml`) are not a conflict.
 
@@ -85,7 +86,7 @@ Guessed access URLs: loopback binds use `127.0.0.1`; a LAN-only bind uses that a
 
 ## Persistence
 
-One file: `$PORT_LIGHT_DATA_DIR/port_light.json`. A process-wide `threading.Lock` wraps read-modify-write. Fine for one replica. Do not run two containers on the same file.
+One file: `$PORT_LIGHT_DATA_DIR/port_light.json`. A process-wide `threading.Lock` wraps read-modify-write. Occupancy loads manuals and hidden ports from one snapshot. Fine for one replica. Do not run two containers on the same file.
 
 The `machines` array may still exist in older `port_light.json` files. It is not scanned and is not shown in the UI.
 
@@ -93,7 +94,7 @@ The `machines` array may still exist in older `port_light.json` files. It is not
 
 ## Frontend
 
-No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail (free ports load `GET /api/ports/{N}`). Skip-to-content focuses `#grid` or `#settings-form`. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`; `frontend/i18n.js` sets `html lang`. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned.
+No framework. Hash routes: `#/` grid, `#/settings` settings, `#/port/8096` detail (free ports load `GET /api/ports/{N}`). Skip-to-content focuses `#grid` or `#settings-form`. Appearance is cached in `localStorage` only to avoid a flash before `/api/settings` returns. UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`; `frontend/i18n.js` sets `html lang`. An optional `HIDDEN_UNLOCK_PASSWORD` is sent as `X-Hidden-Unlock` from `sessionStorage` (not a client-side hash). Hide-from-grid without that env (and without Basic Auth) is a UI filter on rows the API already returned. Hidden occupancy cells keep used/configured color at reduced opacity (chrome `.hidden` is `display: none`).
 
 ## Why not Kubernetes / remote Docker
 

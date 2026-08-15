@@ -104,6 +104,9 @@ def scan_listening_ports(
     except (FileNotFoundError, OSError):
         pass
 
+    if not host_listen_trusted():
+        return []
+
     try:
         return _scan_with_ss()
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -266,6 +269,9 @@ def parse_ss_line(line: str) -> ListeningPort | None:
         protocol = "udp"
     else:
         protocol = "tcp"
+
+    if protocol.endswith("6") and ip in ("*", "0.0.0.0"):
+        ip = "::"
 
     ip = normalize_ip(ip)
 
@@ -497,6 +503,27 @@ def _read_comm(proc_root: str, pid: str) -> str:
     except OSError:
         return ""
     return text.splitlines()[0].strip()[:32] if text else ""
+
+
+def is_host_netns_mode(mode: str | None) -> bool:
+    """True for ``host`` and ``ns:`` paths that are the host network namespace."""
+    text = (mode or "").strip()
+    if text.lower() == "host":
+        return True
+    if not text.lower().startswith("ns:"):
+        return False
+    path = text.split(":", 1)[1].strip()
+    if not path:
+        return False
+    if path in ("/proc/1/ns/net", "/host/proc/1/ns/net"):
+        return True
+    for host in ("/host/proc/1/ns/net", "/proc/1/ns/net"):
+        try:
+            if os.path.exists(path) and os.path.exists(host) and os.path.samestat(os.stat(path), os.stat(host)):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def _parse_ipv6_hex(hex_str: str) -> str:

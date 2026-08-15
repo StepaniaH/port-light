@@ -1389,7 +1389,7 @@
 
     grid.innerHTML = displayPorts.map(function (p) {
       let cls = p.status === 'used' ? 'used' : p.status === 'configured' ? 'configured' : 'free';
-      if (p.is_hidden) cls = 'hidden';
+      if (p.is_hidden) cls += ' hidden';
       const conflict = p.conflict ? ' conflict' : '';
       const selected = p.port === selectedPort ? ' selected' : '';
       const isSearchHit = searchPortNum !== null && p.port === searchPortNum;

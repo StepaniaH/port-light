@@ -30,6 +30,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Swarm `mode: host` without `published` uses `target` as the host port.
 - `/api/health` reports `listen_source` (`host_proc` / `ss` / `proc`). The Host pill is green for host-network `ss`, not only `/host/proc`.
 - Occupancy summary includes `compose_truncated` / `compose_files` when the Compose walk hits `COMPOSE_SCAN_MAX_FILES`, and `hidden_ports` (unlocked) so numeric search does not paint a hidden cell free.
+- Compose macvlan/ipvlan `ipv4_address` / `ipv6_address` plus `expose` / published `target` count as LAN occupancy when Docker is not running.
+- `network_mode: ns:/proc/1/ns/net` (and a `ns:` path that is the host pid 1 netns) is treated like `host`.
 
 ### Fixed
 
@@ -101,6 +103,15 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - macvlan/ipvlan secondary addresses and `IPv6Address` prefixes were ignored.
 - Numeric search painted locked-hidden hits as free, and kept synthetic free neighbors under the in-use filter.
 - `#/port/N` flashed a free detail before the lookup returned.
+- Showing hidden ports hid occupancy cells (`.hidden { display: none }` also matched `.port-cell.hidden`).
+- `ss` `tcp6` / `udp6` `*:443` was stored as IPv4 `0.0.0.0`.
+- Long-syntax `target: "53/udp"` (and `mode: host` with that target) was dropped.
+- SCTP occupancy was treated as TCP, so it conflicted with a TCP bind on the same port.
+- A bridge container without a trusted host listen table still scanned `ss` / local `/proc` and painted container listeners as host used.
+- Occupancy could tear across two unlocked reads of `port_light.json` (manuals vs hidden).
+- `https://nas:192.168.1.10`-shaped extra_hosts values survived as detail URLs.
+- `docker_available` stayed green after the Docker client failed to open.
+- Tailscale 41641 had no access chip (unlike WireGuard) and would have guessed `http://`.
 
 ### Changed
 

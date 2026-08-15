@@ -25,6 +25,7 @@ from backend.port_scanner import (
     _fill_process_names,
     descendant_pids,
     host_proc_available,
+    is_host_netns_mode,
     normalize_ip,
     parse_proc_net_line,
     parse_ss_line,
@@ -349,6 +350,11 @@ def test_ss_ipv6_and_star():
     star = parse_ss_line("tcp LISTEN 0 128 *:22 *:*")
     assert star is not None
     assert star.port == 22
+    star6 = parse_ss_line("tcp6 LISTEN 0 128 *:443 *:*")
+    assert star6 is not None
+    assert star6.port == 443
+    assert star6.ip == "::"
+    assert star6.protocol == "tcp6"
     assert parse_ss_line("tcp LISTEN 0 128 0.0.0.0:0 0.0.0.0:*") is None
     zero = (
         "   0: 00000000:0000 00000000:0000 0A 00000000:00000000 "
@@ -420,9 +426,14 @@ def test_long_syntax_and_ipv4_host():
     assert v6["host_ip"] == "::1"
     long_ip = parse_port_entry({"published": 9000, "target": 80, "host_ip": "10.0.0.5"})
     assert long_ip[0]["host_ip"] == "10.0.0.5"
-    slash = parse_port_entry({"published": "5353/udp", "target": 53})
-    assert slash[0]["host_port"] == 5353
-    assert slash[0]["protocol"] == "udp"
+    assert parse_port_entry({"published": "5353/udp", "target": 53})[0]["protocol"] == "udp"
+    target_slash = parse_port_entry({"published": 5353, "target": "53/udp"})
+    assert target_slash[0]["host_port"] == 5353
+    assert target_slash[0]["container_port"] == 53
+    assert target_slash[0]["protocol"] == "udp"
+    host_udp = parse_port_entry({"target": "53/udp", "mode": "host"})
+    assert host_udp[0]["host_port"] == 53
+    assert host_udp[0]["protocol"] == "udp"
     assert parse_port_entry("not-a-port") == []
     assert parse_port_entry({"target": 80}) == []
     host_mode = parse_port_entry({"target": 8080, "mode": "host"})
@@ -555,6 +566,7 @@ def test_label_urls_reject_javascript():
     assert safe_http_url("javascript:alert(1)") is None
     assert safe_http_url("/relative") is None
     assert safe_http_url("http://photos.lan:2283") == "http://photos.lan:2283"
+    assert safe_http_url("https://nas:192.168.1.10") is None
     assert extract_label_urls({"homepage.href": "javascript:alert(1)"}) == []
 
 
@@ -844,3 +856,75 @@ def test_macvlan_secondary_and_prefixed_ipv6(monkeypatch):
     }, [])
     ips = {row["host_ip"] for row in extra}
     assert ips == {"10.0.0.9", "fd12::10", "10.0.0.10"}
+
+
+def test_compose_macvlan_and_ns_host(tmp_path):
+    (tmp_path / "compose.yml").write_text(
+        "networks:\n"
+        "  lan:\n    driver: macvlan\n"
+        "  backend:\n    driver: bridge\n"
+        "services:\n"
+        "  cam:\n"
+        "    networks:\n"
+        "      lan:\n        ipv4_address: 192.168.1.50\n"
+        "    expose:\n      - '8080'\n"
+        "    ports:\n      - '9000:80'\n"
+        "  db:\n"
+        "    networks:\n"
+        "      backend:\n        ipv4_address: 172.18.0.10\n"
+        "    expose:\n      - '5432'\n"
+        "  vpn:\n"
+        "    network_mode: ns:/proc/1/ns/net\n"
+        "    expose:\n      - '41641/udp'\n",
+        encoding="utf-8",
+    )
+    ports = scan_compose_files(str(tmp_path))
+    cam = [p for p in ports if p.service_name == "cam"]
+    assert {p.port for p in cam if p.host_ip is None} == {9000}
+    lan = {(p.port, p.host_ip) for p in cam if p.host_ip}
+    assert (8080, "192.168.1.50") in lan
+    assert (80, "192.168.1.50") in lan
+    assert not any(p.port == 5432 for p in ports)
+    vpn = [p for p in ports if p.service_name == "vpn"]
+    assert len(vpn) == 1
+    assert vpn[0].port == 41641
+    assert vpn[0].protocol == "udp"
+
+
+def test_host_netns_mode_paths():
+    assert is_host_netns_mode("host") is True
+    assert is_host_netns_mode("ns:/proc/1/ns/net") is True
+    assert is_host_netns_mode("ns:/host/proc/1/ns/net") is True
+    assert is_host_netns_mode("ns:/var/run/docker/netns/abc") is False
+    assert is_host_netns_mode("bridge") is False
+    attrs = {
+        "HostConfig": {"NetworkMode": "ns:/proc/1/ns/net", "PortBindings": {}},
+        "NetworkSettings": {"Ports": {}},
+        "Config": {"ExposedPorts": {"53/udp": {}}},
+    }
+    mapped = {(p["host_port"], p["protocol"]) for p in extract_ports(attrs)}
+    assert (53, "udp") in mapped
+
+
+def test_untrusted_listen_skips_ss_and_proc(monkeypatch):
+    from backend import port_scanner as ps
+    monkeypatch.setattr(ps, "_scan_with_host_proc", lambda prefer_pids=None: None)
+    monkeypatch.setattr(ps, "host_listen_trusted", lambda: False)
+    monkeypatch.setattr(
+        ps, "_scan_with_ss",
+        lambda: [ListeningPort(port=80, protocol="tcp", ip="0.0.0.0")],
+    )
+    monkeypatch.setattr(
+        ps, "_scan_with_proc",
+        lambda prefer_pids=None: [ListeningPort(port=443, protocol="tcp", ip="0.0.0.0")],
+    )
+    assert ps.scan_listening_ports() == []
+
+
+def test_scan_containers_marks_client_missing(monkeypatch):
+    from backend import docker_scanner as ds
+    monkeypatch.setattr(ds, "_docker_client", lambda: None)
+    marked = []
+    monkeypatch.setattr(ds, "_mark_available", lambda ok: marked.append(ok))
+    assert ds.scan_containers() == []
+    assert marked == [False]

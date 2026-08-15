@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
-from .port_scanner import descendant_pids, socket_inodes_for_tree
+from .port_scanner import descendant_pids, is_host_netns_mode, socket_inodes_for_tree
 
 try:
     import docker
@@ -109,6 +109,7 @@ class ContainerInfo:
 def scan_containers() -> list[ContainerInfo]:
     client = _docker_client()
     if client is None:
+        _mark_available(False)
         return []
 
     try:
@@ -159,7 +160,7 @@ def _network_is_host_netns(
 ) -> bool:
     """True for ``host`` and for ``container:`` joiners of a host-netns target."""
     mode = mode or ""
-    if mode == "host":
+    if mode == "host" or is_host_netns_mode(mode):
         return True
     if not mode.startswith("container:"):
         return False
@@ -255,7 +256,7 @@ def extract_ports(attrs: dict) -> list[dict]:
     _add_bindings((attrs.get("NetworkSettings") or {}).get("Ports") or {})
 
     network_mode = (attrs.get("HostConfig") or {}).get("NetworkMode") or ""
-    if network_mode == "host":
+    if network_mode == "host" or is_host_netns_mode(network_mode):
         exposed = (attrs.get("Config") or {}).get("ExposedPorts") or {}
         for spec in exposed:
             cp, protocol = _split_port_spec(spec)
@@ -608,6 +609,7 @@ def safe_http_url(url: str | None) -> str | None:
             text = "https://" + text
     try:
         parsed = urlparse(text)
+        port = parsed.port
     except ValueError:
         return None
     if parsed.scheme not in ("http", "https"):
@@ -615,6 +617,8 @@ def safe_http_url(url: str | None) -> str | None:
     if not parsed.hostname or parsed.username is not None:
         return None
     if parsed.hostname.lower() in _bad:
+        return None
+    if port is not None and not (1 <= port <= 65535):
         return None
     return text
 

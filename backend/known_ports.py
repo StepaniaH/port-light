@@ -62,7 +62,7 @@ KNOWN_PORTS: dict[int, dict] = {
     51820: {"name": "WireGuard",     "description": "WireGuard VPN",                                 "category": "vpn",       "is_access_port": True},
     5060:  {"name": "SIP",           "description": "SIP (Asterisk / FreePBX)",                      "category": "system",    "is_access_port": True},
     5061:  {"name": "SIPS",          "description": "SIP over TLS",                                  "category": "system",    "is_access_port": True},
-    41641: {"name": "Tailscale",     "description": "Tailscale (default UDP)",                       "category": "vpn",       "is_access_port": False},
+    41641: {"name": "Tailscale",     "description": "Tailscale (default UDP)",                       "category": "vpn",       "is_access_port": True},
     5800:  {"name": "VNC HTTP",      "description": "VNC web interface",                             "category": "vpn",       "is_access_port": True},
     5900:  {"name": "VNC",           "description": "VNC remote desktop",                            "category": "vpn",       "is_access_port": True},
 

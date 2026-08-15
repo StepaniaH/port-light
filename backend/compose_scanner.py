@@ -10,6 +10,8 @@ from pathlib import Path
 
 import yaml
 
+from .port_scanner import is_host_netns_mode
+
 _SKIP_DIRS = frozenset({
     ".git", ".svn", ".hg", "node_modules", ".venv", "venv",
     "__pycache__", ".pytest_cache", "data",
@@ -95,10 +97,53 @@ def _norm_proto(proto) -> str:
     return text
 
 
+def _is_host_network(net: str | None) -> bool:
+    return is_host_netns_mode(net)
+
+
 def _is_shared_netns(net: str | None) -> bool:
     if not net:
         return False
     return net.startswith("service:") or net.startswith("container:")
+
+
+def _macvlan_network_names(data: dict) -> set[str]:
+    nets = _unwrap_compose(data.get("networks"))
+    if not isinstance(nets, dict):
+        return set()
+    names: set[str] = set()
+    for name, cfg in nets.items():
+        cfg = _unwrap_compose(cfg)
+        if not isinstance(cfg, dict):
+            continue
+        driver = str(_unwrap_compose(cfg.get("driver")) or "").lower()
+        if driver in ("macvlan", "ipvlan"):
+            names.add(str(name))
+    return names
+
+
+def _service_macvlan_ips(svc_cfg: dict, macvlan_names: set[str]) -> list[str]:
+    nets = _unwrap_compose(svc_cfg.get("networks"))
+    ips: list[str] = []
+    if isinstance(nets, dict):
+        items = nets.items()
+    elif isinstance(nets, list):
+        items = ((item, {}) for item in nets if isinstance(item, str))
+    else:
+        return ips
+    for name, cfg in items:
+        if str(name) not in macvlan_names:
+            continue
+        if not isinstance(cfg, dict):
+            continue
+        for key in ("ipv4_address", "ipv6_address"):
+            raw = str(cfg.get(key) or "").strip()
+            if not raw:
+                continue
+            ip = raw.split("/", 1)[0].strip()
+            if ip and ip not in ips:
+                ips.append(ip)
+    return ips
 
 
 def _unwrap_compose(val):
@@ -254,6 +299,7 @@ def _parse_compose_file(
         return ports
 
     rel_path = os.path.relpath(filepath, scan_dir)
+    macvlan_names = _macvlan_network_names(data)
 
     for svc_name, svc_cfg in local_services.items():
         if not isinstance(svc_cfg, dict):
@@ -281,7 +327,7 @@ def _parse_compose_file(
                     host_ip=p.get("host_ip"),
                     network_mode=net,
                 ))
-        if net == "host":
+        if _is_host_network(net):
             for entry in _port_entries(svc_cfg.get("expose")):
                 for p in parse_expose_entry(entry):
                     ports.append(ComposePort(
@@ -295,6 +341,46 @@ def _parse_compose_file(
                         host_ip=p.get("host_ip"),
                         network_mode=net,
                     ))
+            continue
+        lan_ips = _service_macvlan_ips(svc_cfg, macvlan_names)
+        if not lan_ips:
+            continue
+        lan_rows: list[dict] = []
+        for entry in _port_entries(svc_cfg.get("expose")):
+            lan_rows.extend(parse_expose_entry(entry))
+        for entry in entries:
+            parsed = parse_port_entry(entry)
+            if parsed:
+                for p in parsed:
+                    cp = p.get("container_port")
+                    if cp:
+                        lan_rows.append({
+                            "host_port": cp,
+                            "container_port": cp,
+                            "protocol": p.get("protocol", "tcp"),
+                            "host_ip": None,
+                        })
+                continue
+            if isinstance(entry, dict) and entry.get("target") is not None:
+                extra = parse_expose_entry(entry.get("target"))
+                proto = entry.get("protocol")
+                if proto:
+                    for row in extra:
+                        row["protocol"] = _norm_proto(proto)
+                lan_rows.extend(extra)
+        for ip in lan_ips:
+            for p in lan_rows:
+                ports.append(ComposePort(
+                    port=p["host_port"],
+                    compose_file=rel_path,
+                    project_dir=this_dir,
+                    project_name=this_name,
+                    service_name=svc_name,
+                    container_port=p.get("container_port"),
+                    protocol=p.get("protocol", "tcp"),
+                    host_ip=ip,
+                    network_mode=net,
+                ))
     return ports
 
 
@@ -545,6 +631,12 @@ def parse_port_entry(entry) -> list[dict]:
         proto = _norm_proto(entry.get("protocol") or "tcp")
         host_ip = entry.get("host_ip") or None
         mode = str(entry.get("mode") or "").strip().lower()
+        if isinstance(target, str) and "/" in target:
+            t_s, t_proto = target.rsplit("/", 1)
+            if t_s.strip() and t_proto.strip():
+                if "protocol" not in entry:
+                    proto = _norm_proto(t_proto)
+                target = t_s.strip()
         if _published_unset(host):
             if mode == "host" and target is not None:
                 host = target

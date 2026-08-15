@@ -54,6 +54,11 @@ def test_compose_conflict_uses_bind_overlap():
         {"project_dir": "other", "host_ip": "0.0.0.0", "protocol": "udp"},
     ]
     assert _compose_conflict(tcp_udp) is False
+    tcp_sctp = [
+        {"project_dir": "dns", "host_ip": "0.0.0.0", "protocol": "tcp"},
+        {"project_dir": "other", "host_ip": "0.0.0.0", "protocol": "sctp"},
+    ]
+    assert _compose_conflict(tcp_sctp) is False
 
 
 def test_compose_keeps_distinct_host_ips():
@@ -99,6 +104,7 @@ def test_collect_urls_guesses_http_not_ssh():
     ssh = {"name": "SSH", "is_access_port": True}
     assert _collect_urls(22, ["0.0.0.0"], [], ssh) == []
     assert _collect_urls(5060, ["0.0.0.0"], [], {"name": "SIP", "is_access_port": True}) == []
+    assert _collect_urls(41641, ["0.0.0.0"], [], {"name": "Tailscale", "is_access_port": True}) == []
 
     v6 = _collect_urls(
         8096, ["0.0.0.0"], [], known_web, {"url_host": "2001:db8::1"},

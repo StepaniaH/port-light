@@ -139,12 +139,13 @@ def _occupancy(
         max_files=values["compose_scan_max_files"],
     )
     hidden_locked = hidden_ports_withheld() and not may_see
+    manuals, hidden = port_store.occupancy_user_state()
     result = _classify(
         scan_listening_ports(prefer_pids=prefer),
         containers,
         compose_scan.ports,
-        port_store.get_manual_ports(),
-        port_store.get_hidden_ports(),
+        manuals,
+        hidden,
         start,
         end,
         show_hidden,
@@ -608,7 +609,11 @@ def _binds_overlap(a: str | None, b: str | None) -> bool:
 
 def _proto_family(proto: str | None) -> str:
     base = (proto or "tcp").lower().replace("6", "")
-    return "udp" if base.startswith("udp") else "tcp"
+    if base.startswith("udp"):
+        return "udp"
+    if base.startswith("sctp"):
+        return "sctp"
+    return "tcp"
 
 
 def _compose_conflict(composes: list[dict]) -> bool:
@@ -673,7 +678,7 @@ def _bind_scope_many(ips: list[str]) -> str:
 
 _NO_HTTP_PORTS = frozenset({
     22, 23, 25, 53, 110, 143, 445, 554, 1194, 1935, 3260, 3389, 5060, 5061,
-    5222, 5357, 5900, 8554, 9418, 10050, 10051, 4317, 51820,
+    5222, 5357, 5900, 8554, 9418, 10050, 10051, 4317, 41641, 51820,
 })
 
 
