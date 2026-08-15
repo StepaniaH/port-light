@@ -4,6 +4,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.5.3 — 2026-08-15
+
 ### Added
 
 - Keyboard navigation on the language dropdown (arrows, Home, End).

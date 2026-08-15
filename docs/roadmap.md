@@ -2,6 +2,12 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.5.3
+
+- Keyboard occupancy grid, detail-panel action errors, two-line card labels
+- Compose override files; conflict is per project, not per file
+- Security headers, static cache, poll skip when the map is unchanged
+
 ## Shipped in 0.5.2
 
 - Settings page (`#/settings`): Compose env or Web UI, file overlay in the data volume

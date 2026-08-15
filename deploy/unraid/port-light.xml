@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>port-light</Name>
-  <Repository>stepaniah/port-light:v0.5.2</Repository>
+  <Repository>stepaniah/port-light:v0.5.3</Repository>
   <Registry>https://hub.docker.com/r/stepaniah/port-light/</Registry>
   <Network>bridge</Network>
   <MyIP/>
