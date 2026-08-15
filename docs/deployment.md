@@ -170,7 +170,7 @@ If a Quadlet or rootless snippet works on your machine, open an issue or PR with
 
 ## Health
 
-`GET /api/health` returns process liveness plus `{ proc, docker, compose }` booleans. It does not require Basic Auth and does not include port data. `proc: false` / `docker: false` means the UI can be up while the grid is empty.
+`GET /api/health` returns process liveness plus `{ proc, docker, compose, listen_source }` . It does not require Basic Auth and does not include port data. `proc: false` / `docker: false` means the UI can be up while the grid is empty. `listen_source` is `host_proc`, `ss`, `proc`, or `none` when the Host pill is trusted green.
 
 ## Settings (Compose and Web UI)
 

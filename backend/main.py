@@ -21,10 +21,10 @@ from .auth import (
     hidden_unlock_configured,
     request_may_see_hidden,
 )
-from .compose_scanner import scan_compose_files
+from .compose_scanner import scan_compose_tree
 from .docker_scanner import docker_available, safe_http_url, scan_containers
 from .known_ports import get_known_port
-from .port_scanner import host_proc_available, scan_listening_ports
+from .port_scanner import host_listen_trusted, listen_scan_source, scan_listening_ports
 
 VERSION = "0.5.3"
 
@@ -99,12 +99,15 @@ def meta() -> dict:
 @app.get("/api/health")
 def health() -> dict:
     compose_dir = _compose_dir()
+    source = listen_scan_source()
+    trusted = host_listen_trusted()
     return {
         "status": "ok",
         "version": VERSION,
         "auth_required": auth_configured(),
         "scanners": {
-            "proc": host_proc_available(),
+            "proc": trusted,
+            "listen_source": source if trusted else "none",
             "docker": docker_available(),
             "compose": os.path.isdir(compose_dir),
         },
@@ -124,22 +127,33 @@ def _occupancy(
         end = start
     may_see = request_may_see_hidden(request)
     show_hidden = bool(include_hidden and may_see)
-    return _classify(
-        scan_listening_ports(),
-        scan_containers(),
-        scan_compose_files(
-            _compose_dir(),
-            max_depth=values["compose_scan_depth"],
-            max_files=values["compose_scan_max_files"],
-        ),
+    containers = scan_containers()
+    prefer: list[int] = []
+    for c in containers:
+        prefer.extend(c.pids or [])
+        if c.pid:
+            prefer.append(c.pid)
+    compose_scan = scan_compose_tree(
+        _compose_dir(),
+        max_depth=values["compose_scan_depth"],
+        max_files=values["compose_scan_max_files"],
+    )
+    hidden_locked = hidden_ports_withheld() and not may_see
+    result = _classify(
+        scan_listening_ports(prefer_pids=prefer),
+        containers,
+        compose_scan.ports,
         port_store.get_manual_ports(),
         port_store.get_hidden_ports(),
         start,
         end,
         show_hidden,
-        hidden_locked=hidden_ports_withheld() and not may_see,
+        hidden_locked=hidden_locked,
         options=values,
     )
+    result["summary"]["compose_truncated"] = compose_scan.truncated
+    result["summary"]["compose_files"] = compose_scan.files_scanned
+    return result
 
 
 def _json_etag(payload: dict) -> tuple[str, str]:
@@ -190,7 +204,15 @@ def get_port(
     for row in payload["ports"]:
         if row["port"] == port:
             return row
-    if port in port_store.get_hidden_ports() and payload["summary"]["hidden_locked"]:
+    hidden: set[int] = set()
+    for raw in port_store.get_hidden_ports() or []:
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= n <= 65535:
+            hidden.add(n)
+    if port in hidden:
         raise HTTPException(status_code=404, detail="not found")
     known = get_known_port(port)
     return {
@@ -378,14 +400,17 @@ def _classify(
                 "container_port": p.get("container_port"),
                 "source": p.get("source") or "publish",
             })
-        if c.network_mode == "host" and c.socket_inodes:
+        if c.socket_inodes:
             for inode in c.socket_inodes:
                 port = inode_to_port.get(inode)
                 if port:
                     _add_container(port, c)
-        if c.network_mode == "host" and c.pid:
+        pids = set(c.pids or [])
+        if c.pid:
+            pids.add(c.pid)
+        if pids:
             for port, rec in listening_map.items():
-                if rec.get("pid") == c.pid:
+                if rec.get("pid") in pids:
                     _add_container(port, c)
 
     compose_map: dict[int, list[dict]] = {}
@@ -488,10 +513,9 @@ def _classify(
         proto_bits = []
         if lp_info:
             proto_bits.extend(lp_info.get("protocols") or [lp_info["protocol"]])
-        else:
-            for c in ctors:
-                proto_bits.extend(c.get("protocols") or ([c.get("protocol")] if c.get("protocol") else []))
-            proto_bits.extend(c.get("protocol") or "tcp" for c in composes)
+        for c in ctors:
+            proto_bits.extend(c.get("protocols") or ([c.get("protocol")] if c.get("protocol") else []))
+        proto_bits.extend(c.get("protocol") or "tcp" for c in composes)
 
         port_list.append({
             "port": port,
@@ -534,8 +558,11 @@ def _classify(
             "free": free,
             "hidden": hidden_in_range,
             "hidden_locked": hidden_locked,
+            "hidden_ports": sorted(hidden_ports) if not hidden_locked else [],
             "range_start": range_start,
             "range_end": range_end,
+            "compose_truncated": False,
+            "compose_files": 0,
         },
     }
 

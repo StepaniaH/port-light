@@ -44,7 +44,13 @@
     "docker": "Docker",
     "compose": "Compose",
     "available": "{name}可用",
-    "unavailable": "{name}不可用"
+    "unavailable": "{name}不可用",
+    "truncated": "{name}達到檔案上限，部分宣告連接埠可能沒畫出來",
+    "via": {
+      "host_proc": "{name} · /host/proc",
+      "ss": "{name} · ss",
+      "proc": "{name} · /proc"
+    }
   },
   "status": {
     "used": "使用中",
@@ -53,7 +59,10 @@
     "running": "執行中",
     "paused": "已暫停",
     "restarting": "重啟中",
-    "exited": "已結束"
+    "exited": "已結束",
+    "created": "已建立",
+    "dead": "已死亡",
+    "removing": "正在移除"
   },
   "detail": {
     "panel": "連接埠詳情",

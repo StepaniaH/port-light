@@ -44,7 +44,13 @@
     "docker": "Docker",
     "compose": "Compose",
     "available": "{name} 利用可",
-    "unavailable": "{name} 利用不可"
+    "unavailable": "{name} 利用不可",
+    "truncated": "{name} がファイル上限に達し、一部の宣言ポートが欠けている可能性",
+    "via": {
+      "host_proc": "{name} · /host/proc",
+      "ss": "{name} · ss",
+      "proc": "{name} · /proc"
+    }
   },
   "status": {
     "used": "使用中",
@@ -53,7 +59,10 @@
     "running": "実行中",
     "paused": "一時停止",
     "restarting": "再起動中",
-    "exited": "終了"
+    "exited": "終了",
+    "created": "作成済み",
+    "dead": "dead",
+    "removing": "削除中"
   },
   "detail": {
     "panel": "ポート詳細",

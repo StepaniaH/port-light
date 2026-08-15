@@ -25,6 +25,7 @@ def test_health_unauthenticated(monkeypatch):
     body = res.json()
     assert body["status"] == "ok"
     assert body["auth_required"] is True
+    assert "listen_source" in body["scanners"]
 
 
 def test_root_requires_basic_auth(monkeypatch):
@@ -113,3 +114,19 @@ def test_manual_port_roundtrip_and_lookup(monkeypatch, tmp_path):
     assert free.status_code == 200
     assert free.json()["status"] == "free"
     assert free.json()["port"] == 1
+
+
+def test_hidden_port_lookup_is_not_free(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    monkeypatch.delenv("HIDDEN_UNLOCK_PASSWORD", raising=False)
+    port_store.add_manual_port(8096, "jellyfin")
+    port_store.add_hidden_port(8096)
+    client = TestClient(app)
+    omitted = client.get("/api/ports/8096")
+    assert omitted.status_code == 404
+    shown = client.get("/api/ports/8096", params={"include_hidden": True})
+    assert shown.status_code == 200
+    assert shown.json()["status"] == "configured"
+    assert shown.json()["is_hidden"] is True

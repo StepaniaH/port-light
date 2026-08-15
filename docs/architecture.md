@@ -11,8 +11,8 @@ Browser  ──GET /──►  frontend/index.html
 
 `GET /api/ports` is the only hot path. Every refresh (default 5s) re-runs:
 
-1. `backend/port_scanner.py` — listening TCP sockets
-2. `backend/docker_scanner.py` — container list + published ports
+1. `backend/docker_scanner.py` — container list + published ports (host-network pid trees first, so process names can prefer those PIDs)
+2. `backend/port_scanner.py` — listening TCP/UDP sockets
 3. `backend/compose_scanner.py` — declared host ports in Compose files
 4. `backend/port_store.py` — manual / hidden / machine JSON
 5. `backend/main.py` `_classify()` — union, status, source type, conflicts
@@ -30,9 +30,9 @@ Order of attempts:
 2. **`ss -tulnpH`** (then `ss -tulnp`) — bare metal or `network_mode: host`.
 3. **Local `/proc/net/*`** — last resort (usually the container’s own listeners). `/host/proc` inode → `/proc/<pid>/comm` fills process names when ss is not used.
 
-The Host scanner pill is green only for `/host/proc/1/net/tcp`, or local `/proc/net/tcp` on a non-container host. A bridge container without that mount stays red even though `/proc/net/tcp` exists.
+The Host scanner pill is green for `/host/proc/1/net/tcp`, local `/proc/net/tcp` on a non-container host, or `ss` when the process looks like host netns (`docker0` / several host NICs). A bridge container without that mount stays red even though `/proc/net/tcp` exists. `/api/health` includes `listen_source`: `host_proc`, `ss`, `proc`, or `none`.
 
-UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, or `tcp,udp`), and `bind_scope` (`public` / `lan` / `link` / `localhost`). An empty `/host/proc` listen table is authoritative (no fall-through into the container netns).
+UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate listen entries (IPv4 + IPv6, TCP + UDP, or `0.0.0.0` + a specific address) collapse to one map key: the port number. The payload keeps `ips`, `protocol` (`tcp`, `udp`, or `tcp,udp` — listen, Docker, and Compose protocols are unioned), and `bind_scope` (`public` / `lan` / `link` / `localhost`). An empty `/host/proc` listen table is authoritative (no fall-through into the container netns).
 
 ## Docker
 
@@ -41,9 +41,10 @@ UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate list
 `network_mode: host`:
 
 - `Config.ExposedPorts` is **configured** occupancy (declared), not in-use, unless something is actually listening or the container pid/inode matches a listen row.
-- Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd`, or listen rows whose `pid` matches the container, so anonymous listeners get a container name.
+- Running containers also contribute sockets whose inodes appear in `/host/proc/<pid>/fd` **and descendant PIDs** (`task/*/children`), or listen rows whose `pid` is in that tree, so worker processes still get a container name.
+- `network_mode: container:…` joiners of a host-network target are treated the same way (shared netns). Joiners of a bridge container are not matched by inode (inode numbers are per-netns).
 
-macvlan/ipvlan networks: `ExposedPorts` plus the network IP are treated as LAN occupancy (Docker does not publish those on the host).
+macvlan/ipvlan networks: `ExposedPorts` plus the network IPv4 and IPv6 addresses are treated as LAN occupancy (Docker does not publish those on the host).
 
 Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` / `HostHeader(\`…\`)` rules (http when the router entrypoint is `web`/`http` without TLS; regexp templates are dropped), a `caddy:` / `caddy_0` site address (including `http://…`), nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (on the published mapping whose container port is `VIRTUAL_PORT`, default 80), and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]`) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count). Label URLs attach to the Traefik loadbalancer port or to 80/443/8080/8443 when several mappings exist.
 
@@ -51,14 +52,14 @@ Stopped containers still contribute PortBindings — those become amber if nothi
 
 ## Compose
 
-`COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`. Files matching `compose*.yml|yaml` and `docker-compose*.yml|yaml` are parsed (including `compose.prod.yml`). A non-UTF-8 or tagged (`!reset`) file is skipped or stripped; it does not abort the rest of the walk.
+`COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`. Hitting the cap sets `summary.compose_truncated` (the Compose pill turns amber). Files matching `compose*.yml|yaml` and `docker-compose*.yml|yaml` are parsed (including `compose.prod.yml`). A non-UTF-8 or tagged (`!reset`) file is skipped or stripped; it does not abort the rest of the walk.
 
 `include:` paths (string, `{ path: }`, `{ path: [a.yml, b.yml] }`, or a glob like `../shared/*.yml`) are followed. `{ path, env_file }` interpolates the included file with those env files (Compose spec; `env_file.path` mappings too). `{ project_directory }` contributes that directory’s `.env`. Top-level `env_file` interpolates the compose file itself. Sibling `.env` lines may start with `export `. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile. `network_mode: service:…` / `container:…` ports are ignored (they belong to the target service).
 
 Supported port syntax:
 
 - Short: `8080:80`, `0.0.0.0:8080:80`, `127.0.0.1:8080:80`, `8080:80/tcp`, YAML `{8080: 80}`
-- Long: `{ published, target, protocol, host_ip }` (published may be `"5353/udp"`)
+- Long: `{ published, target, protocol, host_ip, mode }` (`mode: host` without `published` uses `target` as the host port; published may be `"5353/udp"`)
 - Swarm `deploy.ports`
 - `${VAR}` / `$VAR` / `${VAR:-default}` / `${VAR-default}` / `${VAR:?err}` / `${VAR?err}` from the sibling `.env` plus process environment
 - Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 128 ports per mapping
@@ -78,7 +79,7 @@ For each port in the union of listeners ∪ Docker mappings ∪ Compose ∪ manu
 
 `source_type` is a rough tag for filters (`docker` / `system` / `host` / `manual`). System vs host uses the known-port category, not the OS.
 
-Hidden ports are omitted from the payload unless `include_hidden=true` **and** the request may see them (open LAN, or Basic Auth / `X-Hidden-Unlock`).
+Hidden ports are omitted from the payload unless `include_hidden=true` **and** the request may see them (open LAN, or Basic Auth / `X-Hidden-Unlock`). `GET /api/ports/{N}` returns 404 for a hidden port that was omitted — never a free stub. When hidden ports are not locked, `summary.hidden_ports` lists their numbers so numeric search can keep the hidden styling.
 
 Guessed access URLs: loopback binds use `127.0.0.1`; a LAN-only bind uses that address; `0.0.0.0` / `::` uses `URL_HOST` or `localhost`. `URL_HOST` always wins when set (except loopback). Link-local (`169.254/16`, `fe80::`) and the default Docker bridge (`172.17.0.0/16`) are `link`, not LAN, and are not used as guessed hosts.
 

@@ -8,12 +8,22 @@ from backend.compose_scanner import (
     parse_port_entry,
     parse_short_port,
     scan_compose_files,
+    scan_compose_tree,
     substitute_vars,
 )
-from backend.docker_scanner import extract_label_urls, extract_nginx_vhosts, extract_ports, safe_http_url
+from backend.docker_scanner import (
+    ContainerInfo,
+    _macvlan_ports,
+    _network_is_host_netns,
+    extract_label_urls,
+    extract_nginx_vhosts,
+    extract_ports,
+    safe_http_url,
+)
 from backend.port_scanner import (
     ListeningPort,
     _fill_process_names,
+    descendant_pids,
     host_proc_available,
     normalize_ip,
     parse_proc_net_line,
@@ -412,6 +422,9 @@ def test_long_syntax_and_ipv4_host():
     assert slash[0]["protocol"] == "udp"
     assert parse_port_entry("not-a-port") == []
     assert parse_port_entry({"target": 80}) == []
+    host_mode = parse_port_entry({"target": 8080, "mode": "host"})
+    assert host_mode[0]["host_port"] == 8080
+    assert host_mode[0]["container_port"] == 8080
     attrs = {
         "HostConfig": {
             "NetworkMode": "host",
@@ -649,7 +662,7 @@ def test_empty_host_proc_is_authoritative(monkeypatch):
     from backend import port_scanner as ps
     monkeypatch.setattr(ps.os.path, "exists", lambda path: path == "/host/proc/1/net/tcp")
     monkeypatch.setattr(ps, "_read_proc_net_file", lambda path, proto: [])
-    monkeypatch.setattr(ps, "_fill_process_names", lambda ports, root: None)
+    monkeypatch.setattr(ps, "_fill_process_names", lambda ports, root, **kwargs: None)
 
     def boom():
         raise FileNotFoundError("ss")
@@ -660,3 +673,90 @@ def test_empty_host_proc_is_authoritative(monkeypatch):
         lambda: [ListeningPort(port=80, protocol="tcp", ip="0.0.0.0")],
     )
     assert ps.scan_listening_ports() == []
+
+
+def test_fill_process_names_prefers_known_pids(tmp_path):
+    for i in range(1, 40):
+        fd = tmp_path / str(i) / "fd"
+        fd.mkdir(parents=True)
+        (tmp_path / str(i) / "comm").write_text("other\n", encoding="utf-8")
+        os.symlink("socket:[1]", fd / "3")
+    fd = tmp_path / "99" / "fd"
+    fd.mkdir(parents=True)
+    (tmp_path / "99" / "comm").write_text("sshd\n", encoding="utf-8")
+    os.symlink("socket:[12345]", fd / "3")
+    lp = ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", inode=12345)
+    _fill_process_names([lp], str(tmp_path), budget_s=0.0, prefer_pids=[99])
+    assert lp.process_name == "sshd"
+    assert lp.pid == 99
+
+
+def test_descendant_pids_walks_children_file(tmp_path):
+    for pid, kids in ((1, "2 3"), (2, ""), (3, "4"), (4, "")):
+        task = tmp_path / str(pid) / "task" / str(pid)
+        task.mkdir(parents=True)
+        (task / "children").write_text(kids + "\n", encoding="utf-8")
+    assert descendant_pids(1, str(tmp_path)) == [1, 2, 3, 4]
+
+
+def test_macvlan_includes_ipv6(monkeypatch):
+    monkeypatch.setattr(
+        "backend.docker_scanner._network_driver",
+        lambda client, nid: "macvlan",
+    )
+    extra = _macvlan_ports(None, {
+        "NetworkSettings": {"Networks": {"lan": {
+            "NetworkID": "abc",
+            "IPAddress": "",
+            "GlobalIPv6Address": "fd12::10",
+        }}},
+        "Config": {"ExposedPorts": {"80/tcp": {}}},
+    }, [])
+    assert extra[0]["host_ip"] == "fd12::10"
+    assert extra[0]["host_port"] == 80
+    both = _macvlan_ports(None, {
+        "NetworkSettings": {"Networks": {"lan": {
+            "NetworkID": "abc",
+            "IPAddress": "10.0.0.9",
+            "GlobalIPv6Address": "fd12::10",
+        }}},
+        "Config": {"ExposedPorts": {"443/tcp": {}}},
+    }, [])
+    ips = {row["host_ip"] for row in both}
+    assert ips == {"10.0.0.9", "fd12::10"}
+
+
+def test_container_joiner_follows_host_netns():
+    vpn = ContainerInfo(name="vpn", status="running", image="vpn", network_mode="host", container_id="abc123def456")
+    helper = ContainerInfo(
+        name="helper", status="running", image="helper",
+        network_mode="container:vpn",
+    )
+    by_name = {"vpn": vpn, "helper": helper}
+    by_id = {"abc123def456": vpn, "abc123def456"[:12]: vpn}
+    assert _network_is_host_netns("host", by_name, by_id) is True
+    assert _network_is_host_netns("container:vpn", by_name, by_id) is True
+    assert _network_is_host_netns("container:abc123def456", by_name, by_id) is True
+    assert _network_is_host_netns("bridge", by_name, by_id) is False
+    other = ContainerInfo(name="web", status="running", image="web", network_mode="bridge", container_id="fff")
+    by_name["web"] = other
+    by_id["fff"] = other
+    assert _network_is_host_netns("container:web", by_name, by_id) is False
+
+
+def test_compose_scan_reports_file_cap(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a" / "compose.yml").write_text(
+        "services:\n  a:\n    ports: ['8001:80']\n", encoding="utf-8",
+    )
+    (tmp_path / "b" / "compose.yml").write_text(
+        "services:\n  b:\n    ports: ['8002:80']\n", encoding="utf-8",
+    )
+    scan = scan_compose_tree(str(tmp_path), max_files=1)
+    assert scan.truncated is True
+    assert scan.files_scanned == 1
+    assert len({p.port for p in scan.ports}) == 1
+    full = scan_compose_tree(str(tmp_path), max_files=10)
+    assert full.truncated is False
+    assert {p.port for p in full.ports} == {8001, 8002}

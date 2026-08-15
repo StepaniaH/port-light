@@ -5,7 +5,7 @@ from __future__ import annotations
 import glob as _glob
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -113,19 +113,34 @@ class ComposePort:
     project_name: str | None = None
 
 
+@dataclass
+class ComposeScan:
+    ports: list[ComposePort] = field(default_factory=list)
+    truncated: bool = False
+    files_scanned: int = 0
+
+
 def scan_compose_files(
     scan_dir: str,
     max_depth: int | None = None,
     max_files: int | None = None,
 ) -> list[ComposePort]:
-    ports: list[ComposePort] = []
+    return scan_compose_tree(scan_dir, max_depth=max_depth, max_files=max_files).ports
+
+
+def scan_compose_tree(
+    scan_dir: str,
+    max_depth: int | None = None,
+    max_files: int | None = None,
+) -> ComposeScan:
     if not os.path.isdir(scan_dir):
-        return ports
+        return ComposeScan()
 
     depth = max_depth if max_depth is not None else _env_int("COMPOSE_SCAN_DEPTH", 4)
     files_cap = max_files if max_files is not None else _env_int("COMPOSE_SCAN_MAX_FILES", 400)
 
-    files = _find_compose_files(scan_dir, depth, files_cap)
+    files, truncated = _find_compose_files(scan_dir, depth, files_cap)
+    ports: list[ComposePort] = []
     seen_walk: set[str] = set()
     for filepath in files:
         real = os.path.realpath(filepath)
@@ -133,7 +148,7 @@ def scan_compose_files(
             continue
         seen_walk.add(real)
         ports.extend(_parse_compose_file(filepath, scan_dir, frozenset()))
-    return ports
+    return ComposeScan(ports=ports, truncated=truncated, files_scanned=len(seen_walk))
 
 
 def _env_int(name: str, default: int) -> int:
@@ -146,7 +161,7 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> list[str]:
+def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> tuple[list[str], bool]:
     found: list[str] = []
     scan_dir = os.path.abspath(scan_dir)
     for root, dirs, files in os.walk(scan_dir):
@@ -158,10 +173,10 @@ def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> list[s
         dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS and not d.startswith("."))
         for name in sorted(files):
             if _is_compose_filename(name):
-                found.append(os.path.join(root, name))
                 if len(found) >= max_files:
-                    return found
-    return found
+                    return found, True
+                found.append(os.path.join(root, name))
+    return found, False
 
 
 def _parse_compose_file(
@@ -499,8 +514,12 @@ def parse_port_entry(entry) -> list[dict]:
         target = entry.get("target")
         proto = _norm_proto(entry.get("protocol") or "tcp")
         host_ip = entry.get("host_ip") or None
+        mode = str(entry.get("mode") or "").strip().lower()
         if host is None:
-            return []
+            if mode == "host" and target is not None:
+                host = target
+            else:
+                return []
         host_s = str(host)
         if isinstance(host, str) and "/" in host_s:
             host_s, slash_proto = host_s.rsplit("/", 1)

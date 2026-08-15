@@ -96,7 +96,9 @@
 
   const KIND_MATCHERS = {
     running: function (p) {
-      return p.containers && p.containers.some(function (c) { return c.status === 'running'; });
+      return p.containers && p.containers.some(function (c) {
+        return c.status === 'running' || c.status === 'paused' || c.status === 'restarting';
+      });
     },
     system: function (p) {
       return p.source_type === 'system' || (p.known_service && p.known_service.category === 'system');
@@ -673,11 +675,21 @@
       ['docker', 'docker'],
       ['compose', 'compose'],
     ];
+    const truncated = !!(currentData && currentData.summary && currentData.summary.compose_truncated);
     host.innerHTML = items.map(function (pair) {
       const name = t('scanner.' + pair[1]);
       const ok = !!scanners[pair[0]];
-      const title = t(ok ? 'scanner.available' : 'scanner.unavailable', { name: name });
-      return '<span class="pill' + (ok ? ' ok' : ' bad') + '" role="img" title="' +
+      const source = scanners.listen_source;
+      let title = t(ok ? 'scanner.available' : 'scanner.unavailable', { name: name });
+      if (pair[0] === 'proc' && ok && source && source !== 'none') {
+        const via = t('scanner.via.' + source, { name: name });
+        if (via && via.indexOf('scanner.via.') === -1) title = via;
+      }
+      if (pair[0] === 'compose' && truncated) {
+        title = t('scanner.truncated', { name: name });
+      }
+      const warn = pair[0] === 'compose' && truncated;
+      return '<span class="pill' + (ok ? ' ok' : ' bad') + (warn ? ' warn' : '') + '" role="img" title="' +
         escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"></span>';
     }).join('');
   }
@@ -1060,7 +1072,10 @@
       status.textContent = errorText(body, res.status);
       return;
     }
-    rangeFromView = false;
+    const saved = settingsDoc && settingsDoc.values ? settingsDoc.values : settings;
+    const rangeEdited = patch.port_range_start !== saved.port_range_start
+      || patch.port_range_end !== saved.port_range_end;
+    if (rangeEdited) rangeFromView = false;
     applyServerSettings(body);
     rangeFromView = true;
     saveView();
@@ -1202,18 +1217,24 @@
   function buildSearchContext(ports, hitPort) {
     const allPortNums = new Set(ports.map(function (p) { return p.port; }));
     const hitExists = allPortNums.has(hitPort);
+    const hiddenNums = new Set((currentData && currentData.summary && currentData.summary.hidden_ports) || []);
     const result = [];
 
+    function synthetic(port, hidden) {
+      prefetchKnown(port);
+      return hidden
+        ? { port: port, status: 'configured', is_hidden: true, _synthetic: true, known_service: getKnownForFree(port) }
+        : { port: port, status: 'free', _synthetic: true, known_service: getKnownForFree(port) };
+    }
+
     if (!hitExists) {
-      prefetchKnown(hitPort);
-      result.push({ port: hitPort, status: 'free', _synthetic: true, known_service: getKnownForFree(hitPort) });
+      result.push(synthetic(hitPort, hiddenNums.has(hitPort)));
     }
 
     let beforeFree = 0, afterFree = 0;
     for (let p = hitPort - 1; p >= Math.max(1, hitPort - 50) && beforeFree < 3; p--) {
       if (!allPortNums.has(p)) {
-        prefetchKnown(p);
-        result.unshift({ port: p, status: 'free', _synthetic: true, known_service: getKnownForFree(p) });
+        result.unshift(synthetic(p, hiddenNums.has(p)));
         beforeFree++;
       } else {
         const entry = ports.find(function (x) { return x.port === p; });
@@ -1222,8 +1243,7 @@
     }
     for (let p = hitPort + 1; p <= Math.min(65535, hitPort + 50) && afterFree < 3; p++) {
       if (!allPortNums.has(p)) {
-        prefetchKnown(p);
-        result.push({ port: p, status: 'free', _synthetic: true, known_service: getKnownForFree(p) });
+        result.push(synthetic(p, hiddenNums.has(p)));
         afterFree++;
       } else {
         const entry = ports.find(function (x) { return x.port === p; });
@@ -1352,8 +1372,11 @@
       const protoBadge = settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp'
         ? '<span class="proto-badge">' + escapeHtml(p.protocol) + '</span>' : '';
 
+      const ariaParts = [String(p.port), t('status.' + p.status), label, p.protocol].filter(Boolean);
       return '<button type="button" class="port-cell ' + cls + conflict + selected + searchHit + searchNear + '"' +
         ' data-port="' + p.port + '"' +
+        ' aria-label="' + escapeHtml(ariaParts.join(', ')) + '"' +
+        ' aria-selected="' + (p.port === selectedPort ? 'true' : 'false') + '"' +
         ' title="' + escapeHtml([p.port, p.protocol, p.bind_scope, label].filter(Boolean).join(' · ')) + '">' +
         '<div class="port-num">' + p.port + '</div>' +
         labelText +
@@ -1469,14 +1492,18 @@
       html += '<div class="section-title">' + escapeHtml(t('detail.containers')) + '</div>';
       for (let i = 0; i < p.containers.length; i++) {
         const c = p.containers[i];
-        const tag = (c.status === 'running' || c.status === 'paused' || c.status === 'restarting')
-          ? c.status : 'exited';
+        const live = c.status === 'running' || c.status === 'paused' || c.status === 'restarting';
+        const knownTag = {
+          created: 1, dead: 1, removing: 1, exited: 1,
+          paused: 1, restarting: 1, running: 1,
+        };
+        const tag = live ? c.status : (knownTag[c.status] ? c.status : 'exited');
         html += '<div class="row"><span class="key">' + escapeHtml(c.name) + '</span><span class="tag ' + tag + '">' +
           escapeHtml(t('status.' + tag) || c.status) + '</span></div>';
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.image')) + '</span><span class="val">' + escapeHtml(c.image) + '</span></div>';
         if (c.compose_project) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.project')) + '</span><span class="val">' + escapeHtml(c.compose_project) + '</span></div>';
         if (c.compose_service) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.service')) + '</span><span class="val">' + escapeHtml(c.compose_service) + '</span></div>';
-        if (c.network_mode === 'host') html += '<div class="row"><span class="key">' + escapeHtml(t('detail.network')) + '</span><span class="val">host</span></div>';
+        if (c.network_mode) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.network')) + '</span><span class="val">' + escapeHtml(c.network_mode) + '</span></div>';
         if (c.bind_ips && c.bind_ips.length) {
           html += '<div class="row"><span class="key">' + escapeHtml(t('detail.bind')) + '</span><span class="val">' +
             escapeHtml(c.bind_ips.join(', ')) + '</span></div>';
@@ -1501,7 +1528,7 @@
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.file')) + '</span><span class="val">' + escapeHtml(cc.compose_file) + '</span></div>';
         if (cc.host_ip) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.bind')) + '</span><span class="val">' + escapeHtml(cc.host_ip) + '</span></div>';
         if (cc.protocol && cc.protocol !== 'tcp') html += '<div class="row"><span class="key">' + escapeHtml(t('detail.protocol')) + '</span><span class="val">' + escapeHtml(cc.protocol) + '</span></div>';
-        if (cc.network_mode === 'host') html += '<div class="row"><span class="key">' + escapeHtml(t('detail.network')) + '</span><span class="val">host</span></div>';
+        if (cc.network_mode) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.network')) + '</span><span class="val">' + escapeHtml(cc.network_mode) + '</span></div>';
         if (cc.container_port) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.containerPort')) + '</span><span class="val">' + cc.container_port + '</span></div>';
       }
     }

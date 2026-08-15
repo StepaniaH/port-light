@@ -27,6 +27,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `compose.prod.yml` / `docker-compose*.yml` variants are scanned, not only the default filenames.
 - Swarm `deploy.ports` contribute declared host ports.
 - macvlan/ipvlan container IPs plus `EXPOSE` show as LAN occupancy.
+- Swarm `mode: host` without `published` uses `target` as the host port.
+- `/api/health` reports `listen_source` (`host_proc` / `ss` / `proc`). The Host pill is green for host-network `ss`, not only `/host/proc`.
+- Occupancy summary includes `compose_truncated` / `compose_files` when the Compose walk hits `COMPOSE_SCAN_MAX_FILES`, and `hidden_ports` (unlocked) so numeric search does not paint a hidden cell free.
 
 ### Fixed
 
@@ -82,6 +85,14 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - The hidden-port legend counted ports outside the toolbar range.
 - Docker IPv6 `HostIp` values like `[::1]` were stored with brackets.
 - Compose `include: ../shared/*.yml` globs were ignored.
+- A TCP listen hid UDP occupancy on the same port (Docker publish or Compose).
+- `network_mode: container:…` joiners of a host-network container were not attributed.
+- Host-network worker/child PIDs were missed (only the container init pid).
+- macvlan/ipvlan IPv6 (`GlobalIPv6Address`) occupancy was dropped.
+- `GET /api/ports/{N}` synthesized a free stub for a hidden occupied port when `include_hidden` was off.
+- Saving settings reset the toolbar range even when the form range was unchanged.
+- The Running chip ignored paused/restarting containers (the bind is still held).
+- Created/dead/removing containers were labeled exited in the detail drawer.
 
 ### Changed
 

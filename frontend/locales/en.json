@@ -44,7 +44,13 @@
     "docker": "Docker",
     "compose": "Compose",
     "available": "{name} available",
-    "unavailable": "{name} unavailable"
+    "unavailable": "{name} unavailable",
+    "truncated": "{name} hit the file cap — some declared ports may be missing",
+    "via": {
+      "host_proc": "{name} via /host/proc",
+      "ss": "{name} via ss",
+      "proc": "{name} via /proc"
+    }
   },
   "status": {
     "used": "in use",
@@ -53,7 +59,10 @@
     "running": "running",
     "paused": "paused",
     "restarting": "restarting",
-    "exited": "exited"
+    "exited": "exited",
+    "created": "created",
+    "dead": "dead",
+    "removing": "removing"
   },
   "detail": {
     "panel": "Port detail",

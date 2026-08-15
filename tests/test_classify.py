@@ -480,6 +480,91 @@ def test_collect_urls_drops_javascript():
     assert all(u.startswith(("http://", "https://")) for u in urls)
 
 
+def test_listen_tcp_keeps_published_udp():
+    listening = [ListeningPort(port=53, protocol="tcp", ip="0.0.0.0")]
+    containers = [
+        ContainerInfo(
+            name="dns",
+            status="running",
+            image="coredns",
+            ports=[{"host_port": 53, "host_ip": "0.0.0.0", "container_port": 53, "protocol": "udp"}],
+        ),
+    ]
+    compose = [
+        ComposePort(
+            port=53, compose_file="dns/compose.yml", project_dir="dns",
+            service_name="coredns", protocol="udp",
+        ),
+    ]
+    row = _classify(
+        listening, containers, compose, [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )["ports"][0]
+    assert set(row["protocol"].split(",")) == {"tcp", "udp"}
+
+
+def test_host_network_child_pid_is_attributed():
+    containers = [
+        ContainerInfo(
+            name="dns",
+            status="running",
+            image="coredns",
+            ports=[],
+            network_mode="host",
+            pid=10,
+            pids={10, 11},
+        ),
+    ]
+    listening = [ListeningPort(port=53, protocol="udp", ip="0.0.0.0", pid=11, process_name="coredns")]
+    row = _classify(
+        listening, containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )["ports"][0]
+    assert row["status"] == "used"
+    assert any(c["name"] == "dns" for c in row["containers"])
+
+
+def test_container_netns_joiner_inodes():
+    containers = [
+        ContainerInfo(
+            name="helper",
+            status="running",
+            image="helper",
+            ports=[],
+            network_mode="container:vpn",
+            pid=2,
+            pids={2},
+            socket_inodes={12},
+        ),
+    ]
+    listening = [ListeningPort(port=51820, protocol="udp", ip="0.0.0.0", inode=12)]
+    row = _classify(
+        listening, containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )["ports"][0]
+    assert any(c["name"] == "helper" for c in row["containers"])
+
+
+def test_hidden_ports_listed_when_unlocked():
+    out = _classify(
+        [ListeningPort(port=8096, protocol="tcp", ip="0.0.0.0")],
+        [], [], [], hidden_ports=[8096, 22],
+        range_start=8000, range_end=9000,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert out["summary"]["hidden_ports"] == [22, 8096]
+    locked = _classify(
+        [ListeningPort(port=8096, protocol="tcp", ip="0.0.0.0")],
+        [], [], [], hidden_ports=[8096],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=True,
+    )
+    assert locked["summary"]["hidden_ports"] == []
+
+
 def test_meta_unauthenticated(monkeypatch):
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)

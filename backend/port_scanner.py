@@ -15,10 +15,12 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
+import shutil
 import socket
 import struct
 import subprocess
 import time
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 
 
@@ -49,10 +51,52 @@ def host_proc_available() -> bool:
     return os.path.exists("/proc/net/tcp")
 
 
-def scan_listening_ports() -> list[ListeningPort]:
+def listen_scan_source() -> str:
+    """Which listen table ``scan_listening_ports`` will try first."""
+    if os.path.exists("/host/proc/1/net/tcp"):
+        return "host_proc"
+    if shutil.which("ss"):
+        return "ss"
+    if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+        return "none"
+    if os.path.exists("/proc/net/tcp"):
+        return "proc"
+    return "none"
+
+
+def _looks_like_host_netns() -> bool:
+    """Host network namespace usually has docker0/br0 or several non-lo NICs."""
+    try:
+        names = os.listdir("/sys/class/net")
+    except OSError:
+        return False
+    if any(n in names for n in ("docker0", "br0", "cni0", "flannel.1", "virbr0")):
+        return True
+    real = [n for n in names if n != "lo"]
+    veth = sum(1 for n in names if n.startswith("veth"))
+    return veth >= 1 and len(real) >= 3
+
+
+def host_listen_trusted() -> bool:
+    """Green Host pill: a listen table we believe is the host, not a bridge netns."""
+    if host_proc_available():
+        return True
+    if os.path.exists("/host/proc"):
+        return False
+    source = listen_scan_source()
+    if source == "ss" and (
+        os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
+    ):
+        return _looks_like_host_netns()
+    return source != "none"
+
+
+def scan_listening_ports(
+    prefer_pids: Iterable[int] | None = None,
+) -> list[ListeningPort]:
     """Return listening/bound TCP and UDP ports on the host."""
     try:
-        result = _scan_with_host_proc()
+        result = _scan_with_host_proc(prefer_pids=prefer_pids)
         if result is not None:
             return result
     except (FileNotFoundError, OSError):
@@ -64,7 +108,7 @@ def scan_listening_ports() -> list[ListeningPort]:
         pass
 
     try:
-        return _scan_with_proc()
+        return _scan_with_proc(prefer_pids=prefer_pids)
     except (FileNotFoundError, OSError):
         pass
 
@@ -96,6 +140,68 @@ def socket_inodes_for_pid(pid: int, proc_root: str = "/host/proc") -> set[int]:
             except ValueError:
                 continue
     return inodes
+
+
+def descendant_pids(
+    pid: int,
+    proc_root: str = "/host/proc",
+    max_pids: int = 32,
+) -> list[int]:
+    """Breadth-first child PIDs via ``/proc/<pid>/task/*/children``."""
+    if pid <= 0:
+        return []
+    out: list[int] = []
+    seen: set[int] = set()
+    queue = [pid]
+    while queue and len(out) < max_pids:
+        cur = queue.pop(0)
+        if cur in seen or cur <= 0:
+            continue
+        seen.add(cur)
+        out.append(cur)
+        for child in _read_children(cur, proc_root):
+            if child not in seen:
+                queue.append(child)
+    return out
+
+
+def socket_inodes_for_tree(
+    pid: int,
+    proc_root: str = "/host/proc",
+    max_pids: int = 32,
+) -> set[int]:
+    """Socket inodes for a process and its descendants (host-network workers)."""
+    inodes: set[int] = set()
+    for child in descendant_pids(pid, proc_root, max_pids):
+        inodes |= socket_inodes_for_pid(child, proc_root)
+    return inodes
+
+
+def _read_children(pid: int, proc_root: str) -> list[int]:
+    children: list[int] = []
+    roots = [proc_root]
+    if proc_root != "/proc":
+        roots.append("/proc")
+    for root in roots:
+        task = os.path.join(root, str(pid), "task")
+        try:
+            tids = os.listdir(task)
+        except OSError:
+            continue
+        for tid in tids:
+            path = os.path.join(task, tid, "children")
+            try:
+                with open(path) as fh:
+                    text = fh.read()
+            except OSError:
+                continue
+            for part in text.split():
+                try:
+                    children.append(int(part))
+                except ValueError:
+                    continue
+        break
+    return children
 
 
 def _scan_with_ss() -> list[ListeningPort]:
@@ -201,7 +307,9 @@ def _split_local_spec(local_spec: str) -> tuple[str, int | None, str]:
     return ip, port, family
 
 
-def _scan_with_host_proc() -> list[ListeningPort] | None:
+def _scan_with_host_proc(
+    prefer_pids: Iterable[int] | None = None,
+) -> list[ListeningPort] | None:
     if not os.path.exists("/host/proc/1/net/tcp"):
         return None
     ports: list[ListeningPort] = []
@@ -212,11 +320,11 @@ def _scan_with_host_proc() -> list[ListeningPort] | None:
         ("udp6", "/host/proc/1/net/udp6"),
     ]:
         ports.extend(_read_proc_net_file(path, proto))
-    _fill_process_names(ports, "/host/proc")
+    _fill_process_names(ports, "/host/proc", prefer_pids=prefer_pids)
     return ports
 
 
-def _scan_with_proc() -> list[ListeningPort]:
+def _scan_with_proc(prefer_pids: Iterable[int] | None = None) -> list[ListeningPort]:
     ports: list[ListeningPort] = []
     for proto, path in [
         ("tcp", "/proc/net/tcp"),
@@ -225,7 +333,7 @@ def _scan_with_proc() -> list[ListeningPort]:
         ("udp6", "/proc/net/udp6"),
     ]:
         ports.extend(_read_proc_net_file(path, proto))
-    _fill_process_names(ports, "/proc")
+    _fill_process_names(ports, "/proc", prefer_pids=prefer_pids)
     return ports
 
 
@@ -301,13 +409,14 @@ def normalize_ip(ip: str) -> str:
 def _fill_process_names(
     ports: list[ListeningPort],
     proc_root: str,
-    budget_s: float = 0.75,
+    budget_s: float = 1.5,
+    prefer_pids: Iterable[int] | None = None,
 ) -> None:
     """Fill process names from ``/proc/<pid>/fd`` → socket inodes."""
     needed = {p.inode for p in ports if p.inode and not p.process_name}
     if not needed:
         return
-    owners = _inode_to_comm(needed, proc_root, budget_s)
+    owners = _inode_to_comm(needed, proc_root, budget_s, prefer_pids=prefer_pids)
     for p in ports:
         if p.process_name or not p.inode:
             continue
@@ -320,25 +429,40 @@ def _inode_to_comm(
     needed: set[int],
     proc_root: str,
     budget_s: float,
+    prefer_pids: Iterable[int] | None = None,
 ) -> dict[int, tuple[str, int]]:
     found: dict[int, tuple[str, int]] = {}
     start = time.monotonic()
     try:
         names = os.listdir(proc_root)
     except OSError:
-        return found
+        names = []
+    ordered: list[int] = []
+    seen: set[int] = set()
+    for raw in prefer_pids or []:
+        try:
+            pid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if pid > 0 and pid not in seen:
+            ordered.append(pid)
+            seen.add(pid)
+    prefer_n = len(ordered)
     for name in names:
-        if time.monotonic() - start > budget_s:
-            break
         if not name.isdigit():
             continue
         pid = int(name)
-        fd_dir = os.path.join(proc_root, name, "fd")
+        if pid not in seen:
+            ordered.append(pid)
+            seen.add(pid)
+    for i, pid in enumerate(ordered):
+        if i >= prefer_n and time.monotonic() - start > budget_s:
+            break
+        fd_dir = os.path.join(proc_root, str(pid), "fd")
         try:
             fds = os.listdir(fd_dir)
         except OSError:
             continue
-        hit = False
         for fd in fds:
             try:
                 target = os.readlink(os.path.join(fd_dir, fd))
@@ -351,13 +475,12 @@ def _inode_to_comm(
             except ValueError:
                 continue
             if ino in needed and ino not in found:
-                comm = _read_comm(proc_root, name)
+                comm = _read_comm(proc_root, str(pid))
                 if comm:
                     found[ino] = (comm, pid)
-                    hit = True
                     if len(found) >= len(needed):
                         return found
-        if hit and len(found) >= len(needed):
+        if len(found) >= len(needed):
             return found
     return found
 

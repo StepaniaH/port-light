@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
-from .port_scanner import socket_inodes_for_pid
+from .port_scanner import descendant_pids, socket_inodes_for_tree
 
 try:
     import docker
@@ -102,6 +102,8 @@ class ContainerInfo:
     vhost_port: int | None = None
     label_port: int | None = None
     socket_inodes: set[int] = field(default_factory=set)
+    container_id: str | None = None
+    pids: set[int] = field(default_factory=set)
 
 
 def scan_containers() -> list[ContainerInfo]:
@@ -124,9 +126,7 @@ def scan_containers() -> list[ContainerInfo]:
         network_mode = host_config.get("NetworkMode") or ""
         state = attrs.get("State") or {}
         pid = int(state.get("Pid") or 0) or None
-        inodes: set[int] = set()
-        if network_mode == "host" and pid:
-            inodes = socket_inodes_for_pid(pid)
+        cid = getattr(c, "id", None) or (attrs.get("Id") or "") or None
 
         env = (attrs.get("Config") or {}).get("Env")
         vurls, vport = extract_nginx_vhosts(labels, env)
@@ -145,9 +145,59 @@ def scan_containers() -> list[ContainerInfo]:
             vhost_urls=vurls,
             vhost_port=vport,
             label_port=_traefik_service_port(labels),
-            socket_inodes=inodes,
+            container_id=cid,
         ))
+    _attach_host_netns_sockets(result)
     return result
+
+
+def _network_is_host_netns(
+    mode: str | None,
+    by_name: dict[str, ContainerInfo],
+    by_id: dict[str, ContainerInfo],
+    seen: set[str] | None = None,
+) -> bool:
+    """True for ``host`` and for ``container:`` joiners of a host-netns target."""
+    mode = mode or ""
+    if mode == "host":
+        return True
+    if not mode.startswith("container:"):
+        return False
+    ref = mode.split(":", 1)[1].strip()
+    if not ref:
+        return False
+    seen = seen if seen is not None else set()
+    if ref in seen:
+        return False
+    seen.add(ref)
+    target = by_name.get(ref) or by_id.get(ref)
+    if target is None:
+        for key, info in by_id.items():
+            if key.startswith(ref) or ref.startswith(key):
+                target = info
+                break
+    if target is None:
+        return False
+    return _network_is_host_netns(target.network_mode, by_name, by_id, seen)
+
+
+def _attach_host_netns_sockets(containers: list[ContainerInfo]) -> None:
+    by_name = {c.name: c for c in containers if c.name}
+    by_id: dict[str, ContainerInfo] = {}
+    for c in containers:
+        if not c.container_id:
+            continue
+        by_id[c.container_id] = c
+        by_id[c.container_id[:12]] = c
+    for c in containers:
+        if not c.pid:
+            continue
+        if not _network_is_host_netns(c.network_mode, by_name, by_id):
+            continue
+        c.pids = set(descendant_pids(c.pid))
+        if c.pid:
+            c.pids.add(c.pid)
+        c.socket_inodes = socket_inodes_for_tree(c.pid)
 
 
 def extract_ports(attrs: dict) -> list[dict]:
@@ -246,25 +296,30 @@ def _macvlan_ports(client, attrs: dict, existing: list[dict]) -> list[dict]:
         nid = net.get("NetworkID") or name
         if _network_driver(client, nid) not in ("macvlan", "ipvlan"):
             continue
-        ip = (net.get("IPAddress") or "").strip()
-        if not ip:
+        ips = []
+        for key in ("IPAddress", "GlobalIPv6Address"):
+            ip = (net.get(key) or "").strip()
+            if ip and ip not in ips:
+                ips.append(ip)
+        if not ips:
             continue
-        for spec in exposed:
-            cp, protocol = _split_port_spec(spec)
-            if cp is None:
-                continue
-            protocol = str(protocol or "tcp").lower()
-            key = (cp, ip, protocol)
-            if key in seen:
-                continue
-            seen.add(key)
-            extra.append({
-                "host_port": cp,
-                "host_ip": ip,
-                "container_port": cp,
-                "protocol": protocol,
-                "source": "macvlan",
-            })
+        for ip in ips:
+            for spec in exposed:
+                cp, protocol = _split_port_spec(spec)
+                if cp is None:
+                    continue
+                protocol = str(protocol or "tcp").lower()
+                row_key = (cp, ip, protocol)
+                if row_key in seen:
+                    continue
+                seen.add(row_key)
+                extra.append({
+                    "host_port": cp,
+                    "host_ip": ip,
+                    "container_port": cp,
+                    "protocol": protocol,
+                    "source": "macvlan",
+                })
     return extra
 
 

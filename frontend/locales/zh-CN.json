@@ -44,7 +44,13 @@
     "docker": "Docker",
     "compose": "Compose",
     "available": "{name}可用",
-    "unavailable": "{name}不可用"
+    "unavailable": "{name}不可用",
+    "truncated": "{name}达到文件上限，部分声明端口可能没画出来",
+    "via": {
+      "host_proc": "{name} · /host/proc",
+      "ss": "{name} · ss",
+      "proc": "{name} · /proc"
+    }
   },
   "status": {
     "used": "占用中",
@@ -53,7 +59,10 @@
     "running": "运行中",
     "paused": "已暂停",
     "restarting": "重启中",
-    "exited": "已退出"
+    "exited": "已退出",
+    "created": "已创建",
+    "dead": "已死亡",
+    "removing": "正在删除"
   },
   "detail": {
     "panel": "端口详情",

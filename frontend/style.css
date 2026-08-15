@@ -170,6 +170,7 @@ a:focus-visible,
   background: var(--danger); display: inline-block;
 }
 .scanner-dots .pill.ok { background: var(--free); }
+.scanner-dots .pill.ok.warn { background: var(--configured); }
 .scanner-dots .pill.bad { opacity: 0.55; }
 .sync-error { font-size: 0.72rem; color: var(--danger); white-space: nowrap; }
 .sync-age { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -363,7 +364,7 @@ a:focus-visible,
 .tag.free { background: var(--free-bg); color: var(--free); }
 .tag.running { background: var(--tag-running-bg); color: var(--free); }
 .tag.paused, .tag.restarting { background: var(--tag-configured-bg); color: var(--configured); }
-.tag.exited { background: var(--tag-exited-bg); color: var(--danger); }
+.tag.exited, .tag.created, .tag.dead, .tag.removing { background: var(--tag-exited-bg); color: var(--danger); }
 .tag.scope { background: var(--card); border: 1px solid var(--border); color: var(--text-dim); }
 
 .info-box {
