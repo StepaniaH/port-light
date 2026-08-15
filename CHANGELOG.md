@@ -12,6 +12,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Arrow keys on occupancy counts and kind chips.
 - Confirm before deleting a manual port.
 - Distinct known-port names (iSCSI, SIP, RTSP, Jaeger, OTLP, Zabbix, Git daemon, …).
+- Host-network Compose `expose:` entries count as host ports.
 
 ### Fixed
 
@@ -25,7 +26,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Changed
 
 - Occupancy JSON is written atomically (tempfile + `os.replace`).
-- Compose conflict requires overlapping bind addresses, not just the same port number in two projects.
+- Compose conflict requires overlapping bind addresses **and** the same protocol, not just the same port number in two projects.
 - `URL_HOST` may be an IPv6 address; guessed links use `[addr]:port`.
 
 ## 0.5.3 — 2026-08-15

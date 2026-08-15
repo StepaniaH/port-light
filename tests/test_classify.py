@@ -45,6 +45,11 @@ def test_compose_conflict_uses_bind_overlap():
     assert _compose_conflict(overlapping) is True
     assert _compose_conflict(disjoint) is False
     assert _compose_conflict(same_stack) is False
+    tcp_udp = [
+        {"project_dir": "dns", "host_ip": "0.0.0.0", "protocol": "tcp"},
+        {"project_dir": "other", "host_ip": "0.0.0.0", "protocol": "udp"},
+    ]
+    assert _compose_conflict(tcp_udp) is False
 
 
 def test_compose_keeps_distinct_host_ips():

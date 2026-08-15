@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.compose_scanner import (
     expand_port_range,
+    parse_expose_entry,
     parse_port_entry,
     parse_short_port,
     scan_compose_files,
@@ -209,6 +210,30 @@ def test_compose_override_file(tmp_path):
     numbers = {p.port for p in scan_compose_files(str(tmp_path))}
     assert 8096 in numbers
     assert 8920 in numbers
+
+
+def test_host_network_expose(tmp_path):
+    app = tmp_path / "dns"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "services:\n"
+        "  adguard:\n"
+        "    network_mode: host\n"
+        "    expose:\n"
+        "      - '53/udp'\n"
+        "      - 80\n"
+        "  bridged:\n"
+        "    expose:\n"
+        "      - '9000'\n",
+        encoding="utf-8",
+    )
+    found = {(p.port, p.protocol, p.network_mode) for p in scan_compose_files(str(tmp_path))}
+    assert (53, "udp", "host") in found
+    assert (80, "tcp", "host") in found
+    assert all(p != 9000 for p, _, _ in found)
+    assert parse_expose_entry("53/udp")[0]["host_port"] == 53
+    assert parse_expose_entry("8080:80") == []
+    assert parse_expose_entry(53)[0]["protocol"] == "tcp"
 
 
 def test_label_urls_reject_javascript():

@@ -336,6 +336,7 @@ def _classify(
             "container_port": cp.container_port,
             "protocol": cp.protocol,
             "host_ip": cp.host_ip,
+            "network_mode": cp.network_mode,
         })
 
     manual_map: dict[int, dict] = {}
@@ -399,7 +400,11 @@ def _classify(
             "port": port,
             "status": status,
             "source_type": source_type,
-            "protocol": lp_info["protocol"] if lp_info else (composes[0].get("protocol") if composes else "tcp"),
+            "protocol": (
+                lp_info["protocol"] if lp_info
+                else _proto_label([c.get("protocol") or "tcp" for c in composes]) if composes
+                else "tcp"
+            ),
             "ip": ip,
             "ips": ips,
             "bind_scope": _bind_scope_many(ips),
@@ -473,17 +478,28 @@ def _binds_overlap(a: str | None, b: str | None) -> bool:
     return ka == "*" or kb == "*" or ka == kb
 
 
+def _proto_family(proto: str | None) -> str:
+    base = (proto or "tcp").lower().replace("6", "")
+    return "udp" if base.startswith("udp") else "tcp"
+
+
 def _compose_conflict(composes: list[dict]) -> bool:
-    """True when two Compose projects publish the same port on overlapping bind IPs."""
-    by_dir: dict[str, list[str | None]] = {}
+    """True when two Compose projects publish the same port+protocol on overlapping binds."""
+    by_dir: dict[str, list[tuple[str | None, str]]] = {}
     for row in composes:
-        by_dir.setdefault(row.get("project_dir") or "", []).append(row.get("host_ip"))
+        by_dir.setdefault(row.get("project_dir") or "", []).append(
+            (row.get("host_ip"), _proto_family(row.get("protocol"))),
+        )
     dirs = list(by_dir.values())
     if len(dirs) < 2:
         return False
-    for i, ips_a in enumerate(dirs):
-        for ips_b in dirs[i + 1 :]:
-            if any(_binds_overlap(a, b) for a in ips_a for b in ips_b):
+    for i, binds_a in enumerate(dirs):
+        for binds_b in dirs[i + 1 :]:
+            if any(
+                pa == pb and _binds_overlap(a, b)
+                for a, pa in binds_a
+                for b, pb in binds_b
+            ):
                 return True
     return False
 

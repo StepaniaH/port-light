@@ -33,6 +33,7 @@ class ComposePort:
     container_port: int | None = None
     protocol: str = "tcp"
     host_ip: str | None = None
+    network_mode: str | None = None
 
 
 def scan_compose_files(
@@ -120,6 +121,7 @@ def _parse_compose_file(filepath: str, scan_dir: str, seen_real: set[str]) -> li
     for svc_name, svc_cfg in data.get("services", {}).items():
         if not isinstance(svc_cfg, dict):
             continue
+        net = str(svc_cfg.get("network_mode") or "").strip().lower() or None
         for entry in svc_cfg.get("ports") or []:
             for p in parse_port_entry(entry):
                 ports.append(ComposePort(
@@ -130,7 +132,21 @@ def _parse_compose_file(filepath: str, scan_dir: str, seen_real: set[str]) -> li
                     container_port=p.get("container_port"),
                     protocol=p.get("protocol", "tcp"),
                     host_ip=p.get("host_ip"),
+                    network_mode=net,
                 ))
+        if net == "host":
+            for entry in svc_cfg.get("expose") or []:
+                for p in parse_expose_entry(entry):
+                    ports.append(ComposePort(
+                        port=p["host_port"],
+                        compose_file=rel_path,
+                        project_dir=project_dir,
+                        service_name=svc_name,
+                        container_port=p.get("container_port"),
+                        protocol=p.get("protocol", "tcp"),
+                        host_ip=p.get("host_ip"),
+                        network_mode=net,
+                    ))
     return ports
 
 
@@ -217,6 +233,44 @@ def parse_port_entry(entry) -> list[dict]:
             for hp in host_ports
         ]
     return []
+
+
+def parse_expose_entry(entry) -> list[dict]:
+    """Host-network ``expose``: the container port is the host port."""
+    if isinstance(entry, bool) or entry is None:
+        return []
+    if isinstance(entry, int):
+        if 1 <= entry <= 65535:
+            return [{
+                "host_port": entry,
+                "container_port": entry,
+                "protocol": "tcp",
+                "host_ip": None,
+            }]
+        return []
+    if not isinstance(entry, str):
+        return []
+    protocol = "tcp"
+    text = entry.strip()
+    if "/" in text:
+        text, protocol = text.rsplit("/", 1)
+        protocol = (protocol or "tcp").lower()
+    if ":" in text:
+        return []
+    try:
+        host_ports = expand_port_range(text)
+    except ValueError:
+        return []
+    return [
+        {
+            "host_port": hp,
+            "container_port": hp,
+            "protocol": protocol,
+            "host_ip": None,
+        }
+        for hp in host_ports
+        if 1 <= hp <= 65535
+    ]
 
 
 def parse_short_port(entry: str) -> list[dict]:
