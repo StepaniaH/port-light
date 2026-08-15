@@ -24,6 +24,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `ss` uses `-n` so `:ssh` / `:http` still count; a loopback listen no longer hides a public Docker/Compose bind.
 - Traefik/homepage URLs attach to the app publish, not every sidecar; Caddy `*.home.arpa` is not a live link.
 - Unraid `[PORT:n]` uses the host mapping when the container port was remapped.
+- Discarding a detail hide/label error no longer lights the map-sync banner; empty-grid search keeps focus in the search box.
+- The Hidden chip is restored with `include_hidden`; unlock failures stay in the modal instead of sticking a password in session storage.
+- Desktop detail no longer traps Tab; numeric search neighbors are capped; settings segmented controls and the port-copy control have accessible names.
 
 ### Performance
 

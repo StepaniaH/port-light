@@ -151,7 +151,8 @@
         else kindFilters.add(f);
       });
     }
-    if (view.status === 'running') kindFilters.add('running');
+    if (typeof view.showHidden === 'boolean') showHidden = view.showHidden;
+    if (kindFilters.has('hidden')) showHidden = true;
     if (view.rangeStart >= 1 && view.rangeStart <= 65535) {
       rangeStart = view.rangeStart;
       rangeFromView = true;
@@ -188,6 +189,7 @@
         sort: sortMode,
         status: statusFilter,
         kinds: Array.from(kindFilters),
+        showHidden: showHidden,
         rangeStart: rangeStart,
         rangeEnd: rangeEnd,
       }));
@@ -440,6 +442,16 @@
       err.classList.add('hidden');
       err.textContent = '';
     }
+    const unlockErr = document.getElementById('unhide-error');
+    if (id === 'unhide-modal' && unlockErr) {
+      unlockErr.hidden = true;
+      unlockErr.classList.add('hidden');
+      unlockErr.textContent = '';
+    }
+    const unlockInput = document.getElementById('unhide-password');
+    if (id === 'unhide-modal' && unlockInput) {
+      unlockInput.removeAttribute('aria-invalid');
+    }
     const input = document.getElementById(id).querySelector('input');
     if (input) input.focus();
   }
@@ -486,6 +498,14 @@
     e.preventDefault();
     unlockHidden();
   });
+  document.getElementById('unhide-password').addEventListener('input', function () {
+    this.removeAttribute('aria-invalid');
+    const err = document.getElementById('unhide-error');
+    if (!err) return;
+    err.hidden = true;
+    err.classList.add('hidden');
+    err.textContent = '';
+  });
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
@@ -513,7 +533,8 @@
       return;
     }
     if (e.key === 'Tab' && !detailPanel.classList.contains('hidden') &&
-        detailPanel.contains(document.activeElement)) {
+        detailPanel.contains(document.activeElement) &&
+        window.matchMedia('(max-width: 900px)').matches) {
       trapTab(e, detailPanel);
       return;
     }
@@ -1189,7 +1210,8 @@
       control = renderThemePicker(f.choices || [], value, disabled);
     } else if (f.type === 'choice') {
       const choices = f.choices || [];
-      control = '<div class="segmented" role="radiogroup">' +
+      control = '<div class="segmented" role="radiogroup" aria-label="' +
+        escapeHtml(fieldLabel(f)) + '">' +
         choices.map(function (c) {
           return '<label class="seg-opt"><input type="radio" name="' + f.key + '" value="' +
             escapeHtml(c) + '"' + (c === value ? ' checked' : '') + disabled +
@@ -1280,8 +1302,10 @@
     if (selectedPort !== null) {
       const entry = portFromList(selectedPort);
       if (entry) renderDetail(entry);
-      else if (route.name === 'port') showPortDetail(selectedPort);
-      else closeDetail(true);
+      else if (route.name === 'port') {
+        detailShownPort = null;
+        showPortDetail(selectedPort);
+      } else closeDetail(true);
     }
   }
 
@@ -1359,7 +1383,10 @@
         knownCache[port] = null;
         return null;
       }
-      if (!res.ok) return null;
+      if (!res.ok) {
+        knownCache[port] = null;
+        return null;
+      }
       return res.json();
     }).then(function (body) {
       delete knownInflight[port];
@@ -1377,6 +1404,7 @@
         });
       }
     }).catch(function () {
+      knownCache[port] = null;
       delete knownInflight[port];
     });
   }
@@ -1434,29 +1462,36 @@
       }
     }
 
-    let beforeFree = 0, afterFree = 0;
-    for (let p = hitPort - 1; p >= Math.max(1, hitPort - 50) && beforeFree < 3; p--) {
+    let before = 0, after = 0;
+    const neighborCap = 3;
+    for (let p = hitPort - 1; p >= Math.max(1, hitPort - 50) && before < neighborCap; p--) {
       if (allPortNums.has(p)) {
         const entry = ports.find(function (x) { return x.port === p; });
-        if (entry) result.unshift(entry);
+        if (entry) {
+          result.unshift(entry);
+          before++;
+        }
       } else if (hiddenNums.has(p)) {
         result.unshift(synthetic(p, true));
-        beforeFree++;
+        before++;
       } else if (!locked) {
         result.unshift(synthetic(p, false));
-        beforeFree++;
+        before++;
       }
     }
-    for (let p = hitPort + 1; p <= Math.min(65535, hitPort + 50) && afterFree < 3; p++) {
+    for (let p = hitPort + 1; p <= Math.min(65535, hitPort + 50) && after < neighborCap; p++) {
       if (allPortNums.has(p)) {
         const entry = ports.find(function (x) { return x.port === p; });
-        if (entry) result.push(entry);
+        if (entry) {
+          result.push(entry);
+          after++;
+        }
       } else if (hiddenNums.has(p)) {
         result.push(synthetic(p, true));
-        afterFree++;
+        after++;
       } else if (!locked) {
         result.push(synthetic(p, false));
-        afterFree++;
+        after++;
       }
     }
 
@@ -1559,8 +1594,10 @@
       });
       const noFacet = !searchTerm && searchPortNum === null && kindFilters.size === 0 && statusFilter === 'all';
       const key = noFacet && inRange.length === 0 ? 'grid.emptyNone' : 'grid.empty';
+      const active = document.activeElement;
+      const gridHadFocus = active === grid || (active && grid.contains(active));
       grid.innerHTML = '<div class="empty">' + escapeHtml(t(key)) + '</div>';
-      grid.focus({ preventScroll: true });
+      if (gridHadFocus) grid.focus({ preventScroll: true });
       return;
     }
 
@@ -1638,7 +1675,8 @@
     setDetailOpen(true);
     const name = getCellLabel(p);
     let html = '<div class="detail-head"><div><h2><button type="button" class="detail-copy-port" data-copy-port="' +
-      p.port + '" title="' + escapeHtml(t('detail.copyPort')) + '">' + p.port + '</button></h2>' +
+      p.port + '" title="' + escapeHtml(t('detail.copyPort')) + '" aria-label="' +
+      escapeHtml(t('detail.copyPort') + ': ' + p.port) + '">' + p.port + '</button></h2>' +
       (name ? '<div class="detail-sub">' + escapeHtml(name) + '</div>' : '') +
       '</div><button type="button" class="close-btn" data-close-detail aria-label="' +
       escapeHtml(t('detail.close')) + '">×</button></div>';
@@ -1868,7 +1906,6 @@
     const row = detailContent.querySelector('.action-row');
     if (row) detailContent.insertBefore(p, row);
     else detailContent.appendChild(p);
-    setSyncError(true);
   }
 
   async function mutateDetail(url, opts, afterOk) {
@@ -1937,26 +1974,37 @@
   async function unlockHidden() {
     const password = document.getElementById('unhide-password').value;
     if (!password) return;
+    const prevUnlock = hiddenUnlock;
+    const prevShow = showHidden;
     hiddenUnlock = password;
-    sessionStorage.setItem('port-light-hidden-unlock', password);
-    showHidden = true;
     const data = await loadPorts();
-    if (!data) return;
-    if (data.summary && data.summary.hidden_locked) {
-      hiddenUnlock = '';
-      sessionStorage.removeItem('port-light-hidden-unlock');
-      showHidden = false;
+    if (!data || (data.summary && data.summary.hidden_locked)) {
+      hiddenUnlock = prevUnlock;
+      showHidden = prevShow;
+      if (!prevUnlock) sessionStorage.removeItem('port-light-hidden-unlock');
       const input = document.getElementById('unhide-password');
-      input.value = '';
-      input.placeholder = t('modal.wrongPassword');
+      const err = document.getElementById('unhide-error');
+      if (input) {
+        input.value = '';
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+      }
+      if (err) {
+        err.hidden = false;
+        err.classList.remove('hidden');
+        err.textContent = t(!data ? 'modal.unlockFailed' : 'modal.wrongPassword');
+      }
       return;
     }
+    sessionStorage.setItem('port-light-hidden-unlock', password);
+    showHidden = true;
     currentData = data;
     const followup = pendingAfterUnlock;
     pendingAfterUnlock = null;
     closeModals();
     document.getElementById('unhide-password').value = '';
     syncHiddenButton();
+    saveView();
     if (followup) followup();
     else render();
   }
@@ -1994,7 +2042,12 @@
       })
       .then(function () {
         if (window.PortLightI18n) PortLightI18n.applyDom();
+        if (showHidden && meta.hidden_unlock_required && !hiddenUnlock) {
+          showHidden = false;
+          kindFilters.delete('hidden');
+        }
         syncHiddenButton();
+        syncFilterUI();
         applyRoute();
         setupRefresh();
         syncHeaderHeight();

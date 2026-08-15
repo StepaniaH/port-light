@@ -116,6 +116,7 @@
     "unlockPassword": "解除パスワード",
     "unlock": "解除",
     "wrongPassword": "パスワードが違います",
+    "unlockFailed": "非表示ポートを解除できませんでした。",
     "invalidPort": "1 から 65535 のポート番号を入力してください。",
     "addFailed": "ポートを追加できませんでした。"
   },

@@ -972,8 +972,10 @@ a:focus-visible,
 @media (max-width: 720px) {
   .app-bar { padding: 0 10px; gap: 8px; }
   .brand-text { display: none; }
+  .sync-age { display: none; }
+  .app-actions { flex-wrap: wrap; }
   #view-grid { padding: 12px; }
-  .filter-aside { margin-left: 0; width: 100%; }
+  .filter-aside { margin-left: 0; width: 100%; flex-wrap: wrap; }
   .setting-row { flex-direction: column; align-items: stretch; }
   .setting-control { align-items: stretch; }
   .setting-row input[type="number"],

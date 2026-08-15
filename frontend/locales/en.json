@@ -116,6 +116,7 @@
     "unlockPassword": "Unlock password",
     "unlock": "Unlock",
     "wrongPassword": "Wrong password",
+    "unlockFailed": "Could not unlock hidden ports.",
     "invalidPort": "Enter a port between 1 and 65535.",
     "addFailed": "Could not add that port."
   },
