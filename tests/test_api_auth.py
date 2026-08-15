@@ -15,6 +15,7 @@ def test_health_unauthenticated(monkeypatch):
     assert res.headers.get("x-content-type-options") == "nosniff"
     assert res.headers.get("x-frame-options") == "DENY"
     assert res.headers.get("referrer-policy") == "no-referrer"
+    assert "camera=()" in (res.headers.get("permissions-policy") or "")
     assert res.headers.get("cache-control") == "no-store"
     body = res.json()
     assert body["status"] == "ok"
@@ -68,3 +69,21 @@ def test_static_assets_are_cacheable(monkeypatch):
     html = client.get("/")
     assert html.status_code == 200
     assert html.headers.get("cache-control") == "no-cache"
+
+
+def test_manual_port_roundtrip_and_lookup(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    client = TestClient(app)
+    created = client.post("/api/manual-ports", json={"port": 4242, "label": "lab"})
+    assert created.status_code == 200
+    patched = client.patch("/api/manual-ports/4242", json={"label": "bench"})
+    assert patched.status_code == 200
+    assert patched.json()["entry"]["label"] == "bench"
+    row = client.get("/api/ports/4242")
+    assert row.status_code == 200
+    assert row.json()["manual_label"] == "bench"
+    known = client.get("/api/known-ports/22")
+    assert known.status_code == 200
+    assert known.json()["name"] == "SSH"

@@ -33,6 +33,17 @@ def _lookup(tree: dict, key: str) -> None:
     assert isinstance(cur, str) and cur.strip(), key
 
 
+def test_locale_files_have_no_duplicate_keys():
+    def no_dupes(pairs):
+        keys = [key for key, _ in pairs]
+        assert len(keys) == len(set(keys)), keys
+        return dict(pairs)
+
+    for code in CODES:
+        text = (LOCALES_DIR / f"{code}.json").read_text(encoding="utf-8")
+        json.loads(text, object_pairs_hook=no_dupes)
+
+
 def test_locale_files_share_the_english_key_tree():
     trees = {}
     for code in CODES:

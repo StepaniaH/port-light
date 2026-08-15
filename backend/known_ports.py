@@ -37,6 +37,7 @@ KNOWN_PORTS: dict[int, dict] = {
     139:  {"name": "NetBIOS",       "description": "NetBIOS session (SMB related)",                  "category": "system",    "is_access_port": False},
     143:  {"name": "IMAP",          "description": "Email receiving (plaintext)",                    "category": "system",    "is_access_port": False},
     161:  {"name": "SNMP",          "description": "Simple Network Management Protocol",             "category": "system",    "is_access_port": False},
+    162:  {"name": "SNMP trap",     "description": "SNMP trap",                                      "category": "system",    "is_access_port": False},
     389:  {"name": "LDAP",          "description": "Directory service",                             "category": "system",    "is_access_port": False},
     443:  {"name": "HTTPS",         "description": "Encrypted web server",                           "category": "web",       "is_access_port": True},
     445:  {"name": "SMB",           "description": "Windows file sharing / Samba",                   "category": "system",    "is_access_port": True},
@@ -57,6 +58,7 @@ KNOWN_PORTS: dict[int, dict] = {
     2222:  {"name": "SSH Alt",       "description": "Alternate SSH",                                 "category": "system",    "is_access_port": True},
     3389:  {"name": "RDP",           "description": "Windows Remote Desktop",                        "category": "vpn",       "is_access_port": True},
     51820: {"name": "WireGuard",     "description": "WireGuard VPN",                                 "category": "vpn",       "is_access_port": True},
+    41641: {"name": "Tailscale",     "description": "Tailscale (default UDP)",                       "category": "vpn",       "is_access_port": False},
     5800:  {"name": "VNC HTTP",      "description": "VNC web interface",                             "category": "vpn",       "is_access_port": True},
     5900:  {"name": "VNC",           "description": "VNC remote desktop",                            "category": "vpn",       "is_access_port": True},
 
@@ -131,6 +133,7 @@ KNOWN_PORTS: dict[int, dict] = {
     8686:   {"name": "Lidarr",       "description": "Lidarr music manager",                          "category": "selfhosted","is_access_port": True},
     9696:   {"name": "Prowlarr",     "description": "Prowlarr (current default)",                    "category": "selfhosted","is_access_port": True},
     32400:  {"name": "Plex",         "description": "Plex Media Server",                             "category": "selfhosted","is_access_port": True},
+    32469:  {"name": "Plex GDM",     "description": "Plex GDM discovery",                            "category": "selfhosted","is_access_port": False},
     19999:  {"name": "Netdata",      "description": "Netdata",                                       "category": "selfhosted","is_access_port": True},
     7860:   {"name": "Gradio",       "description": "Gradio / Automatic1111",                        "category": "selfhosted","is_access_port": True},
     15777:  {"name": "Tdarr UI",     "description": "Tdarr web UI",                                  "category": "selfhosted","is_access_port": True},

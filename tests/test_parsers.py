@@ -7,7 +7,7 @@ from backend.compose_scanner import (
     scan_compose_files,
     substitute_vars,
 )
-from backend.docker_scanner import extract_label_urls, extract_ports
+from backend.docker_scanner import extract_label_urls, extract_ports, safe_http_url
 from backend.port_scanner import normalize_ip, parse_proc_net_line, parse_ss_line
 
 
@@ -172,3 +172,26 @@ def test_long_syntax_and_ipv4_host():
     })
     assert "https://wiki.home.arpa" in urls
     assert "https://media.home.arpa" in urls
+
+
+def test_compose_override_file(tmp_path):
+    app = tmp_path / "media"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "services:\n  jellyfin:\n    ports:\n      - '8096:8096'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.override.yml").write_text(
+        "services:\n  jellyfin:\n    ports:\n      - '8920:8920'\n",
+        encoding="utf-8",
+    )
+    numbers = {p.port for p in scan_compose_files(str(tmp_path))}
+    assert 8096 in numbers
+    assert 8920 in numbers
+
+
+def test_label_urls_reject_javascript():
+    assert safe_http_url("javascript:alert(1)") is None
+    assert safe_http_url("/relative") is None
+    assert safe_http_url("http://photos.lan:2283") == "http://photos.lan:2283"
+    assert extract_label_urls({"homepage.href": "javascript:alert(1)"}) == []

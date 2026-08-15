@@ -20,7 +20,7 @@ Browser  ──GET /──►  frontend/index.html
 
 The UI (`frontend/app.js`) filters, sorts, and searches **in the browser**. `include_hidden` is the exception: when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set, the server withholds those rows unless the request is authorized (`backend/auth.py`).
 
-Optional HTTP Basic Auth is applied as middleware to every path except `/api/health`. Responses set `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy`. `/api/*` is `Cache-Control: no-store`; `/static/*` is long-lived (`?v=` busts); `/` is `no-cache` so a new `?v=` actually loads.
+Optional HTTP Basic Auth is applied as middleware to every path except `/api/health`. Responses set `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`. `/api/*` is `Cache-Control: no-store`; `/static/*` is long-lived (`?v=` busts); `/` is `no-cache` so a new `?v=` actually loads.
 
 ## Listening ports
 
@@ -47,7 +47,7 @@ Stopped containers still contribute PortBindings — those become amber if nothi
 
 ## Compose
 
-`COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`.
+`COMPOSE_SCAN_DIR` is walked up to `COMPOSE_SCAN_DEPTH` (default 4), skipping `.git` / `node_modules` / venvs, capped by `COMPOSE_SCAN_MAX_FILES`. Files named `compose.yml` / `docker-compose.yml` (and the matching `.yaml` / `.override.yml` variants) are parsed.
 
 `include:` paths (string or `{ path: }`) are followed. Compose **profiles** are ignored: every service’s published ports count, because the map is about occupancy, not the currently selected profile.
 
@@ -58,7 +58,7 @@ Supported port syntax:
 - `${VAR}` / `$VAR` / `${VAR:-default}` from the sibling `.env` plus process environment
 - Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 128 ports per mapping
 
-A host port listed in more than one parsed file is marked `conflict: true`. That is a Compose-declaration conflict, not a runtime bind failure.
+A host port listed in more than one **project directory** is marked `conflict: true`. Two files in the same stack (`compose.yml` plus `compose.override.yml`) are not a conflict. That flag is a Compose-declaration clash, not a runtime bind failure.
 
 ## Classification
 

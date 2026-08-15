@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from pathlib import Path
 
@@ -19,7 +20,7 @@ from .auth import (
     request_may_see_hidden,
 )
 from .compose_scanner import scan_compose_files
-from .docker_scanner import docker_available, scan_containers
+from .docker_scanner import docker_available, safe_http_url, scan_containers
 from .known_ports import get_known_port
 from .port_scanner import host_proc_available, scan_listening_ports
 
@@ -33,6 +34,10 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    )
     if request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
     elif request.url.path.startswith("/static/"):
@@ -318,7 +323,12 @@ def _classify(
                     _add_container(port, c)
 
     compose_map: dict[int, list[dict]] = {}
+    compose_seen: set[tuple] = set()
     for cp in compose_ports:
+        key = (cp.project_dir, cp.port, cp.service_name)
+        if key in compose_seen:
+            continue
+        compose_seen.add(key)
         compose_map.setdefault(cp.port, []).append({
             "project_dir": cp.project_dir,
             "service_name": cp.service_name,
@@ -395,7 +405,7 @@ def _classify(
             "machine": manual["machine"] if manual else "localhost",
             "known_service": known,
             "is_hidden": port in hidden_ports,
-            "conflict": len(composes) > 1,
+            "conflict": len({c["project_dir"] for c in composes}) > 1,
             "urls": urls,
         })
 
@@ -428,9 +438,19 @@ def _proto_label(protocols: list[str]) -> str:
 
 
 def _bind_scope(ip: str) -> str:
-    if not ip or ip in ("0.0.0.0", "::", "*"):
+    if not ip or ip in ("*",):
         return "public"
-    if ip in ("127.0.0.1", "::1", "localhost"):
+    if ip == "localhost":
+        return "localhost"
+    try:
+        addr = ipaddress.ip_address(ip.split("%", 1)[0])
+    except ValueError:
+        return "lan"
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
+    if addr.is_unspecified:
+        return "public"
+    if addr.is_loopback:
         return "localhost"
     return "lan"
 
@@ -454,7 +474,8 @@ def _collect_urls(
     urls: list[str] = []
     seen: set[str] = set()
     for c in containers:
-        for u in c.get("urls") or []:
+        for raw in c.get("urls") or []:
+            u = safe_http_url(raw)
             if u and u not in seen:
                 seen.add(u)
                 urls.append(u)

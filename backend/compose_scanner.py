@@ -16,6 +16,8 @@ _SKIP_DIRS = frozenset({
 _COMPOSE_NAMES = frozenset({
     "compose.yml", "compose.yaml",
     "docker-compose.yml", "docker-compose.yaml",
+    "compose.override.yml", "compose.override.yaml",
+    "docker-compose.override.yml", "docker-compose.override.yaml",
 })
 _MAX_RANGE = 128
 

@@ -6,6 +6,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 from .port_scanner import socket_inodes_for_pid
 
@@ -18,6 +19,7 @@ except ImportError:
 
 _TRAEFIK_HOST = re.compile(r"Host(?:Regexp)?\(\s*`([^`]+)`\s*\)", re.IGNORECASE)
 _LOCK = threading.Lock()
+_BAD_URL_SCHEMES = frozenset({"javascript", "data", "file", "vbscript", "blob", "about"})
 _CLIENT = None
 _AVAIL = False
 _AVAIL_AT = 0.0
@@ -188,14 +190,10 @@ def extract_label_urls(labels: dict) -> list[str]:
     seen: set[str] = set()
 
     def _add(url: str):
-        url = url.strip().rstrip("/")
-        if not url:
-            return
-        if not url.startswith(("http://", "https://")):
-            url = "https://" + url
-        if url not in seen:
-            seen.add(url)
-            urls.append(url)
+        cleaned = safe_http_url(url)
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            urls.append(cleaned)
 
     for key, val in (labels or {}).items():
         if not val or not isinstance(val, str):
@@ -213,6 +211,41 @@ def extract_label_urls(labels: dict) -> list[str]:
             _add(val)
 
     return urls
+
+
+def safe_http_url(url: str | None) -> str | None:
+    """Keep http(s) links only. Traefik/Caddy hosts get https:// prepended."""
+    if not url or not isinstance(url, str):
+        return None
+    text = url.strip().rstrip("/")
+    if not text or any(ch.isspace() for ch in text):
+        return None
+    _bad = _BAD_URL_SCHEMES
+    if "://" in text:
+        scheme, _, rest = text.partition("://")
+        if scheme.lower() not in ("http", "https") or not rest:
+            return None
+    else:
+        head = text.split(":", 1)[0].lower()
+        if head in _bad:
+            return None
+        if text.startswith("//"):
+            text = "https:" + text
+        elif text.startswith("/"):
+            return None
+        else:
+            text = "https://" + text
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return None
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if not parsed.hostname or parsed.username is not None:
+        return None
+    if parsed.hostname.lower() in _bad:
+        return None
+    return text
 
 
 def _split_port_spec(spec: str) -> tuple[int | None, str]:

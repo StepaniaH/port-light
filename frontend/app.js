@@ -72,6 +72,8 @@
   let route = { name: 'grid' };
   let pendingAfterUnlock = null;
   let focusBack = null;
+  let pendingGridFocus = null;
+  let occupancyKey = '';
 
   const appEl = document.getElementById('app');
   const grid = document.getElementById('grid');
@@ -230,6 +232,7 @@
     settingsBtn.setAttribute('aria-current', onSettings ? 'page' : 'false');
     syncHeaderHeight();
     if (onSettings) {
+      pendingGridFocus = null;
       closeDetail(true);
       loadSettingsPage();
       return;
@@ -242,6 +245,7 @@
     }
     closeDetail(true);
     if (currentData) render();
+    applyPendingGridFocus();
   }
 
   window.addEventListener('hashchange', applyRoute);
@@ -486,7 +490,7 @@
     else if (key === 'ArrowRight') next = cells[Math.min(cells.length - 1, idx + 1)];
     else if (key === 'Home') next = cells[0];
     else if (key === 'End') next = cells[cells.length - 1];
-    else if (key === 'ArrowUp' || key === 'ArrowDown') {
+    else if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'PageUp' || key === 'PageDown') {
       const rows = cellsByRow(cells);
       let foundR = -1;
       let foundC = -1;
@@ -495,8 +499,13 @@
         if (c >= 0) { foundR = r; foundC = c; break; }
       }
       if (foundR < 0) return;
-      const destR = key === 'ArrowDown' ? foundR + 1 : foundR - 1;
-      if (destR < 0 || destR >= rows.length) return;
+      const page = Math.max(1, Math.min(8, rows.length - 1));
+      const delta = (key === 'PageUp' || key === 'PageDown') ? page : 1;
+      let destR = (key === 'ArrowDown' || key === 'PageDown') ? foundR + delta : foundR - delta;
+      if (key === 'PageUp' || key === 'PageDown') {
+        destR = Math.max(0, Math.min(rows.length - 1, destR));
+      }
+      if (destR < 0 || destR >= rows.length || destR === foundR) return;
       const destRow = rows[destR];
       const from = current.getBoundingClientRect();
       const fromMid = (from.left + from.right) / 2;
@@ -513,7 +522,8 @@
 
   grid.addEventListener('keydown', function (e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' &&
-        e.key !== 'ArrowDown' && e.key !== 'Home' && e.key !== 'End') return;
+        e.key !== 'ArrowDown' && e.key !== 'Home' && e.key !== 'End' &&
+        e.key !== 'PageUp' && e.key !== 'PageDown') return;
     if (e.target === grid) {
       const first = grid.querySelector('.port-cell');
       if (first) { e.preventDefault(); first.focus(); }
@@ -660,9 +670,14 @@
     loadPorts().then(function (data) {
       if (!data || route.name === 'settings') return;
       currentData = data;
-      render();
+      const key = JSON.stringify({ ports: data.ports, summary: data.summary });
+      if (key !== occupancyKey) {
+        occupancyKey = key;
+        render();
+      }
+    }).then(function () {
+      fetchHealth();
     });
-    fetchHealth();
   }
 
   async function loadPorts() {
@@ -685,6 +700,14 @@
       tick();
     }
   }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      return;
+    }
+    if (settings.auto_refresh) setupRefresh();
+  });
 
   function loadSettingsPage() {
     fetchSettings().then(function (doc) {
@@ -948,6 +971,13 @@
     document.documentElement.classList.toggle('detail-open', open);
     detailPanel.classList.toggle('hidden', !open);
     detailBackdrop.classList.toggle('hidden', !open);
+    if (open) {
+      detailPanel.setAttribute('role', 'dialog');
+      detailPanel.setAttribute('aria-modal', 'true');
+    } else {
+      detailPanel.removeAttribute('role');
+      detailPanel.setAttribute('aria-modal', 'false');
+    }
   }
 
   function render() {
@@ -1205,9 +1235,10 @@
     if (p.urls && p.urls.length > 0) {
       html += '<div class="section-title">' + escapeHtml(t('detail.open')) + '</div>';
       for (let i = 0; i < p.urls.length; i++) {
-        const u = p.urls[i];
+        const href = safeHref(p.urls[i]);
+        if (!href) continue;
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.url')) + '</span><span class="val"><a class="detail-link" href="' +
-          escapeHtml(u) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(u) + '</a></span></div>';
+          escapeHtml(href) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(href) + '</a></span></div>';
       }
     }
 
@@ -1268,6 +1299,17 @@
     }
     html += '</div>';
 
+    const active = document.activeElement;
+    const inDetail = active && detailContent.contains(active);
+    const fromGrid = active && active.classList && active.classList.contains('port-cell');
+    let keep = '';
+    if (inDetail && active && active.getAttribute) {
+      if (active.hasAttribute('data-close-detail')) keep = 'close';
+      else if (active.hasAttribute('data-hide-port')) keep = 'hide';
+      else if (active.hasAttribute('data-unhide-port')) keep = 'unhide';
+      else if (active.hasAttribute('data-delete-port')) keep = 'delete';
+    }
+
     detailContent.innerHTML = html;
     const closeBtn = detailContent.querySelector('[data-close-detail]');
     if (closeBtn) closeBtn.addEventListener('click', function () { closeDetail(); });
@@ -1277,9 +1319,16 @@
     if (showBtn) showBtn.addEventListener('click', function () { window._portLightUnhide(p.port); });
     const delBtn = detailContent.querySelector('[data-delete-port]');
     if (delBtn) delBtn.addEventListener('click', function () { window._portLightDeleteManual(p.port); });
+    const focusEl = keep === 'close' ? closeBtn
+      : keep === 'hide' ? hideBtn
+      : keep === 'unhide' ? showBtn
+      : keep === 'delete' ? delBtn
+      : (fromGrid ? closeBtn : null);
+    if (focusEl) focusEl.focus({ preventScroll: true });
   }
 
   function closeDetail(skipHash) {
+    if (selectedPort !== null) pendingGridFocus = selectedPort;
     const wasOpen = !detailPanel.classList.contains('hidden') || selectedPort !== null;
     setDetailOpen(false);
     selectedPort = null;
@@ -1288,6 +1337,19 @@
       return;
     }
     if (wasOpen && currentData && route.name !== 'settings') render();
+    applyPendingGridFocus();
+  }
+
+  function applyPendingGridFocus() {
+    if (route.name === 'settings') {
+      pendingGridFocus = null;
+      return;
+    }
+    const port = pendingGridFocus;
+    pendingGridFocus = null;
+    if (!port) return;
+    const cell = grid.querySelector('.port-cell[data-port="' + port + '"]');
+    if (cell) cell.focus({ preventScroll: true });
   }
 
   function showDetailError(msg) {
@@ -1391,6 +1453,15 @@
     const div = document.createElement('div');
     div.textContent = String(text);
     return div.innerHTML;
+  }
+
+  function safeHref(url) {
+    if (!url) return '';
+    const text = String(url).trim();
+    const lower = text.toLowerCase();
+    if (lower.indexOf('http://') !== 0 && lower.indexOf('https://') !== 0) return '';
+    if (/[\s<>]/.test(text)) return '';
+    return text;
   }
 
   function startApp() {

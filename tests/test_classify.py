@@ -11,7 +11,9 @@ def test_bind_scope():
     assert _bind_scope("::") == "public"
     assert _bind_scope("*") == "public"
     assert _bind_scope("127.0.0.1") == "localhost"
+    assert _bind_scope("127.0.0.2") == "localhost"
     assert _bind_scope("::1") == "localhost"
+    assert _bind_scope("::ffff:127.0.0.1") == "localhost"
     assert _bind_scope("192.168.1.10") == "lan"
     assert _bind_scope_many(["127.0.0.1", "0.0.0.0"]) == "public"
     assert _bind_scope_many(["127.0.0.1", "10.0.0.5"]) == "lan"
@@ -102,6 +104,35 @@ def test_classify_used_configured_hidden_conflict():
     assert hidden[0]["is_hidden"] is True
     assert hidden[0]["status"] == "configured"
     assert hidden[0]["source_type"] == "manual"
+
+
+def test_compose_same_project_is_not_conflict():
+    compose = [
+        ComposePort(port=8096, compose_file="media/compose.yml", project_dir="media", service_name="jellyfin"),
+        ComposePort(port=8096, compose_file="media/compose.override.yml", project_dir="media", service_name="jellyfin"),
+        ComposePort(port=5432, compose_file="db/compose.yml", project_dir="db", service_name="postgres"),
+        ComposePort(port=5432, compose_file="other/compose.yml", project_dir="other", service_name="db"),
+    ]
+    out = _classify(
+        [], [], compose, [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert by_port[8096]["conflict"] is False
+    assert len(by_port[8096]["compose_configs"]) == 1
+    assert by_port[5432]["conflict"] is True
+
+
+def test_collect_urls_drops_javascript():
+    urls = _collect_urls(
+        8096, ["0.0.0.0"],
+        [{"urls": ["javascript:alert(1)", "https://media.home.arpa"]}],
+        {"name": "Jellyfin", "is_access_port": True},
+    )
+    assert "javascript:alert(1)" not in urls
+    assert "https://media.home.arpa" in urls
+    assert all(u.startswith(("http://", "https://")) for u in urls)
 
 
 def test_meta_unauthenticated(monkeypatch):
