@@ -53,22 +53,18 @@ def scan_listening_ports() -> list[ListeningPort]:
     """Return listening/bound TCP and UDP ports on the host."""
     try:
         result = _scan_with_host_proc()
-        if result:
+        if result is not None:
             return result
     except (FileNotFoundError, OSError):
         pass
 
     try:
-        result = _scan_with_ss()
-        if result:
-            return result
+        return _scan_with_ss()
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         pass
 
     try:
-        result = _scan_with_proc()
-        if result:
-            return result
+        return _scan_with_proc()
     except (FileNotFoundError, OSError):
         pass
 
@@ -205,7 +201,9 @@ def _split_local_spec(local_spec: str) -> tuple[str, int | None, str]:
     return ip, port, family
 
 
-def _scan_with_host_proc() -> list[ListeningPort]:
+def _scan_with_host_proc() -> list[ListeningPort] | None:
+    if not os.path.exists("/host/proc/1/net/tcp"):
+        return None
     ports: list[ListeningPort] = []
     for proto, path in [
         ("tcp", "/host/proc/1/net/tcp"),

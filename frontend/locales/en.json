@@ -86,6 +86,8 @@
     "delete": "Delete",
     "deleteConfirm": "Remove the manual entry for port {port}?",
     "actionFailed": "Could not update that port.",
+    "notFound": "This port is not on the occupancy map.",
+    "hiddenLocked": "This port is hidden. Unlock hidden ports to see it.",
     "label": "Label",
     "saveLabel": "Save label",
     "copyPort": "Copy port number",
@@ -259,11 +261,13 @@
     "docker": "Docker",
     "system": "System",
     "host": "Host",
-    "manual": "Manual"
+    "manual": "Manual",
+    "unknown": "Unknown"
   },
   "scope": {
     "public": "public",
     "lan": "LAN",
+    "link": "link-local",
     "localhost": "localhost"
   }
 }

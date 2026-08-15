@@ -24,6 +24,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (env or labels) become detail-panel URLs. `VIRTUAL_PORT` picks which published mapping gets the link (default 80; a lone mismatched publish still gets it).
 - Traefik `HostHeader()`.
 - `/proc` inode walk fills process names when `ss` is not used (the usual `/host/proc` mount).
+- `compose.prod.yml` / `docker-compose*.yml` variants are scanned, not only the default filenames.
+- Swarm `deploy.ports` contribute declared host ports.
+- macvlan/ipvlan container IPs plus `EXPOSE` show as LAN occupancy.
 
 ### Fixed
 
@@ -60,6 +63,22 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Host scanner health was green whenever `/proc/net/tcp` existed, including a bridge container without `/host/proc`.
 - A hidden port still counted as free in the legend.
 - A paused or restarting container was painted configured (the host bind is still held).
+- Two folders named `wiki` were treated as one Compose project (conflicts dropped, ports lost).
+- A non-UTF-8 compose file aborted the whole Compose scan.
+- `${VAR:?err}` / `${VAR?err}` never interpolated, so declared ports vanished.
+- YAML `8080: 80` mapping entries and `8080:80/TCP` were dropped.
+- `network_mode: service:…` / `container:…` still counted that service’s `ports:` as host occupancy.
+- `extends.file` ignored the base file’s sibling `.env`.
+- Compose `!reset` tags made `yaml.safe_load` discard the file.
+- Host-network `EXPOSE` painted running containers green even when nothing listened.
+- An empty `/host/proc` listen table fell through into the container netns.
+- Traefik `entrypoints=web` links were always `https://`; `HostRegexp` templates became fake URLs; Caddy `http://host` was dropped.
+- Traefik/Caddy links were copied onto every published port of the container.
+- Link-local and `172.17.0.0/16` binds were treated as LAN for guessed URLs.
+- Hidden occupied ports opened the detail drawer as free.
+- Tab from the occupancy grid was trapped in the drawer on desktop.
+- Escape cleared search before closing the detail drawer.
+- Numeric search neighbors could exceed port 65535; digit search ignored kind filters for occupied neighbors.
 
 ### Changed
 

@@ -456,6 +456,10 @@
       if (closeLocaleMenu({ focusTrigger: true })) return;
       if (route.name === 'settings') { location.hash = '#/'; return; }
       if (searchTerm || searchPortNum !== null) {
+        if (!detailPanel.classList.contains('hidden') || selectedPort !== null) {
+          closeDetail();
+          return;
+        }
         searchInput.value = '';
         searchTerm = '';
         searchPortNum = null;
@@ -471,7 +475,8 @@
       trapTab(e, modal);
       return;
     }
-    if (e.key === 'Tab' && !detailPanel.classList.contains('hidden')) {
+    if (e.key === 'Tab' && !detailPanel.classList.contains('hidden') &&
+        detailPanel.contains(document.activeElement)) {
       trapTab(e, detailPanel);
       return;
     }
@@ -1073,7 +1078,8 @@
     detailBackdrop.classList.toggle('hidden', !open);
     if (open) {
       detailPanel.setAttribute('role', 'dialog');
-      detailPanel.setAttribute('aria-modal', 'true');
+      const overlay = window.matchMedia('(max-width: 900px)').matches;
+      detailPanel.setAttribute('aria-modal', overlay ? 'true' : 'false');
     } else {
       detailPanel.removeAttribute('role');
       detailPanel.setAttribute('aria-modal', 'false');
@@ -1122,14 +1128,25 @@
     renderDetail(fallback && fallback.port === port ? fallback : freeStub(port));
     const gen = ++portDetailGen;
     detailShownPort = port;
-    api('/api/ports/' + port + '?include_hidden=' + showHidden).then(function (res) {
-      if (!res.ok) return null;
+    api('/api/ports/' + port + '?include_hidden=true').then(function (res) {
+      if (gen !== portDetailGen || selectedPort !== port) return null;
+      if (res.status === 404) {
+        renderDetail(Object.assign(freeStub(port), { _missing: true, _locked: true }));
+        return null;
+      }
+      if (!res.ok) {
+        detailShownPort = null;
+        showDetailError(t('detail.actionFailed'));
+        return null;
+      }
       return res.json();
     }).then(function (row) {
       if (!row || gen !== portDetailGen || selectedPort !== port) return;
       if (row.known_service) knownCache[port] = row.known_service;
       renderDetail(row);
-    }).catch(function () {});
+    }).catch(function () {
+      if (gen === portDetailGen) detailShownPort = null;
+    });
   }
 
   function prefetchKnown(port) {
@@ -1202,7 +1219,7 @@
         if (entry) result.unshift(entry);
       }
     }
-    for (let p = hitPort + 1; p <= hitPort + 50 && afterFree < 3; p++) {
+    for (let p = hitPort + 1; p <= Math.min(65535, hitPort + 50) && afterFree < 3; p++) {
       if (!allPortNums.has(p)) {
         result.push({ port: p, status: 'free', _synthetic: true, known_service: getKnownForFree(p) });
         afterFree++;
@@ -1227,7 +1244,7 @@
   }
 
   function getKnownForFree(port) {
-    if (knownCache[port]) return knownCache[port];
+    if (Object.prototype.hasOwnProperty.call(knownCache, port)) return knownCache[port];
     const found = portFromList(port);
     if (found && found.known_service) return found.known_service;
     return null;
@@ -1264,7 +1281,10 @@
     let displayPorts;
 
     if (searchPortNum !== null) {
-      displayPorts = buildSearchContext(ports, searchPortNum);
+      displayPorts = buildSearchContext(ports, searchPortNum).filter(function (p) {
+        if (p._synthetic || p.port === searchPortNum) return true;
+        return matchesFilter(p);
+      });
     } else {
       displayPorts = ports.filter(function (p) {
         if (!searchTerm && (p.port < rangeStart || p.port > rangeEnd)) return false;
@@ -1277,13 +1297,15 @@
             p.known_service ? p.known_service.description : '',
             ...(p.containers || []).map(function (c) {
               return c.name + ' ' + (c.compose_project || '') + ' ' + (c.compose_service || '') +
-                ' ' + c.image + ' ' + (c.bind_ips || []).join(' ') + ' ' + (c.protocol || '');
+                ' ' + c.image + ' ' + (c.status || '') + ' ' + (c.bind_ips || []).join(' ') + ' ' + (c.protocol || '');
             }),
             ...(p.compose_configs || []).map(function (c) {
               return (c.project_name || '') + ' ' + (c.project_dir || '') + ' ' +
                 c.service_name + ' ' + c.compose_file + ' ' + (c.host_ip || '');
             }),
-            p.protocol || '', p.bind_scope || '', (p.ips || []).join(' '),
+            p.protocol || '', p.bind_scope || '', p.source_type || '', p.machine || '',
+            p.pid ? String(p.pid) : '', (p.ips || []).join(' '),
+            p.known_service ? (p.known_service.category || '') : '',
             ...(p.urls || []),
           ].join(' ').toLowerCase();
           if (!haystack.includes(searchTerm)) return false;
@@ -1307,6 +1329,7 @@
       const noFacet = !searchTerm && searchPortNum === null && kindFilters.size === 0 && statusFilter === 'all';
       const key = noFacet && inRange.length === 0 ? 'grid.emptyNone' : 'grid.empty';
       grid.innerHTML = '<div class="empty">' + escapeHtml(t(key)) + '</div>';
+      grid.focus({ preventScroll: true });
       return;
     }
 
@@ -1388,6 +1411,10 @@
 
     html += '<div class="row"><span class="key">' + escapeHtml(t('detail.status')) + '</span><span class="tag ' + p.status + '">' +
       escapeHtml(t('status.' + p.status) || p.status) + '</span></div>';
+    if (p._missing) {
+      html += '<p class="detail-error" role="alert">' +
+        escapeHtml(t(p._locked ? 'detail.hiddenLocked' : 'detail.notFound')) + '</p>';
+    }
     html += '<div class="row"><span class="key">' + escapeHtml(t('detail.source')) + '</span><span class="val">' +
       escapeHtml(tx('sourceType', p.source_type || 'unknown')) + '</span></div>';
     if (p.protocol) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.protocol')) + '</span><span class="val">' + escapeHtml(p.protocol) + '</span></div>';
@@ -1501,7 +1528,6 @@
 
     const active = document.activeElement;
     const inDetail = active && detailContent.contains(active);
-    const fromGrid = active && active.classList && active.classList.contains('port-cell');
     let keep = '';
     if (inDetail && active && active.getAttribute) {
       if (active.hasAttribute('data-close-detail')) keep = 'close';
@@ -1544,8 +1570,11 @@
       : keep === 'delete' ? delBtn
       : keep === 'copy' ? copyBtn
       : keep === 'label' ? labelInput
-      : (fromGrid ? closeBtn : null);
-    if (focusEl) focusEl.focus({ preventScroll: true });
+      : closeBtn;
+    if (keep && focusEl) focusEl.focus({ preventScroll: true });
+    else if (closeBtn && !detailPanel.contains(document.activeElement)) {
+      closeBtn.focus({ preventScroll: true });
+    }
   }
 
   function closeDetail(skipHash) {

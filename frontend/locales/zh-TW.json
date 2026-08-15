@@ -86,6 +86,8 @@
     "delete": "刪除",
     "deleteConfirm": "刪除連接埠 {port} 的手動項目？",
     "actionFailed": "無法更新該連接埠。",
+    "notFound": "占用圖上沒有這個連接埠。",
+    "hiddenLocked": "此連接埠已隱藏。解鎖隱藏連接埠後才能查看。",
     "label": "標籤",
     "saveLabel": "儲存標籤",
     "copyPort": "複製連接埠號碼",
@@ -259,11 +261,13 @@
     "docker": "Docker",
     "system": "系統",
     "host": "主機",
-    "manual": "手動"
+    "manual": "手動",
+    "unknown": "未知"
   },
   "scope": {
     "public": "公開",
     "lan": "區域網路",
+    "link": "連結本機",
     "localhost": "localhost"
   }
 }

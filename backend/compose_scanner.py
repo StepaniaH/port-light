@@ -13,15 +13,90 @@ _SKIP_DIRS = frozenset({
     ".git", ".svn", ".hg", "node_modules", ".venv", "venv",
     "__pycache__", ".pytest_cache", "data",
 })
-_COMPOSE_NAMES = frozenset({
-    "compose.yml", "compose.yaml",
-    "docker-compose.yml", "docker-compose.yaml",
-    "compose.override.yml", "compose.override.yaml",
-    "docker-compose.override.yml", "docker-compose.override.yaml",
-})
 _MAX_RANGE = 128
 
 _VAR_RE = re.compile(r"\$\$|\$\{([^}]+)\}|\$(\w+)")
+_COMPOSE_PREFIXES = ("compose.", "docker-compose.")
+_COMPOSE_SUFFIXES = (".yml", ".yaml")
+
+
+class _ComposeLoader(yaml.SafeLoader):
+    """Ignore Compose ``!reset`` / ``!override`` tags so the rest of the file still loads."""
+
+
+def _unknown_compose_tag(loader, _tag_suffix, node):
+    if isinstance(node, yaml.ScalarNode):
+        return loader.construct_scalar(node)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return None
+
+
+_ComposeLoader.add_multi_constructor("!", _unknown_compose_tag)
+
+
+def _load_yaml(text: str):
+    return yaml.load(text, Loader=_ComposeLoader)
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    return text
+
+
+def _is_compose_filename(name: str) -> bool:
+    lower = name.lower()
+    return lower.startswith(_COMPOSE_PREFIXES) and lower.endswith(_COMPOSE_SUFFIXES)
+
+
+def _project_dir_key(parent: Path, scan_dir: str) -> str:
+    try:
+        rel = os.path.relpath(str(parent), os.path.abspath(scan_dir))
+    except ValueError:
+        return parent.name
+    if rel == ".":
+        return parent.name or "."
+    return rel.replace("\\", "/")
+
+
+def _project_display_name(raw_name, fallback: str) -> str:
+    if isinstance(raw_name, str) and raw_name.strip():
+        return raw_name.strip()
+    if isinstance(raw_name, (int, float)) and not isinstance(raw_name, bool):
+        return str(raw_name)
+    return fallback
+
+
+def _norm_proto(proto) -> str:
+    text = str(proto or "tcp").strip().lower() or "tcp"
+    if "/" in text:
+        text = text.split("/", 1)[0] or "tcp"
+    return text
+
+
+def _is_shared_netns(net: str | None) -> bool:
+    if not net:
+        return False
+    return net.startswith("service:") or net.startswith("container:")
+
+
+def _port_entries(ports_cfg) -> list:
+    if ports_cfg is None or ports_cfg is False:
+        return []
+    if isinstance(ports_cfg, dict):
+        if any(k in ports_cfg for k in ("published", "target", "host_ip", "protocol", "mode")):
+            return [ports_cfg]
+        return [{k: v} for k, v in ports_cfg.items()]
+    if isinstance(ports_cfg, list):
+        return ports_cfg
+    return [ports_cfg]
 
 
 @dataclass
@@ -81,7 +156,7 @@ def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> list[s
             continue
         dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith(".")]
         for name in files:
-            if name in _COMPOSE_NAMES:
+            if _is_compose_filename(name):
                 found.append(os.path.join(root, name))
                 if len(found) >= max_files:
                     return found
@@ -102,17 +177,14 @@ def _parse_compose_file(
     chain = chain | {real}
 
     ports: list[ComposePort] = []
-    try:
-        raw = Path(filepath).read_text()
-    except OSError:
+    raw = _read_text(Path(filepath))
+    if raw is None:
         return ports
-    if raw.startswith("\ufeff"):
-        raw = raw[1:]
 
     env_vars = {**_load_env_file(Path(filepath).parent), **(extra_env or {})}
     interpolated = substitute_vars(raw, env_vars)
     try:
-        data = yaml.safe_load(interpolated)
+        data = _load_yaml(interpolated)
     except yaml.YAMLError:
         return ports
     if not isinstance(data, dict):
@@ -124,19 +196,17 @@ def _parse_compose_file(
         env_vars = {**env_vars, **extra_file_env}
         interpolated = substitute_vars(raw, env_vars)
         try:
-            data = yaml.safe_load(interpolated)
+            data = _load_yaml(interpolated)
         except yaml.YAMLError:
             return ports
         if not isinstance(data, dict):
             return ports
 
-    this_dir = project_dir if project_dir is not None else parent.name
-    raw_name = data.get("name")
-    this_name = (
-        raw_name.strip()
-        if isinstance(raw_name, str) and raw_name.strip()
-        else (project_name or this_dir)
-    )
+    this_dir = project_dir if project_dir is not None else _project_dir_key(parent, scan_dir)
+    fallback_name = Path(this_dir).name
+    if not fallback_name or fallback_name in (".", ".."):
+        fallback_name = parent.name
+    this_name = _project_display_name(data.get("name"), project_name or fallback_name)
 
     for inc_path, inc_env in _include_specs(data.get("include"), parent):
         ports.extend(_parse_compose_file(
@@ -158,7 +228,13 @@ def _parse_compose_file(
             svc_cfg, filepath, env_vars, frozenset(), local_services,
         )
         net = str(svc_cfg.get("network_mode") or "").strip().lower() or None
-        for entry in svc_cfg.get("ports") or []:
+        if _is_shared_netns(net):
+            continue
+        entries = _port_entries(svc_cfg.get("ports"))
+        deploy = svc_cfg.get("deploy")
+        if isinstance(deploy, dict):
+            entries.extend(_port_entries(deploy.get("ports")))
+        for entry in entries:
             for p in parse_port_entry(entry):
                 ports.append(ComposePort(
                     port=p["host_port"],
@@ -203,6 +279,14 @@ def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str]]]:
             paths = [item]
         elif isinstance(item, dict):
             extra = _env_files_from_include(parent, item.get("env_file"))
+            proj = item.get("project_directory")
+            if isinstance(proj, str) and proj.strip():
+                try:
+                    proj_dir = (parent / proj).resolve()
+                except (TypeError, ValueError, OSError):
+                    proj_dir = None
+                if proj_dir is not None and proj_dir.is_dir():
+                    extra = {**_load_env_file(proj_dir), **extra}
             raw_path = item.get("path")
             if isinstance(raw_path, str):
                 paths = [raw_path]
@@ -252,25 +336,22 @@ def _load_env_file(directory: Path) -> dict[str, str]:
 
 def _read_env_file(path: Path) -> dict[str, str]:
     env: dict[str, str] = {}
-    try:
-        text = path.read_text()
-        if text.startswith("\ufeff"):
-            text = text[1:]
-        for line in text.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            if line.startswith("export "):
-                line = line[7:].lstrip()
-            if "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            key = key.strip()
-            if not key:
-                continue
-            env[key] = val.strip().strip("\"'")
-    except OSError:
-        pass
+    text = _read_text(path)
+    if text is None:
+        return env
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        if not key:
+            continue
+        env[key] = val.strip().strip("\"'")
     return env
 
 
@@ -295,15 +376,12 @@ def _extends_ref(ext, filepath: str) -> tuple[str, str] | None:
 
 
 def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
-    try:
-        raw = Path(filepath).read_text()
-    except OSError:
+    raw = _read_text(Path(filepath))
+    if raw is None:
         return {}
-    if raw.startswith("\ufeff"):
-        raw = raw[1:]
     raw = substitute_vars(raw, env_vars)
     try:
-        data = yaml.safe_load(raw)
+        data = _load_yaml(raw)
     except yaml.YAMLError:
         return {}
     if not isinstance(data, dict):
@@ -348,7 +426,8 @@ def _resolve_extends(
         other = other_local.get(ref_svc) if isinstance(other_local, dict) else None
     else:
         other_path = ref_file
-        other_local = _services_from_file(ref_file, env_vars)
+        merged_env = {**_load_env_file(Path(ref_file).parent), **env_vars}
+        other_local = _services_from_file(ref_file, merged_env)
         other = other_local.get(ref_svc)
     if not isinstance(other, dict):
         return svc_cfg
@@ -365,6 +444,17 @@ def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
         if m.group(0) == "$$":
             return "$"
         name = m.group(1) or m.group(2)
+        if ":?" in name:
+            var, _, _err = name.partition(":?")
+            val = merged.get(var)
+            if val is None or val == "":
+                return ""
+            return val
+        if "?" in name:
+            var, _, _err = name.partition("?")
+            if var not in merged:
+                return ""
+            return merged[var]
         if ":-" in name:
             var, _, default = name.partition(":-")
             val = merged.get(var)
@@ -380,12 +470,26 @@ def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
 
 
 def parse_port_entry(entry) -> list[dict]:
+    if isinstance(entry, bool) or entry is None:
+        return []
+    if isinstance(entry, (int, float)) and not isinstance(entry, bool):
+        return []
     if isinstance(entry, str):
         return parse_short_port(entry)
     if isinstance(entry, dict):
+        if (
+            "published" not in entry
+            and "target" not in entry
+            and "host_ip" not in entry
+            and len(entry) == 1
+        ):
+            key, val = next(iter(entry.items()))
+            if isinstance(val, dict):
+                return parse_port_entry(val)
+            return parse_short_port(f"{key}:{val}")
         host = entry.get("published")
         target = entry.get("target")
-        proto = entry.get("protocol") or "tcp"
+        proto = _norm_proto(entry.get("protocol") or "tcp")
         host_ip = entry.get("host_ip") or None
         if host is None:
             return []
@@ -393,7 +497,7 @@ def parse_port_entry(entry) -> list[dict]:
         if isinstance(host, str) and "/" in host_s:
             host_s, slash_proto = host_s.rsplit("/", 1)
             if "protocol" not in entry and slash_proto:
-                proto = slash_proto
+                proto = _norm_proto(slash_proto)
         try:
             host_ports = expand_port_range(host_s)
             container_port = int(str(target).split("-")[0]) if target is not None else None
@@ -431,7 +535,7 @@ def parse_expose_entry(entry) -> list[dict]:
     text = entry.strip()
     if "/" in text:
         text, protocol = text.rsplit("/", 1)
-        protocol = (protocol or "tcp").lower()
+        protocol = _norm_proto(protocol or "tcp")
     if ":" in text:
         return []
     try:
@@ -454,6 +558,7 @@ def parse_short_port(entry: str) -> list[dict]:
     protocol = "tcp"
     if "/" in entry:
         entry, protocol = entry.rsplit("/", 1)
+    protocol = _norm_proto(protocol)
     entry = entry.strip()
     host_ip = None
     if entry.startswith("["):

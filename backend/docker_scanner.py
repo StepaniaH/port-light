@@ -32,6 +32,8 @@ _CLIENT = None
 _AVAIL = False
 _AVAIL_AT = 0.0
 _AVAIL_TTL = 5.0
+_NET_DRIVER: dict[str, str] = {}
+_TRAEFIK_BAD_HOST = re.compile(r"[\\^$+*?()\[\]{}|]")
 
 
 def _docker_client():
@@ -98,6 +100,7 @@ class ContainerInfo:
     urls: list[str] = field(default_factory=list)
     vhost_urls: list[str] = field(default_factory=list)
     vhost_port: int | None = None
+    label_port: int | None = None
     socket_inodes: set[int] = field(default_factory=set)
 
 
@@ -127,11 +130,13 @@ def scan_containers() -> list[ContainerInfo]:
 
         env = (attrs.get("Config") or {}).get("Env")
         vurls, vport = extract_nginx_vhosts(labels, env)
+        ports = extract_ports(attrs)
+        ports.extend(_macvlan_ports(client, attrs, ports))
         result.append(ContainerInfo(
             name=c.name,
             status=c.status,
             image=attrs.get("Config", {}).get("Image", "unknown"),
-            ports=extract_ports(attrs),
+            ports=ports,
             compose_project=labels.get("com.docker.compose.project"),
             compose_service=labels.get("com.docker.compose.service"),
             network_mode=network_mode or None,
@@ -139,6 +144,7 @@ def scan_containers() -> list[ContainerInfo]:
             urls=extract_label_urls(labels, env, include_nginx=False),
             vhost_urls=vurls,
             vhost_port=vport,
+            label_port=_traefik_service_port(labels),
             socket_inodes=inodes,
         ))
     return result
@@ -149,7 +155,7 @@ def extract_ports(attrs: dict) -> list[dict]:
     ports: list[dict] = []
     seen: set[tuple] = set()
 
-    def _add(host_port, host_ip, container_port, protocol):
+    def _add(host_port, host_ip, container_port, protocol, source="publish"):
         try:
             hp = int(host_port)
             cp = int(container_port) if container_port is not None else None
@@ -158,8 +164,13 @@ def extract_ports(attrs: dict) -> list[dict]:
         if hp < 1 or hp > 65535:
             return
         host_ip = host_ip or "0.0.0.0"
+        protocol = str(protocol or "tcp").lower()
         key = (hp, host_ip, cp, protocol)
         if key in seen:
+            if source != "expose":
+                for row in ports:
+                    if (row["host_port"], row["host_ip"], row["container_port"], row["protocol"]) == key:
+                        row["source"] = source
             return
         seen.add(key)
         ports.append({
@@ -167,6 +178,7 @@ def extract_ports(attrs: dict) -> list[dict]:
             "host_ip": host_ip,
             "container_port": cp,
             "protocol": protocol,
+            "source": source,
         })
 
     bindings = (attrs.get("HostConfig") or {}).get("PortBindings") or {}
@@ -195,9 +207,122 @@ def extract_ports(attrs: dict) -> list[dict]:
         for spec in exposed:
             cp, protocol = _split_port_spec(spec)
             if cp is not None:
-                _add(cp, "0.0.0.0", cp, protocol)
+                _add(cp, "0.0.0.0", cp, protocol, "expose")
 
     return ports
+
+
+def _network_driver(client, net_id: str) -> str:
+    if not net_id:
+        return ""
+    with _LOCK:
+        cached = _NET_DRIVER.get(net_id)
+    if cached is not None:
+        return cached
+    driver = ""
+    try:
+        net = client.networks.get(net_id)
+        driver = str((net.attrs or {}).get("Driver") or "")
+    except Exception:
+        driver = ""
+    with _LOCK:
+        _NET_DRIVER[net_id] = driver
+    return driver
+
+
+def _macvlan_ports(client, attrs: dict, existing: list[dict]) -> list[dict]:
+    """macvlan/ipvlan IPs are reachable on the LAN without Docker PortBindings."""
+    extra: list[dict] = []
+    networks = (attrs.get("NetworkSettings") or {}).get("Networks") or {}
+    exposed = (attrs.get("Config") or {}).get("ExposedPorts") or {}
+    if not isinstance(networks, dict) or not exposed:
+        return extra
+    seen = {(p["host_port"], p.get("host_ip"), p.get("protocol")) for p in existing}
+    for name, net in networks.items():
+        if not isinstance(net, dict):
+            continue
+        nid = net.get("NetworkID") or name
+        if _network_driver(client, nid) not in ("macvlan", "ipvlan"):
+            continue
+        ip = (net.get("IPAddress") or "").strip()
+        if not ip:
+            continue
+        for spec in exposed:
+            cp, protocol = _split_port_spec(spec)
+            if cp is None:
+                continue
+            protocol = str(protocol or "tcp").lower()
+            key = (cp, ip, protocol)
+            if key in seen:
+                continue
+            seen.add(key)
+            extra.append({
+                "host_port": cp,
+                "host_ip": ip,
+                "container_port": cp,
+                "protocol": protocol,
+                "source": "macvlan",
+            })
+    return extra
+
+
+def _traefik_service_port(labels: dict | None) -> int | None:
+    for key, val in (labels or {}).items():
+        if not str(key).lower().endswith(".loadbalancer.server.port"):
+            continue
+        try:
+            port = int(str(val).strip())
+        except (TypeError, ValueError):
+            continue
+        if 1 <= port <= 65535:
+            return port
+    return None
+
+
+def _traefik_router_name(label_key: str) -> str:
+    parts = str(label_key).lower().split(".")
+    try:
+        idx = parts.index("routers")
+        return parts[idx + 1]
+    except (ValueError, IndexError):
+        return ""
+
+
+def _traefik_router_https(labels: dict, router: str) -> bool:
+    if not router:
+        return True
+    prefix = f"traefik.http.routers.{router}.".lower()
+    entrypoints = ""
+    tls = False
+    for key, val in labels.items():
+        lk = str(key).lower()
+        if not lk.startswith(prefix):
+            continue
+        field = lk[len(prefix):]
+        if field == "tls" or field.startswith("tls."):
+            if not _label_is_off(val):
+                tls = True
+        elif field == "entrypoints":
+            entrypoints = str(val).lower()
+    if tls:
+        return True
+    if "websecure" in entrypoints or "https" in entrypoints:
+        return True
+    if entrypoints and "web" in entrypoints.split(",") and "websecure" not in entrypoints:
+        return False
+    if entrypoints.strip() in ("web", "http"):
+        return False
+    return True
+
+
+def _ok_traefik_host(host: str) -> bool:
+    if not host or "*" in host:
+        return False
+    if _TRAEFIK_BAD_HOST.search(host):
+        return False
+    if "/" in host or " " in host:
+        return False
+    return True
 
 
 def extract_label_urls(
@@ -229,14 +354,24 @@ def extract_label_urls(
         if "traefik" in lk and lk.endswith(".rule"):
             if traefik_off:
                 continue
+            router = _traefik_router_name(lk)
+            scheme = "https" if _traefik_router_https(labels, router) else "http"
+            regexp = "hostregexp" in val.lower()
             for args in _TRAEFIK_HOST_FN.findall(val):
                 for host in _TRAEFIK_HOST_ARG.findall(args):
-                    if "*" not in host:
-                        _add(host)
+                    if not _ok_traefik_host(host):
+                        continue
+                    if regexp and _TRAEFIK_BAD_HOST.search(host):
+                        continue
+                    _add(f"{scheme}://{host}")
         elif lk == "caddy" or (lk.startswith("caddy_") and lk[6:].isdigit()):
-            host = val.split()[0].strip()
-            if _looks_like_hostname(host):
-                _add(host)
+            raw = val.strip()
+            if raw.lower().startswith(("http://", "https://")):
+                _add(raw.split()[0].rstrip("/"))
+            else:
+                host = raw.split()[0].strip()
+                if _looks_like_hostname(host):
+                    _add(host)
         elif lk in ("homepage.href", "wud.href"):
             _add(val)
         elif lk == "net.unraid.docker.webui":

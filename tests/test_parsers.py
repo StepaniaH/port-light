@@ -61,7 +61,7 @@ def test_compose_include_and_depth(tmp_path):
     assert 3000 in numbers
     assert 3001 in numbers
     db = [p for p in ports if p.port == 5432]
-    assert {p.project_dir for p in db} == {"wiki"}
+    assert {p.project_dir for p in db} == {"apps/wiki"}
     assert {p.project_name for p in db} == {"wiki"}
 
 
@@ -89,7 +89,7 @@ def test_include_env_file_and_export(tmp_path):
     assert 9080 in numbers
     assert 18080 in numbers
     web = [p for p in scan_compose_files(str(tmp_path)) if p.port == 9080]
-    assert {p.project_dir for p in web} == {"web"}
+    assert {p.project_dir for p in web} == {"apps/web"}
 
 
 def test_top_level_env_file_and_path_mapping(tmp_path):
@@ -503,3 +503,128 @@ def test_label_urls_reject_javascript():
     assert safe_http_url("/relative") is None
     assert safe_http_url("http://photos.lan:2283") == "http://photos.lan:2283"
     assert extract_label_urls({"homepage.href": "javascript:alert(1)"}) == []
+
+
+def test_compose_occupancy_gaps(tmp_path):
+    apps = tmp_path / "apps" / "wiki"
+    other = tmp_path / "other" / "wiki"
+    apps.mkdir(parents=True)
+    other.mkdir(parents=True)
+    (apps / "compose.yml").write_text(
+        "services:\n  wiki:\n    ports:\n      - '3000:80'\n",
+        encoding="utf-8",
+    )
+    (other / "compose.yml").write_text(
+        "services:\n  wiki:\n    ports:\n      - '3000:80'\n",
+        encoding="utf-8",
+    )
+    ports = [p for p in scan_compose_files(str(tmp_path)) if p.port == 3000]
+    assert {p.project_dir for p in ports} == {"apps/wiki", "other/wiki"}
+
+    prod = tmp_path / "stack"
+    prod.mkdir()
+    (prod / "compose.prod.yml").write_text(
+        "services:\n  api:\n    ports:\n      - '4000:80'\n"
+        "    deploy:\n      ports:\n        - published: 4001\n          target: 80\n",
+        encoding="utf-8",
+    )
+    numbers = {p.port for p in scan_compose_files(str(tmp_path / "stack"))}
+    assert 4000 in numbers
+    assert 4001 in numbers
+
+    mapped = tmp_path / "map"
+    mapped.mkdir()
+    (mapped / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - 8080: 80\n      - '8081:80/TCP'\n",
+        encoding="utf-8",
+    )
+    mapped_ports = {p.port: p.protocol for p in scan_compose_files(str(tmp_path / "map"))}
+    assert mapped_ports[8080] == "tcp"
+    assert mapped_ports[8081] == "tcp"
+
+    sidecar = tmp_path / "ns"
+    sidecar.mkdir()
+    (sidecar / "compose.yml").write_text(
+        "services:\n"
+        "  vpn:\n    network_mode: host\n    ports:\n      - '51820:51820/udp'\n"
+        "  helper:\n    network_mode: service:vpn\n    ports:\n      - '9999:80'\n",
+        encoding="utf-8",
+    )
+    ns_ports = {p.port for p in scan_compose_files(str(tmp_path / "ns"))}
+    assert 51820 in ns_ports
+    assert 9999 not in ns_ports
+
+    tagged = tmp_path / "tags"
+    tagged.mkdir()
+    (tagged / "compose.yml").write_text(
+        "services:\n  web:\n    ports: !reset\n      - '6000:80'\n",
+        encoding="utf-8",
+    )
+    assert 6000 in {p.port for p in scan_compose_files(str(tmp_path / "tags"))}
+
+    bad = tmp_path / "mixed"
+    good = bad / "ok"
+    junk = bad / "junk"
+    good.mkdir(parents=True)
+    junk.mkdir()
+    (junk / "compose.yml").write_bytes(b"\xff\xfe services: {}\n")
+    (good / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '6100:80'\n",
+        encoding="utf-8",
+    )
+    assert 6100 in {p.port for p in scan_compose_files(str(tmp_path / "mixed"))}
+
+
+def test_required_env_and_extends_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("MUST_PORT", "7200")
+    assert "7200:80" in substitute_vars("ports: '${MUST_PORT:?missing}:80'", {})
+    assert substitute_vars("ports: '${NOPE:?missing}:80'", {}) == "ports: ':80'"
+    assert "7300:80" in substitute_vars("ports: '${MUST_PORT?missing}:80'", {"MUST_PORT": "7300"})
+    assert substitute_vars("ports: '${ABSENT?missing}:80'", {}) == "ports: ':80'"
+
+    base = tmp_path / "lib"
+    app = tmp_path / "app"
+    base.mkdir()
+    app.mkdir()
+    (base / ".env").write_text("BASE_PORT=7400\n", encoding="utf-8")
+    (base / "common.yml").write_text(
+        "services:\n  base:\n    ports:\n      - '${BASE_PORT}:80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "services:\n  web:\n    extends:\n      file: ../lib/common.yml\n      service: base\n",
+        encoding="utf-8",
+    )
+    assert 7400 in {p.port for p in scan_compose_files(str(tmp_path))}
+
+
+def test_traefik_http_entrypoint_and_caddy_scheme():
+    http_only = extract_label_urls({
+        "traefik.http.routers.wiki.rule": "Host(`wiki.lan`)",
+        "traefik.http.routers.wiki.entrypoints": "web",
+    })
+    assert "http://wiki.lan" in http_only
+    assert "https://wiki.lan" not in http_only
+    regexp = extract_label_urls({
+        "traefik.http.routers.x.rule": "HostRegexp(`^foo\\.bar$`)",
+    })
+    assert regexp == []
+    caddy = extract_label_urls({"caddy": "http://media.home.arpa"})
+    assert "http://media.home.arpa" in caddy
+
+
+def test_empty_host_proc_is_authoritative(monkeypatch):
+    from backend import port_scanner as ps
+    monkeypatch.setattr(ps.os.path, "exists", lambda path: path == "/host/proc/1/net/tcp")
+    monkeypatch.setattr(ps, "_read_proc_net_file", lambda path, proto: [])
+    monkeypatch.setattr(ps, "_fill_process_names", lambda ports, root: None)
+
+    def boom():
+        raise FileNotFoundError("ss")
+
+    monkeypatch.setattr(ps, "_scan_with_ss", boom)
+    monkeypatch.setattr(
+        ps, "_scan_with_proc",
+        lambda: [ListeningPort(port=80, protocol="tcp", ip="0.0.0.0")],
+    )
+    assert ps.scan_listening_ports() == []

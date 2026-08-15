@@ -28,7 +28,8 @@ def test_bind_scope():
     assert _bind_scope("[::1]") == "localhost"
     assert _bind_scope("[::]") == "public"
     assert _bind_scope("8.8.8.8") == "public"
-    assert _bind_scope("169.254.1.1") == "lan"
+    assert _bind_scope("169.254.1.1") == "link"
+    assert _bind_scope("172.17.0.2") == "link"
     assert _bind_scope_many(["8.8.8.8", "127.0.0.1"]) == "public"
 
 
@@ -369,6 +370,59 @@ def test_nginx_vhost_follows_virtual_port():
     assert "https://app.lan" in out["ports"][0]["urls"]
 
 
+def test_host_network_expose_is_configured_until_listen():
+    containers = [
+        ContainerInfo(
+            name="app",
+            status="running",
+            image="app",
+            network_mode="host",
+            ports=[{
+                "host_port": 8080, "host_ip": "0.0.0.0",
+                "container_port": 8080, "protocol": "tcp", "source": "expose",
+            }],
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert out["ports"][0]["status"] == "configured"
+    listening = [ListeningPort(port=8080, protocol="tcp", ip="0.0.0.0")]
+    used = _classify(
+        listening, containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert used["ports"][0]["status"] == "used"
+
+
+def test_label_urls_follow_web_mapping():
+    containers = [
+        ContainerInfo(
+            name="wiki",
+            status="running",
+            image="wiki",
+            urls=["https://wiki.lan"],
+            label_port=80,
+            ports=[
+                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
+                {"host_port": 9000, "host_ip": "0.0.0.0", "container_port": 9000, "protocol": "tcp"},
+            ],
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert "https://wiki.lan" in by_port[8080]["urls"]
+    assert "https://wiki.lan" not in by_port[9000]["urls"]
+
+
 def test_compose_same_project_is_not_conflict():
     compose = [
         ComposePort(port=8096, compose_file="media/compose.yml", project_dir="media", service_name="jellyfin"),
@@ -383,7 +437,7 @@ def test_compose_same_project_is_not_conflict():
     )
     by_port = {p["port"]: p for p in out["ports"]}
     assert by_port[8096]["conflict"] is False
-    assert len(by_port[8096]["compose_configs"]) == 1
+    assert len(by_port[8096]["compose_configs"]) == 2
     assert by_port[5432]["conflict"] is True
 
 

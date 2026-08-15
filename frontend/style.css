@@ -115,7 +115,9 @@ a:focus-visible,
 .chip:focus-visible,
 .icon-btn:focus-visible,
 .port-cell:focus-visible,
-.seg-opt:focus-within {
+.seg-opt:focus-within,
+#grid:focus-visible,
+#settings-form:focus-visible {
   outline: none;
   box-shadow: var(--focus);
 }

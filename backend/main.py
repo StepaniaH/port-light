@@ -347,6 +347,8 @@ def _classify(
                 existing["protocol"] = _proto_label(existing["protocols"])
             if cport and not existing.get("container_port"):
                 existing["container_port"] = cport
+            if extra.get("source") != "expose":
+                existing["expose_only"] = False
             return
         lst.append({
             "name": c.name,
@@ -359,6 +361,9 @@ def _classify(
             "vhost_urls": list(c.vhost_urls or []),
             "vhost_port": c.vhost_port,
             "vhost_fallback": _vhost_fallback(c),
+            "label_port": c.label_port,
+            "label_fallback": _label_url_fallback(c),
+            "expose_only": extra.get("source") == "expose",
             "bind_ips": [hip] if hip else [],
             "protocols": [proto] if proto else [],
             "protocol": proto,
@@ -371,11 +376,16 @@ def _classify(
                 "host_ip": p.get("host_ip"),
                 "protocol": p.get("protocol"),
                 "container_port": p.get("container_port"),
+                "source": p.get("source") or "publish",
             })
         if c.network_mode == "host" and c.socket_inodes:
             for inode in c.socket_inodes:
                 port = inode_to_port.get(inode)
                 if port:
+                    _add_container(port, c)
+        if c.network_mode == "host" and c.pid:
+            for port, rec in listening_map.items():
+                if rec.get("pid") == c.pid:
                     _add_container(port, c)
 
     compose_map: dict[int, list[dict]] = {}
@@ -383,7 +393,7 @@ def _classify(
     for cp in compose_ports:
         if cp.port < 1 or cp.port > 65535:
             continue
-        key = (cp.project_dir, cp.port, cp.service_name, cp.host_ip or "", cp.protocol)
+        key = (cp.project_dir, cp.port, cp.service_name, cp.host_ip or "", _proto_family(cp.protocol), cp.compose_file)
         if key in compose_seen:
             continue
         compose_seen.add(key)
@@ -426,7 +436,10 @@ def _classify(
         manual = manual_map.get(port)
 
         is_listening = port in listening_map
-        has_live = any(c["status"] in ("running", "paused", "restarting") for c in ctors)
+        has_live = any(
+            c["status"] in ("running", "paused", "restarting") and not c.get("expose_only")
+            for c in ctors
+        )
         is_manual = manual is not None
 
         if is_listening or has_live:
@@ -470,6 +483,8 @@ def _classify(
         urls = _collect_urls(port, ips, ctors, known, options)
         for c in ctors:
             c.pop("vhost_fallback", None)
+            c.pop("label_fallback", None)
+            c.pop("expose_only", None)
         proto_bits = []
         if lp_info:
             proto_bits.extend(lp_info.get("protocols") or [lp_info["protocol"]])
@@ -605,6 +620,13 @@ def _bind_scope(ip: str) -> str:
         return "public"
     if addr.is_loopback:
         return "localhost"
+    if addr.is_link_local:
+        return "link"
+    try:
+        if addr in ipaddress.ip_network("172.17.0.0/16"):
+            return "link"
+    except TypeError:
+        pass
     if addr.is_global:
         return "public"
     return "lan"
@@ -616,6 +638,8 @@ def _bind_scope_many(ips: list[str]) -> str:
         return "public"
     if "lan" in scopes:
         return "lan"
+    if "link" in scopes:
+        return "link"
     return "localhost"
 
 
@@ -653,6 +677,18 @@ def _guess_url_host(ips: list[str], configured: str) -> str:
     return "localhost"
 
 
+def _label_url_fallback(c) -> bool:
+    lport = getattr(c, "label_port", None)
+    cports = {p.get("container_port") for p in (c.ports or [])}
+    cports.discard(None)
+    if lport:
+        return lport not in cports
+    web = cports & {80, 443, 8080, 8443}
+    if web:
+        return False
+    return True
+
+
 def _vhost_fallback(c) -> bool:
     """True when VIRTUAL_PORT does not match any published container port."""
     vport = c.vhost_port
@@ -671,11 +707,21 @@ def _collect_urls(
     urls: list[str] = []
     seen: set[str] = set()
     for c in containers:
-        for raw in c.get("urls") or []:
-            u = safe_http_url(raw)
-            if u and u not in seen:
-                seen.add(u)
-                urls.append(u)
+        label_urls = c.get("urls") or []
+        if label_urls:
+            cport = c.get("container_port")
+            lport = c.get("label_port")
+            attach = bool(c.get("label_fallback"))
+            if lport is not None:
+                attach = attach or cport == lport
+            elif cport in (80, 443, 8080, 8443) or cport is None:
+                attach = True
+            if attach:
+                for raw in label_urls:
+                    u = safe_http_url(raw)
+                    if u and u not in seen:
+                        seen.add(u)
+                        urls.append(u)
         vurls = c.get("vhost_urls") or []
         if not vurls:
             continue

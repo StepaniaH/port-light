@@ -86,6 +86,8 @@
     "delete": "删除",
     "deleteConfirm": "删除端口 {port} 的手动条目？",
     "actionFailed": "无法更新该端口。",
+    "notFound": "占用图上没有这个端口。",
+    "hiddenLocked": "该端口已隐藏。解锁隐藏端口后才能查看。",
     "label": "标签",
     "saveLabel": "保存标签",
     "copyPort": "复制端口号",
@@ -259,11 +261,13 @@
     "docker": "Docker",
     "system": "系统",
     "host": "主机",
-    "manual": "手动"
+    "manual": "手动",
+    "unknown": "未知"
   },
   "scope": {
     "public": "公网",
     "lan": "局域网",
+    "link": "链路本地",
     "localhost": "localhost"
   }
 }
