@@ -246,7 +246,7 @@
         location.hash = '#/settings/' + settingsPanel;
         return;
       }
-      settingsDirty = false;
+      revertUnsavedSettings();
     }
     const prev = route.name;
     route = next;
@@ -665,6 +665,7 @@
       }
     }
     markDirty();
+    syncDependentSettings();
   });
   document.getElementById('settings-fields').addEventListener('input', markDirty);
 
@@ -740,6 +741,19 @@
     const res = await api('/api/settings');
     if (!res.ok) return null;
     return res.json();
+  }
+
+  function revertUnsavedSettings() {
+    settingsDirty = false;
+    if (!settingsDoc) return;
+    applyServerSettings(settingsDoc);
+    if (!window.PortLightI18n) return;
+    PortLightI18n.load(settings.locale || 'auto').then(function () {
+      PortLightI18n.applyDom();
+      syncHiddenButton();
+      if (currentData) render();
+      syncHeaderHeight();
+    });
   }
 
   function applyServerSettings(doc) {
@@ -917,8 +931,21 @@
     if ((location.hash || '') !== next) location.hash = next;
   }
 
+  function syncDependentSettings() {
+    const form = document.getElementById('settings-form');
+    if (!form) return;
+    const auto = form.elements.auto_refresh;
+    const row = form.querySelector('[data-setting="refresh_ms"]');
+    if (!auto || !row) return;
+    row.classList.toggle('is-inactive', !auto.checked);
+  }
+
   function renderSettingsForm(doc) {
-    const values = doc.values || {};
+    const values = Object.assign({}, doc.values || {});
+    if (rangeFromView) {
+      values.port_range_start = rangeStart;
+      values.port_range_end = rangeEnd;
+    }
     const fields = doc.fields || [];
     const host = document.getElementById('settings-fields');
     const lead = document.getElementById('settings-lead');
@@ -978,6 +1005,7 @@
       ].join('');
     }
     showSettingsPanel(route.section || settingsPanel);
+    syncDependentSettings();
   }
 
   function kvRow(labelKey, value, valueKey) {
@@ -1154,7 +1182,7 @@
         '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + disabled + '>';
     }
     const wide = f.key === 'theme' ? ' is-wide' : '';
-    return '<' + tag + ' class="setting-row' + wide + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
+    return '<' + tag + ' class="setting-row' + wide + '" data-setting="' + escapeHtml(f.key) + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
       '</span></span><span class="setting-control">' + control + originHint(f) +
       '</span></' + tag + '>';
@@ -1713,6 +1741,12 @@
     html += '</div>';
     }
 
+    const prevLabel = detailContent.querySelector('[data-label-input]');
+    const prevDraft = prevLabel ? prevLabel.value : null;
+    const prevStart = prevLabel ? prevLabel.selectionStart : null;
+    const prevEnd = prevLabel ? prevLabel.selectionEnd : null;
+    const labelDirty = prevDraft != null && prevDraft !== (p.manual_label || '');
+
     const active = document.activeElement;
     const inDetail = active && detailContent.contains(active);
     let keep = '';
@@ -1751,6 +1785,12 @@
       });
     }
     const labelInput = detailContent.querySelector('[data-label-input]');
+    if (labelInput && (keep === 'label' || labelDirty) && prevDraft != null) {
+      labelInput.value = prevDraft;
+      if (keep === 'label' && prevStart != null) {
+        try { labelInput.setSelectionRange(prevStart, prevEnd); } catch (e) {}
+      }
+    }
     const focusEl = keep === 'close' ? closeBtn
       : keep === 'hide' ? hideBtn
       : keep === 'unhide' ? showBtn

@@ -295,6 +295,17 @@ def test_summary_counts_respect_range():
     assert out["summary"]["free"] == 9000 - 8000 + 1 - 1
 
 
+def test_summary_free_on_full_port_space():
+    out = _classify(
+        [ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", process_name="sshd")],
+        [], [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert out["summary"]["used"] == 1
+    assert out["summary"]["free"] == 65534
+
+
 def test_hidden_used_port_is_not_free():
     out = _classify(
         [ListeningPort(port=8096, protocol="tcp", ip="0.0.0.0")],

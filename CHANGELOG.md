@@ -8,6 +8,17 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 - Settings splits into Appearance, Occupancy, and Advanced, so theme palettes are not on the same scroll as Compose scan depth and host paths.
 - FastAPI / Pydantic / pytest minimums, and GitHub Actions `checkout` / `setup-python` / QEMU / docker-login majors.
+- Occupancy Settings shows the toolbar range (the range the map is using). Turning auto-refresh off dims the interval field.
+
+### Fixed
+
+- Discarding Settings reverts the live theme, density, and language preview.
+- Typing a manual-port label in the detail drawer is no longer wiped by auto-refresh.
+
+### Performance
+
+- Free-count is occupancy-in-range, not a loop over every port in the toolbar range.
+- Docker / listen / Compose scans are reused for a couple of seconds so `#/port/N` does not walk the trees again after the grid poll.
 
 ## 0.5.4 — 2026-08-15
 

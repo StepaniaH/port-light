@@ -130,3 +130,30 @@ def test_hidden_port_lookup_is_not_free(monkeypatch, tmp_path):
     assert shown.status_code == 200
     assert shown.json()["status"] == "configured"
     assert shown.json()["is_hidden"] is True
+
+
+def test_occupancy_scan_snapshot_reused_until_store_write(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    import backend.main as main
+    from backend.compose_scanner import ComposeScan
+
+    main._occ_snap = None
+    n = {"c": 0}
+
+    def fake_containers():
+        n["c"] += 1
+        return []
+
+    monkeypatch.setattr(main, "scan_containers", fake_containers)
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
+    client = TestClient(app)
+    assert client.get("/api/ports").status_code == 200
+    assert client.get("/api/ports/2100").status_code == 200
+    assert n["c"] == 1
+    client.post("/api/manual-ports", json={"port": 4242, "label": "lab"})
+    assert client.get("/api/ports").status_code == 200
+    assert n["c"] == 2
+

@@ -18,6 +18,10 @@ def test_manual_and_hidden_roundtrip(tmp_path, monkeypatch):
     assert port_store.get_manual_ports() == []
     port_store.update_stored_settings({"theme": "light"})
     assert port_store.get_stored_settings()["theme"] == "light"
+    gen = port_store.store_generation()
+    assert gen >= 1
+    port_store.update_stored_settings({"theme": "dark"})
+    assert port_store.store_generation() == gen + 1
     port_store.update_stored_settings({"theme": None})
     assert "theme" not in port_store.get_stored_settings()
 

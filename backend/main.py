@@ -6,6 +6,8 @@ import hashlib
 import ipaddress
 import json
 import os
+import threading
+import time
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
@@ -29,6 +31,10 @@ from .port_scanner import host_listen_trusted, listen_scan_source, scan_listenin
 VERSION = "0.5.4"
 
 app = FastAPI(title="Port-Light", version=VERSION)
+
+_OCC_TTL = 2.0
+_occ_lock = threading.Lock()
+_occ_snap: dict | None = None
 
 
 async def security_headers_middleware(request: Request, call_next):
@@ -114,6 +120,55 @@ def health() -> dict:
     }
 
 
+def _scan_key(values: dict) -> tuple:
+    return (
+        os.environ.get("PORT_LIGHT_DATA_DIR", "/data"),
+        _compose_dir(),
+        port_store.store_generation(),
+        values["compose_scan_depth"],
+        values["compose_scan_max_files"],
+        values["guess_urls"],
+        values["url_host"],
+        values["url_scheme"],
+    )
+
+
+def _scan_snapshot(values: dict) -> dict:
+    """Reuse Docker / listen / Compose scans for a couple of seconds.
+
+    Opening `#/port/N` otherwise re-walks the same trees the grid just polled.
+    Store writes bump ``store_generation`` so a hide / rename is visible immediately.
+    """
+    global _occ_snap
+    key = _scan_key(values)
+    now = time.monotonic()
+    with _occ_lock:
+        snap = _occ_snap
+        if snap and snap["key"] == key and now - snap["at"] < _OCC_TTL:
+            return snap
+    containers = scan_containers()
+    prefer: list[int] = []
+    for c in containers:
+        prefer.extend(c.pids or [])
+        if c.pid:
+            prefer.append(c.pid)
+    snap = {
+        "at": time.monotonic(),
+        "key": key,
+        "containers": containers,
+        "listening": scan_listening_ports(prefer_pids=prefer),
+        "compose_scan": scan_compose_tree(
+            _compose_dir(),
+            max_depth=values["compose_scan_depth"],
+            max_files=values["compose_scan_max_files"],
+        ),
+        "user_state": port_store.occupancy_user_state(),
+    }
+    with _occ_lock:
+        _occ_snap = snap
+    return snap
+
+
 def _occupancy(
     request: Request,
     range_start: int | None,
@@ -127,23 +182,13 @@ def _occupancy(
         end = start
     may_see = request_may_see_hidden(request)
     show_hidden = bool(include_hidden and may_see)
-    containers = scan_containers()
-    prefer: list[int] = []
-    for c in containers:
-        prefer.extend(c.pids or [])
-        if c.pid:
-            prefer.append(c.pid)
-    compose_scan = scan_compose_tree(
-        _compose_dir(),
-        max_depth=values["compose_scan_depth"],
-        max_files=values["compose_scan_max_files"],
-    )
+    snap = _scan_snapshot(values)
+    manuals, hidden = snap["user_state"]
     hidden_locked = hidden_ports_withheld() and not may_see
-    manuals, hidden = port_store.occupancy_user_state()
     result = _classify(
-        scan_listening_ports(prefer_pids=prefer),
-        containers,
-        compose_scan.ports,
+        snap["listening"],
+        snap["containers"],
+        snap["compose_scan"].ports,
         manuals,
         hidden,
         start,
@@ -152,8 +197,8 @@ def _occupancy(
         hidden_locked=hidden_locked,
         options=values,
     )
-    result["summary"]["compose_truncated"] = compose_scan.truncated
-    result["summary"]["compose_files"] = compose_scan.files_scanned
+    result["summary"]["compose_truncated"] = snap["compose_scan"].truncated
+    result["summary"]["compose_files"] = snap["compose_scan"].files_scanned
     return result
 
 
@@ -549,7 +594,9 @@ def _classify(
     hidden_in_range = sum(1 for p in hidden_ports if range_start <= p <= range_end)
     occupied = {p["port"] for p in port_list}
     occupied.update(hidden_ports)
-    free = sum(1 for n in range(range_start, range_end + 1) if n not in occupied)
+    span = range_end - range_start + 1
+    in_range = sum(1 for n in occupied if range_start <= n <= range_end)
+    free = max(0, span - in_range)
 
     return {
         "ports": port_list,

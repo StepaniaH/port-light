@@ -27,6 +27,12 @@ import threading
 from pathlib import Path
 
 _LOCK = threading.Lock()
+_generation = 0
+
+
+def store_generation() -> int:
+    """Bumps on every successful write. Occupancy uses this to drop a stale scan snapshot."""
+    return _generation
 
 
 def _data_dir() -> Path:
@@ -67,6 +73,8 @@ def _save(data: dict) -> None:
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp_name, target)
+        global _generation
+        _generation += 1
     except Exception:
         try:
             os.unlink(tmp_name)
