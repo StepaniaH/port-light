@@ -88,6 +88,7 @@
   let detailShownPort = null;
   const knownCache = {};
   const knownInflight = {};
+  let knownRenderFrame = 0;
 
   const appEl = document.getElementById('app');
   const grid = document.getElementById('grid');
@@ -305,8 +306,13 @@
     } else if (btn.dataset.kind === 'hidden') {
       if (kindFilters.has('hidden')) kindFilters.delete('hidden');
       else {
-        if (!ensureHiddenVisible()) return;
+        const vis = ensureHiddenVisible();
+        if (vis === 'blocked') return;
         kindFilters.add('hidden');
+        syncFilterUI();
+        saveView();
+        if (vis === 'ready') render();
+        return;
       }
     }
     syncFilterUI();
@@ -320,7 +326,15 @@
     const f = chip.dataset.filter;
     if (kindFilters.has(f)) kindFilters.delete(f);
     else {
-      if (f === 'hidden' && !ensureHiddenVisible()) return;
+      if (f === 'hidden') {
+        const vis = ensureHiddenVisible();
+        if (vis === 'blocked') return;
+        kindFilters.add('hidden');
+        syncFilterUI();
+        saveView();
+        if (vis === 'ready') render();
+        return;
+      }
       kindFilters.add(f);
     }
     syncFilterUI();
@@ -350,7 +364,7 @@
   });
 
   function ensureHiddenVisible() {
-    if (showHidden) return true;
+    if (showHidden) return 'ready';
     if (meta.hidden_unlock_required && !hiddenUnlock) {
       pendingAfterUnlock = function () {
         kindFilters.add('hidden');
@@ -359,12 +373,12 @@
         render();
       };
       openModal('unhide-modal');
-      return false;
+      return 'blocked';
     }
     showHidden = true;
     syncHiddenButton();
     tick();
-    return true;
+    return 'loading';
   }
 
   sortSelect.addEventListener('change', function (e) {
@@ -658,6 +672,10 @@
           if (settingsDoc) {
             const lead = document.getElementById('settings-lead');
             lead.textContent = t(settingsDoc.readonly ? 'settings.leadReadonly' : 'settings.lead');
+          }
+          const status = document.getElementById('settings-status');
+          if (settingsDirty && status && !status.classList.contains('is-error')) {
+            status.textContent = t('settings.unsaved');
           }
           if (currentData) render();
           syncHeaderHeight();
@@ -1001,7 +1019,11 @@
         kvRow('settings.host.dataDir', env.data_dir),
         kvRow('settings.host.basicAuth', env.auth_required ? t('settings.on') : t('settings.off'), env.auth_required ? 'settings.on' : 'settings.off'),
         kvRow('settings.host.hiddenUnlock', env.hidden_unlock_required ? t('settings.on') : t('settings.off'), env.hidden_unlock_required ? 'settings.on' : 'settings.off'),
-        kvRow('settings.host.settingsSource', doc.source),
+        kvRow(
+          'settings.host.settingsSource',
+          t('settings.source.' + doc.source),
+          (doc.source === 'auto' || doc.source === 'env' || doc.source === 'file') ? 'settings.source.' + doc.source : '',
+        ),
       ].join('');
     }
     showSettingsPanel(route.section || settingsPanel);
@@ -1348,7 +1370,12 @@
         category: body.category,
         is_access_port: body.is_access_port,
       };
-      if (currentData) render();
+      if (currentData && searchPortNum !== null && !knownRenderFrame) {
+        knownRenderFrame = requestAnimationFrame(function () {
+          knownRenderFrame = 0;
+          if (currentData && searchPortNum !== null) render();
+        });
+      }
     }).catch(function () {
       delete knownInflight[port];
     });

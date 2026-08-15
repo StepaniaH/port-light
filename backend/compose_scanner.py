@@ -646,7 +646,11 @@ def _resolve_extends(
 
 
 def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
-    merged = {**os.environ, **env_vars}
+    """Interpolate Compose ``$VAR`` / ``${VAR}`` from the *project* env only.
+
+    Port-Light's process environment is not the user's compose shell; mixing it
+    in lets ``HOSTNAME`` / ``PORT_RANGE_*`` rewrite other stacks' port lines.
+    """
 
     def _replacer(m: re.Match) -> str:
         if m.group(0) == "$$":
@@ -654,25 +658,25 @@ def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
         name = m.group(1) or m.group(2)
         if ":?" in name:
             var, _, _err = name.partition(":?")
-            val = merged.get(var)
+            val = env_vars.get(var)
             if val is None or val == "":
                 return ""
             return val
         if "?" in name:
             var, _, _err = name.partition("?")
-            if var not in merged:
+            if var not in env_vars:
                 return ""
-            return merged[var]
+            return env_vars[var]
         if ":-" in name:
             var, _, default = name.partition(":-")
-            val = merged.get(var)
+            val = env_vars.get(var)
             if val is None or val == "":
                 return default
             return val
         if "-" in name:
             var, _, default = name.partition("-")
-            return merged[var] if var in merged else default
-        return merged.get(name, m.group(0))
+            return env_vars[var] if var in env_vars else default
+        return env_vars.get(name, m.group(0))
 
     return _VAR_RE.sub(_replacer, text)
 

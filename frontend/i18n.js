@@ -4,7 +4,7 @@
   'use strict';
 
   var SUPPORTED = ['en', 'zh-CN', 'zh-TW', 'ja'];
-  var CACHE_BUST = '44';
+  var CACHE_BUST = '45';
   var cache = {};
   var dict = {};
   var locale = 'en';

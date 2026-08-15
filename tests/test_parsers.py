@@ -257,11 +257,10 @@ def test_env_default_substitution():
     assert "9090:80" in hyphen
 
 
-def test_env_empty_uses_colon_default_only(monkeypatch):
-    monkeypatch.setenv("WEB_PORT", "")
-    colon = substitute_vars("ports: '${WEB_PORT:-8080}:80'", {})
+def test_env_empty_uses_colon_default_only():
+    colon = substitute_vars("ports: '${WEB_PORT:-8080}:80'", {"WEB_PORT": ""})
     assert "8080:80" in colon
-    hyphen = substitute_vars("ports: '${WEB_PORT-9090}:80'", {})
+    hyphen = substitute_vars("ports: '${WEB_PORT-9090}:80'", {"WEB_PORT": ""})
     assert hyphen == "ports: ':80'"
     assert substitute_vars("cmd: echo $$HOME", {}) == "cmd: echo $HOME"
     assert substitute_vars("x: $${unset}", {}) == "x: ${unset}"
@@ -410,12 +409,18 @@ def test_extract_port_bindings_and_homepage():
     assert all("*" not in u for u in urls)
 
 
-def test_env_var_without_default(monkeypatch):
-    monkeypatch.setenv("WEB_PORT", "9090")
-    out = substitute_vars("ports: '${WEB_PORT}:80'", {})
+def test_env_var_without_default():
+    out = substitute_vars("ports: '${WEB_PORT}:80'", {"WEB_PORT": "9090"})
     assert "9090:80" in out
     missing = substitute_vars("ports: '${NO_SUCH_PORT}:80'", {})
     assert "${NO_SUCH_PORT}:80" in missing
+
+
+def test_compose_ignores_process_environment(monkeypatch):
+    monkeypatch.setenv("WEB_PORT", "9090")
+    monkeypatch.setenv("HOSTNAME", "port-light")
+    assert "${WEB_PORT}:80" in substitute_vars("ports: '${WEB_PORT}:80'", {})
+    assert "8080:80" in substitute_vars("ports: '${WEB_PORT:-8080}:80'", {})
 
 
 def test_long_syntax_and_ipv4_host():
@@ -640,9 +645,8 @@ def test_compose_occupancy_gaps(tmp_path):
     assert 6100 in {p.port for p in scan_compose_files(str(tmp_path / "mixed"))}
 
 
-def test_required_env_and_extends_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("MUST_PORT", "7200")
-    assert "7200:80" in substitute_vars("ports: '${MUST_PORT:?missing}:80'", {})
+def test_required_env_and_extends_env(tmp_path):
+    assert "7200:80" in substitute_vars("ports: '${MUST_PORT:?missing}:80'", {"MUST_PORT": "7200"})
     assert substitute_vars("ports: '${NOPE:?missing}:80'", {}) == "ports: ':80'"
     assert "7300:80" in substitute_vars("ports: '${MUST_PORT?missing}:80'", {"MUST_PORT": "7300"})
     assert substitute_vars("ports: '${ABSENT?missing}:80'", {}) == "ports: ':80'"

@@ -14,11 +14,16 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 - Discarding Settings reverts the live theme, density, and language preview.
 - Typing a manual-port label in the detail drawer is no longer wiped by auto-refresh.
+- Compose `${VAR}` interpolation no longer reads Port-Light's own environment (`HOSTNAME`, `PORT_RANGE_*`, …).
+- Turning on the Hidden chip no longer renders an empty grid before the include-hidden payload arrives.
+- Switching language on Settings updates the unsaved status string; the host "settings source" row is translated.
 
 ### Performance
 
 - Free-count is occupancy-in-range, not a loop over every port in the toolbar range.
 - Docker / listen / Compose scans are reused for a couple of seconds so `#/port/N` does not walk the trees again after the grid poll.
+- Unchanged occupancy polls return `304` without classifying or hashing the map again.
+- Known-port prefetch during numeric search coalesces to one grid render.
 
 ## 0.5.4 — 2026-08-15
 

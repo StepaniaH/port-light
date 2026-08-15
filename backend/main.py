@@ -163,18 +163,19 @@ def _scan_snapshot(values: dict) -> dict:
             max_files=values["compose_scan_max_files"],
         ),
         "user_state": port_store.occupancy_user_state(),
+        "packed": {},
     }
     with _occ_lock:
         _occ_snap = snap
     return snap
 
 
-def _occupancy(
+def _packed_occupancy(
     request: Request,
     range_start: int | None,
     range_end: int | None,
     include_hidden: bool,
-) -> dict:
+) -> tuple[dict, str, str]:
     values = _values()
     start = range_start if range_start is not None else values["port_range_start"]
     end = range_end if range_end is not None else values["port_range_end"]
@@ -182,9 +183,14 @@ def _occupancy(
         end = start
     may_see = request_may_see_hidden(request)
     show_hidden = bool(include_hidden and may_see)
-    snap = _scan_snapshot(values)
-    manuals, hidden = snap["user_state"]
     hidden_locked = hidden_ports_withheld() and not may_see
+    snap = _scan_snapshot(values)
+    pkey = (start, end, show_hidden, hidden_locked)
+    with _occ_lock:
+        packed = snap.get("packed", {}).get(pkey)
+        if packed is not None:
+            return packed
+    manuals, hidden = snap["user_state"]
     result = _classify(
         snap["listening"],
         snap["containers"],
@@ -199,7 +205,11 @@ def _occupancy(
     )
     result["summary"]["compose_truncated"] = snap["compose_scan"].truncated
     result["summary"]["compose_files"] = snap["compose_scan"].files_scanned
-    return result
+    body, etag = _json_etag(result)
+    packed = (result, body, etag)
+    with _occ_lock:
+        snap.setdefault("packed", {})[pkey] = packed
+    return packed
 
 
 def _json_etag(payload: dict) -> tuple[str, str]:
@@ -230,8 +240,7 @@ def get_ports(
     range_end: int | None = Query(default=None, ge=1, le=65535),
     include_hidden: bool = Query(default=False),
 ) -> Response:
-    payload = _occupancy(request, range_start, range_end, include_hidden)
-    body, etag = _json_etag(payload)
+    _payload, body, etag = _packed_occupancy(request, range_start, range_end, include_hidden)
     headers = {"ETag": etag}
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
@@ -246,12 +255,27 @@ def get_port(
 ) -> dict:
     if port < 1 or port > 65535:
         raise HTTPException(status_code=400, detail="port out of range")
-    payload = _occupancy(request, 1, 65535, include_hidden)
-    for row in payload["ports"]:
-        if row["port"] == port:
-            return row
+    may_see = request_may_see_hidden(request)
+    show_hidden = bool(include_hidden and may_see)
+    hidden_locked = hidden_ports_withheld() and not may_see
+    snap = _scan_snapshot(_values())
+    with _occ_lock:
+        packed_map = dict(snap.get("packed") or {})
+    found_visibility = False
+    for (_start, _end, sh, hl), packed in packed_map.items():
+        if sh != show_hidden or hl != hidden_locked:
+            continue
+        found_visibility = True
+        for row in packed[0]["ports"]:
+            if row["port"] == port:
+                return row
+    if not found_visibility:
+        payload, _body, _etag = _packed_occupancy(request, 1, 65535, include_hidden)
+        for row in payload["ports"]:
+            if row["port"] == port:
+                return row
     hidden: set[int] = set()
-    for raw in port_store.get_hidden_ports() or []:
+    for raw in snap["user_state"][1]:
         try:
             n = int(raw)
         except (TypeError, ValueError):

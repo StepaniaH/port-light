@@ -157,3 +157,35 @@ def test_occupancy_scan_snapshot_reused_until_store_write(monkeypatch, tmp_path)
     assert client.get("/api/ports").status_code == 200
     assert n["c"] == 2
 
+
+def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    import backend.main as main
+    from backend.compose_scanner import ComposeScan
+
+    main._occ_snap = None
+    n = {"k": 0}
+    real = main._classify
+
+    def wrapped(*args, **kwargs):
+        n["k"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(main, "scan_containers", lambda: [])
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
+    monkeypatch.setattr(main, "_classify", wrapped)
+    client = TestClient(app)
+    first = client.get("/api/ports")
+    assert first.status_code == 200
+    etag = first.headers.get("etag")
+    again = client.get("/api/ports", headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    assert n["k"] == 1
+    row = client.get("/api/ports/2100")
+    assert row.status_code == 200
+    assert n["k"] == 1
+
+

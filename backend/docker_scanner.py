@@ -33,6 +33,7 @@ _AVAIL = False
 _AVAIL_AT = 0.0
 _AVAIL_TTL = 5.0
 _NET_DRIVER: dict[str, str] = {}
+_NET_DRIVER_MAX = 256
 _TRAEFIK_BAD_HOST = re.compile(r"[\\^$+*?()\[\]{}|]")
 
 
@@ -280,6 +281,8 @@ def _network_driver(client, net_id: str) -> str:
     except Exception:
         driver = ""
     with _LOCK:
+        if len(_NET_DRIVER) >= _NET_DRIVER_MAX:
+            _NET_DRIVER.clear()
         _NET_DRIVER[net_id] = driver
     return driver
 
