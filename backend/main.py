@@ -573,6 +573,20 @@ def _host_for_url(host: str) -> str:
     return str(addr)
 
 
+def _guess_url_host(ips: list[str], configured: str) -> str:
+    """Localhost binds stay loopback; LAN-only binds use that address unless URL_HOST is set."""
+    scope = _bind_scope_many(ips)
+    if scope == "localhost":
+        return "127.0.0.1"
+    if configured:
+        return configured
+    if scope == "lan":
+        for ip in ips or []:
+            if _bind_scope(ip) == "lan":
+                return ip
+    return "localhost"
+
+
 def _collect_urls(
     port: int,
     ips: list[str],
@@ -591,13 +605,9 @@ def _collect_urls(
     opts = options or {}
     if opts.get("guess_urls") is False:
         return urls
-    scope = _bind_scope_many(ips)
     if known and known.get("is_access_port"):
         configured = (opts.get("url_host") or "").strip()
-        if scope == "localhost":
-            host = "127.0.0.1"
-        else:
-            host = configured or "localhost"
+        host = _guess_url_host(ips, configured)
         name = (known.get("name") or "").upper()
         scheme_pref = opts.get("url_scheme") or "auto"
         if scheme_pref in ("http", "https"):

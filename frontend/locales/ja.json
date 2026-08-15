@@ -208,7 +208,7 @@
       },
       "url_host": {
         "label": "URL のホスト名",
-        "help": "推定リンクで localhost の代わりに使います。空なら localhost / 127.0.0.1。"
+        "help": "推定リンクで localhost の代わりに使います。空なら LAN のバインドアドレス。全インターフェースのときは localhost。"
       },
       "url_scheme": {
         "label": "URL のスキーム",

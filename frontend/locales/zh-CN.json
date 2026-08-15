@@ -208,7 +208,7 @@
       },
       "url_host": {
         "label": "URL 主机名",
-        "help": "猜测链接时用来代替 localhost。留空则用 localhost / 127.0.0.1。"
+        "help": "猜测链接时用来代替 localhost。留空则用局域网绑定地址；对所有接口监听时仍用 localhost。"
       },
       "url_scheme": {
         "label": "URL 协议",

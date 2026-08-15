@@ -32,6 +32,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `traefik.enable=false` no longer contributes Traefik Host URLs.
 - Long-syntax `published: "5353/udp"` was dropped instead of recorded as UDP.
 - A UTF-8 BOM on `.env` hid `export KEY=` lines.
+- Guessed access URLs used `localhost` even when the port was bound to a LAN address only.
 
 ### Changed
 

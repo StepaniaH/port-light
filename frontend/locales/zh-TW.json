@@ -208,7 +208,7 @@
       },
       "url_host": {
         "label": "URL 主機名稱",
-        "help": "猜測連結時用來代替 localhost。留空則用 localhost / 127.0.0.1。"
+        "help": "猜測連結時用來代替 localhost。留空則用區網繫結位址；對所有介面監聽時仍用 localhost。"
       },
       "url_scheme": {
         "label": "URL 通訊協定",

@@ -208,7 +208,7 @@
       },
       "url_host": {
         "label": "URL hostname",
-        "help": "Used in guessed links instead of localhost. Leave empty for localhost / 127.0.0.1."
+        "help": "Used in guessed links instead of localhost. Empty uses the LAN bind address, or localhost when the port is public."
       },
       "url_scheme": {
         "label": "URL scheme",

@@ -105,7 +105,7 @@ FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         "url_host", "str", "URL_HOST", "", "links",
-        "URL hostname", "Used in guessed links instead of localhost. Leave empty for localhost / 127.0.0.1.",
+        "URL hostname", "Used in guessed links instead of localhost. Empty uses the LAN bind address, or localhost when the port is public.",
         max_length=253,
     ),
     FieldSpec(

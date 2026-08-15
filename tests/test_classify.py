@@ -100,6 +100,14 @@ def test_collect_urls_guesses_http_not_ssh():
         8096, ["0.0.0.0"], [], known_web, {"url_host": "2001:db8::1"},
     )
     assert "http://[2001:db8::1]:8096" in v6
+    lan = _collect_urls(8096, ["192.168.1.10"], [], known_web)
+    assert "http://192.168.1.10:8096" in lan
+    ula = _collect_urls(8096, ["fd12::10"], [], known_web)
+    assert "http://[fd12::10]:8096" in ula
+    still_override = _collect_urls(
+        8096, ["192.168.1.10"], [], known_web, {"url_host": "nas.lan"},
+    )
+    assert "http://nas.lan:8096" in still_override
 
 
 def test_classify_used_configured_hidden_conflict():

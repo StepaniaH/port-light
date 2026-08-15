@@ -700,7 +700,7 @@
     if (portsAbort) portsAbort.abort();
     const ac = new AbortController();
     portsAbort = ac;
-    grid.setAttribute('aria-busy', 'true');
+    grid.setAttribute('aria-busy', currentData ? 'false' : 'true');
     try {
       const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
       const headers = {};
