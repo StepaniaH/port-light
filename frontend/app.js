@@ -38,6 +38,14 @@
   }
 
   let currentData = null;
+  let hostCatalog = { local: { id: 'local', name: '', local: true }, peers: [], readonly: false };
+  let hostMaps = {};
+  let focusHostId = 'local';
+  let selectedHostId = 'local';
+  const hostAborts = {};
+  const hostEtags = {};
+  const hostRetrying = {};
+  let peersDraft = [];
   let statusFilter = 'all';
   let kindFilters = new Set();
   let sortMode = 'port-asc';
@@ -96,6 +104,8 @@
 
   const appEl = document.getElementById('app');
   const grid = document.getElementById('grid');
+  const hostBoards = document.getElementById('host-boards');
+  const hostSwitcher = document.getElementById('host-switcher');
   const summary = document.getElementById('summary');
   const detailPanel = document.getElementById('detail-panel');
   const detailBackdrop = document.getElementById('detail-backdrop');
@@ -222,6 +232,69 @@
     document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
   }
 
+  function hasPeers() {
+    return !!(hostCatalog.peers && hostCatalog.peers.length);
+  }
+
+  function listedHosts() {
+    const local = hostCatalog.local || { id: 'local', name: '', local: true };
+    return [local].concat(hostCatalog.peers || []);
+  }
+
+  function hostById(id) {
+    const hosts = listedHosts();
+    for (let i = 0; i < hosts.length; i++) {
+      if (hosts[i].id === id) return hosts[i];
+    }
+    return null;
+  }
+
+  function hostName(id) {
+    const row = hostById(id);
+    return (row && row.name) || id || t('hosts.thisMachine');
+  }
+
+  function occupancyFocusTarget() {
+    if (route.name === 'settings') return document.getElementById('settings-form');
+    if (hasPeers()) {
+      return document.getElementById('host-grid-' + focusHostId)
+        || document.querySelector('.host-grid')
+        || hostSwitcher;
+    }
+    return grid;
+  }
+
+  function occupancyUrl(hostId) {
+    const q = 'range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
+    if (!hasPeers() && hostId === 'local') return '/api/ports?' + q;
+    return '/api/hosts/' + encodeURIComponent(hostId) + '/ports?' + q;
+  }
+
+  function portApiUrl(hostId, port) {
+    if (!hasPeers() && hostId === 'local') return '/api/ports/' + port;
+    return '/api/hosts/' + encodeURIComponent(hostId || 'local') + '/ports/' + port;
+  }
+
+  function gridHash(hostId) {
+    hostId = hostId || focusHostId;
+    if (!hasPeers() || hostId === 'local') return '#/';
+    return '#/h/' + hostId;
+  }
+
+  function portHash(hostId, port) {
+    hostId = hostId || selectedHostId || focusHostId;
+    if (!hasPeers() || hostId === 'local') return '#/port/' + port;
+    return '#/h/' + hostId + '/port/' + port;
+  }
+
+  function dataForHost(hostId) {
+    if (!hasPeers() || hostId === 'local') {
+      if (hostMaps.local && hostMaps.local.data) return hostMaps.local.data;
+      return currentData;
+    }
+    return hostMaps[hostId] && hostMaps[hostId].data;
+  }
+
   try {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
       if ((settings.theme || 'system') === 'system') applyTheme();
@@ -235,8 +308,8 @@
     window.matchMedia('(max-width: 900px)').addEventListener('change', syncDetailModal);
   } catch (e) {}
 
-  function parseRoute() {
-    const raw = (location.hash || '#/').replace(/^#\/?/, '');
+  function parseHash(hash) {
+    const raw = String(hash || '#/').replace(/^#\/?/, '');
     const parts = raw.split('/').filter(Boolean);
     if (parts[0] === 'settings') {
       let section = parts[1];
@@ -245,21 +318,48 @@
       }
       return { name: 'settings', section: section };
     }
-    if (parts[0] === 'port' && /^\d+$/.test(parts[1] || '')) {
-      const n = parseInt(parts[1], 10);
-      if (n >= 1 && n <= 65535) return { name: 'port', port: n };
+    let hostId = 'local';
+    let rest = parts;
+    if (parts[0] === 'h' && parts[1]) {
+      hostId = parts[1];
+      rest = parts.slice(2);
+      if (hostId !== 'local' && !/^[a-z0-9]{8,16}$/.test(hostId)) hostId = 'local';
     }
-    return { name: 'grid' };
+    if (rest[0] === 'port' && /^\d+$/.test(rest[1] || '')) {
+      const n = parseInt(rest[1], 10);
+      if (n >= 1 && n <= 65535) return { name: 'port', port: n, hostId: hostId };
+    }
+    return { name: 'grid', hostId: hostId };
   }
+
+  function parseRoute() {
+    return parseHash(location.hash);
+  }
+
+  function leaveSettingsOrStay() {
+    if (!settingsDirty || route.name !== 'settings') return true;
+    if (!window.confirm(t('settings.discard'))) return false;
+    revertUnsavedSettings();
+    return true;
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a || !settingsDirty || route.name !== 'settings') return;
+    const next = parseHash(a.getAttribute('href'));
+    if (next.name === 'settings') return;
+    if (!leaveSettingsOrStay()) e.preventDefault();
+  }, true);
 
   function applyRoute() {
     const next = parseRoute();
     if (settingsDirty && route.name === 'settings' && next.name !== 'settings') {
-      if (!window.confirm(t('settings.discard'))) {
-        location.hash = '#/settings/' + settingsPanel;
+      if (!leaveSettingsOrStay()) {
+        const stay = '#/settings/' + settingsPanel;
+        if ((location.hash || '') !== stay) location.hash = stay;
         return;
       }
-      revertUnsavedSettings();
     }
     const prev = route.name;
     route = next;
@@ -284,14 +384,18 @@
       return;
     }
     if (prev === 'settings') tick();
+    if (route.hostId && hostById(route.hostId)) focusHostId = route.hostId;
+    else if (route.name !== 'settings') focusHostId = 'local';
     if (route.name === 'port') {
       selectedPort = route.port;
-      if (currentData) render();
+      selectedHostId = route.hostId || 'local';
+      focusHostId = selectedHostId;
+      if (currentData || hasPeers()) render();
       else showPortDetail(route.port);
       return;
     }
     closeDetail(true);
-    if (currentData) render();
+    if (currentData || hasPeers()) render();
     applyPendingGridFocus();
   }
 
@@ -301,9 +405,7 @@
   if (skipLink) {
     skipLink.addEventListener('click', function (e) {
       e.preventDefault();
-      const target = route.name === 'settings'
-        ? document.getElementById('settings-form')
-        : document.getElementById('grid');
+      const target = occupancyFocusTarget();
       if (!target) return;
       target.focus();
     });
@@ -479,6 +581,7 @@
   }
 
   document.getElementById('btn-add').addEventListener('click', function () {
+    if (hasPeers() && focusHostId !== 'local') return;
     openModal('add-modal');
   });
   document.getElementById('add-cancel').addEventListener('click', closeModals);
@@ -525,7 +628,11 @@
     if (e.key === 'Escape') {
       if (modalOpen()) { closeModals(); return; }
       if (closeLocaleMenu({ focusTrigger: true })) return;
-      if (route.name === 'settings') { location.hash = '#/'; return; }
+      if (route.name === 'settings') {
+        if (!leaveSettingsOrStay()) return;
+        location.hash = '#/';
+        return;
+      }
       if (searchTerm || searchPortNum !== null) {
         if (!detailPanel.classList.contains('hidden') || selectedPort !== null) {
           closeDetail();
@@ -591,8 +698,14 @@
   });
   detailBackdrop.addEventListener('click', function () { closeDetail(); });
 
-  function gridCells() {
-    return Array.prototype.slice.call(grid.querySelectorAll('.port-cell'));
+  function gridRootFrom(el) {
+    if (!el || !el.closest) return grid;
+    return el.closest('.host-grid, #grid') || grid;
+  }
+
+  function gridCells(root) {
+    root = root || gridRootFrom(document.activeElement);
+    return Array.prototype.slice.call(root.querySelectorAll('.port-cell'));
   }
 
   function cellsByRow(cells) {
@@ -611,8 +724,8 @@
     return rows;
   }
 
-  function moveGridFocus(key) {
-    const cells = gridCells();
+  function moveGridFocus(key, root) {
+    const cells = gridCells(root);
     if (!cells.length) return;
     const current = document.activeElement;
     const idx = cells.indexOf(current);
@@ -652,19 +765,61 @@
     if (next && next !== current) next.focus();
   }
 
-  grid.addEventListener('keydown', function (e) {
+  document.getElementById('view-grid').addEventListener('keydown', function (e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' &&
         e.key !== 'ArrowDown' && e.key !== 'Home' && e.key !== 'End' &&
         e.key !== 'PageUp' && e.key !== 'PageDown') return;
-    if (e.target === grid) {
-      const first = grid.querySelector('.port-cell');
+    const root = gridRootFrom(e.target);
+    if (e.target === root || e.target === grid) {
+      const first = root.querySelector('.port-cell');
       if (first) { e.preventDefault(); first.focus(); }
       return;
     }
     if (!e.target || !e.target.classList || !e.target.classList.contains('port-cell')) return;
     e.preventDefault();
-    moveGridFocus(e.key);
+    moveGridFocus(e.key, root);
   });
+
+  if (hostSwitcher) {
+    hostSwitcher.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-host-switch]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-host-switch');
+      if (!id) return;
+      focusHostId = id;
+      if (route.name === 'port' && selectedHostId !== id) {
+        location.hash = gridHash(id);
+        return;
+      }
+      const want = gridHash(id);
+      if ((location.hash || '#/') !== want) location.hash = want;
+      else render();
+    });
+  }
+  if (hostBoards) {
+    hostBoards.addEventListener('click', function (e) {
+      const retry = e.target.closest('[data-host-retry]');
+      if (retry) {
+        e.preventDefault();
+        e.stopPropagation();
+        retryHost(retry.getAttribute('data-host-retry'));
+        return;
+      }
+      if (e.target.closest('.port-cell')) return;
+      const board = e.target.closest('.host-board');
+      if (!board) return;
+      const id = board.getAttribute('data-host');
+      if (!id || id === focusHostId) return;
+      focusHostId = id;
+      if (route.name === 'port') {
+        render();
+        return;
+      }
+      const want = gridHash(id);
+      if ((location.hash || '#/') !== want) location.hash = want;
+      else render();
+    });
+  }
 
   document.getElementById('settings-form').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -720,6 +875,43 @@
     syncDependentSettings();
   });
   document.getElementById('settings-fields').addEventListener('input', markDirty);
+  document.getElementById('settings-fields').addEventListener('click', function (e) {
+    const add = e.target.closest('#peer-add');
+    if (add) {
+      e.preventDefault();
+      if (hostCatalog.readonly || (settingsDoc && settingsDoc.readonly)) return;
+      readPeersDraftFromForm();
+      if (peersDraft.length >= 6) return;
+      peersDraft.push({ id: '', name: '', url: '', username: '', password: '', has_auth: false, clear_auth: false });
+      renderPeersEditor(false);
+      markDirty();
+      return;
+    }
+    const row = e.target.closest('.peer-row');
+    if (!row) return;
+    if (e.target.closest('[data-peer-remove]')) {
+      e.preventDefault();
+      readPeersDraftFromForm();
+      const i = parseInt(row.getAttribute('data-peer-index'), 10);
+      if (!isNaN(i)) peersDraft.splice(i, 1);
+      renderPeersEditor(!!(settingsDoc && settingsDoc.readonly) || !!hostCatalog.readonly);
+      markDirty();
+      return;
+    }
+    if (e.target.closest('[data-peer-clear-auth]')) {
+      e.preventDefault();
+      readPeersDraftFromForm();
+      const i = parseInt(row.getAttribute('data-peer-index'), 10);
+      if (!isNaN(i) && peersDraft[i]) {
+        peersDraft[i].clear_auth = true;
+        peersDraft[i].has_auth = false;
+        peersDraft[i].username = '';
+        peersDraft[i].password = '';
+      }
+      renderPeersEditor(false);
+      markDirty();
+    }
+  });
 
   function markDirty() {
     if (settingsDoc && settingsDoc.readonly) return;
@@ -759,19 +951,31 @@
       const res = await api('/api/health');
       if (!res.ok) return;
       const body = await res.json();
-      renderScanners(body.scanners || {});
+      renderScanners(body.scanners || {}, document.getElementById('scanner-pills'), currentData);
     } catch (err) {}
   }
 
-  function renderScanners(scanners) {
-    const host = document.getElementById('scanner-pills');
+  async function fetchHostHealth(hostId) {
+    const url = hostId === 'local' ? '/api/health' : '/api/hosts/' + encodeURIComponent(hostId) + '/health';
+    try {
+      const res = await api(url);
+      if (!res.ok) return;
+      const body = await res.json();
+      if (!hostMaps[hostId]) hostMaps[hostId] = {};
+      hostMaps[hostId].scanners = body.scanners || {};
+    } catch (err) {}
+  }
+
+  function renderScanners(scanners, hostEl, data) {
+    const host = hostEl || document.getElementById('scanner-pills');
+    if (!host) return;
     const items = [
       ['proc', 'host'],
       ['docker', 'docker'],
       ['compose', 'compose'],
     ];
-    const truncated = !!(currentData && currentData.summary && currentData.summary.compose_truncated);
-    const incomplete = !!(currentData && currentData.summary && currentData.summary.compose_incomplete);
+    const truncated = !!(data && data.summary && data.summary.compose_truncated);
+    const incomplete = !!(data && data.summary && data.summary.compose_incomplete);
     host.innerHTML = items.map(function (pair) {
       const name = t('scanner.' + pair[1]);
       const ok = !!scanners[pair[0]];
@@ -872,6 +1076,21 @@
     syncHeaderHeight();
   }
 
+  async function fetchHosts() {
+    try {
+      const res = await api('/api/hosts');
+      if (!res.ok) return hostCatalog;
+      const body = await res.json();
+      hostCatalog = {
+        local: body.local || { id: 'local', name: '', local: true },
+        peers: Array.isArray(body.peers) ? body.peers : [],
+        readonly: !!body.readonly,
+      };
+    } catch (err) {}
+    if (!hostById(focusHostId)) focusHostId = 'local';
+    return hostCatalog;
+  }
+
   async function fetchPorts(opts) {
     const isolated = !!(opts && opts.isolated);
     if (portsAbort) portsAbort.abort();
@@ -906,32 +1125,161 @@
     }
   }
 
+  function occupancyFingerprint() {
+    if (!hasPeers()) {
+      if (!currentData) return '';
+      return JSON.stringify({ ports: currentData.ports, summary: currentData.summary });
+    }
+    return JSON.stringify(listedHosts().map(function (h) {
+      const m = hostMaps[h.id] || {};
+      return {
+        id: h.id,
+        ports: m.data && m.data.ports,
+        summary: m.data && m.data.summary,
+        error: m.error || '',
+        scanners: m.scanners || null,
+      };
+    }));
+  }
+
+  async function fetchHostOccupancy(hostId, opts) {
+    const isolated = !!(opts && opts.isolated);
+    if (hostAborts[hostId]) hostAborts[hostId].abort();
+    const ac = new AbortController();
+    hostAborts[hostId] = ac;
+    const root = document.getElementById('host-grid-' + hostId) || (hostId === 'local' ? grid : null);
+    if (!isolated && root) root.setAttribute('aria-busy', 'true');
+    try {
+      const url = occupancyUrl(hostId);
+      const headers = {};
+      const tag = hostEtags[hostId];
+      if (!isolated && tag && tag.url === url && tag.etag) headers['If-None-Match'] = tag.etag;
+      const res = await api(url, { signal: ac.signal, headers: headers });
+      if (res.status === 304) return { ok: true, unchanged: true };
+      if (res.status === 502) {
+        const body = await res.json().catch(function () { return {}; });
+        const auth = String(body.detail || '').toLowerCase().indexOf('auth') >= 0;
+        return { ok: false, stale: false, auth: auth };
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const etag = res.headers.get('etag');
+      const data = await res.json();
+      if (!isolated || (data.summary && !data.summary.hidden_locked)) {
+        hostEtags[hostId] = { etag: etag || '', url: url };
+      }
+      return { ok: true, data: data };
+    } catch (err) {
+      if (err && err.name === 'AbortError') return { ok: false, stale: true };
+      console.error('fetch error:', err);
+      return { ok: false, stale: false };
+    } finally {
+      if (!isolated && hostAborts[hostId] === ac && root) root.setAttribute('aria-busy', 'false');
+    }
+  }
+
+  async function loadAllOccupancy(opts) {
+    const ids = listedHosts().map(function (h) { return h.id; });
+    const results = await Promise.all(ids.map(function (id) {
+      return fetchHostOccupancy(id, opts);
+    }));
+    let localOk = false;
+    ids.forEach(function (id, i) {
+      const result = results[i];
+      if (!hostMaps[id]) hostMaps[id] = {};
+      if (!result || result.stale) return;
+      if (result.unchanged) {
+        if (id === 'local') localOk = true;
+        return;
+      }
+      if (result.ok && result.data) {
+        hostMaps[id].data = result.data;
+        hostMaps[id].error = '';
+        if (id === 'local') localOk = true;
+      } else {
+        hostMaps[id].error = result.auth ? 'auth' : 'down';
+      }
+    });
+    await Promise.all(ids.map(fetchHostHealth));
+    if (localOk) {
+      setSyncError(false);
+      markRefreshed();
+    } else {
+      setSyncError(true);
+    }
+    const focused = dataForHost(focusHostId);
+    if (focused) currentData = focused;
+    else if (hostMaps.local && hostMaps.local.data) currentData = hostMaps.local.data;
+    return currentData;
+  }
+
+  async function retryHost(hostId) {
+    if (!hostId || hostRetrying[hostId]) return;
+    hostRetrying[hostId] = true;
+    const btn = hostBoards && hostBoards.querySelector('[data-host-retry="' + hostId + '"]');
+    if (btn) btn.disabled = true;
+    let shouldRender = false;
+    try {
+      const result = await fetchHostOccupancy(hostId);
+      if (!hostMaps[hostId]) hostMaps[hostId] = {};
+      if (result && !result.stale) {
+        if (result.unchanged) {
+          hostMaps[hostId].error = '';
+        } else if (result.ok && result.data) {
+          hostMaps[hostId].data = result.data;
+          hostMaps[hostId].error = '';
+        } else {
+          hostMaps[hostId].error = result.auth ? 'auth' : 'down';
+        }
+      }
+      if (!result || result.stale) return;
+      await fetchHostHealth(hostId);
+      occupancyKey = occupancyFingerprint();
+      if (hostId === focusHostId && hostMaps[hostId].data) {
+        currentData = hostMaps[hostId].data;
+      }
+      if (hostId === 'local') setSyncError(!!hostMaps[hostId].error);
+      if (!hostMaps[hostId].error) markRefreshed();
+      shouldRender = true;
+    } finally {
+      hostRetrying[hostId] = false;
+    }
+    if (shouldRender) render();
+  }
+
   function tick() {
     if (route.name === 'settings') return;
     if (modalOpen()) return;
     const wantHidden = showHidden;
     loadPorts().then(function (data) {
-      if (!data || route.name === 'settings') return;
+      if (route.name === 'settings') return;
       if (showHidden !== wantHidden) return;
-      if (data === currentData && occupancyKey) return;
-      currentData = data;
-      const lockedNow = !!(data.summary && data.summary.hidden_locked);
+      if (!hasPeers()) {
+        if (!data) return;
+        if (data === currentData && occupancyKey) return;
+        currentData = data;
+      } else if (data) {
+        currentData = dataForHost(focusHostId) || data;
+      } else if (!currentData) {
+        return;
+      }
+      const lockedNow = !!(currentData && currentData.summary && currentData.summary.hidden_locked);
       if (lockedNow !== lastHiddenLocked) {
         lastHiddenLocked = lockedNow;
         Object.keys(lockedHitCache).forEach(function (k) { delete lockedHitCache[k]; });
         Object.keys(lockedHitInflight).forEach(function (k) { delete lockedHitInflight[k]; });
       }
-      const key = JSON.stringify({ ports: data.ports, summary: data.summary });
+      const key = occupancyFingerprint();
       if (key !== occupancyKey) {
         occupancyKey = key;
         render();
       }
     }).then(function () {
-      fetchHealth();
+      if (!hasPeers()) fetchHealth();
     });
   }
 
   async function loadPorts(opts) {
+    if (hasPeers()) return loadAllOccupancy(opts);
     const result = await fetchPorts(opts);
     if (!result || result.stale) return null;
     if (result.unchanged) {
@@ -967,11 +1315,25 @@
   });
 
   function loadSettingsPage() {
-    fetchSettings().then(function (doc) {
+    Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
+      const doc = pair[0];
       if (!doc) return;
       settingsDoc = doc;
+      peersDraft = (hostCatalog.peers || []).map(clonePeerRow);
       renderSettingsForm(doc);
     });
+  }
+
+  function clonePeerRow(p) {
+    return {
+      id: p.id || '',
+      name: p.name || '',
+      url: p.url || '',
+      username: p.username || '',
+      password: '',
+      has_auth: !!p.has_auth,
+      clear_auth: false,
+    };
   }
 
   function fieldLabel(f) {
@@ -1069,7 +1431,8 @@
         settingsCard('settings.groups.appearance.title', 'settings.groups.appearance.blurb', rowsFor(lookFields)) +
         settingsCard('settings.cards.title', 'settings.cards.blurb', rowsFor(cardFields))) +
       settingsPanelHtml('occupancy',
-        settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || []))) +
+        settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
+        settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +
       settingsPanelHtml('advanced',
         settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
@@ -1094,6 +1457,7 @@
     }
     showSettingsPanel(route.section || settingsPanel);
     syncDependentSettings();
+    renderPeersEditor(!!doc.readonly || !!hostCatalog.readonly);
   }
 
   function kvRow(labelKey, value, valueKey) {
@@ -1281,6 +1645,84 @@
       '</span></' + tag + '>';
   }
 
+  function renderPeersEditor(readonly) {
+    const host = document.getElementById('settings-peers');
+    if (!host) return;
+    const locked = !!readonly;
+    const rows = (peersDraft || []).map(function (row, i) {
+      const disabled = locked ? ' disabled' : '';
+      const keep = row.has_auth && !row.clear_auth
+        ? ' placeholder="' + escapeHtml(t('hosts.passwordKeep')) + '"'
+        : '';
+      return '<div class="peer-row" data-peer-index="' + i + '" data-peer-id="' +
+        escapeHtml(row.id || '') + '" data-has-auth="' + (row.has_auth && !row.clear_auth ? '1' : '0') + '">' +
+        '<label><span data-i18n="hosts.name">' + escapeHtml(t('hosts.name')) + '</span>' +
+        '<input data-peer-field="name" maxlength="40" value="' + escapeHtml(row.name || '') +
+        '" placeholder="' + escapeHtml(t('hosts.namePlaceholder')) + '"' + disabled + '></label>' +
+        '<label><span data-i18n="hosts.url">' + escapeHtml(t('hosts.url')) + '</span>' +
+        '<input data-peer-field="url" value="' + escapeHtml(row.url || '') +
+        '" placeholder="' + escapeHtml(t('hosts.urlPlaceholder')) + '"' + disabled + '></label>' +
+        '<label><span data-i18n="hosts.username">' + escapeHtml(t('hosts.username')) + '</span>' +
+        '<input data-peer-field="username" autocomplete="off" value="' + escapeHtml(row.username || '') +
+        '"' + disabled + '></label>' +
+        '<label><span data-i18n="hosts.password">' + escapeHtml(t('hosts.password')) + '</span>' +
+        '<input type="password" data-peer-field="password" autocomplete="new-password" value="' +
+        escapeHtml(row.password || '') + '"' + keep + disabled + '></label>' +
+        '<div class="peer-row-actions">' +
+        (row.has_auth && !row.clear_auth
+          ? '<button type="button" class="btn-secondary" data-peer-clear-auth' + disabled + '>' +
+            escapeHtml(t('hosts.clearAuth')) + '</button>'
+          : '') +
+        '<button type="button" class="btn-secondary" data-peer-remove' + disabled + '>' +
+        escapeHtml(t('hosts.remove')) + '</button></div></div>';
+    }).join('');
+    const canAdd = !locked && peersDraft.length < 6;
+    host.innerHTML = '<div class="peer-list">' + rows + '</div>' +
+      '<p class="field-help" data-i18n="hosts.max">' + escapeHtml(t('hosts.max')) + '</p>' +
+      '<p class="field-help" data-i18n="hosts.dockerHint">' + escapeHtml(t('hosts.dockerHint')) + '</p>' +
+      '<button type="button" class="btn-secondary" id="peer-add"' + (canAdd ? '' : ' disabled') + '>' +
+      escapeHtml(t('hosts.add')) + '</button>';
+  }
+
+  function readPeersDraftFromForm() {
+    const host = document.getElementById('settings-peers');
+    if (!host) return;
+    const rows = host.querySelectorAll('.peer-row');
+    const next = [];
+    rows.forEach(function (row, i) {
+      const prev = peersDraft[i] || {};
+      next.push({
+        id: row.getAttribute('data-peer-id') || prev.id || '',
+        name: ((row.querySelector('[data-peer-field="name"]') || {}).value || ''),
+        url: ((row.querySelector('[data-peer-field="url"]') || {}).value || ''),
+        username: ((row.querySelector('[data-peer-field="username"]') || {}).value || ''),
+        password: ((row.querySelector('[data-peer-field="password"]') || {}).value || ''),
+        has_auth: row.getAttribute('data-has-auth') === '1' || !!prev.has_auth,
+        clear_auth: !!prev.clear_auth,
+      });
+    });
+    peersDraft = next;
+  }
+
+  function peersPayload() {
+    readPeersDraftFromForm();
+    return peersDraft.map(function (row) {
+      const name = String(row.name || '').trim();
+      const url = String(row.url || '').trim();
+      if (!name || !url) return null;
+      const item = { name: name, url: url };
+      if (row.id) item.id = row.id;
+      if (row.clear_auth) {
+        item.username = '';
+        item.password = '';
+        return item;
+      }
+      if (row.username) item.username = row.username;
+      if (row.password) item.password = row.password;
+      return item;
+    }).filter(Boolean);
+  }
+
   async function saveSettingsPage() {
     if (settingsDoc && settingsDoc.readonly) return;
     const status = document.getElementById('settings-status');
@@ -1322,6 +1764,26 @@
     applyServerSettings(body);
     rangeFromView = true;
     saveView();
+    if (!(hostCatalog && hostCatalog.readonly)) {
+      const hostRes = await api('/api/hosts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ peers: peersPayload() }),
+      });
+      const hostBody = await hostRes.json().catch(function () { return {}; });
+      if (!hostRes.ok) {
+        renderSettingsForm(body);
+        status.className = 'is-error';
+        status.textContent = errorText(hostBody, hostRes.status);
+        return;
+      }
+      hostCatalog = {
+        local: hostBody.local || hostCatalog.local,
+        peers: Array.isArray(hostBody.peers) ? hostBody.peers : [],
+        readonly: !!hostBody.readonly,
+      };
+      peersDraft = (hostCatalog.peers || []).map(clonePeerRow);
+    }
     renderSettingsForm(body);
     setupRefresh();
     status.className = 'is-ok';
@@ -1360,11 +1822,44 @@
   }
 
   function render() {
-    if (!currentData) return;
-    renderSummary(currentData.summary);
-    renderGrid(currentData.ports);
+    const multi = hasPeers();
+    appEl.classList.toggle('multi-host', multi);
+    syncAddButton();
+    if (multi) {
+      grid.hidden = true;
+      grid.classList.add('hidden');
+      hostBoards.hidden = false;
+      hostBoards.classList.remove('hidden');
+      hostSwitcher.hidden = false;
+      hostSwitcher.classList.remove('hidden');
+      renderHostSwitcher();
+      renderHostBoards();
+      const focused = dataForHost(focusHostId);
+      if (focused && focused.summary) {
+        currentData = focused;
+        renderSummary(focused.summary);
+      } else if (currentData && currentData.summary) {
+        renderSummary(currentData.summary);
+      }
+    } else {
+      grid.hidden = false;
+      grid.classList.remove('hidden');
+      if (hostBoards) {
+        hostBoards.hidden = true;
+        hostBoards.classList.add('hidden');
+        hostBoards.innerHTML = '';
+      }
+      if (hostSwitcher) {
+        hostSwitcher.hidden = true;
+        hostSwitcher.classList.add('hidden');
+        hostSwitcher.innerHTML = '';
+      }
+      if (!currentData) return;
+      renderSummary(currentData.summary);
+      renderGrid(currentData.ports, grid, currentData, 'local');
+    }
     if (selectedPort !== null) {
-      const entry = portFromList(selectedPort);
+      const entry = portFromList(selectedPort, selectedHostId);
       if (entry) renderDetail(entry);
       else if (route.name === 'port') {
         detailShownPort = null;
@@ -1373,9 +1868,84 @@
     }
   }
 
-  function portFromList(port) {
-    if (!currentData || !currentData.ports) return null;
-    return currentData.ports.find(function (p) { return p.port === port; }) || null;
+  function syncAddButton() {
+    const btn = document.getElementById('btn-add');
+    if (!btn) return;
+    const local = !hasPeers() || focusHostId === 'local';
+    btn.disabled = !local;
+    const title = local ? t('action.add') : t('hosts.localOnly');
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+  }
+
+  function snapshotGridFocus() {
+    const el = document.activeElement;
+    if (!el || !el.classList || !el.classList.contains('port-cell')) return null;
+    return { port: el.getAttribute('data-port'), host: el.getAttribute('data-host') || 'local' };
+  }
+
+  function renderHostSwitcher() {
+    if (!hostSwitcher) return;
+    hostSwitcher.innerHTML = listedHosts().map(function (h) {
+      const on = h.id === focusHostId;
+      return '<button type="button" class="host-chip' + (on ? ' active' : '') +
+        '" role="tab" aria-selected="' + (on ? 'true' : 'false') +
+        '" data-host-switch="' + escapeHtml(h.id) + '">' +
+        escapeHtml(h.name || h.id) + '</button>';
+    }).join('');
+  }
+
+  function renderHostBoards() {
+    if (!hostBoards) return;
+    const restore = snapshotGridFocus();
+    const hosts = listedHosts();
+    hostBoards.innerHTML = hosts.map(function (h) {
+      return '<article class="host-board' + (h.id === focusHostId ? ' is-active' : '') +
+        '" data-host="' + escapeHtml(h.id) + '">' +
+        '<header class="host-board-head"><div class="host-board-title">' +
+        escapeHtml(h.name || h.id) +
+        (h.local ? ' <span class="host-local">' + escapeHtml(t('hosts.thisMachine')) + '</span>' : '') +
+        '</div><div class="host-board-pills scanner-dots" data-host-pills="' +
+        escapeHtml(h.id) + '"></div></header>' +
+        '<p class="host-board-counts" data-host-counts="' + escapeHtml(h.id) + '"></p>' +
+        '<div class="host-board-error hidden" hidden data-host-error="' + escapeHtml(h.id) + '">' +
+        '<span></span><button type="button" class="btn-secondary" data-host-retry="' +
+        escapeHtml(h.id) + '">' + escapeHtml(t('hosts.retry')) + '</button></div>' +
+        '<div class="host-grid" id="host-grid-' + escapeHtml(h.id) +
+        '" tabindex="-1" role="region" data-i18n-aria="grid.aria"></div></article>';
+    }).join('');
+    hosts.forEach(function (h) {
+      const map = hostMaps[h.id] || {};
+      const root = document.getElementById('host-grid-' + h.id);
+      const err = hostBoards.querySelector('[data-host-error="' + h.id + '"]');
+      const counts = hostBoards.querySelector('[data-host-counts="' + h.id + '"]');
+      const pills = hostBoards.querySelector('[data-host-pills="' + h.id + '"]');
+      if (map.error && err) {
+        err.hidden = false;
+        err.classList.remove('hidden');
+        const text = err.querySelector('span');
+        if (text) text.textContent = t(map.error === 'auth' ? 'hosts.authFailed' : 'hosts.unreachable');
+        const retry = err.querySelector('[data-host-retry]');
+        if (retry) retry.disabled = !!hostRetrying[h.id];
+      }
+      if (map.data && map.data.summary && counts) {
+        counts.textContent = t('hosts.counts', {
+          used: map.data.summary.used,
+          configured: map.data.summary.configured,
+        });
+      }
+      if (pills) renderScanners(map.scanners || {}, pills, map.data);
+      if (map.data && root) renderGrid(map.data.ports, root, map.data, h.id, restore);
+      else if (root && !map.error) {
+        root.innerHTML = '<div class="empty">' + escapeHtml(t('hosts.loading')) + '</div>';
+      }
+    });
+  }
+
+  function portFromList(port, hostId) {
+    const data = dataForHost(hostId || selectedHostId || 'local') || currentData;
+    if (!data || !data.ports) return null;
+    return data.ports.find(function (p) { return p.port === port; }) || null;
   }
 
   function freeStub(port) {
@@ -1408,20 +1978,23 @@
   }
 
   function showPortDetail(port, fallback) {
-    const local = portFromList(port);
+    const hostId = selectedHostId || 'local';
+    const local = portFromList(port, hostId);
     if (local) {
       detailShownPort = port;
       renderDetail(local);
       return;
     }
-    if (detailShownPort === port) return;
+    if (detailShownPort === port && route.hostId === hostId) return;
     renderDetail(fallback && fallback.port === port ? fallback : pendingStub(port));
     const gen = ++portDetailGen;
     detailShownPort = port;
-    api('/api/ports/' + port + '?include_hidden=true').then(function (res) {
-      if (gen !== portDetailGen || selectedPort !== port) return null;
+    const openedHost = hostId;
+    api(portApiUrl(hostId, port) + '?include_hidden=true').then(function (res) {
+      if (gen !== portDetailGen || selectedPort !== port || selectedHostId !== openedHost) return null;
       if (res.status === 404) {
-        const locked = !!(currentData && currentData.summary && currentData.summary.hidden_locked);
+        const data = dataForHost(openedHost) || currentData;
+        const locked = !!(data && data.summary && data.summary.hidden_locked);
         renderDetail(Object.assign(freeStub(port), {
           _missing: true,
           _locked: locked,
@@ -1436,7 +2009,7 @@
       }
       return res.json();
     }).then(function (row) {
-      if (!row || gen !== portDetailGen || selectedPort !== port) return;
+      if (!row || gen !== portDetailGen || selectedPort !== port || selectedHostId !== openedHost) return;
       if (row.known_service) knownCache[port] = row.known_service;
       renderDetail(row);
     }).catch(function () {
@@ -1484,7 +2057,11 @@
         ' aria-pressed="' + (active ? 'true' : 'false') + '">' +
         '<span class="dot ' + dot + '"></span><span class="num">' + n + '</span> ' + label + '</button>';
     }
-    let html = toggle(statusFilter === 'used', 'data-status="used"', 'used', s.used, t('legend.inUse')) +
+    let html = '';
+    if (hasPeers()) {
+      html += '<span class="legend-host">' + escapeHtml(t('hosts.legendHost', { name: hostName(focusHostId) })) + '</span>';
+    }
+    html += toggle(statusFilter === 'used', 'data-status="used"', 'used', s.used, t('legend.inUse')) +
       toggle(statusFilter === 'configured', 'data-status="configured"', 'configured', s.configured, t('legend.configured')) +
       '<span class="stat is-static"><span class="dot free"></span><span class="num">' + s.free + '</span> ' + t('legend.free') + '</span>';
     if (s.hidden > 0) {
@@ -1503,8 +2080,8 @@
     return '';
   }
 
-  function hiddenOccupancy(port) {
-    const rows = (currentData && currentData.summary && currentData.summary.hidden_occupancy) || [];
+  function hiddenOccupancy(port, dataCtx) {
+    const rows = (dataCtx && dataCtx.summary && dataCtx.summary.hidden_occupancy) || [];
     for (let i = 0; i < rows.length; i++) {
       if (rows[i] && rows[i].port === port) {
         const status = rows[i].status;
@@ -1515,23 +2092,26 @@
     return 'free';
   }
 
-  function probeLockedHit(port) {
-    if (lockedHitCache[port] || lockedHitInflight[port]) return;
-    lockedHitInflight[port] = true;
-    api('/api/ports/' + port).then(function (res) {
-      lockedHitCache[port] = res.status === 404 ? 'locked' : 'free';
-      delete lockedHitInflight[port];
-      if (currentData && searchPortNum === port) render();
+  function probeLockedHit(port, hostId) {
+    const key = (hostId || 'local') + ':' + port;
+    if (lockedHitCache[key] || lockedHitInflight[key]) return;
+    lockedHitInflight[key] = true;
+    api(portApiUrl(hostId || 'local', port)).then(function (res) {
+      lockedHitCache[key] = res.status === 404 ? 'locked' : 'free';
+      delete lockedHitInflight[key];
+      if (searchPortNum === port) render();
     }).catch(function () {
-      delete lockedHitInflight[port];
+      delete lockedHitInflight[key];
     });
   }
 
-  function buildSearchContext(ports, hitPort) {
+  function buildSearchContext(ports, hitPort, dataCtx, hostId) {
+    dataCtx = dataCtx || currentData;
+    hostId = hostId || 'local';
     const allPortNums = new Set(ports.map(function (p) { return p.port; }));
     const hitExists = allPortNums.has(hitPort);
-    const hiddenNums = new Set((currentData && currentData.summary && currentData.summary.hidden_ports) || []);
-    const locked = !!(currentData && currentData.summary && currentData.summary.hidden_locked);
+    const hiddenNums = new Set((dataCtx && dataCtx.summary && dataCtx.summary.hidden_ports) || []);
+    const locked = !!(dataCtx && dataCtx.summary && dataCtx.summary.hidden_locked);
     const result = [];
 
     function synthetic(port, hidden) {
@@ -1541,7 +2121,7 @@
       }
       return {
         port: port,
-        status: hiddenOccupancy(port),
+        status: hiddenOccupancy(port, dataCtx),
         is_hidden: true,
         _synthetic: true,
         known_service: getKnownForFree(port),
@@ -1552,12 +2132,12 @@
       if (hiddenNums.has(hitPort)) {
         result.push(synthetic(hitPort, true));
       } else if (locked) {
-        const kind = lockedHitCache[hitPort];
+        const kind = lockedHitCache[(hostId || 'local') + ':' + hitPort];
         if (kind === 'free') {
           result.push(synthetic(hitPort, false));
         } else {
           prefetchKnown(hitPort);
-          if (!kind) probeLockedHit(hitPort);
+          if (!kind) probeLockedHit(hitPort, hostId);
           result.push({
             port: hitPort,
             status: 'free',
@@ -1653,11 +2233,15 @@
     }
   }
 
-  function renderGrid(ports) {
+  function renderGrid(ports, rootEl, dataCtx, hostId, restore) {
+    rootEl = rootEl || grid;
+    dataCtx = dataCtx || currentData;
+    hostId = hostId || 'local';
+    ports = ports || [];
     let displayPorts;
 
     if (searchPortNum !== null) {
-      displayPorts = buildSearchContext(ports, searchPortNum).filter(function (p) {
+      displayPorts = buildSearchContext(ports, searchPortNum, dataCtx, hostId).filter(function (p) {
         if (p.port === searchPortNum) return true;
         return matchesFilter(p);
       });
@@ -1692,32 +2276,38 @@
 
     displayPorts = sortPorts(displayPorts.slice());
 
-    let restorePort = null;
-    if (document.activeElement && document.activeElement.classList &&
+    let restorePort = restore && restore.port;
+    let restoreHost = restore && restore.host;
+    if (!restore && document.activeElement && document.activeElement.classList &&
         document.activeElement.classList.contains('port-cell')) {
       restorePort = document.activeElement.getAttribute('data-port');
+      restoreHost = document.activeElement.getAttribute('data-host') || hostId;
     }
 
+    const cellSelected = function (p) {
+      return p.port === selectedPort && (selectedHostId || 'local') === hostId;
+    };
+
     if (displayPorts.length === 0) {
-      const inRange = (currentData.ports || []).filter(function (p) {
+      const inRange = (dataCtx.ports || []).filter(function (p) {
         return p.port >= rangeStart && p.port <= rangeEnd && (showHidden || !p.is_hidden);
       });
       const noFacet = !searchTerm && searchPortNum === null && kindFilters.size === 0 && statusFilter === 'all';
       const key = noFacet && inRange.length === 0 ? 'grid.emptyNone' : 'grid.empty';
       const active = document.activeElement;
-      const gridHadFocus = active === grid || (active && grid.contains(active));
-      grid.innerHTML = '<div class="empty">' + escapeHtml(t(key)) + '</div>';
-      if (gridHadFocus) grid.focus({ preventScroll: true });
+      const gridHadFocus = active === rootEl || (active && rootEl.contains(active));
+      rootEl.innerHTML = '<div class="empty">' + escapeHtml(t(key)) + '</div>';
+      if (gridHadFocus) rootEl.focus({ preventScroll: true });
       return;
     }
 
-    grid.innerHTML = displayPorts.map(function (p) {
+    rootEl.innerHTML = displayPorts.map(function (p) {
       const lockedHit = !!(p._locked && p._synthetic);
       let cls = lockedHit ? 'locked'
         : p.status === 'used' ? 'used' : p.status === 'configured' ? 'configured' : 'free';
       if (p.is_hidden) cls += ' hidden';
       const conflict = p.conflict ? ' conflict' : '';
-      const selected = p.port === selectedPort ? ' selected' : '';
+      const selected = cellSelected(p) ? ' selected' : '';
       const isSearchHit = searchPortNum !== null && p.port === searchPortNum;
       const searchHit = isSearchHit ? ' search-hit' : '';
       const searchNear = searchPortNum !== null && !isSearchHit ? ' search-near' : '';
@@ -1733,9 +2323,9 @@
 
       const ariaParts = [String(p.port), statusLabel, label, p.protocol].filter(Boolean);
       return '<button type="button" class="port-cell ' + cls + conflict + selected + searchHit + searchNear + '"' +
-        ' data-port="' + p.port + '"' +
+        ' data-port="' + p.port + '" data-host="' + escapeHtml(hostId) + '"' +
         ' aria-label="' + escapeHtml(ariaParts.join(', ')) + '"' +
-        ' aria-selected="' + (p.port === selectedPort ? 'true' : 'false') + '"' +
+        ' aria-selected="' + (cellSelected(p) ? 'true' : 'false') + '"' +
         ' title="' + escapeHtml([p.port, p.protocol, p.bind_scope, label].filter(Boolean).join(' · ')) + '">' +
         '<div class="port-num">' + p.port + '</div>' +
         labelText +
@@ -1743,16 +2333,20 @@
         '</button>';
     }).join('');
 
-    grid.querySelectorAll('.port-cell').forEach(function (el) {
+    rootEl.querySelectorAll('.port-cell').forEach(function (el) {
       el.addEventListener('click', function () {
         const port = parseInt(el.dataset.port, 10);
-        if (selectedPort === port && route.name === 'port') {
+        const hid = el.dataset.host || 'local';
+        if (selectedPort === port && (selectedHostId || 'local') === hid && route.name === 'port') {
           closeDetail();
           return;
         }
         selectedPort = port;
-        if (location.hash !== '#/port/' + port) {
-          location.hash = '#/port/' + port;
+        selectedHostId = hid;
+        focusHostId = hid;
+        const want = portHash(hid, port);
+        if (location.hash !== want) {
+          location.hash = want;
         } else {
           const entry = displayPorts.find(function (p) { return p.port === port; });
           showPortDetail(port, entry);
@@ -1760,14 +2354,14 @@
         if (settings.copy_on_click) {
           navigator.clipboard.writeText(String(port)).then(function () {
             const live = document.querySelector('.detail-copy-port[data-copy-port="' + port + '"]')
-              || grid.querySelector('.port-cell[data-port="' + port + '"]');
+              || rootEl.querySelector('.port-cell[data-port="' + port + '"]');
             if (live) showCopyToast(live);
           }).catch(function () {});
         }
       });
     });
-    if (restorePort) {
-      const again = grid.querySelector('.port-cell[data-port="' + restorePort + '"]');
+    if (restorePort && (!restoreHost || restoreHost === hostId)) {
+      const again = rootEl.querySelector('.port-cell[data-port="' + restorePort + '"]');
       if (again) again.focus({ preventScroll: true });
     }
   }
@@ -1802,6 +2396,10 @@
     if (p._pending) {
       html += '<p class="modal-hint">' + escapeHtml(t('detail.loading')) + '</p>';
     } else {
+    const remote = hasPeers() && selectedHostId && selectedHostId !== 'local';
+    if (remote) {
+      html += '<p class="modal-hint">' + escapeHtml(t('detail.remoteReadOnly', { name: hostName(selectedHostId) })) + '</p>';
+    }
     html += '<div class="row"><span class="key">' + escapeHtml(t('detail.status')) + '</span><span class="tag ' + p.status + '">' +
       escapeHtml(t('status.' + p.status) || p.status) + '</span></div>';
     if (p._missing) {
@@ -1905,13 +2503,14 @@
       html += '<div class="info-box"><span class="info-name">' + escapeHtml(t('detail.manual')) + '</span> — ' + escapeHtml(p.manual_label) + '</div>';
     }
 
-    if (p.manual_label != null || p.source_type === 'manual') {
+    if (!remote && (p.manual_label != null || p.source_type === 'manual')) {
       html += '<form class="detail-label-form" data-label-form="' + p.port + '"><label><span class="key">' +
         escapeHtml(t('detail.label')) + '</span><input type="text" maxlength="80" value="' +
         escapeHtml(p.manual_label || '') + '" data-label-input></label><button type="submit" class="btn-secondary">' +
         escapeHtml(t('detail.saveLabel')) + '</button></form>';
     }
 
+    if (!remote) {
     html += '<div class="action-row">';
     if (p.is_hidden) {
       html += '<button type="button" class="btn-unhide" data-unhide-port="' + p.port + '">' + escapeHtml(t('detail.unhide')) + '</button>';
@@ -1922,6 +2521,7 @@
       html += '<button type="button" class="btn-delete" data-delete-port="' + p.port + '">' + escapeHtml(t('detail.delete')) + '</button>';
     }
     html += '</div>';
+    }
     }
 
     const prevLabel = detailContent.querySelector('[data-label-input]');
@@ -1990,17 +2590,18 @@
   }
 
   function closeDetail(skipHash) {
-    if (selectedPort !== null) pendingGridFocus = selectedPort;
+    const hostId = selectedHostId || focusHostId;
+    if (selectedPort !== null) pendingGridFocus = { port: selectedPort, hostId: hostId };
     const wasOpen = !detailPanel.classList.contains('hidden') || selectedPort !== null;
     setDetailOpen(false);
     selectedPort = null;
     detailShownPort = null;
     portDetailGen += 1;
     if (!skipHash && route.name === 'port') {
-      location.hash = '#/';
+      location.hash = gridHash(hostId);
       return;
     }
-    if (wasOpen && currentData && route.name !== 'settings') render();
+    if (wasOpen && (currentData || hasPeers()) && route.name !== 'settings') render();
     applyPendingGridFocus();
   }
 
@@ -2009,10 +2610,13 @@
       pendingGridFocus = null;
       return;
     }
-    const port = pendingGridFocus;
+    const pending = pendingGridFocus;
     pendingGridFocus = null;
-    if (!port) return;
-    const cell = grid.querySelector('.port-cell[data-port="' + port + '"]');
+    if (!pending) return;
+    const port = pending.port || pending;
+    const hostId = pending.hostId || 'local';
+    const root = document.getElementById('host-grid-' + hostId) || grid;
+    const cell = root.querySelector('.port-cell[data-port="' + port + '"]');
     if (cell) cell.focus({ preventScroll: true });
   }
 
@@ -2039,12 +2643,15 @@
   }
 
   window._portLightHide = function (port) {
+    if (hasPeers() && selectedHostId !== 'local') return;
     mutateDetail('/api/hidden/' + port, { method: 'POST' }, tick);
   };
   window._portLightUnhide = function (port) {
+    if (hasPeers() && selectedHostId !== 'local') return;
     mutateDetail('/api/hidden/' + port, { method: 'DELETE' }, tick);
   };
   window._portLightDeleteManual = function (port) {
+    if (hasPeers() && selectedHostId !== 'local') return;
     if (!window.confirm(t('detail.deleteConfirm', { port: port }))) return;
     mutateDetail('/api/manual-ports/' + port, { method: 'DELETE' }, function () {
       closeDetail();
@@ -2052,6 +2659,7 @@
     });
   };
   window._portLightSaveLabel = function (port, label) {
+    if (hasPeers() && selectedHostId !== 'local') return;
     mutateDetail('/api/manual-ports/' + port, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -2163,6 +2771,9 @@
       .then(fetchSettings)
       .then(function (doc) {
         if (doc) applyServerSettings(doc);
+        return fetchHosts();
+      })
+      .then(function () {
         return window.PortLightI18n
           ? PortLightI18n.load(settings.locale || 'auto')
           : Promise.resolve();

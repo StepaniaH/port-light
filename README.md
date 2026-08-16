@@ -17,6 +17,10 @@ A local web dashboard that shows **which host ports are taken**, as a traffic-li
 
 ![Port-Light screenshot](https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/screenshot.png)
 
+Other Port-Light instances on the LAN or Tailscale:
+
+![Two occupancy maps side by side](https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/screenshot-multi-host.png)
+
 ## What it does
 
 Port-Light merges three local sources into one grid:
@@ -48,6 +52,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Built-in names for common homelab ports (SSH, Jellyfin, Postgres, …), plus a local override file
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
+- One UI can pull occupancy maps from other Port-Light instances (LAN / Tailscale). Each host still scans itself.
 - Appearance presets on Settings: system / dark / light plus Gruvbox, Catppuccin, Nord, Dracula, Tokyo Night, One Dark, Solarized, Everforest, Rosé Pine, and Kanagawa. Compact grid, UI language (English, 简体中文, 繁體中文, 日本語). Also via Compose env.
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
@@ -57,7 +62,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 
 - **LAN tool.** There is no login unless you set `AUTH_USER` and `AUTH_PASSWORD`. Put it behind a reverse proxy or keep it off the public internet. See [SECURITY.md](SECURITY.md).
 - **Hide from grid** is a display filter. It becomes an API gate only when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set.
-- **Multi-host is not implemented.** Run one Port-Light per machine.
+- **Multi-host is a read-only viewer.** Each machine still runs Port-Light. One UI can pull the others over LAN or Tailscale (Settings → Occupancy). Do not expose port 2100 to the public internet. The hub fetches those URLs itself; a Docker bridge container often cannot reach Tailscale `100.x` — use a LAN IP, or `network_mode: host` on the hub.
 - Process names come from `/host/proc` (inode → `comm`) when that mount is present — the usual image. Without it, the grid shows Docker container names. `ss -tlnp` names still need a host-network / bare-metal path.
 - Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
 
@@ -70,7 +75,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.5.5
+    image: stepaniah/port-light:v0.6.0
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -115,6 +120,8 @@ Open `http://localhost:2100`.
 | `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. Env only. |
 | `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. Env only. |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI save wins over env. `env`: Compose is the only source and the Settings page is read-only. |
+| `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. |
+| `PORT_LIGHT_PEERS` | unset | JSON array of `{name, url, username?, password?}` used when the data file has no `peers` key, or when `PORT_LIGHT_SETTINGS_SOURCE=env`. Same lock as Settings. |
 
 Most of the table (except paths and secrets) can also be changed on **Settings** in the UI. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
 
@@ -124,8 +131,9 @@ If you bind-mount `custom_ports.json` in Compose, create the **file** on the hos
 
 ## Privacy
 
-- No telemetry or analytics. The app does not make outbound requests.
-- All data stays on the machine that runs the container (listen tables, Docker API, Compose files, `/data` JSON).
+- No telemetry or analytics.
+- The app does not phone home. The only optional outbound HTTP is occupancy pulls to Port-Light URLs you add (LAN / Tailscale).
+- All scan data stays on the machine that runs that instance (listen tables, Docker API, Compose files, `/data` JSON).
 - Sibling `.env` files next to Compose stacks are read locally for `${VAR}` substitution and are never uploaded.
 
 ## Tech stack

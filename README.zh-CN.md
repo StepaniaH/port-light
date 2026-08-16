@@ -17,6 +17,10 @@
 
 ![Port-Light 截图](https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/screenshot.png)
 
+局域网或 Tailscale 上的其他 Port-Light 实例：
+
+![两台占用图并排](https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/screenshot-multi-host.png)
+
 ## 它做什么
 
 把三条**本机**数据合成一张网格：
@@ -48,6 +52,7 @@
 - 常见 homelab 端口内置名称（SSH、Jellyfin、Postgres 等），可用本地文件覆盖
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
+- 一个界面可以拉取其他 Port-Light 实例的占用图（局域网 / Tailscale）。每台机器仍自己扫描。
 - 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；紧凑网格、界面语言（English / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
@@ -57,7 +62,7 @@
 
 - **局域网工具。** 未设置 `AUTH_USER` / `AUTH_PASSWORD` 时没有登录。请放在反向代理后面，或不要暴露到公网。见 [SECURITY.md](SECURITY.md)。
 - **从网格隐藏**只是显示过滤。只有配置了 `AUTH_*` 或 `HIDDEN_UNLOCK_PASSWORD` 时，API 才会真正不返回这些端口。
-- **多机尚未实现。** 每台机器各自跑一份 Port-Light。
+- **多机是只读汇总。** 每台机器仍各自跑 Port-Light。一个界面可以通过局域网或 Tailscale 拉取其他机器的占用图（设置 → 占用图）。不要把 2100 端口暴露到公网。由 Hub 自己去拉这些地址；Docker 桥接容器常常连不上 Tailscale 的 `100.x` — 改填局域网 IP，或让 Hub 使用 `network_mode: host`。
 - 挂了 `/host/proc` 时（镜像默认如此），监听端口可以从 inode 对上进程名。没挂则只能看到 Docker 的容器名。`ss -tlnp` 的进程名仍需要 host network 或裸机。
 - `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
 
@@ -70,7 +75,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.5.5
+    image: stepaniah/port-light:v0.6.0
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -115,6 +120,8 @@ docker compose up -d
 | `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 |
 | `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。只能用环境变量。 |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页保存的值覆盖 env。`env`：只认 Compose，设置页只读。 |
+| `PORT_LIGHT_HOST_NAME` | 主机名 | 并排显示其他占用图时，本机这一列的名称。 |
+| `PORT_LIGHT_PEERS` | 未设置 | `{name, url, username?, password?}` 的 JSON 数组。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。与设置页同一把锁。 |
 
 上表里除路径和密钥外，也可以在 Web UI 的 **Settings** 里改，写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
 
@@ -124,8 +131,9 @@ docker compose up -d
 
 ## 隐私
 
-- 无遥测、无统计。应用本身不会发外网请求。
-- 数据留在跑容器的那台机器上（监听表、Docker API、Compose 文件、`/data` 里的 JSON）。
+- 无遥测、无统计。
+- 应用不会主动访问外网。唯一可选的出站 HTTP 是你在设置里添加的其他 Port-Light 地址（局域网 / Tailscale）上的占用图。
+- 扫描数据留在跑那份实例的机器上（监听表、Docker API、Compose 文件、`/data` 里的 JSON）。
 - Compose 旁边的 `.env` 只用于本地 `${VAR}` 替换，不会上传。
 
 ## 技术栈

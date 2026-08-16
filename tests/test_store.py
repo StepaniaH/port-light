@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import errno
 import json
+import tempfile
+
+import pytest
 
 from backend import port_store
 
@@ -77,3 +81,18 @@ def test_hidden_port_rejects_out_of_range(tmp_path, monkeypatch):
     assert port_store.add_hidden_port(0) is False
     assert port_store.add_hidden_port(70000) is False
     assert port_store.get_hidden_ports() == []
+
+
+def test_save_permission_denied_is_store_write_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+
+    def boom(*_a, **_k):
+        raise OSError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr(tempfile, "mkstemp", boom)
+    with pytest.raises(port_store.StoreWriteError) as caught:
+        port_store.replace_peers([])
+    message = str(caught.value).lower()
+    assert "permission denied" in message
+    assert "writable" in message
+    assert ".tmp" not in message

@@ -11,11 +11,11 @@ import time
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import port_store, settings as app_settings
+from . import hosts, port_store, settings as app_settings
 from .auth import (
     auth_configured,
     basic_auth_middleware,
@@ -33,9 +33,14 @@ from .port_scanner import (
     scan_listening_ports,
 )
 
-VERSION = "0.5.5"
+VERSION = "0.6.0"
 
 app = FastAPI(title="Port-Light", version=VERSION)
+
+
+@app.exception_handler(port_store.StoreWriteError)
+def _store_write_error(_request: Request, exc: port_store.StoreWriteError) -> JSONResponse:
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 _OCC_TTL = 2.0
 _occ_lock = threading.Lock()
@@ -263,6 +268,94 @@ def put_settings(body: dict = Body(...)) -> dict:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/hosts")
+def get_hosts() -> dict:
+    try:
+        return hosts.catalog()
+    except hosts.HostsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/hosts")
+def put_hosts(body: dict = Body(...)) -> dict:
+    try:
+        peers = hosts.replace_peers(body.get("peers") if isinstance(body, dict) else None)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except hosts.HostsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"local": hosts.public_local(), "peers": peers, "readonly": False}
+
+
+@app.get("/api/hosts/{host_id}/health")
+def get_host_health(host_id: str) -> Response:
+    if host_id == hosts.LOCAL_ID:
+        return JSONResponse(health())
+    return _proxy_peer(host_id, "/api/health", {})
+
+
+@app.get("/api/hosts/{host_id}/ports")
+def get_host_ports(
+    host_id: str,
+    request: Request,
+    range_start: int | None = Query(default=None, ge=1, le=65535),
+    range_end: int | None = Query(default=None, ge=1, le=65535),
+    include_hidden: bool = Query(default=False),
+) -> Response:
+    if host_id == hosts.LOCAL_ID:
+        return get_ports(request, range_start, range_end, include_hidden)
+    query: dict[str, str] = {"include_hidden": "true" if include_hidden else "false"}
+    if range_start is not None:
+        query["range_start"] = str(range_start)
+    if range_end is not None:
+        query["range_end"] = str(range_end)
+    return _proxy_peer(host_id, "/api/ports", query, request.headers.get("if-none-match"))
+
+
+@app.get("/api/hosts/{host_id}/ports/{port}")
+def get_host_port(
+    host_id: str,
+    port: int,
+    request: Request,
+    include_hidden: bool = Query(default=False),
+) -> Response:
+    if port < 1 or port > 65535:
+        raise HTTPException(status_code=400, detail="port out of range")
+    if host_id == hosts.LOCAL_ID:
+        return JSONResponse(get_port(port, request, include_hidden))
+    query = {"include_hidden": "true" if include_hidden else "false"}
+    return _proxy_peer(host_id, f"/api/ports/{port}", query, not_found_ok=True)
+
+
+def _proxy_peer(
+    host_id: str,
+    path: str,
+    query: dict[str, str],
+    if_none_match: str | None = None,
+    *,
+    not_found_ok: bool = False,
+) -> Response:
+    try:
+        peer = hosts.get_peer(host_id)
+    except hosts.HostsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not peer:
+        raise HTTPException(status_code=404, detail="unknown host")
+    status, data, etag = hosts.fetch_peer_json(peer, path, query, if_none_match)
+    headers = {}
+    if etag:
+        headers["ETag"] = etag
+    if status == 304:
+        return Response(status_code=304, headers=headers)
+    if status == 200 and data is not None:
+        return JSONResponse(data, headers=headers)
+    if not_found_ok and status == 404:
+        raise HTTPException(status_code=404, detail="not found")
+    if status in (401, 403):
+        raise HTTPException(status_code=502, detail="peer authentication failed")
+    raise HTTPException(status_code=502, detail="peer unreachable")
 
 
 @app.get("/api/ports")

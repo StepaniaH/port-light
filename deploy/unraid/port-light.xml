@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>port-light</Name>
-  <Repository>stepaniah/port-light:v0.5.5</Repository>
+  <Repository>stepaniah/port-light:v0.6.0</Repository>
   <Registry>https://hub.docker.com/r/stepaniah/port-light/</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/StepaniaH/port-light/issues</Support>
   <Project>https://github.com/StepaniaH/port-light</Project>
-  <Overview>Port occupancy map for a Docker host. Merges listen tables, container mappings, and Compose declarations into a traffic-light grid. Not a container manager — no start/stop/logs.</Overview>
+  <Overview>Port occupancy map for a Docker host. Merges listen tables, container mappings, and Compose declarations into a traffic-light grid. Can pull occupancy JSON from other Port-Light instances. Not a container manager — no start/stop/logs.</Overview>
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:2100]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/StepaniaH/port-light/main/deploy/unraid/port-light.xml</TemplateURL>

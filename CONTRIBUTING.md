@@ -23,6 +23,8 @@ ruff check backend tests
 pytest
 ```
 
+`PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants something like `PORT_LIGHT_DATA_DIR=./data`. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
+
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 
 Settings that belong on both Compose and the UI live in `backend/settings.py`. Secrets and filesystem paths stay env-only.

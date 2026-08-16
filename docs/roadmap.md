@@ -2,6 +2,10 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.6.0
+
+- Read-only multi-host viewer: the hub pulls peer `GET /api/ports`; each host still scans itself
+
 ## Shipped in 0.5.5
 
 - Occupancy honesty: Compose include / override / extends / env_file, required interpolation, hidden unlock, 304 polls, last-publish LRU
@@ -38,7 +42,6 @@ Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and
 
 ## Later
 
-- Read-only multi-host agent (snapshot JSON, then UI)
 - Community Apps listing (Unraid) once a template repo exists
 - Working Podman rootless report from a real host
 

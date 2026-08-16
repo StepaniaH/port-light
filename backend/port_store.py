@@ -1,4 +1,4 @@
-"""Port store — persistent user data: manual ports, hidden ports, machines.
+"""Port store — persistent user data: manual ports, hidden ports, peers.
 
 All data is stored in a single JSON file under the data directory
 (typically a Docker volume). No personal info is baked into the code;
@@ -11,20 +11,28 @@ File format::
         {"port": 1234, "label": "My Service", "machine": "localhost"}
       ],
       "hidden_ports": [1234, 5678],
-      "machines": [
-        {"name": "localhost", "host": "127.0.0.1", "note": "This machine"},
-        {"name": "nas", "host": "192.168.x.x", "note": "Example: Synology NAS"}
+      "peers": [
+        {"id": "a1b2c3d4", "name": "NAS", "url": "http://10.0.0.2:2100",
+         "username": "", "password": ""}
       ]
     }
+
+The ``machines`` array may still exist in older files. It is not scanned.
 """
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import tempfile
 import threading
 from pathlib import Path
+
+
+class StoreWriteError(Exception):
+    """Raised when the data file cannot be written."""
+
 
 _LOCK = threading.Lock()
 _generation = 0
@@ -47,7 +55,7 @@ def _load() -> dict:
     """Load the full data structure from disk."""
     f = _data_file()
     if not f.exists():
-        return {"manual_ports": [], "hidden_ports": [], "machines": []}
+        return {"manual_ports": [], "hidden_ports": [], "machines": [], "peers": []}
     try:
         return json.loads(f.read_text())
     except json.JSONDecodeError:
@@ -56,30 +64,45 @@ def _load() -> dict:
             os.replace(f, corrupt)
         except OSError:
             pass
-        return {"manual_ports": [], "hidden_ports": [], "machines": []}
+        return {"manual_ports": [], "hidden_ports": [], "machines": [], "peers": []}
     except OSError:
-        return {"manual_ports": [], "hidden_ports": [], "machines": []}
+        return {"manual_ports": [], "hidden_ports": [], "machines": [], "peers": []}
 
 
 def _save(data: dict) -> None:
     d = _data_dir()
-    d.mkdir(parents=True, exist_ok=True)
     target = _data_file()
-    fd, tmp_name = tempfile.mkstemp(prefix=".port_light.", suffix=".tmp", dir=str(d))
+    tmp_name = None
     try:
+        d.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(prefix=".port_light.", suffix=".tmp", dir=str(d))
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp_name, target)
+        tmp_name = None
         global _generation
         _generation += 1
+    except OSError as exc:
+        if tmp_name:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+        if exc.errno in (errno.EACCES, errno.EPERM, errno.EROFS):
+            raise StoreWriteError(
+                f"cannot write {target} (permission denied). "
+                "The data directory must be writable by this process."
+            ) from exc
+        raise
     except Exception:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
+        if tmp_name:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
         raise
 
 
@@ -298,3 +321,40 @@ def remove_machine(name: str) -> bool:
             _save(data)
             return True
         return False
+
+
+def peers_stored() -> bool:
+    """True when the file has a ``peers`` key, including an empty list."""
+    return "peers" in _load()
+
+
+def get_peers() -> list[dict]:
+    data = _load()
+    raw = data.get("peers")
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        host_id = str(item.get("id") or "").strip()
+        name = str(item.get("name") or "").strip()
+        url = str(item.get("url") or "").strip()
+        if not host_id or not name or not url:
+            continue
+        out.append({
+            "id": host_id,
+            "name": name,
+            "url": url,
+            "username": str(item.get("username") or ""),
+            "password": str(item.get("password") or ""),
+        })
+    return out
+
+
+def replace_peers(peers: list[dict]) -> list[dict]:
+    with _LOCK:
+        data = _load()
+        data["peers"] = list(peers)
+        _save(data)
+        return list(peers)

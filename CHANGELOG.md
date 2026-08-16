@@ -4,6 +4,22 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.6.0 — 2026-08-16
+
+### Added
+
+- One UI can show occupancy maps from other Port-Light instances (LAN / Tailscale). Each machine still scans itself; this instance only pulls `GET /api/ports` and `/api/health`. Desktop uses side-by-side columns; under 900px a host switcher shows one map. Search, sort, range, and kind chips apply to every map. Hide, labels, and add stay on this machine. Configure peers on Settings → Occupancy, or `PORT_LIGHT_PEERS` when settings are env-locked. Older releases that already serve `/api/ports` work as peers. A Docker bridge hub often cannot reach Tailscale `100.x` — use a LAN IP, or `network_mode: host` on the hub.
+- A failed host column can be retried without waiting for the next occupancy poll.
+
+### Changed
+
+- `GET /api/hosts` returns the saved peer username so Settings can refill the field. The password is still never echoed.
+
+### Fixed
+
+- Leaving Settings with unsaved changes prompts on the logo click (and Esc) before the hash changes, so a suppressed `confirm` during `hashchange` cannot trap you on the page.
+- An unwritable data directory returns 500 with `permission denied` instead of a tempfile errno.
+
 ## 0.5.5 — 2026-08-16
 
 ### Changed

@@ -4,7 +4,7 @@ Published image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/por
 
 | Tag | Meaning |
 |-----|---------|
-| `v0.5.5` (and other `v*`) | Release built from that git tag |
+| `v0.6.0` (and other `v*`) | Release built from that git tag |
 | `latest` | Same as the newest `v*` tag at build time |
 | `dev` | Manual `workflow_dispatch` builds |
 
@@ -15,7 +15,7 @@ Pin a `v*` tag on hosts you care about.
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.5.5
+    image: stepaniah/port-light:v0.6.0
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -50,7 +50,7 @@ docker run -d \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  stepaniah/port-light:v0.5.5
+  stepaniah/port-light:v0.6.0
 ```
 
 ## Build from this repo
@@ -88,7 +88,7 @@ services:
       - internal
 
   port-light:
-    image: stepaniah/port-light:v0.5.5
+    image: stepaniah/port-light:v0.6.0
     restart: unless-stopped
     ports:
       - "2100:2100"
@@ -155,7 +155,7 @@ podman run -d --name port-light --restart unless-stopped \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  docker.io/stepaniah/port-light:v0.5.5
+  docker.io/stepaniah/port-light:v0.6.0
 ```
 
 Rootless socket is typically `$XDG_RUNTIME_DIR/podman/podman.sock`. SELinux hosts often need `:z` (or `:Z`) on the volume flags.
@@ -185,6 +185,10 @@ environment:
   LOCALE: en
   URL_HOST: nas.lan
 ```
+
+Other machines: add them on Settings → Occupancy, or set `PORT_LIGHT_PEERS` (JSON) when the source is `env`. Each peer still runs its own Port-Light; this instance only pulls occupancy JSON. Keep those URLs on LAN or Tailscale.
+
+This instance fetches those URLs; the browser does not. From the default Docker bridge, Tailscale `100.x` (or MagicDNS) is often unreachable because the container does not have the host's Tailscale interface. Use a LAN IP, or run the hub with `network_mode: host`. Peers can stay on bridge.
 
 Paths (`COMPOSE_SCAN_DIR`) and secrets (`AUTH_*`, `HIDDEN_UNLOCK_PASSWORD`) cannot be stored from the UI.
 

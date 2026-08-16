@@ -17,7 +17,8 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Docker socket | Often mounted into the container. Read-only is not the same as safe. |
 | `/host/proc` | Read-only view of host network tables (and other `/proc` data for PID 1). |
 | Compose mount | Read-only view of the bind you set, including sibling `.env` files. |
-| Data volume | Local JSON under `/data`. Never sent off-box. |
+| Data volume | Local JSON under `/data`. Occupancy scans never leave that host. Optional hub pulls to peer URLs you add are the only outbound HTTP. |
+| Peer URLs | `PUT /api/hosts` stores origins + optional Basic Auth. The hub fetches only `/api/ports` and `/api/health` on those origins (no redirects, no public IPv4). |
 
 Without auth, anyone who can reach port 2100 can read the port map (names, images, Compose paths) and change manual/hidden entries.
 
