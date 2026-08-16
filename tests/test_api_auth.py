@@ -132,6 +132,25 @@ def test_hidden_port_lookup_is_not_free(monkeypatch, tmp_path):
     assert shown.json()["is_hidden"] is True
 
 
+def test_hidden_free_lookup_with_include(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    monkeypatch.delenv("HIDDEN_UNLOCK_PASSWORD", raising=False)
+    port_store.add_hidden_port(42424)
+    client = TestClient(app)
+    omitted = client.get("/api/ports/42424")
+    assert omitted.status_code == 404
+    shown = client.get("/api/ports/42424", params={"include_hidden": True})
+    assert shown.status_code == 200
+    assert shown.json()["status"] == "free"
+    assert shown.json()["is_hidden"] is True
+    listed = client.get("/api/ports", params={"include_hidden": True})
+    assert 42424 in [p["port"] for p in listed.json()["ports"]]
+    occ = listed.json()["summary"]["hidden_occupancy"]
+    assert {"port": 42424, "status": "free"} in occ
+
+
 def test_occupancy_scan_snapshot_reused_until_store_write(monkeypatch, tmp_path):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("AUTH_USER", raising=False)

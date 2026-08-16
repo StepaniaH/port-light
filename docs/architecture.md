@@ -36,7 +36,7 @@ UDP bound sockets (`st=07` in proc, `UNCONN` in ss) are included. Duplicate list
 
 ## Docker
 
-`docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings`, then `NetworkSettings.Ports`. Empty / `0` HostPort on one address family reuses a sibling assignment on the same spec (typical dual-stack `-P`). Empty `HostIp` is dual-stack (`0.0.0.0` and `::`). Unassigned ephemeral publishes stay off the map until Docker fills `NetworkSettings.Ports`. After a host port has been assigned, a later stopped inspect with `HostPort: 0` keeps the last mapping in process memory (including when a static publish remains and only the ephemeral `HostPort` is zeroed) so amber occupancy does not vanish across a restart flicker.
+`docker.from_env()` talks to the mounted socket. Port mappings come from `HostConfig.PortBindings`, then `NetworkSettings.Ports`. Empty / `0` HostPort on one address family reuses a sibling assignment on the same spec (typical dual-stack `-P`). Empty `HostIp` is dual-stack (`0.0.0.0` and `::`). Unassigned ephemeral publishes stay off the map until Docker fills `NetworkSettings.Ports`. After a host port has been assigned, a later stopped inspect with `HostPort: 0` keeps the last mapping in process memory (LRU, 256 container ids; including when a static publish remains and only the ephemeral `HostPort` is zeroed) so amber occupancy does not vanish across a restart flicker.
 
 `network_mode: host` and `network_mode: ns:/proc/1/ns/net` (or any `ns:` path that is the same inode as host pid 1):
 
@@ -82,7 +82,7 @@ For each port in the union of listeners ∪ Docker mappings ∪ Compose ∪ manu
 
 `source_type` is a rough tag for filters (`docker` / `system` / `host` / `manual`). System vs host uses the known-port category, not the OS.
 
-Hidden ports are omitted from the payload unless `include_hidden=true` **and** the request may see them (open LAN, or Basic Auth / `X-Hidden-Unlock`). `GET /api/ports/{N}` returns 404 for a hidden port that was omitted — never a free stub. When hidden ports are not locked, `summary.hidden_ports` lists their numbers so numeric search can keep the hidden styling.
+Hidden ports are omitted from the payload unless `include_hidden=true` **and** the request may see them (open LAN, or Basic Auth / `X-Hidden-Unlock`). `GET /api/ports/{N}` returns 404 for a hidden port that was omitted — never a free stub. When hidden ports are included, a hide-only cell (no listen / Docker / Compose / manual) is `status: "free"` and `is_hidden: true`. When hidden ports are not locked, `summary.hidden_ports` lists their numbers and `summary.hidden_occupancy` lists `{port, status}` so numeric search can keep hidden styling without painting a used port as configured.
 
 Guessed access URLs: loopback binds use `127.0.0.1`; a LAN-only bind uses that address; `0.0.0.0` / `::` uses `URL_HOST` or `localhost`. `URL_HOST` always wins when set (except loopback). Link-local (`169.254/16`, `fe80::`) and the default Docker bridge (`172.17.0.0/16`) are `link`, not LAN, and are not used as guessed hosts.
 

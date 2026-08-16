@@ -365,16 +365,26 @@ def _merge_recalled(current: list[dict], recalled: list[dict]) -> list[dict]:
     return out
 
 
+def _lru_put(store: dict, key: str, value, max_size: int) -> None:
+    if key in store:
+        del store[key]
+    elif max_size > 0 and len(store) >= max_size:
+        oldest = next(iter(store), None)
+        if oldest is not None:
+            del store[oldest]
+    store[key] = value
+
+
 def _remember_publish(cid: str, ports: list[dict]) -> None:
     with _LOCK:
-        if len(_LAST_PUBLISH) >= _LAST_PUBLISH_MAX:
-            _LAST_PUBLISH.clear()
-        _LAST_PUBLISH[cid] = [dict(p) for p in ports]
+        _lru_put(_LAST_PUBLISH, cid, [dict(p) for p in ports], _LAST_PUBLISH_MAX)
 
 
 def _recall_publish(cid: str) -> list[dict]:
     with _LOCK:
         rows = _LAST_PUBLISH.get(cid)
+        if rows is not None:
+            _LAST_PUBLISH[cid] = _LAST_PUBLISH.pop(cid)
     return [dict(p) for p in rows] if rows else []
 
 
@@ -392,9 +402,7 @@ def _network_driver(client, net_id: str) -> str:
     except Exception:
         driver = ""
     with _LOCK:
-        if len(_NET_DRIVER) >= _NET_DRIVER_MAX:
-            _NET_DRIVER.clear()
-        _NET_DRIVER[net_id] = driver
+        _lru_put(_NET_DRIVER, net_id, driver, _NET_DRIVER_MAX)
     return driver
 
 

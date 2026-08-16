@@ -575,6 +575,8 @@ def test_hidden_ports_listed_when_unlocked():
         include_hidden=False, hidden_locked=False,
     )
     assert out["summary"]["hidden_ports"] == [22, 8096]
+    occ = {row["port"]: row["status"] for row in out["summary"]["hidden_occupancy"]}
+    assert occ == {22: "free", 8096: "used"}
     locked = _classify(
         [ListeningPort(port=8096, protocol="tcp", ip="0.0.0.0")],
         [], [], [], hidden_ports=[8096],
@@ -582,6 +584,7 @@ def test_hidden_ports_listed_when_unlocked():
         include_hidden=False, hidden_locked=True,
     )
     assert locked["summary"]["hidden_ports"] == []
+    assert locked["summary"]["hidden_occupancy"] == []
 
 
 def test_listen_ips_union_docker_bind_scope():
@@ -773,3 +776,26 @@ def test_meta_unauthenticated(monkeypatch):
     assert res.status_code == 200
     assert res.json()["version"] == VERSION
     assert res.json()["auth_required"] is False
+
+
+def test_hidden_free_port_emitted_when_included():
+    shown = _classify(
+        [], [], [], [], hidden_ports=[42424],
+        range_start=1, range_end=65535,
+        include_hidden=True, hidden_locked=False,
+    )
+    row = next(p for p in shown["ports"] if p["port"] == 42424)
+    assert row["status"] == "free"
+    assert row["is_hidden"] is True
+    assert row["bind_scope"] is None
+    omitted = _classify(
+        [ListeningPort(port=8096, protocol="tcp", ip="0.0.0.0")],
+        [], [], [], hidden_ports=[8096, 42424],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert 42424 not in {p["port"] for p in omitted["ports"]}
+    assert 8096 not in {p["port"] for p in omitted["ports"]}
+    occ = {row["port"]: row["status"] for row in omitted["summary"]["hidden_occupancy"]}
+    assert occ[42424] == "free"
+    assert occ[8096] == "used"

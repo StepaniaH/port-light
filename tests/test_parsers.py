@@ -17,6 +17,8 @@ from backend.docker_scanner import (
     _attach_host_netns_sockets,
     _macvlan_ports,
     _network_is_host_netns,
+    _recall_publish,
+    _remember_publish,
     _resolve_container_ref,
     _traefik_service_port,
     extract_label_urls,
@@ -1505,3 +1507,16 @@ def test_stopped_macvlan_uses_ipam_config(monkeypatch):
     }, [])
     ips = {row["host_ip"] for row in extra}
     assert ips == {"192.168.1.50", "fd12::10"}
+
+
+def test_last_publish_evicts_oldest(monkeypatch):
+    import backend.docker_scanner as ds
+    monkeypatch.setattr(ds, "_LAST_PUBLISH", {})
+    monkeypatch.setattr(ds, "_LAST_PUBLISH_MAX", 2)
+    _remember_publish("aaaa", [{"host_port": 1}])
+    _remember_publish("bbbb", [{"host_port": 2}])
+    _remember_publish("aaaa", [{"host_port": 11}])
+    _remember_publish("cccc", [{"host_port": 3}])
+    assert _recall_publish("bbbb") == []
+    assert _recall_publish("aaaa")[0]["host_port"] == 11
+    assert _recall_publish("cccc")[0]["host_port"] == 3

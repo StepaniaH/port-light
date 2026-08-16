@@ -301,20 +301,26 @@ def get_port(
         if 1 <= n <= 65535:
             hidden.add(n)
     if port in hidden:
-        raise HTTPException(status_code=404, detail="not found")
-    known = get_known_port(port)
-    return {
-        "port": port,
-        "status": "free",
-        "source_type": "unknown",
-        "protocol": "tcp",
-        "known_service": known,
-        "is_hidden": False,
-        "conflict": False,
-        "urls": [],
-        "containers": [],
-        "compose_configs": [],
-    }
+        if not show_hidden:
+            raise HTTPException(status_code=404, detail="not found")
+        manuals, hidden_list = snap["user_state"]
+        result = _classify(
+            snap["listening"],
+            snap["containers"],
+            snap["compose_scan"].ports,
+            manuals,
+            hidden_list,
+            1,
+            65535,
+            True,
+            hidden_locked=False,
+            options=_values(),
+        )
+        for row in result["ports"]:
+            if row["port"] == port:
+                return row
+        return _free_port_payload(port, hidden=True)
+    return _free_port_payload(port, hidden=False)
 
 
 @app.get("/api/known-ports/{port}")
@@ -384,6 +390,21 @@ def index() -> FileResponse:
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon() -> FileResponse:
     return FileResponse(_FRONTEND_DIR / "icon.png")
+
+
+def _free_port_payload(port: int, *, hidden: bool) -> dict:
+    return {
+        "port": port,
+        "status": "free",
+        "source_type": "unknown",
+        "protocol": "tcp",
+        "known_service": get_known_port(port),
+        "is_hidden": hidden,
+        "conflict": False,
+        "urls": [],
+        "containers": [],
+        "compose_configs": [],
+    }
 
 
 app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
@@ -541,12 +562,10 @@ def _classify(
         }
 
     all_ports = set(listening_map) | set(container_map) | set(compose_map) | set(manual_map)
+    hidden_status: dict[int, str] = {}
 
     port_list: list[dict] = []
-    for port in sorted(all_ports):
-        if port in hidden_ports and not include_hidden:
-            continue
-
+    for port in sorted(all_ports | hidden):
         lp_info = listening_map.get(port)
         ctors = container_map.get(port, [])
         composes = compose_map.get(port, [])
@@ -558,6 +577,7 @@ def _classify(
             for c in ctors
         )
         is_manual = manual is not None
+        has_occ = bool(lp_info or ctors or composes or is_manual)
 
         if is_listening or has_live:
             status = "used"
@@ -565,6 +585,11 @@ def _classify(
             status = "configured"
         else:
             status = "free"
+
+        if port in hidden:
+            hidden_status[port] = status
+            if not include_hidden:
+                continue
 
         if ctors:
             source_type = "docker"
@@ -593,9 +618,9 @@ def _classify(
             if hip and hip not in ips:
                 ips.append(hip)
         if not ips:
-            ips = [lp_info["ip"] if lp_info else "0.0.0.0"]
-        ip = (lp_info["ip"] if lp_info else None) or ips[0]
-        urls = _collect_urls(port, ips, ctors, known, options)
+            ips = [lp_info["ip"] if lp_info else "0.0.0.0"] if has_occ else []
+        ip = (lp_info["ip"] if lp_info else None) or (ips[0] if ips else None)
+        urls = _collect_urls(port, ips, ctors, known, options) if has_occ else []
         for c in ctors:
             c.pop("vhost_host_ports", None)
             c.pop("label_host_ports", None)
@@ -614,7 +639,7 @@ def _classify(
             "protocol": _proto_label(proto_bits) if proto_bits else "tcp",
             "ip": ip,
             "ips": ips,
-            "bind_scope": _bind_scope_many(ips),
+            "bind_scope": _bind_scope_many(ips) if ips else None,
             "process": lp_info["process"] if lp_info else None,
             "pid": lp_info["pid"] if lp_info else None,
             "containers": ctors,
@@ -651,6 +676,10 @@ def _classify(
             "hidden": hidden_in_range,
             "hidden_locked": hidden_locked,
             "hidden_ports": sorted(hidden_ports) if not hidden_locked else [],
+            "hidden_occupancy": (
+                [{"port": n, "status": hidden_status[n]} for n in sorted(hidden_status)]
+                if not hidden_locked else []
+            ),
             "range_start": range_start,
             "range_end": range_end,
             "compose_truncated": False,

@@ -45,6 +45,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `services: !override` / `!reset` replaces the mapping (or that service); overlay / extends copies `deploy.ports` the same way as `ports`.
 - Unquoted Compose `.env` values drop inline comments (`8080 # public`); interpolation understands `:+` / `+` and nested `${}`.
 - A mobile detail overlay marks the skip link, header, and views `inert`, traps Tab even before focus is inside the panel, and drops both after a resize to desktop.
+- Hiding a free port still occupies the map when included: `include_hidden` emits `status: "free"`; `GET /api/ports/{N}` no longer 404s that cell; numeric search uses `hidden_occupancy` instead of painting every hidden stub configured.
+- Locked numeric search no longer paints an unknown hit as configured; opening a 404 only claims a locked hide when hidden ports are actually withheld.
+- Stopped Docker last-publish recalls evict the oldest mapping, not the whole cache.
 
 ### Performance
 

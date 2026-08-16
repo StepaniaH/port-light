@@ -1373,7 +1373,7 @@
   function pendingStub(port) {
     return {
       port: port,
-      status: 'configured',
+      status: 'free',
       source_type: 'unknown',
       known_service: knownCache[port] || null,
       containers: [],
@@ -1399,7 +1399,12 @@
     api('/api/ports/' + port + '?include_hidden=true').then(function (res) {
       if (gen !== portDetailGen || selectedPort !== port) return null;
       if (res.status === 404) {
-        renderDetail(Object.assign(freeStub(port), { _missing: true, _locked: true }));
+        const locked = !!(currentData && currentData.summary && currentData.summary.hidden_locked);
+        renderDetail(Object.assign(freeStub(port), {
+          _missing: true,
+          _locked: locked,
+          is_hidden: locked,
+        }));
         return null;
       }
       if (!res.ok) {
@@ -1476,6 +1481,18 @@
     return '';
   }
 
+  function hiddenOccupancy(port) {
+    const rows = (currentData && currentData.summary && currentData.summary.hidden_occupancy) || [];
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i] && rows[i].port === port) {
+        const status = rows[i].status;
+        if (status === 'used' || status === 'configured' || status === 'free') return status;
+        return 'free';
+      }
+    }
+    return 'free';
+  }
+
   function buildSearchContext(ports, hitPort) {
     const allPortNums = new Set(ports.map(function (p) { return p.port; }));
     const hitExists = allPortNums.has(hitPort);
@@ -1485,20 +1502,21 @@
 
     function synthetic(port, hidden) {
       prefetchKnown(port);
-      return hidden
-        ? { port: port, status: 'configured', is_hidden: true, _synthetic: true, known_service: getKnownForFree(port) }
-        : { port: port, status: 'free', _synthetic: true, known_service: getKnownForFree(port) };
+      if (!hidden) {
+        return { port: port, status: 'free', _synthetic: true, known_service: getKnownForFree(port) };
+      }
+      return {
+        port: port,
+        status: hiddenOccupancy(port),
+        is_hidden: true,
+        _synthetic: true,
+        known_service: getKnownForFree(port),
+      };
     }
 
     if (!hitExists) {
       if (hiddenNums.has(hitPort)) {
         result.push(synthetic(hitPort, true));
-      } else if (locked) {
-        prefetchKnown(hitPort);
-        result.push({
-          port: hitPort, status: 'configured', is_hidden: true,
-          _synthetic: true, _locked: true, known_service: getKnownForFree(hitPort),
-        });
       } else {
         result.push(synthetic(hitPort, false));
       }
