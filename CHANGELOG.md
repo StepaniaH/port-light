@@ -39,6 +39,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - The Hidden chip is restored with `include_hidden`; unlock failures stay in the modal instead of sticking a password in session storage; unlock does not race the occupancy poll.
 - Desktop detail no longer traps Tab; Close is auto-focused only when the drawer opens; numeric search neighbors are capped; settings segmented controls and the port-copy control have accessible names.
 - Turning the Hidden eye on persists `showHidden`; a manual-port label draft restores only for the same port; the last-refresh time and sync-error banner remeasure the sticky header.
+- Hidden unlock aborts the in-flight occupancy poll so a locked response cannot clobber the unlocked map; focus returns to the Hidden chip or count that opened the modal.
+- Copy-on-click toasts the cell (or detail port) still on screen; the grid is `aria-busy` on every poll; re-picking the current language is not unsaved; the unlock password field is required.
 
 ### Performance
 

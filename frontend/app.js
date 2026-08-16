@@ -79,6 +79,7 @@
   let hiddenUnlock = sessionStorage.getItem('port-light-hidden-unlock') || '';
   let route = { name: 'grid' };
   let pendingAfterUnlock = null;
+  let pendingUnlockFocus = 'eye';
   let focusBack = null;
   let pendingGridFocus = null;
   let occupancyKey = '';
@@ -308,7 +309,7 @@
     } else if (btn.dataset.kind === 'hidden') {
       if (kindFilters.has('hidden')) kindFilters.delete('hidden');
       else {
-        const vis = ensureHiddenVisible();
+        const vis = ensureHiddenVisible('stat');
         if (vis === 'blocked') return;
         kindFilters.add('hidden');
         syncFilterUI();
@@ -329,7 +330,7 @@
     if (kindFilters.has(f)) kindFilters.delete(f);
     else {
       if (f === 'hidden') {
-        const vis = ensureHiddenVisible();
+        const vis = ensureHiddenVisible('chip');
         if (vis === 'blocked') return;
         kindFilters.add('hidden');
         syncFilterUI();
@@ -365,9 +366,10 @@
     if (moveChipFocus(this, e.key)) e.preventDefault();
   });
 
-  function ensureHiddenVisible() {
+  function ensureHiddenVisible(opener) {
     if (showHidden) return 'ready';
     if (meta.hidden_unlock_required && !hiddenUnlock) {
+      pendingUnlockFocus = opener || 'eye';
       pendingAfterUnlock = function () {
         kindFilters.add('hidden');
         syncFilterUI();
@@ -487,6 +489,7 @@
       return;
     }
     if (meta.hidden_unlock_required && !hiddenUnlock) {
+      pendingUnlockFocus = 'eye';
       openModal('unhide-modal');
       return;
     }
@@ -851,16 +854,16 @@
 
   async function fetchPorts(opts) {
     const isolated = !!(opts && opts.isolated);
-    if (!isolated && portsAbort) portsAbort.abort();
+    if (portsAbort) portsAbort.abort();
     const ac = new AbortController();
     if (!isolated) {
       portsAbort = ac;
-      grid.setAttribute('aria-busy', currentData ? 'false' : 'true');
+      grid.setAttribute('aria-busy', 'true');
     }
     try {
       const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
       const headers = {};
-      if (portsEtag && portsEtagUrl === url) headers['If-None-Match'] = portsEtag;
+      if (!isolated && portsEtag && portsEtagUrl === url) headers['If-None-Match'] = portsEtag;
       const res = await api(url, { signal: ac.signal, headers: headers });
       if (res.status === 304) return { ok: true, unchanged: true };
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -880,8 +883,10 @@
   function tick() {
     if (route.name === 'settings') return;
     if (modalOpen()) return;
+    const wantHidden = showHidden;
     loadPorts().then(function (data) {
       if (!data || route.name === 'settings') return;
+      if (showHidden !== wantHidden) return;
       if (data === currentData && occupancyKey) return;
       currentData = data;
       const key = JSON.stringify({ ports: data.ports, summary: data.summary });
@@ -1145,6 +1150,10 @@
     const drop = row.closest('.locale-dropdown');
     const input = drop.querySelector('input[name="locale"]');
     const value = row.getAttribute('data-value');
+    if (input.value === value) {
+      closeLocaleMenu({ focusTrigger: true });
+      return;
+    }
     input.value = value;
     drop.querySelectorAll('.locale-row').forEach(function (r) {
       const on = r === row;
@@ -1654,7 +1663,9 @@
         }
         if (settings.copy_on_click) {
           navigator.clipboard.writeText(String(port)).then(function () {
-            showCopyToast(el);
+            const live = document.querySelector('.detail-copy-port[data-copy-port="' + port + '"]')
+              || grid.querySelector('.port-cell[data-port="' + port + '"]');
+            if (live) showCopyToast(live);
           }).catch(function () {});
         }
       });
@@ -1669,6 +1680,8 @@
     cell.querySelectorAll('.copy-toast').forEach(function (tEl) { tEl.remove(); });
     const toast = document.createElement('div');
     toast.className = 'copy-toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
     toast.textContent = t('grid.copied');
     cell.appendChild(toast);
     requestAnimationFrame(function () { toast.classList.add('show'); });
@@ -2019,7 +2032,12 @@
     saveView();
     if (followup) followup();
     else render();
-    unhideBtn.focus({ preventScroll: true });
+    const focusKey = pendingUnlockFocus;
+    pendingUnlockFocus = 'eye';
+    let focusEl = unhideBtn;
+    if (focusKey === 'chip') focusEl = document.querySelector('#filters [data-filter="hidden"]');
+    else if (focusKey === 'stat') focusEl = document.querySelector('#summary button.stat[data-kind="hidden"]');
+    if (focusEl) focusEl.focus({ preventScroll: true });
   }
 
   function escapeHtml(text) {

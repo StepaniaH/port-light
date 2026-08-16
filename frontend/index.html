@@ -15,7 +15,7 @@
       if (s.grid_density) document.documentElement.setAttribute('data-density', s.grid_density);
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=47">
+  <link rel="stylesheet" href="/static/style.css?v=48">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -138,7 +138,7 @@
         <h2 id="unhide-title" data-i18n="modal.unhideTitle">Show hidden ports</h2>
         <p class="modal-hint" data-i18n="modal.unhideHint">Enter the unlock password if the host requires one. Otherwise the eye button just includes hidden ports in the grid.</p>
         <label><span data-i18n="modal.unlockPassword">Unlock password</span>
-          <input type="password" id="unhide-password" autocomplete="current-password">
+          <input type="password" id="unhide-password" autocomplete="current-password" required>
         </label>
         <p id="unhide-error" class="modal-hint is-error hidden" hidden role="alert"></p>
         <div class="modal-actions">
@@ -149,7 +149,7 @@
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=47"></script>
-  <script src="/static/app.js?v=47"></script>
+  <script src="/static/i18n.js?v=48"></script>
+  <script src="/static/app.js?v=48"></script>
 </body>
 </html>
