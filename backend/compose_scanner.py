@@ -18,7 +18,6 @@ _SKIP_DIRS = frozenset({
 })
 _MAX_RANGE = 128
 
-_VAR_RE = re.compile(r"\$\$|\$\{([^}]+)\}|\$(\w+)")
 _COMPOSE_PREFIXES = ("compose.", "docker-compose.")
 _COMPOSE_SUFFIXES = (".yml", ".yaml")
 
@@ -128,9 +127,10 @@ def _macvlan_names_tree(
     names = _macvlan_network_names(data)
     parent = Path(filepath).parent
     nested = chain | {real}
-    for group, inc_env, inc_base in _include_specs(data.get("include"), parent):
+    spec_root = env_base if env_base is not None else parent
+    for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root):
         nested_env = {**(extra_env or {}), **inc_env}
-        nested_base = inc_base or env_base
+        nested_base = inc_base if inc_base is not None else env_base
         for inc_path in group:
             names |= _macvlan_names_tree(
                 str(inc_path), nested_env, nested, nested_base,
@@ -144,9 +144,10 @@ def _extends_macvlan_names(
     env_vars: dict[str, str],
     local_services: dict,
     chain: frozenset[tuple[str, str]],
+    work_dir: Path | None = None,
 ) -> set[str]:
     names: set[str] = set()
-    ref = _extends_ref(svc_cfg.get("extends"), filepath)
+    ref = _extends_ref(svc_cfg.get("extends"), filepath, work_dir)
     if ref is None or ref in chain:
         return names
     ref_file, ref_svc = ref
@@ -154,15 +155,17 @@ def _extends_macvlan_names(
         other_path = filepath
         other_local = local_services
         other = other_local.get(ref_svc) if isinstance(other_local, dict) else None
+        nested_dir = work_dir
     else:
         other_path = ref_file
         merged_env = {**_load_env_file(Path(ref_file).parent), **env_vars}
         names |= _macvlan_names_tree(ref_file, merged_env, frozenset())
         other_local = _services_from_file(ref_file, merged_env)
         other = other_local.get(ref_svc)
+        nested_dir = Path(ref_file).parent
     if isinstance(other, dict):
         names |= _extends_macvlan_names(
-            other, other_path, env_vars, other_local, chain | {ref},
+            other, other_path, env_vars, other_local, chain | {ref}, nested_dir,
         )
     return names
 
@@ -267,6 +270,18 @@ def _service_macvlan_ips(svc_cfg: dict, macvlan_names: set[str]) -> list[str]:
 
 def _unwrap_compose(val):
     return val.value if isinstance(val, _ComposeTag) else val
+
+
+def _service_map(raw) -> dict:
+    data = _unwrap_compose(raw)
+    if not isinstance(data, dict):
+        return {}
+    out: dict = {}
+    for name, cfg in data.items():
+        body = _unwrap_compose(cfg)
+        if isinstance(body, dict):
+            out[name] = body
+    return out
 
 
 def _port_entries(ports_cfg) -> list:
@@ -455,7 +470,8 @@ def _included_reals(
     data, env_vars, parent = loaded
     out: set[str] = set()
     nested_chain = chain | {real}
-    for group, inc_env, inc_base in _include_specs(data.get("include"), parent):
+    spec_root = env_base if env_base is not None else parent
+    for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root):
         nested_env = {**env_vars, **inc_env}
         nested_base = inc_base if inc_base is not None else env_base
         for inc_path in group:
@@ -552,7 +568,8 @@ def _parse_compose_data(
         fallback_name = parent.name
     this_name = _project_display_name(data.get("name"), project_name or fallback_name)
 
-    specs = _include_specs(data.get("include"), parent)
+    spec_root = env_base if env_base is not None else parent
+    specs = _include_specs(data.get("include"), spec_root)
     macvlan_names = set(extra_macvlan or ()) | _macvlan_network_names(data)
     for group, inc_env, inc_base in specs:
         nested_env = {**env_vars, **inc_env}
@@ -569,20 +586,16 @@ def _parse_compose_data(
             this_dir, this_name, nested_base, macvlan_names,
         ))
 
-    local_services = data.get("services")
-    if not isinstance(local_services, dict):
-        return ports
-
+    local_services = _service_map(data.get("services"))
     rel_path = os.path.relpath(filepath, scan_dir)
+    work_dir = spec_root
 
     for svc_name, svc_cfg in local_services.items():
-        if not isinstance(svc_cfg, dict):
-            continue
         lan_names = macvlan_names | _extends_macvlan_names(
-            svc_cfg, filepath, env_vars, local_services, frozenset(),
+            svc_cfg, filepath, env_vars, local_services, frozenset(), work_dir,
         )
         svc_cfg = _resolve_extends(
-            svc_cfg, filepath, env_vars, frozenset(), local_services,
+            svc_cfg, filepath, env_vars, frozenset(), local_services, work_dir,
         )
         net = str(_unwrap_compose(svc_cfg.get("network_mode")) or "").strip().lower() or None
         if _is_shared_netns(net):
@@ -762,11 +775,19 @@ def _read_env_file(path: Path) -> dict[str, str]:
         key = key.strip()
         if not key:
             continue
-        env[key] = val.strip().strip("\"'")
+        val = val.strip()
+        if len(val) >= 2 and val[0] in "\"'" and val[-1] == val[0]:
+            val = val[1:-1]
+        else:
+            for i, ch in enumerate(val):
+                if ch == "#" and (i == 0 or val[i - 1].isspace()):
+                    val = val[:i].rstrip()
+                    break
+        env[key] = val
     return env
 
 
-def _extends_ref(ext, filepath: str) -> tuple[str, str] | None:
+def _extends_ref(ext, filepath: str, work_dir: Path | None = None) -> tuple[str, str] | None:
     if isinstance(ext, str) and ext.strip():
         return os.path.realpath(filepath), ext.strip()
     if not isinstance(ext, dict):
@@ -780,7 +801,8 @@ def _extends_ref(ext, filepath: str) -> tuple[str, str] | None:
         return os.path.realpath(filepath), svc
     if not isinstance(f, str):
         return None
-    resolved = (Path(filepath).parent / f).resolve()
+    base = work_dir if work_dir is not None else Path(filepath).parent
+    resolved = (base / f).resolve()
     if not resolved.is_file():
         return None
     return str(resolved), svc
@@ -798,7 +820,7 @@ def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
     if not isinstance(data, dict):
         return {}
     svcs = data.get("services")
-    return svcs if isinstance(svcs, dict) else {}
+    return _service_map(svcs)
 
 
 def _overlay_port_fields(base: dict, child: dict) -> dict:
@@ -845,6 +867,27 @@ def _overlay_port_fields(base: dict, child: dict) -> dict:
             out["networks"] = merged_nets
         else:
             out["networks"] = child_nets
+    child_deploy_raw = child.get("deploy")
+    if child_deploy_raw is not None:
+        base_deploy = _unwrap_compose(out.get("deploy"))
+        if not isinstance(base_deploy, dict):
+            base_deploy = {}
+        if isinstance(child_deploy_raw, _ComposeTag) and child_deploy_raw.name in ("reset", "override"):
+            body = _unwrap_compose(child_deploy_raw.value)
+            out["deploy"] = body if isinstance(body, dict) else {}
+        else:
+            child_deploy = _unwrap_compose(child_deploy_raw)
+            if not isinstance(child_deploy, dict):
+                out["deploy"] = child_deploy
+            else:
+                merged_deploy = dict(base_deploy)
+                merged_deploy.update({k: v for k, v in child_deploy.items() if k != "ports"})
+                if "ports" in child_deploy:
+                    merged_deploy["ports"] = _overlay_port_fields(
+                        {"ports": base_deploy.get("ports")},
+                        {"ports": child_deploy.get("ports")},
+                    ).get("ports")
+                out["deploy"] = merged_deploy
     return out
 
 
@@ -874,16 +917,24 @@ def _overlay_compose_docs(base: dict, child: dict) -> dict:
         out["networks"] = _overlay_port_fields(
             {"networks": out.get("networks")}, {"networks": child_nets},
         ).get("networks")
-    base_svcs = _unwrap_compose(out.get("services"))
-    child_svcs = _unwrap_compose(child.get("services"))
-    if isinstance(child_svcs, dict):
-        merged = dict(base_svcs) if isinstance(base_svcs, dict) else {}
+    base_svcs = _service_map(out.get("services"))
+    child_svcs_raw = child.get("services")
+    if isinstance(child_svcs_raw, _ComposeTag) and child_svcs_raw.name in ("reset", "override"):
+        out["services"] = _service_map(child_svcs_raw.value)
+    elif isinstance(child_svcs_raw, dict) or isinstance(_unwrap_compose(child_svcs_raw), dict):
+        child_svcs = child_svcs_raw if isinstance(child_svcs_raw, dict) else _unwrap_compose(child_svcs_raw)
+        merged = dict(base_svcs)
         for name, cfg in child_svcs.items():
+            tagged = isinstance(cfg, _ComposeTag) and cfg.name in ("reset", "override")
+            body = _unwrap_compose(cfg)
+            if tagged:
+                merged[name] = body if isinstance(body, dict) else {}
+                continue
             prev = merged.get(name)
-            if isinstance(prev, dict) and isinstance(cfg, dict):
-                merged[name] = _overlay_port_fields(prev, cfg)
-            else:
-                merged[name] = cfg
+            if isinstance(prev, dict) and isinstance(body, dict):
+                merged[name] = _overlay_port_fields(prev, body)
+            elif isinstance(body, dict):
+                merged[name] = body
         out["services"] = merged
     return out
 
@@ -907,8 +958,9 @@ def _resolve_extends(
     env_vars: dict[str, str],
     chain: frozenset[tuple[str, str]],
     local_services: dict,
+    work_dir: Path | None = None,
 ) -> dict:
-    ref = _extends_ref(svc_cfg.get("extends"), filepath)
+    ref = _extends_ref(svc_cfg.get("extends"), filepath, work_dir)
     if ref is None:
         return svc_cfg
     if ref in chain:
@@ -918,15 +970,17 @@ def _resolve_extends(
         other_local = local_services
         other_path = filepath
         other = other_local.get(ref_svc) if isinstance(other_local, dict) else None
+        nested_dir = work_dir
     else:
         other_path = ref_file
         merged_env = {**_load_env_file(Path(ref_file).parent), **env_vars}
         other_local = _services_from_file(ref_file, merged_env)
         other = other_local.get(ref_svc)
+        nested_dir = Path(ref_file).parent
     if not isinstance(other, dict):
         return svc_cfg
     base = _resolve_extends(
-        other, other_path, env_vars, chain | {ref}, other_local,
+        other, other_path, env_vars, chain | {ref}, other_local, nested_dir,
     )
     return _overlay_port_fields(base, svc_cfg)
 
@@ -938,33 +992,90 @@ def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
     in lets ``HOSTNAME`` / ``PORT_RANGE_*`` rewrite other stacks' port lines.
     """
 
-    def _replacer(m: re.Match) -> str:
-        if m.group(0) == "$$":
-            return "$"
-        name = m.group(1) or m.group(2)
+    def _braced(s: str, start: int) -> tuple[str, int] | None:
+        depth = 1
+        j = start
+        while j < len(s):
+            if s[j] == "{":
+                depth += 1
+            elif s[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    return s[start:j], j + 1
+            j += 1
+        return None
+
+    def _expand_name(name: str) -> str:
         if ":?" in name:
             var, _, _err = name.partition(":?")
             val = env_vars.get(var)
             if val is None or val == "":
                 return ""
             return val
+        if ":+" in name:
+            var, _, alt = name.partition(":+")
+            val = env_vars.get(var)
+            if val is None or val == "":
+                return ""
+            return substitute_vars(alt, env_vars)
+        if ":-" in name:
+            var, _, default = name.partition(":-")
+            val = env_vars.get(var)
+            if val is None or val == "":
+                return substitute_vars(default, env_vars)
+            return val
         if "?" in name:
             var, _, _err = name.partition("?")
             if var not in env_vars:
                 return ""
             return env_vars[var]
-        if ":-" in name:
-            var, _, default = name.partition(":-")
-            val = env_vars.get(var)
-            if val is None or val == "":
-                return default
-            return val
+        if "+" in name:
+            var, _, alt = name.partition("+")
+            if var not in env_vars:
+                return ""
+            return substitute_vars(alt, env_vars)
         if "-" in name:
             var, _, default = name.partition("-")
-            return env_vars[var] if var in env_vars else default
-        return env_vars.get(name, m.group(0))
+            if var in env_vars:
+                return env_vars[var]
+            return substitute_vars(default, env_vars)
+        if name in env_vars:
+            return env_vars[name]
+        return "${" + name + "}"
 
-    return _VAR_RE.sub(_replacer, text)
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch != "$" or i + 1 >= n:
+            out.append(ch)
+            i += 1
+            continue
+        nxt = text[i + 1]
+        if nxt == "$":
+            out.append("$")
+            i += 2
+            continue
+        if nxt == "{":
+            parsed = _braced(text, i + 2)
+            if parsed is None:
+                out.append(ch)
+                i += 1
+                continue
+            inner, end = parsed
+            out.append(_expand_name(inner))
+            i = end
+            continue
+        m = re.match(r"\w+", text[i + 1:])
+        if m:
+            name = m.group(0)
+            out.append(env_vars[name] if name in env_vars else "$" + name)
+            i += 1 + len(name)
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def parse_port_entry(entry) -> list[dict]:

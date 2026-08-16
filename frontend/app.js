@@ -224,7 +224,13 @@
       if ((settings.theme || 'system') === 'system') applyTheme();
     });
   } catch (e) {}
-  window.addEventListener('resize', syncHeaderHeight);
+  window.addEventListener('resize', function () {
+    syncHeaderHeight();
+    syncDetailModal();
+  });
+  try {
+    window.matchMedia('(max-width: 900px)').addEventListener('change', syncDetailModal);
+  } catch (e) {}
 
   function parseRoute() {
     const raw = (location.hash || '#/').replace(/^#\/?/, '');
@@ -538,7 +544,6 @@
       return;
     }
     if (e.key === 'Tab' && !detailPanel.classList.contains('hidden') &&
-        detailPanel.contains(document.activeElement) &&
         window.matchMedia('(max-width: 900px)').matches) {
       trapTab(e, detailPanel);
       return;
@@ -823,6 +828,11 @@
     if (!list.length) return;
     const first = list[0];
     const last = list[list.length - 1];
+    if (!root.contains(document.activeElement)) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+      return;
+    }
     if (e.shiftKey && document.activeElement === first) {
       e.preventDefault();
       last.focus();
@@ -1297,19 +1307,34 @@
     settingsDirty = false;
   }
 
-  function setDetailOpen(open) {
-    appEl.classList.toggle('detail-open', open);
-    document.documentElement.classList.toggle('detail-open', open);
-    detailPanel.classList.toggle('hidden', !open);
-    detailBackdrop.classList.toggle('hidden', !open);
+  function syncDetailModal() {
+    const open = !detailPanel.classList.contains('hidden');
+    const overlay = open && window.matchMedia('(max-width: 900px)').matches;
     if (open) {
       detailPanel.setAttribute('role', 'dialog');
-      const overlay = window.matchMedia('(max-width: 900px)').matches;
       detailPanel.setAttribute('aria-modal', overlay ? 'true' : 'false');
     } else {
       detailPanel.removeAttribute('role');
       detailPanel.setAttribute('aria-modal', 'false');
     }
+    [
+      document.querySelector('.skip-link'),
+      document.getElementById('app-header'),
+      document.getElementById('view-grid'),
+      document.getElementById('view-settings'),
+    ].forEach(function (el) {
+      if (!el) return;
+      if (overlay) el.setAttribute('inert', '');
+      else el.removeAttribute('inert');
+    });
+  }
+
+  function setDetailOpen(open) {
+    appEl.classList.toggle('detail-open', open);
+    document.documentElement.classList.toggle('detail-open', open);
+    detailPanel.classList.toggle('hidden', !open);
+    detailBackdrop.classList.toggle('hidden', !open);
+    syncDetailModal();
   }
 
   function render() {

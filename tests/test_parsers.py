@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from backend.compose_scanner import (
+    _read_env_file,
     expand_port_range,
     parse_expose_entry,
     parse_port_entry,
@@ -1063,6 +1064,140 @@ def test_include_project_directory_and_nested_env(tmp_path):
         encoding="utf-8",
     )
     assert {p.port for p in scan_compose_files(str(app))} == {2222}
+
+
+def test_project_directory_reroots_nested_include_and_extends(tmp_path):
+    project = tmp_path / "project"
+    lib = tmp_path / "lib"
+    app = tmp_path / "app"
+    for d in (project, lib, app):
+        d.mkdir()
+    (lib / "ports.yml").write_text(
+        "services:\n  decoy:\n    ports:\n      - '9991:80'\n",
+        encoding="utf-8",
+    )
+    (lib / "base.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '9992:80'\n",
+        encoding="utf-8",
+    )
+    (project / "ports.yml").write_text(
+        "services:\n  nested:\n    ports:\n      - '8101:80'\n",
+        encoding="utf-8",
+    )
+    (project / "base.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '8102:80'\n",
+        encoding="utf-8",
+    )
+    (lib / "stack.yml").write_text(
+        "include:\n  - ports.yml\n"
+        "services:\n  ext:\n    extends:\n      file: base.yml\n      service: web\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - path: ../lib/stack.yml\n    project_directory: ../project\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(app))} == {8101, 8102}
+
+
+def test_services_override_and_reset_tags(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '8080:80'\n"
+        "  db:\n    ports:\n      - '5432:5432'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.override.yml").write_text(
+        "services: !override\n  web:\n    ports:\n      - '9090:80'\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(app))} == {9090}
+
+    one = tmp_path / "one"
+    one.mkdir()
+    (one / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '8080:80'\n      - '8081:81'\n",
+        encoding="utf-8",
+    )
+    (one / "compose.override.yml").write_text(
+        "services:\n  web: !override\n    ports:\n      - '9190:80'\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(one))} == {9190}
+
+    tagged = tmp_path / "tagged"
+    tagged.mkdir()
+    (tagged / "compose.yml").write_text(
+        "services: !override\n  web:\n    ports:\n      - '6060:80'\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(tagged))} == {6060}
+
+
+def test_deploy_ports_overlay_and_extends(tmp_path):
+    app = tmp_path / "swarm"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "services:\n  web:\n    deploy:\n      ports:\n        - published: 4001\n          target: 80\n",
+        encoding="utf-8",
+    )
+    (app / "compose.override.yml").write_text(
+        "services:\n  web:\n    deploy:\n      ports: !reset\n        - published: 5001\n          target: 80\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(app))} == {5001}
+
+    child = tmp_path / "child"
+    child.mkdir()
+    (child / "compose.yml").write_text(
+        "services:\n  web:\n    image: nginx\n",
+        encoding="utf-8",
+    )
+    (child / "compose.override.yml").write_text(
+        "services:\n  web:\n    deploy:\n      ports:\n        - published: 6001\n          target: 80\n",
+        encoding="utf-8",
+    )
+    assert 6001 in {p.port for p in scan_compose_files(str(child))}
+
+    ext = tmp_path / "ext"
+    ext.mkdir()
+    (ext / "compose.yml").write_text(
+        "services:\n  base:\n    deploy:\n      ports:\n        - published: 7001\n          target: 80\n"
+        "  web:\n    extends: base\n    deploy:\n      ports: !override\n"
+        "        - published: 7002\n          target: 80\n",
+        encoding="utf-8",
+    )
+    ports = {p.port for p in scan_compose_files(str(ext)) if p.service_name == "web"}
+    assert ports == {7002}
+
+
+def test_env_comments_and_plus_interpolation(tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        'WEB_PORT=8080 # public\nPASS="a#b"\nHASH=\'c#d\'\n',
+        encoding="utf-8",
+    )
+    env = _read_env_file(env_path)
+    assert env["WEB_PORT"] == "8080"
+    assert env["PASS"] == "a#b"
+    assert env["HASH"] == "c#d"
+
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / ".env").write_text("WEB_PORT=8080 # public\n", encoding="utf-8")
+    (app / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '${WEB_PORT}:80'\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(app))} == {8080}
+
+    assert substitute_vars("ports: '${HOST_PORT:+8080}:80'", {"HOST_PORT": "1"}) == "ports: '8080:80'"
+    assert substitute_vars("ports: '${HOST_PORT:+8080}:80'", {}) == "ports: ':80'"
+    assert substitute_vars("ports: '${WEB_PORT:-$FALLBACK}:80'", {"FALLBACK": "9090"}) == "ports: '9090:80'"
+    assert substitute_vars("ports: '${OUTER:-${INNER}}:80'", {"INNER": "7070"}) == "ports: '7070:80'"
+    assert substitute_vars("ports: '${FLAG+9090}:80'", {"FLAG": ""}) == "ports: '9090:80'"
+    assert substitute_vars("ports: '${FLAG+9090}:80'", {}) == "ports: ':80'"
 
 
 def test_compose_override_reset_replaces_base_ports(tmp_path):

@@ -41,6 +41,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Turning the Hidden eye on persists `showHidden`; a manual-port label draft restores only for the same port; the last-refresh time and sync-error banner remeasure the sticky header.
 - Hidden unlock aborts the in-flight occupancy poll so a locked response cannot clobber the unlocked map; focus returns to the Hidden chip or count that opened the modal.
 - Copy-on-click toasts the cell (or detail port) still on screen; the grid is `aria-busy` on every poll; re-picking the current language is not unsaved; the unlock password field is required.
+- `include.project_directory` also re-roots nested `include:` paths and `extends.file`, not only `.env`.
+- `services: !override` / `!reset` replaces the mapping (or that service); overlay / extends copies `deploy.ports` the same way as `ports`.
+- Unquoted Compose `.env` values drop inline comments (`8080 # public`); interpolation understands `:+` / `+` and nested `${}`.
+- A mobile detail overlay marks the skip link, header, and views `inert`, traps Tab even before focus is inside the panel, and drops both after a resize to desktop.
 
 ### Performance
 
