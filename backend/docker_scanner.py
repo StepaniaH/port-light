@@ -292,17 +292,24 @@ def extract_ports(attrs: dict) -> list[dict]:
 
     def _add_bindings(spec_map):
         for spec, binding_list in (spec_map or {}).items():
+            if isinstance(binding_list, dict):
+                binding_list = [binding_list]
+            if not isinstance(binding_list, list):
+                continue
             cp, protocol = _split_port_spec(spec)
             assigned: list[tuple[int, str]] = []
             pending_ips: list[str] = []
-            for b in binding_list or []:
-                hp = _usable_host_port((b or {}).get("HostPort"))
-                hip = (b or {}).get("HostIp") or "0.0.0.0"
-                if hp is None:
-                    pending_ips.append(hip)
+            for b in binding_list:
+                if not isinstance(b, dict):
                     continue
-                assigned.append((hp, hip))
-                _add(hp, hip, cp, protocol)
+                hp = _usable_host_port(b.get("HostPort"))
+                hips = _binding_ips(b.get("HostIp"))
+                if hp is None:
+                    pending_ips.extend(hips)
+                    continue
+                for hip in hips:
+                    assigned.append((hp, hip))
+                    _add(hp, hip, cp, protocol)
             if assigned and pending_ips:
                 hp = assigned[0][0]
                 for hip in pending_ips:
@@ -322,14 +329,40 @@ def extract_ports(attrs: dict) -> list[dict]:
     cid = str(attrs.get("Id") or "")
     status = str((attrs.get("State") or {}).get("Status") or "").lower()
     published = [p for p in ports if p.get("source") != "expose"]
-    if published and cid:
-        _remember_publish(cid, published)
-        return ports
-    if cid and status not in ("running", "paused", "restarting"):
+    expose = [p for p in ports if p.get("source") == "expose"]
+    stopped = status not in ("running", "paused", "restarting")
+    if cid and stopped:
         recalled = _recall_publish(cid)
         if recalled:
-            return recalled + [p for p in ports if p.get("source") == "expose"]
+            published = _merge_recalled(published, recalled)
+    if published and cid:
+        _remember_publish(cid, published)
+        return published + expose
     return ports
+
+
+def _binding_ips(raw) -> list[str]:
+    text = "" if raw is None else str(raw).strip()
+    if not text:
+        return ["0.0.0.0", "::"]
+    if text.startswith("[") and text.endswith("]") and ":" in text:
+        text = text[1:-1]
+    return [text] if text else ["0.0.0.0", "::"]
+
+
+def _merge_recalled(current: list[dict], recalled: list[dict]) -> list[dict]:
+    keys = {
+        (p["host_port"], p.get("host_ip"), p.get("container_port"), p.get("protocol"))
+        for p in current
+    }
+    out = [dict(p) for p in current]
+    for p in recalled:
+        key = (p["host_port"], p.get("host_ip"), p.get("container_port"), p.get("protocol"))
+        if key in keys:
+            continue
+        keys.add(key)
+        out.append(dict(p))
+    return out
 
 
 def _remember_publish(cid: str, ports: list[dict]) -> None:
@@ -432,6 +465,12 @@ def _macvlan_ips(net: dict) -> list[str]:
         ip = _strip_net_ip(net.get(key))
         if ip and ip not in ips:
             ips.append(ip)
+    ipam = net.get("IPAMConfig")
+    if isinstance(ipam, dict):
+        for key in ("IPv4Address", "IPv6Address"):
+            ip = _strip_net_ip(ipam.get(key))
+            if ip and ip not in ips:
+                ips.append(ip)
     for key in ("SecondaryIPAddresses", "SecondaryIPv6Addresses"):
         extra = net.get(key) or []
         if not isinstance(extra, list):
@@ -451,15 +490,49 @@ def _macvlan_ips(net: dict) -> list[str]:
 
 
 def _traefik_service_port(labels: dict | None) -> int | None:
+    """Container port for Traefik/homepage URLs: the Host() router's service, if unique."""
+    service_ports: dict[str, int] = {}
+    router_service: dict[str, str] = {}
+    host_routers: set[str] = set()
     for key, val in (labels or {}).items():
-        if not str(key).lower().endswith(".loadbalancer.server.port"):
+        lk = str(key).lower()
+        if lk.endswith(".loadbalancer.server.port"):
+            parts = lk.split(".")
+            try:
+                name = parts[parts.index("services") + 1]
+            except (ValueError, IndexError):
+                continue
+            try:
+                port = int(str(val).strip())
+            except (TypeError, ValueError):
+                continue
+            if 1 <= port <= 65535:
+                service_ports[name] = port
             continue
-        try:
-            port = int(str(val).strip())
-        except (TypeError, ValueError):
+        if "routers" not in lk:
             continue
-        if 1 <= port <= 65535:
-            return port
+        router = _traefik_router_name(lk)
+        if not router:
+            continue
+        if lk.endswith(".service") and isinstance(val, str) and val.strip():
+            router_service[router] = val.strip().lower()
+        elif lk.endswith(".rule"):
+            low = str(val).lower()
+            if "host(" in low or "hostsni(" in low or "hostheader(" in low:
+                host_routers.add(router)
+    picked: list[int] = []
+    for router in host_routers:
+        svc = router_service.get(router) or router
+        port = service_ports.get(svc)
+        if port and port not in picked:
+            picked.append(port)
+    if len(picked) == 1:
+        return picked[0]
+    if len(picked) > 1:
+        return None
+    uniq = list(dict.fromkeys(service_ports.values()))
+    if len(uniq) == 1:
+        return uniq[0]
     return None
 
 
@@ -560,6 +633,8 @@ def extract_label_urls(
                 if _looks_like_hostname(host):
                     _add(host)
         elif lk in ("homepage.href", "wud.href"):
+            if "{" in val or "}" in val:
+                continue
             _add(val)
         elif lk == "net.unraid.docker.webui":
             _add(expand_unraid_webui(val, ports))
@@ -696,7 +771,7 @@ def safe_http_url(url: str | None) -> str | None:
     if not url or not isinstance(url, str):
         return None
     text = url.strip().rstrip("/")
-    if not text or any(ch.isspace() for ch in text):
+    if not text or any(ch.isspace() for ch in text) or "{" in text or "}" in text:
         return None
     _bad = _BAD_URL_SCHEMES
     if "://" in text:

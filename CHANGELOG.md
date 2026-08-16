@@ -28,6 +28,13 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Included Compose files are not scanned as their own stack; `external: true` networks with a static IP plus `expose` are LAN occupancy when Docker is down.
 - Host-network Compose leftover `ports:` is ignored (Docker ignores it); `expose:` still counts.
 - `container:` joiners match a unique id prefix of at least 12 characters, not a short prefix of another container.
+- Sibling Compose includes share macvlan names; `path: [base, overlay]` overlays instead of unioning both files' ports.
+- Including a shared `compose.yml` no longer auto-merges that directory's `compose.override.yml`.
+- `network_mode: !reset` returns to bridge, so leftover host `expose` is not occupancy.
+- Empty Docker `HostIp` is dual-stack (`0.0.0.0` and `::`); a stopped mixed static+ephemeral publish still recalls the last ephemeral host port.
+- Stopped macvlan still uses `IPAMConfig` static IPs; Homepage/wud `{{hostname}}` hrefs are not occupancy links.
+- Traefik URLs follow the Host() router's service port, not the first `loadbalancer.server.port`.
+- A bridge container's PID no longer steals a host listen socket.
 - Discarding a detail hide/label error no longer lights the map-sync banner; empty-grid search keeps focus in the search box.
 - The Hidden chip is restored with `include_hidden`; unlock failures stay in the modal instead of sticking a password in session storage; unlock does not race the occupancy poll.
 - Desktop detail no longer traps Tab; Close is auto-focused only when the drawer opens; numeric search neighbors are capped; settings segmented controls and the port-copy control have accessible names.

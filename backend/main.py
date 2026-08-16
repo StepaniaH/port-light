@@ -26,7 +26,12 @@ from .auth import (
 from .compose_scanner import scan_compose_tree
 from .docker_scanner import docker_available, safe_http_url, scan_containers
 from .known_ports import get_known_port
-from .port_scanner import host_listen_trusted, listen_scan_source, scan_listening_ports
+from .port_scanner import (
+    host_listen_trusted,
+    is_host_netns_mode,
+    listen_scan_source,
+    scan_listening_ports,
+)
 
 VERSION = "0.5.4"
 
@@ -161,8 +166,6 @@ def _scan_snapshot(values: dict) -> dict:
         prefer: list[int] = []
         for c in containers:
             prefer.extend(c.pids or [])
-            if c.pid:
-                prefer.append(c.pid)
         snap = {
             "at": time.monotonic(),
             "key": key,
@@ -491,7 +494,9 @@ def _classify(
                 if port:
                     _add_container(port, c)
         pids = set(c.pids or [])
-        if c.pid:
+        mode = c.network_mode or ""
+        hostish = bool(pids) or bool(c.socket_inodes) or mode == "host" or is_host_netns_mode(mode)
+        if hostish and c.pid:
             pids.add(c.pid)
         if pids:
             for port, rec in listening_map.items():

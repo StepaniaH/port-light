@@ -17,6 +17,7 @@ from backend.docker_scanner import (
     _macvlan_ports,
     _network_is_host_netns,
     _resolve_container_ref,
+    _traefik_service_port,
     extract_label_urls,
     extract_nginx_vhosts,
     extract_ports,
@@ -1207,3 +1208,165 @@ def test_joiner_prefix_match_requires_unique_id():
     assert _resolve_container_ref("aaaaaaabbbbb", by_name, by_id) is other
     assert _network_is_host_netns("container:aaaaaaaaaaaa11", by_name, by_id) is True
     assert _network_is_host_netns("container:aaaaaaabbbbb", by_name, by_id) is False
+
+
+def test_sibling_include_macvlan_is_visible(tmp_path):
+    app = tmp_path / "cam"
+    app.mkdir()
+    (app / "networks.yml").write_text(
+        "networks:\n  lan:\n    driver: macvlan\n",
+        encoding="utf-8",
+    )
+    (app / "cam.yml").write_text(
+        "services:\n  cam:\n    networks:\n      lan:\n        ipv4_address: 192.168.1.50\n"
+        "    expose:\n      - '80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - networks.yml\n  - cam.yml\n",
+        encoding="utf-8",
+    )
+    lan = {(p.port, p.host_ip) for p in scan_compose_files(str(tmp_path))}
+    assert (80, "192.168.1.50") in lan
+
+
+def test_include_path_list_overlays(tmp_path):
+    shared = tmp_path / "shared"
+    app = tmp_path / "app"
+    shared.mkdir()
+    app.mkdir()
+    (shared / "base.yml").write_text(
+        "services:\n  db:\n    ports:\n      - '5432:5432'\n",
+        encoding="utf-8",
+    )
+    (shared / "over.yml").write_text(
+        "services:\n  db:\n    ports: !override\n      - '15432:5432'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - path:\n      - ../shared/base.yml\n      - ../shared/over.yml\n",
+        encoding="utf-8",
+    )
+    ports = {p.port for p in scan_compose_files(str(tmp_path)) if p.port in (5432, 15432)}
+    assert ports == {15432}
+
+
+def test_include_skips_sibling_override(tmp_path):
+    shared = tmp_path / "shared"
+    app = tmp_path / "app"
+    shared.mkdir()
+    app.mkdir()
+    (shared / "compose.yml").write_text(
+        "services:\n  db:\n    ports:\n      - '5432:5432'\n",
+        encoding="utf-8",
+    )
+    (shared / "compose.override.yml").write_text(
+        "services:\n  db:\n    ports:\n      - '15432:5432'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.yml").write_text(
+        "include:\n  - ../shared/compose.yml\n",
+        encoding="utf-8",
+    )
+    ports = {p.port for p in scan_compose_files(str(tmp_path)) if p.port in (5432, 15432)}
+    assert ports == {5432}
+
+
+def test_network_mode_reset_drops_host_expose(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "compose.yml").write_text(
+        "services:\n  web:\n    network_mode: host\n    expose:\n      - '80'\n"
+        "    ports:\n      - '8080:80'\n",
+        encoding="utf-8",
+    )
+    (app / "compose.override.yml").write_text(
+        "services:\n  web:\n    network_mode: !reset\n    ports:\n      - '8080:80'\n",
+        encoding="utf-8",
+    )
+    numbers = {p.port for p in scan_compose_files(str(app))}
+    assert 8080 in numbers
+    assert 80 not in numbers
+
+
+def test_empty_hostip_records_dual_stack():
+    attrs = {
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {"80/tcp": [{"HostIp": "", "HostPort": "50000"}]},
+        },
+        "NetworkSettings": {"Ports": {}},
+        "Config": {"ExposedPorts": {}},
+    }
+    ips = {p["host_ip"] for p in extract_ports(attrs) if p["host_port"] == 50000}
+    assert ips == {"0.0.0.0", "::"}
+
+
+def test_stopped_mixed_publish_keeps_ephemeral():
+    running = {
+        "Id": "deadbeefmixed1",
+        "State": {"Status": "running"},
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {
+                "80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "8080"}],
+                "443/tcp": [{"HostIp": "0.0.0.0", "HostPort": "32768"}],
+            },
+        },
+        "NetworkSettings": {
+            "Ports": {
+                "80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "8080"}],
+                "443/tcp": [{"HostIp": "0.0.0.0", "HostPort": "32768"}],
+            },
+        },
+        "Config": {"ExposedPorts": {}},
+    }
+    assert {p["host_port"] for p in extract_ports(running)} == {8080, 32768}
+    stopped = {
+        "Id": "deadbeefmixed1",
+        "State": {"Status": "exited"},
+        "HostConfig": {
+            "NetworkMode": "bridge",
+            "PortBindings": {
+                "80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "8080"}],
+                "443/tcp": [{"HostIp": "0.0.0.0", "HostPort": "0"}],
+            },
+        },
+        "NetworkSettings": {"Ports": None},
+        "Config": {"ExposedPorts": {}},
+    }
+    assert {p["host_port"] for p in extract_ports(stopped)} == {8080, 32768}
+
+
+def test_homepage_template_href_is_dropped():
+    assert extract_label_urls({"homepage.href": "http://{{hostname}}:2283"}) == []
+    assert extract_label_urls({"wud.href": "{{href}}"}) == []
+    assert "http://photos.lan:2283" in extract_label_urls(
+        {"homepage.href": "http://photos.lan:2283"},
+    )
+
+
+def test_traefik_label_port_follows_host_router():
+    labels = {
+        "traefik.http.services.metrics.loadbalancer.server.port": "8082",
+        "traefik.http.services.wiki.loadbalancer.server.port": "80",
+        "traefik.http.routers.wiki.rule": "Host(`wiki.lan`)",
+    }
+    assert _traefik_service_port(labels) == 80
+
+
+def test_stopped_macvlan_uses_ipam_config(monkeypatch):
+    monkeypatch.setattr(
+        "backend.docker_scanner._network_driver",
+        lambda client, nid: "macvlan",
+    )
+    extra = _macvlan_ports(None, {
+        "NetworkSettings": {"Networks": {"lan": {
+            "NetworkID": "abc",
+            "IPAddress": "",
+            "IPAMConfig": {"IPv4Address": "192.168.1.50", "IPv6Address": "fd12::10"},
+        }}},
+        "Config": {"ExposedPorts": {"80/tcp": {}}},
+    }, [])
+    ips = {row["host_ip"] for row in extra}
+    assert ips == {"192.168.1.50", "fd12::10"}

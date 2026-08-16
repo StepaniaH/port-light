@@ -128,13 +128,13 @@ def _macvlan_names_tree(
     names = _macvlan_network_names(data)
     parent = Path(filepath).parent
     nested = chain | {real}
-    for inc_path, inc_env, inc_base in _include_specs(data.get("include"), parent):
-        names |= _macvlan_names_tree(
-            str(inc_path),
-            {**(extra_env or {}), **inc_env},
-            nested,
-            inc_base or env_base,
-        )
+    for group, inc_env, inc_base in _include_specs(data.get("include"), parent):
+        nested_env = {**(extra_env or {}), **inc_env}
+        nested_base = inc_base or env_base
+        for inc_path in group:
+            names |= _macvlan_names_tree(
+                str(inc_path), nested_env, nested, nested_base,
+            )
     return names
 
 
@@ -400,8 +400,9 @@ def _compose_doc(
     filepath: str,
     extra_env: dict[str, str] | None = None,
     env_base: Path | None = None,
+    apply_override: bool = True,
 ) -> tuple[dict, dict[str, str], Path] | None:
-    """Load one Compose file: project env, top-level env_file, sibling override."""
+    """Load one Compose file: project env, top-level env_file, optional sibling override."""
     raw = _read_text(Path(filepath))
     if raw is None:
         return None
@@ -423,16 +424,17 @@ def _compose_doc(
             return None
         if not isinstance(data, dict):
             return None
-    ov_path = _sibling_override_path(filepath)
-    if ov_path:
-        ov_raw = _read_text(Path(ov_path))
-        if ov_raw is not None:
-            try:
-                ov_data = _load_yaml(substitute_vars(ov_raw, env_vars))
-            except yaml.YAMLError:
-                ov_data = None
-            if isinstance(ov_data, dict):
-                data = _overlay_compose_docs(data, ov_data)
+    if apply_override:
+        ov_path = _sibling_override_path(filepath)
+        if ov_path:
+            ov_raw = _read_text(Path(ov_path))
+            if ov_raw is not None:
+                try:
+                    ov_data = _load_yaml(substitute_vars(ov_raw, env_vars))
+                except yaml.YAMLError:
+                    ov_data = None
+                if isinstance(ov_data, dict):
+                    data = _overlay_compose_docs(data, ov_data)
     return data, env_vars, parent
 
 
@@ -441,25 +443,28 @@ def _included_reals(
     extra_env: dict[str, str] | None = None,
     chain: frozenset[str] = frozenset(),
     env_base: Path | None = None,
+    apply_override: bool = True,
 ) -> set[str]:
     """Realpaths reached via ``include:`` (not scanned as their own stack)."""
     real = os.path.realpath(filepath)
     if real in chain:
         return set()
-    loaded = _compose_doc(filepath, extra_env, env_base)
+    loaded = _compose_doc(filepath, extra_env, env_base, apply_override=apply_override)
     if loaded is None:
         return set()
     data, env_vars, parent = loaded
     out: set[str] = set()
-    for inc_path, inc_env, inc_base in _include_specs(data.get("include"), parent):
-        nested = os.path.realpath(inc_path)
-        out.add(nested)
-        out |= _included_reals(
-            str(inc_path),
-            {**env_vars, **inc_env},
-            chain | {real},
-            inc_base if inc_base is not None else env_base,
-        )
+    nested_chain = chain | {real}
+    for group, inc_env, inc_base in _include_specs(data.get("include"), parent):
+        nested_env = {**env_vars, **inc_env}
+        nested_base = inc_base if inc_base is not None else env_base
+        for inc_path in group:
+            nested = os.path.realpath(inc_path)
+            out.add(nested)
+            out |= _included_reals(
+                str(inc_path), nested_env, nested_chain, nested_base,
+                apply_override=False,
+            )
     return out
 
 
@@ -471,35 +476,98 @@ def _parse_compose_file(
     project_dir: str | None = None,
     project_name: str | None = None,
     env_base: Path | None = None,
+    apply_override: bool = True,
+    extra_macvlan: set[str] | None = None,
 ) -> list[ComposePort]:
     real = os.path.realpath(filepath)
     if real in chain:
         return []
-    chain = chain | {real}
-
-    ports: list[ComposePort] = []
-    loaded = _compose_doc(filepath, extra_env, env_base)
+    loaded = _compose_doc(filepath, extra_env, env_base, apply_override=apply_override)
     if loaded is None:
-        return ports
+        return []
     data, env_vars, parent = loaded
+    return _parse_compose_data(
+        data, filepath, parent, env_vars, scan_dir, chain | {real},
+        extra_env, project_dir, project_name, env_base, extra_macvlan,
+    )
 
+
+def _parse_include_group(
+    paths: list[Path],
+    scan_dir: str,
+    chain: frozenset[str],
+    extra_env: dict[str, str] | None,
+    project_dir: str | None,
+    project_name: str | None,
+    env_base: Path | None,
+    extra_macvlan: set[str] | None,
+) -> list[ComposePort]:
+    files = [path for path in paths if path.is_file()]
+    if not files:
+        return []
+    extra_chain = frozenset(os.path.realpath(str(path)) for path in files)
+    if extra_chain <= chain:
+        return []
+    if len(files) == 1:
+        return _parse_compose_file(
+            str(files[0]), scan_dir, chain, extra_env,
+            project_dir=project_dir, project_name=project_name,
+            env_base=env_base, apply_override=False, extra_macvlan=extra_macvlan,
+        )
+    merged = None
+    env_vars = extra_env or {}
+    parent = files[0].parent
+    first = str(files[0])
+    for path in files:
+        loaded = _compose_doc(str(path), extra_env, env_base, apply_override=False)
+        if loaded is None:
+            continue
+        data, env_vars, parent = loaded
+        merged = data if merged is None else _overlay_compose_docs(merged, data)
+    if merged is None:
+        return []
+    return _parse_compose_data(
+        merged, first, parent, env_vars, scan_dir, chain | extra_chain,
+        extra_env, project_dir, project_name, env_base, extra_macvlan,
+    )
+
+
+def _parse_compose_data(
+    data: dict,
+    filepath: str,
+    parent: Path,
+    env_vars: dict[str, str],
+    scan_dir: str,
+    chain: frozenset[str],
+    extra_env: dict[str, str] | None,
+    project_dir: str | None,
+    project_name: str | None,
+    env_base: Path | None,
+    extra_macvlan: set[str] | None,
+) -> list[ComposePort]:
+    ports: list[ComposePort] = []
     this_dir = project_dir if project_dir is not None else _project_dir_key(parent, scan_dir)
     fallback_name = Path(this_dir).name
     if not fallback_name or fallback_name in (".", ".."):
         fallback_name = parent.name
     this_name = _project_display_name(data.get("name"), project_name or fallback_name)
 
-    macvlan_names = _macvlan_network_names(data)
-    for inc_path, inc_env, inc_base in _include_specs(data.get("include"), parent):
+    specs = _include_specs(data.get("include"), parent)
+    macvlan_names = set(extra_macvlan or ()) | _macvlan_network_names(data)
+    for group, inc_env, inc_base in specs:
         nested_env = {**env_vars, **inc_env}
         nested_base = inc_base if inc_base is not None else env_base
-        ports.extend(_parse_compose_file(
-            str(inc_path), scan_dir, chain, nested_env,
-            project_dir=this_dir,
-            project_name=this_name,
-            env_base=nested_base,
+        for inc_path in group:
+            macvlan_names |= _macvlan_names_tree(
+                str(inc_path), nested_env, chain, nested_base,
+            )
+    for group, inc_env, inc_base in specs:
+        nested_env = {**env_vars, **inc_env}
+        nested_base = inc_base if inc_base is not None else env_base
+        ports.extend(_parse_include_group(
+            group, scan_dir, chain, nested_env,
+            this_dir, this_name, nested_base, macvlan_names,
         ))
-        macvlan_names |= _macvlan_names_tree(str(inc_path), nested_env, chain, nested_base)
 
     local_services = data.get("services")
     if not isinstance(local_services, dict):
@@ -595,14 +663,16 @@ def _parse_compose_file(
     return ports
 
 
-def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str], Path | None]]:
+def _include_specs(
+    include, parent: Path,
+) -> list[tuple[list[Path], dict[str, str], Path | None]]:
     if not include:
         return []
     if isinstance(include, str):
         include = [include]
     if not isinstance(include, list):
         return []
-    out: list[tuple[Path, dict[str, str], Path | None]] = []
+    out: list[tuple[list[Path], dict[str, str], Path | None]] = []
     for item in include:
         paths: list[str] = []
         extra: dict[str, str] = {}
@@ -625,20 +695,23 @@ def _include_specs(include, parent: Path) -> list[tuple[Path, dict[str, str], Pa
                 paths = [raw_path]
             elif isinstance(raw_path, list):
                 paths = [p for p in raw_path if isinstance(p, str)]
+        group: list[Path] = []
         for path in paths:
             if not path:
                 continue
             try:
                 if any(ch in path for ch in "*?["):
                     pattern = os.path.normpath(os.path.join(str(parent), path))
-                    candidates = [Path(p).resolve() for p in _glob.glob(pattern)]
+                    candidates = sorted(Path(p).resolve() for p in _glob.glob(pattern))
                 else:
                     candidates = [(parent / path).resolve()]
             except (TypeError, ValueError, OSError):
                 continue
             for resolved in candidates:
                 if resolved.is_file():
-                    out.append((resolved, extra, env_base))
+                    group.append(resolved)
+        if group:
+            out.append((group, extra, env_base))
     return out
 
 
@@ -730,9 +803,20 @@ def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
 
 def _overlay_port_fields(base: dict, child: dict) -> dict:
     out = dict(base)
-    child_net = _unwrap_compose(child.get("network_mode"))
-    if child_net:
-        out["network_mode"] = child_net
+    child_net_raw = child.get("network_mode")
+    if isinstance(child_net_raw, _ComposeTag):
+        if child_net_raw.name == "reset":
+            out.pop("network_mode", None)
+        else:
+            net = _unwrap_compose(child_net_raw.value)
+            if net:
+                out["network_mode"] = net
+            else:
+                out.pop("network_mode", None)
+    else:
+        child_net = _unwrap_compose(child_net_raw)
+        if child_net:
+            out["network_mode"] = child_net
     for key in ("ports", "expose"):
         child_val = child.get(key)
         if isinstance(child_val, _ComposeTag) and child_val.name in ("reset", "override"):

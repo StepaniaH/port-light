@@ -704,6 +704,65 @@ def test_inode_only_host_net_urls_stay_on_web_port():
     assert "https://app.lan" not in by_port[5432]["urls"]
 
 
+def test_bridge_container_pid_does_not_steal_host_listen():
+    containers = [
+        ContainerInfo(
+            name="jellyfin",
+            status="running",
+            image="jellyfin",
+            network_mode="bridge",
+            pid=100,
+            ports=[{
+                "host_port": 8096, "host_ip": "0.0.0.0",
+                "container_port": 8096, "protocol": "tcp",
+            }],
+        ),
+    ]
+    listening = [
+        ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", pid=100, process_name="sshd"),
+    ]
+    out = _classify(
+        listening, containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert all(c["name"] != "jellyfin" for c in by_port[22].get("containers") or [])
+    assert any(c["name"] == "jellyfin" for c in by_port[8096]["containers"])
+
+
+def test_traefik_metrics_port_does_not_take_wiki_url():
+    from backend.docker_scanner import _traefik_service_port
+    labels = {
+        "traefik.http.services.metrics.loadbalancer.server.port": "8082",
+        "traefik.http.services.wiki.loadbalancer.server.port": "80",
+        "traefik.http.routers.wiki.rule": "Host(`wiki.lan`)",
+    }
+    containers = [
+        ContainerInfo(
+            name="wiki",
+            status="running",
+            image="wiki",
+            urls=["https://wiki.lan"],
+            label_port=_traefik_service_port(labels),
+            ports=[
+                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
+                {"host_port": 8082, "host_ip": "0.0.0.0", "container_port": 8082, "protocol": "tcp"},
+            ],
+        ),
+    ]
+    out = _classify(
+        [], containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+        options={"guess_urls": False},
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert "https://wiki.lan" in by_port[8080]["urls"]
+    assert "https://wiki.lan" not in by_port[8082]["urls"]
+
+
 def test_meta_unauthenticated(monkeypatch):
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
