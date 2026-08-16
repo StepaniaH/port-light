@@ -46,6 +46,7 @@
     "available": "{name} available",
     "unavailable": "{name} unavailable",
     "truncated": "{name} hit the file cap — some declared ports may be missing",
+    "incomplete": "{name} skipped a stack Compose would refuse (required env or include)",
     "via": {
       "host_proc": "{name} via /host/proc",
       "ss": "{name} via ss",

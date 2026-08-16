@@ -10,6 +10,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - FastAPI / Pydantic / pytest minimums, and GitHub Actions `checkout` / `setup-python` / QEMU / docker-login majors.
 - Occupancy Settings shows the toolbar range (the range the map is using). Turning auto-refresh off dims the interval field.
 - Known-port table: Transmission on 9091 (access), plus n8n, Proxmox, wg-easy, Frigate, Calibre-Web, Homebridge, Komga, Actual, Technitium, Z-Wave JS UI.
+- Compose scan walks directories named `data` (only `.git` / `node_modules` / venvs stay skipped).
 
 ### Fixed
 
@@ -51,6 +52,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Locked numeric search probes `GET /api/ports/{N}` so a withheld occupied port is not painted free; a real free hit still goes green after the lookup.
 - `extends.file` interpolates the base file’s top-level `env_file`, not only its sibling `.env`.
 - Occupancy `If-None-Match` accepts weak tags and lists; container/compose rows are sorted so a Docker reorder is still `304`.
+- Compose `${VAR:?}` / `${VAR?}`, a missing required `env_file`, a missing `include` path, or a missing `extends.file` no longer keep the rest of that project’s declared ports (Compose would refuse the stack). `summary.compose_incomplete` turns the Compose pill amber. `required: false` env files may be absent; `${VAR:?}` still interpolates from top-level `env_file` after `.env`.
 
 ### Performance
 

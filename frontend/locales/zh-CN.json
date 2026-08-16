@@ -46,6 +46,7 @@
     "available": "{name}可用",
     "unavailable": "{name}不可用",
     "truncated": "{name}达到文件上限，部分声明端口可能没画出来",
+    "incomplete": "{name}跳过了 Compose 会拒绝启动的栈（缺必填环境变量或 include）",
     "via": {
       "host_proc": "{name} · /host/proc",
       "ss": "{name} · ss",

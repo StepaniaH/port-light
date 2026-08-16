@@ -14,7 +14,7 @@ from .port_scanner import is_host_netns_mode
 
 _SKIP_DIRS = frozenset({
     ".git", ".svn", ".hg", "node_modules", ".venv", "venv",
-    "__pycache__", ".pytest_cache", "data",
+    "__pycache__", ".pytest_cache",
 })
 _MAX_RANGE = 128
 
@@ -83,6 +83,10 @@ _AUTO_OVERRIDE_NAMES = frozenset({
 })
 
 
+class ComposeWouldFail(Exception):
+    """Compose would refuse this project (required interp / env_file / include)."""
+
+
 def _load_yaml(text: str):
     docs = [doc for doc in yaml.load_all(text, Loader=_ComposeLoader) if doc is not None]
     if not docs:
@@ -95,23 +99,6 @@ def _load_yaml(text: str):
     return merged
 
 
-def _compose_dict(
-    filepath: str,
-    extra_env: dict[str, str] | None = None,
-    env_base: Path | None = None,
-) -> dict | None:
-    raw = _read_text(Path(filepath))
-    if raw is None:
-        return None
-    env_root = env_base if env_base is not None else Path(filepath).parent
-    env_vars = {**_load_env_file(env_root), **(extra_env or {})}
-    try:
-        data = _load_yaml(substitute_vars(raw, env_vars))
-    except yaml.YAMLError:
-        return None
-    return data if isinstance(data, dict) else None
-
-
 def _macvlan_names_tree(
     filepath: str,
     extra_env: dict[str, str] | None,
@@ -121,11 +108,11 @@ def _macvlan_names_tree(
     real = os.path.realpath(filepath)
     if real in chain:
         return set()
-    data = _compose_dict(filepath, extra_env, env_base)
-    if not data:
+    loaded = _compose_doc(filepath, extra_env, env_base, apply_override=False)
+    if loaded is None:
         return set()
+    data, _env_vars, parent = loaded
     names = _macvlan_network_names(data)
-    parent = Path(filepath).parent
     nested = chain | {real}
     spec_root = env_base if env_base is not None else parent
     for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root):
@@ -314,6 +301,7 @@ class ComposePort:
 class ComposeScan:
     ports: list[ComposePort] = field(default_factory=list)
     truncated: bool = False
+    incomplete: bool = False
     files_scanned: int = 0
 
 
@@ -338,8 +326,12 @@ def scan_compose_tree(
 
     files, truncated = _find_compose_files(scan_dir, depth, files_cap)
     included: set[str] = set()
+    incomplete = False
     for filepath in files:
-        included |= _included_reals(filepath)
+        try:
+            included |= _included_reals(filepath)
+        except ComposeWouldFail:
+            incomplete = True
     ports: list[ComposePort] = []
     seen_walk: set[str] = set()
     for filepath in files:
@@ -347,8 +339,16 @@ def scan_compose_tree(
         if real in seen_walk or real in included:
             continue
         seen_walk.add(real)
-        ports.extend(_parse_compose_file(filepath, scan_dir, frozenset()))
-    return ComposeScan(ports=ports, truncated=truncated, files_scanned=len(seen_walk))
+        try:
+            ports.extend(_parse_compose_file(filepath, scan_dir, frozenset()))
+        except ComposeWouldFail:
+            incomplete = True
+    return ComposeScan(
+        ports=ports,
+        truncated=truncated,
+        incomplete=incomplete,
+        files_scanned=len(seen_walk),
+    )
 
 
 def _env_int(name: str, default: int) -> int:
@@ -424,32 +424,37 @@ def _compose_doc(
     parent = Path(filepath).parent
     env_root = env_base if env_base is not None else parent
     env_vars = {**_load_env_file(env_root), **(extra_env or {})}
+    interpolated = substitute_vars(raw, env_vars, required=False)
     try:
-        data = _load_yaml(substitute_vars(raw, env_vars))
+        data = _load_yaml(interpolated)
     except yaml.YAMLError:
         return None
     if not isinstance(data, dict):
         return None
-    extra_file_env = _env_files_from_include(env_root, data.get("env_file"))
+    extra_file_env = _require_env_files(env_root, data.get("env_file"))
     if extra_file_env:
         env_vars = {**env_vars, **extra_file_env}
-        try:
-            data = _load_yaml(substitute_vars(raw, env_vars))
-        except yaml.YAMLError:
-            return None
-        if not isinstance(data, dict):
-            return None
+    interpolated = substitute_vars(raw, env_vars, required=True)
+    try:
+        data = _load_yaml(interpolated)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
     if apply_override:
         ov_path = _sibling_override_path(filepath)
         if ov_path:
             ov_raw = _read_text(Path(ov_path))
             if ov_raw is not None:
+                ov_interpolated = substitute_vars(ov_raw, env_vars)
                 try:
-                    ov_data = _load_yaml(substitute_vars(ov_raw, env_vars))
-                except yaml.YAMLError:
-                    ov_data = None
+                    ov_data = _load_yaml(ov_interpolated)
+                except yaml.YAMLError as exc:
+                    raise ComposeWouldFail(str(ov_path)) from exc
                 if isinstance(ov_data, dict):
                     data = _overlay_compose_docs(data, ov_data)
+                elif ov_data is not None:
+                    raise ComposeWouldFail(str(ov_path))
     return data, env_vars, parent
 
 
@@ -519,6 +524,8 @@ def _parse_include_group(
     extra_macvlan: set[str] | None,
 ) -> list[ComposePort]:
     files = [path for path in paths if path.is_file()]
+    if len(files) != len(paths):
+        raise ComposeWouldFail("include path is not a file")
     if not files:
         return []
     extra_chain = frozenset(os.path.realpath(str(path)) for path in files)
@@ -537,7 +544,7 @@ def _parse_include_group(
     for path in files:
         loaded = _compose_doc(str(path), extra_env, env_base, apply_override=False)
         if loaded is None:
-            continue
+            raise ComposeWouldFail(str(path))
         data, env_vars, parent = loaded
         merged = data if merged is None else _overlay_compose_docs(merged, data)
     if merged is None:
@@ -591,6 +598,7 @@ def _parse_compose_data(
     work_dir = spec_root
 
     for svc_name, svc_cfg in local_services.items():
+        _require_env_files(work_dir, svc_cfg.get("env_file"))
         lan_names = macvlan_names | _extends_macvlan_names(
             svc_cfg, filepath, env_vars, local_services, frozenset(), work_dir,
         )
@@ -693,7 +701,7 @@ def _include_specs(
         if isinstance(item, str):
             paths = [item]
         elif isinstance(item, dict):
-            extra = _env_files_from_include(parent, item.get("env_file"))
+            extra = _require_env_files(parent, item.get("env_file"))
             proj = item.get("project_directory")
             if isinstance(proj, str) and proj.strip():
                 try:
@@ -719,38 +727,60 @@ def _include_specs(
                 else:
                     candidates = [(parent / path).resolve()]
             except (TypeError, ValueError, OSError):
-                continue
+                raise ComposeWouldFail(path) from None
             for resolved in candidates:
                 if resolved.is_file():
                     group.append(resolved)
+        if paths and not group:
+            raise ComposeWouldFail("include matched no files")
         if group:
             out.append((group, extra, env_base))
     return out
 
 
-def _env_file_paths(env_file) -> list[str]:
-    names: list[str] = []
+def _flag_required(raw) -> bool:
+    if raw is False:
+        return False
+    if isinstance(raw, str) and raw.strip().lower() in ("false", "no", "0"):
+        return False
+    return True
+
+
+def _env_file_specs(env_file) -> list[tuple[str, bool]]:
+    """``(path, required)``. Compose defaults ``required`` to true."""
+    env_file = _unwrap_compose(env_file)
+    if not env_file:
+        return []
     if isinstance(env_file, str):
-        return [env_file]
+        return [(env_file, True)]
     if isinstance(env_file, dict):
         path = env_file.get("path")
-        return [path] if isinstance(path, str) else []
+        if not isinstance(path, str) or not path.strip():
+            return []
+        return [(path, _flag_required(env_file.get("required", True)))]
     if not isinstance(env_file, list):
         return []
+    names: list[tuple[str, bool]] = []
     for item in env_file:
-        if isinstance(item, str):
-            names.append(item)
+        item = _unwrap_compose(item)
+        if isinstance(item, str) and item.strip():
+            names.append((item, True))
         elif isinstance(item, dict):
             path = item.get("path")
-            if isinstance(path, str):
-                names.append(path)
+            if isinstance(path, str) and path.strip():
+                names.append((path, _flag_required(item.get("required", True))))
     return names
 
 
-def _env_files_from_include(parent: Path, env_file) -> dict[str, str]:
+def _require_env_files(parent: Path, env_file) -> dict[str, str]:
     merged: dict[str, str] = {}
-    for name in _env_file_paths(env_file):
-        merged.update(_read_env_file((parent / name).resolve()))
+    for name, required in _env_file_specs(env_file):
+        path = (parent / name).resolve()
+        if not path.is_file():
+            if required:
+                raise ComposeWouldFail(str(path))
+            continue
+        merged.update(_read_env_file(path))
     return merged
 
 
@@ -804,7 +834,7 @@ def _extends_ref(ext, filepath: str, work_dir: Path | None = None) -> tuple[str,
     base = work_dir if work_dir is not None else Path(filepath).parent
     resolved = (base / f).resolve()
     if not resolved.is_file():
-        return None
+        raise ComposeWouldFail(str(resolved))
     return str(resolved), svc
 
 
@@ -816,7 +846,7 @@ def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
         apply_override=False,
     )
     if loaded is None:
-        return {}
+        raise ComposeWouldFail(filepath)
     data, _merged, _parent = loaded
     return _service_map(data.get("services"))
 
@@ -975,18 +1005,29 @@ def _resolve_extends(
         other = other_local.get(ref_svc)
         nested_dir = Path(ref_file).parent
     if not isinstance(other, dict):
-        return svc_cfg
+        raise ComposeWouldFail(ref_svc)
+    _require_env_files(
+        nested_dir if nested_dir is not None else Path(other_path).parent,
+        other.get("env_file"),
+    )
     base = _resolve_extends(
         other, other_path, env_vars, chain | {ref}, other_local, nested_dir,
     )
     return _overlay_port_fields(base, svc_cfg)
 
 
-def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
+def substitute_vars(
+    text: str,
+    env_vars: dict[str, str],
+    *,
+    required: bool = True,
+) -> str:
     """Interpolate Compose ``$VAR`` / ``${VAR}`` from the *project* env only.
 
     Port-Light's process environment is not the user's compose shell; mixing it
     in lets ``HOSTNAME`` / ``PORT_RANGE_*`` rewrite other stacks' port lines.
+    ``required=False`` is the first YAML pass so ``env_file`` can still load
+    ``${VAR:?}`` values; the second pass is strict (Compose would abort).
     """
 
     def _braced(s: str, start: int) -> tuple[str, int] | None:
@@ -1007,6 +1048,8 @@ def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
             var, _, _err = name.partition(":?")
             val = env_vars.get(var)
             if val is None or val == "":
+                if required:
+                    raise ComposeWouldFail("${" + var + ":?}")
                 return ""
             return val
         if ":+" in name:
@@ -1014,28 +1057,30 @@ def substitute_vars(text: str, env_vars: dict[str, str]) -> str:
             val = env_vars.get(var)
             if val is None or val == "":
                 return ""
-            return substitute_vars(alt, env_vars)
+            return substitute_vars(alt, env_vars, required=required)
         if ":-" in name:
             var, _, default = name.partition(":-")
             val = env_vars.get(var)
             if val is None or val == "":
-                return substitute_vars(default, env_vars)
+                return substitute_vars(default, env_vars, required=required)
             return val
         if "?" in name:
             var, _, _err = name.partition("?")
             if var not in env_vars:
+                if required:
+                    raise ComposeWouldFail("${" + var + "?}")
                 return ""
             return env_vars[var]
         if "+" in name:
             var, _, alt = name.partition("+")
             if var not in env_vars:
                 return ""
-            return substitute_vars(alt, env_vars)
+            return substitute_vars(alt, env_vars, required=required)
         if "-" in name:
             var, _, default = name.partition("-")
             if var in env_vars:
                 return env_vars[var]
-            return substitute_vars(default, env_vars)
+            return substitute_vars(default, env_vars, required=required)
         if name in env_vars:
             return env_vars[name]
         return "${" + name + "}"

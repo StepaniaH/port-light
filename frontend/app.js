@@ -771,6 +771,7 @@
       ['compose', 'compose'],
     ];
     const truncated = !!(currentData && currentData.summary && currentData.summary.compose_truncated);
+    const incomplete = !!(currentData && currentData.summary && currentData.summary.compose_incomplete);
     host.innerHTML = items.map(function (pair) {
       const name = t('scanner.' + pair[1]);
       const ok = !!scanners[pair[0]];
@@ -782,8 +783,10 @@
       }
       if (pair[0] === 'compose' && truncated) {
         title = t('scanner.truncated', { name: name });
+      } else if (pair[0] === 'compose' && incomplete) {
+        title = t('scanner.incomplete', { name: name });
       }
-      const warn = pair[0] === 'compose' && truncated;
+      const warn = pair[0] === 'compose' && (truncated || incomplete);
       return '<span class="pill' + (ok ? ' ok' : ' bad') + (warn ? ' warn' : '') + '" role="img" title="' +
         escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"></span>';
     }).join('');

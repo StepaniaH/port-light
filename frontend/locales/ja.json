@@ -46,6 +46,7 @@
     "available": "{name} 利用可",
     "unavailable": "{name} 利用不可",
     "truncated": "{name} がファイル上限に達し、一部の宣言ポートが欠けている可能性",
+    "incomplete": "{name} は Compose が拒否するスタックを飛ばしました（必須の環境変数または include）",
     "via": {
       "host_proc": "{name} · /host/proc",
       "ss": "{name} · ss",

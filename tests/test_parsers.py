@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 from backend.compose_scanner import (
+    ComposeWouldFail,
     _read_env_file,
     expand_port_range,
     parse_expose_entry,
@@ -655,9 +658,13 @@ def test_compose_occupancy_gaps(tmp_path):
 
 def test_required_env_and_extends_env(tmp_path):
     assert "7200:80" in substitute_vars("ports: '${MUST_PORT:?missing}:80'", {"MUST_PORT": "7200"})
-    assert substitute_vars("ports: '${NOPE:?missing}:80'", {}) == "ports: ':80'"
+    with pytest.raises(ComposeWouldFail):
+        substitute_vars("ports: '${NOPE:?missing}:80'", {})
+    assert substitute_vars("ports: '${NOPE:?missing}:80'", {}, required=False) == "ports: ':80'"
     assert "7300:80" in substitute_vars("ports: '${MUST_PORT?missing}:80'", {"MUST_PORT": "7300"})
-    assert substitute_vars("ports: '${ABSENT?missing}:80'", {}) == "ports: ':80'"
+    with pytest.raises(ComposeWouldFail):
+        substitute_vars("ports: '${ABSENT?missing}:80'", {})
+    assert substitute_vars("ports: '${EMPTY?missing}:80'", {"EMPTY": ""}) == "ports: ':80'"
 
     base = tmp_path / "lib"
     app = tmp_path / "app"
@@ -688,6 +695,87 @@ def test_required_env_and_extends_env(tmp_path):
         encoding="utf-8",
     )
     assert 7411 in {p.port for p in scan_compose_files(str(tmp_path))}
+
+
+def test_compose_would_fail_skips_project_not_siblings(tmp_path):
+    ok = tmp_path / "ok"
+    bad = tmp_path / "bad"
+    ok.mkdir()
+    bad.mkdir()
+    (ok / "compose.yml").write_text(
+        "services:\n  web:\n    ports: ['7600:80']\n",
+        encoding="utf-8",
+    )
+    (bad / "compose.yml").write_text(
+        "services:\n"
+        "  keep:\n    ports: ['7500:80']\n"
+        "  web:\n    ports: ['${MUST:?missing}:80']\n",
+        encoding="utf-8",
+    )
+    scan = scan_compose_tree(str(tmp_path))
+    assert scan.incomplete is True
+    assert {p.port for p in scan.ports} == {7600}
+
+    filled = tmp_path / "filled"
+    filled.mkdir()
+    (filled / "ports.env").write_text("MUST=7511\n", encoding="utf-8")
+    (filled / "compose.yml").write_text(
+        "env_file: ports.env\n"
+        "services:\n  web:\n    ports: ['${MUST:?missing}:80']\n",
+        encoding="utf-8",
+    )
+    assert 7511 in {p.port for p in scan_compose_files(str(filled))}
+
+    optional = tmp_path / "optional"
+    optional.mkdir()
+    (optional / "compose.yml").write_text(
+        "env_file:\n  - path: missing.env\n    required: false\n"
+        "services:\n  web:\n    ports: ['7900:80']\n",
+        encoding="utf-8",
+    )
+    opt_scan = scan_compose_tree(str(optional))
+    assert opt_scan.incomplete is False
+    assert {p.port for p in opt_scan.ports} == {7900}
+
+    required = tmp_path / "required"
+    required.mkdir()
+    (required / "compose.yml").write_text(
+        "env_file: missing.env\n"
+        "services:\n  web:\n    ports: ['7910:80']\n",
+        encoding="utf-8",
+    )
+    req_scan = scan_compose_tree(str(required))
+    assert req_scan.incomplete is True
+    assert req_scan.ports == []
+
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    (parent / "compose.yml").write_text(
+        "include:\n  - ./gone.yml\n"
+        "services:\n  web:\n    ports: ['7700:80']\n",
+        encoding="utf-8",
+    )
+    inc_scan = scan_compose_tree(str(parent))
+    assert inc_scan.incomplete is True
+    assert inc_scan.ports == []
+
+    svc = tmp_path / "svcenv"
+    svc.mkdir()
+    (svc / "compose.yml").write_text(
+        "services:\n  web:\n    env_file: gone.env\n    ports: ['7930:80']\n",
+        encoding="utf-8",
+    )
+    svc_scan = scan_compose_tree(str(svc))
+    assert svc_scan.incomplete is True
+    assert svc_scan.ports == []
+
+    nested = tmp_path / "data" / "wiki"
+    nested.mkdir(parents=True)
+    (nested / "compose.yml").write_text(
+        "services:\n  web:\n    ports: ['7800:80']\n",
+        encoding="utf-8",
+    )
+    assert 7800 in {p.port for p in scan_compose_files(str(tmp_path / "data"))}
 
 
 def test_traefik_http_entrypoint_and_caddy_scheme():

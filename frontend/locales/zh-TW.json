@@ -46,6 +46,7 @@
     "available": "{name}可用",
     "unavailable": "{name}不可用",
     "truncated": "{name}達到檔案上限，部分宣告連接埠可能沒畫出來",
+    "incomplete": "{name}略過了 Compose 會拒絕啟動的堆疊（缺必填環境變數或 include）",
     "via": {
       "host_proc": "{name} · /host/proc",
       "ss": "{name} · ss",

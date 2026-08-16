@@ -36,7 +36,7 @@ The image includes a `HEALTHCHECK` on `GET /api/health`. Compose does not need a
 
 Create `./data` first if you run the container as a non-root `user:` so the bind mount is writable.
 
-Do **not** add `cap_add: NET_ADMIN` unless you are on the bare-metal `ss` path and actually need process names.
+Do **not** add `cap_add: NET_ADMIN` unless you are on the bare-metal `ss` path. The usual `/host/proc` mount already fills process names via socket inodes.
 
 ## Docker run
 

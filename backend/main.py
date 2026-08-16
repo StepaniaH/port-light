@@ -222,6 +222,7 @@ def _packed_occupancy(
         options=values,
     )
     result["summary"]["compose_truncated"] = snap["compose_scan"].truncated
+    result["summary"]["compose_incomplete"] = snap["compose_scan"].incomplete
     result["summary"]["compose_files"] = snap["compose_scan"].files_scanned
     body, etag = _json_etag(result)
     packed = (result, body, etag)
@@ -707,6 +708,7 @@ def _classify(
             "range_start": range_start,
             "range_end": range_end,
             "compose_truncated": False,
+            "compose_incomplete": False,
             "compose_files": 0,
         },
     }

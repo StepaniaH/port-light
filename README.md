@@ -58,7 +58,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - **LAN tool.** There is no login unless you set `AUTH_USER` and `AUTH_PASSWORD`. Put it behind a reverse proxy or keep it off the public internet. See [SECURITY.md](SECURITY.md).
 - **Hide from grid** is a display filter. It becomes an API gate only when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set.
 - **Multi-host is not implemented.** Run one Port-Light per machine.
-- Typical Docker deploy **cannot show process names** (only container names from the Docker API). `ss -tlnp` process names need a host-network / bare-metal path.
+- Process names come from `/host/proc` (inode → `comm`) when that mount is present — the usual image. Without it, the grid shows Docker container names. `ss -tlnp` names still need a host-network / bare-metal path.
 - Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
 
 Roadmap and design notes: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md).

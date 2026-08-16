@@ -58,7 +58,7 @@
 - **局域网工具。** 未设置 `AUTH_USER` / `AUTH_PASSWORD` 时没有登录。请放在反向代理后面，或不要暴露到公网。见 [SECURITY.md](SECURITY.md)。
 - **从网格隐藏**只是显示过滤。只有配置了 `AUTH_*` 或 `HIDDEN_UNLOCK_PASSWORD` 时，API 才会真正不返回这些端口。
 - **多机尚未实现。** 每台机器各自跑一份 Port-Light。
-- 常见 Docker 部署**看不到进程名**（只能看到 Docker API 给的容器名）。`ss -tlnp` 的进程名需要 host network 或裸机。
+- 挂了 `/host/proc` 时（镜像默认如此），监听端口可以从 inode 对上进程名。没挂则只能看到 Docker 的容器名。`ss -tlnp` 的进程名仍需要 host network 或裸机。
 - `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
 
 后续计划与设计：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。
