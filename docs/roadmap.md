@@ -2,6 +2,12 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.5.5
+
+- Occupancy honesty: Compose include / override / extends / env_file, required interpolation, hidden unlock, 304 polls, last-publish LRU
+- Settings splits into Appearance, Occupancy, and Advanced
+- Compose scan walks directories named `data`
+
 ## Shipped in 0.5.4
 
 - Occupancy-map polish: Compose macvlan / include / extends, host `ns:`, protocol union, hidden cells, untrusted listen scan

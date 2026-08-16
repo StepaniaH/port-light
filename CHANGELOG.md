@@ -4,6 +4,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.5.5 — 2026-08-16
+
 ### Changed
 
 - Settings splits into Appearance, Occupancy, and Advanced, so theme palettes are not on the same scroll as Compose scan depth and host paths.

@@ -33,7 +33,7 @@ from .port_scanner import (
     scan_listening_ports,
 )
 
-VERSION = "0.5.4"
+VERSION = "0.5.5"
 
 app = FastAPI(title="Port-Light", version=VERSION)
 
