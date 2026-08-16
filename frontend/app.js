@@ -90,6 +90,9 @@
   const knownCache = {};
   const knownInflight = {};
   let knownRenderFrame = 0;
+  const lockedHitCache = {};
+  const lockedHitInflight = {};
+  let lastHiddenLocked = null;
 
   const appEl = document.getElementById('app');
   const grid = document.getElementById('grid');
@@ -821,9 +824,13 @@
 
   function trapTab(e, root) {
     if (!root) return;
-    const nodes = root.querySelectorAll('button, input, select, textarea, a[href]');
+    const nodes = root.querySelectorAll(
+      'button, input, select, textarea, a[href], summary, [tabindex]:not([tabindex="-1"])'
+    );
     const list = Array.prototype.filter.call(nodes, function (el) {
-      return !el.disabled && el.getClientRects().length > 0;
+      if (el.disabled) return false;
+      if (el.closest && el.closest('[inert]')) return false;
+      return el.getClientRects().length > 0 || el === document.activeElement;
     });
     if (!list.length) return;
     const first = list[0];
@@ -878,9 +885,15 @@
       if (res.status === 304) return { ok: true, unchanged: true };
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const etag = res.headers.get('etag');
-      portsEtag = etag || '';
-      portsEtagUrl = url;
-      return { ok: true, data: await res.json() };
+      const data = await res.json();
+      if (!isolated) {
+        portsEtag = etag || '';
+        portsEtagUrl = url;
+      } else if (data.summary && !data.summary.hidden_locked) {
+        portsEtag = etag || '';
+        portsEtagUrl = url;
+      }
+      return { ok: true, data: data };
     } catch (err) {
       if (err && err.name === 'AbortError') return { ok: false, stale: true };
       console.error('fetch error:', err);
@@ -899,6 +912,12 @@
       if (showHidden !== wantHidden) return;
       if (data === currentData && occupancyKey) return;
       currentData = data;
+      const lockedNow = !!(data.summary && data.summary.hidden_locked);
+      if (lockedNow !== lastHiddenLocked) {
+        lastHiddenLocked = lockedNow;
+        Object.keys(lockedHitCache).forEach(function (k) { delete lockedHitCache[k]; });
+        Object.keys(lockedHitInflight).forEach(function (k) { delete lockedHitInflight[k]; });
+      }
       const key = JSON.stringify({ ports: data.ports, summary: data.summary });
       if (key !== occupancyKey) {
         occupancyKey = key;
@@ -1493,6 +1512,18 @@
     return 'free';
   }
 
+  function probeLockedHit(port) {
+    if (lockedHitCache[port] || lockedHitInflight[port]) return;
+    lockedHitInflight[port] = true;
+    api('/api/ports/' + port).then(function (res) {
+      lockedHitCache[port] = res.status === 404 ? 'locked' : 'free';
+      delete lockedHitInflight[port];
+      if (currentData && searchPortNum === port) render();
+    }).catch(function () {
+      delete lockedHitInflight[port];
+    });
+  }
+
   function buildSearchContext(ports, hitPort) {
     const allPortNums = new Set(ports.map(function (p) { return p.port; }));
     const hitExists = allPortNums.has(hitPort);
@@ -1517,6 +1548,22 @@
     if (!hitExists) {
       if (hiddenNums.has(hitPort)) {
         result.push(synthetic(hitPort, true));
+      } else if (locked) {
+        const kind = lockedHitCache[hitPort];
+        if (kind === 'free') {
+          result.push(synthetic(hitPort, false));
+        } else {
+          prefetchKnown(hitPort);
+          if (!kind) probeLockedHit(hitPort);
+          result.push({
+            port: hitPort,
+            status: 'free',
+            is_hidden: true,
+            _synthetic: true,
+            _locked: true,
+            known_service: getKnownForFree(hitPort),
+          });
+        }
       } else {
         result.push(synthetic(hitPort, false));
       }
@@ -1662,7 +1709,9 @@
     }
 
     grid.innerHTML = displayPorts.map(function (p) {
-      let cls = p.status === 'used' ? 'used' : p.status === 'configured' ? 'configured' : 'free';
+      const lockedHit = !!(p._locked && p._synthetic);
+      let cls = lockedHit ? 'locked'
+        : p.status === 'used' ? 'used' : p.status === 'configured' ? 'configured' : 'free';
       if (p.is_hidden) cls += ' hidden';
       const conflict = p.conflict ? ' conflict' : '';
       const selected = p.port === selectedPort ? ' selected' : '';
@@ -1671,14 +1720,15 @@
       const searchNear = searchPortNum !== null && !isSearchHit ? ' search-near' : '';
       const label = getCellLabel(p);
       const labelText = label ? '<div class="port-label">' + escapeHtml(label) + '</div>' : '';
-      const statusText = settings.show_status_text && p.status !== 'free'
+      const statusLabel = lockedHit ? t('legend.locked') : t('status.' + p.status);
+      const statusText = settings.show_status_text && !lockedHit && p.status !== 'free'
         ? '<span class="status-text">' + escapeHtml(t('status.' + p.status)) + '</span>' : '';
       const accessBadge = settings.show_access_badge && p.known_service && p.known_service.is_access_port
         ? '<span class="access-badge">' + escapeHtml(t('grid.web')) + '</span>' : '';
       const protoBadge = settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp'
         ? '<span class="proto-badge">' + escapeHtml(p.protocol) + '</span>' : '';
 
-      const ariaParts = [String(p.port), t('status.' + p.status), label, p.protocol].filter(Boolean);
+      const ariaParts = [String(p.port), statusLabel, label, p.protocol].filter(Boolean);
       return '<button type="button" class="port-cell ' + cls + conflict + selected + searchHit + searchNear + '"' +
         ' data-port="' + p.port + '"' +
         ' aria-label="' + escapeHtml(ariaParts.join(', ')) + '"' +

@@ -70,3 +70,10 @@ def test_occupancy_user_state_is_one_snapshot(tmp_path, monkeypatch):
     manuals, hidden = port_store.occupancy_user_state()
     assert manuals[0]["port"] == 9
     assert hidden == [22]
+
+
+def test_hidden_port_rejects_out_of_range(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    assert port_store.add_hidden_port(0) is False
+    assert port_store.add_hidden_port(70000) is False
+    assert port_store.get_hidden_ports() == []

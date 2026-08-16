@@ -194,16 +194,19 @@ def get_hidden_ports() -> list[int]:
 
 
 def add_hidden_port(port: int) -> bool:
+    n = _hidden_port(port)
+    if n is None:
+        return False
     with _LOCK:
         data = _load()
         hp = [_hidden_port(p) for p in data.get("hidden_ports") or []]
         hp = [p for p in hp if p is not None]
-        if port in hp:
+        if n in hp:
             if data.get("hidden_ports") != hp:
                 data["hidden_ports"] = hp
                 _save(data)
             return False
-        hp.append(port)
+        hp.append(n)
         data["hidden_ports"] = hp
         _save(data)
         return True

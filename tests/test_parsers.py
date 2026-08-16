@@ -674,6 +674,21 @@ def test_required_env_and_extends_env(tmp_path):
     )
     assert 7400 in {p.port for p in scan_compose_files(str(tmp_path))}
 
+    env_base = tmp_path / "lib2"
+    env_app = tmp_path / "app2"
+    env_base.mkdir()
+    env_app.mkdir()
+    (env_base / "ports.env").write_text("WEB_PORT=7411\n", encoding="utf-8")
+    (env_base / "common.yml").write_text(
+        "env_file: ports.env\nservices:\n  base:\n    ports:\n      - '${WEB_PORT}:80'\n",
+        encoding="utf-8",
+    )
+    (env_app / "compose.yml").write_text(
+        "services:\n  web:\n    extends:\n      file: ../lib2/common.yml\n      service: base\n",
+        encoding="utf-8",
+    )
+    assert 7411 in {p.port for p in scan_compose_files(str(tmp_path))}
+
 
 def test_traefik_http_entrypoint_and_caddy_scheme():
     http_only = extract_label_urls({

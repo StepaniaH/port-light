@@ -588,6 +588,8 @@ a:focus-visible,
 .port-cell.hidden { opacity: 0.4; }
 .port-cell.hidden:not(.used):not(.configured) { border-left-color: var(--hidden); }
 .port-cell.hidden:not(.used):not(.configured) .indicator { background: var(--hidden); }
+.port-cell.locked { opacity: 0.5; border-style: dashed; border-left-color: var(--hidden); }
+.port-cell.locked .indicator { background: var(--hidden); }
 .port-cell.search-hit, .port-cell.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .port-cell.search-near { opacity: 1; }
 .port-cell.conflict { box-shadow: inset 0 2px 0 var(--conflict); }

@@ -88,6 +88,10 @@ def test_ports_etag_not_modified(monkeypatch, tmp_path):
     assert etag
     again = client.get("/api/ports", headers={"If-None-Match": etag})
     assert again.status_code == 304
+    weak = client.get("/api/ports", headers={"If-None-Match": "W/" + etag})
+    assert weak.status_code == 304
+    listed = client.get("/api/ports", headers={"If-None-Match": etag + ', "nope"'})
+    assert listed.status_code == 304
     client.post("/api/manual-ports", json={"port": 4242, "label": "lab"})
     changed = client.get("/api/ports", headers={"If-None-Match": etag})
     assert changed.status_code == 200

@@ -160,7 +160,7 @@ def _extends_macvlan_names(
         other_path = ref_file
         merged_env = {**_load_env_file(Path(ref_file).parent), **env_vars}
         names |= _macvlan_names_tree(ref_file, merged_env, frozenset())
-        other_local = _services_from_file(ref_file, merged_env)
+        other_local = _services_from_file(ref_file, env_vars)
         other = other_local.get(ref_svc)
         nested_dir = Path(ref_file).parent
     if isinstance(other, dict):
@@ -809,18 +809,16 @@ def _extends_ref(ext, filepath: str, work_dir: Path | None = None) -> tuple[str,
 
 
 def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
-    raw = _read_text(Path(filepath))
-    if raw is None:
+    loaded = _compose_doc(
+        filepath,
+        extra_env=env_vars,
+        env_base=Path(filepath).parent,
+        apply_override=False,
+    )
+    if loaded is None:
         return {}
-    raw = substitute_vars(raw, env_vars)
-    try:
-        data = _load_yaml(raw)
-    except yaml.YAMLError:
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    svcs = data.get("services")
-    return _service_map(svcs)
+    data, _merged, _parent = loaded
+    return _service_map(data.get("services"))
 
 
 def _overlay_port_fields(base: dict, child: dict) -> dict:
@@ -973,8 +971,7 @@ def _resolve_extends(
         nested_dir = work_dir
     else:
         other_path = ref_file
-        merged_env = {**_load_env_file(Path(ref_file).parent), **env_vars}
-        other_local = _services_from_file(ref_file, merged_env)
+        other_local = _services_from_file(ref_file, env_vars)
         other = other_local.get(ref_svc)
         nested_dir = Path(ref_file).parent
     if not isinstance(other, dict):

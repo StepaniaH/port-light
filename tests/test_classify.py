@@ -8,6 +8,8 @@ from backend.main import (
     _classify,
     _collect_urls,
     _compose_conflict,
+    _etag_matched,
+    _json_etag,
     _proto_label,
 )
 from backend.port_scanner import ListeningPort
@@ -799,3 +801,38 @@ def test_hidden_free_port_emitted_when_included():
     occ = {row["port"]: row["status"] for row in omitted["summary"]["hidden_occupancy"]}
     assert occ[42424] == "free"
     assert occ[8096] == "used"
+
+
+def test_classify_container_order_is_stable():
+    a = ContainerInfo(
+        name="zeta", status="running", image="z",
+        ports=[{"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"}],
+    )
+    b = ContainerInfo(
+        name="alpha", status="running", image="a",
+        ports=[{"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"}],
+    )
+    r1 = _classify(
+        [], [a, b], [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    r2 = _classify(
+        [], [b, a], [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    names1 = [c["name"] for c in r1["ports"][0]["containers"]]
+    names2 = [c["name"] for c in r2["ports"][0]["containers"]]
+    assert names1 == names2 == ["alpha", "zeta"]
+    assert _json_etag(r1)[1] == _json_etag(r2)[1]
+
+
+def test_etag_matched_weak_and_list():
+    etag = '"abc123"'
+    assert _etag_matched(etag, etag) is True
+    assert _etag_matched('W/"abc123"', etag) is True
+    assert _etag_matched('"nope", "abc123"', etag) is True
+    assert _etag_matched("*", etag) is True
+    assert _etag_matched('"nope"', etag) is False
+    assert _etag_matched(None, etag) is False

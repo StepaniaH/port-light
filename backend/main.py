@@ -230,6 +230,19 @@ def _packed_occupancy(
     return packed
 
 
+def _etag_matched(header: str | None, etag: str) -> bool:
+    if not header or not etag:
+        return False
+    want = etag.strip()
+    for part in header.split(","):
+        token = part.strip()
+        if token[:2].lower() == "w/":
+            token = token[2:].strip()
+        if token == "*" or token == want:
+            return True
+    return False
+
+
 def _json_etag(payload: dict) -> tuple[str, str]:
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
@@ -260,7 +273,7 @@ def get_ports(
 ) -> Response:
     _payload, body, etag = _packed_occupancy(request, range_start, range_end, include_hidden)
     headers = {"ETag": etag}
-    if request.headers.get("if-none-match") == etag:
+    if _etag_matched(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers=headers)
     return Response(content=body, media_type="application/json", headers=headers)
 
@@ -367,6 +380,8 @@ def list_hidden(request: Request) -> dict:
 
 @app.post("/api/hidden/{port}")
 def hide_port(port: int) -> dict:
+    if port < 1 or port > 65535:
+        raise HTTPException(status_code=400, detail="port out of range")
     added = port_store.add_hidden_port(port)
     return {"status": "ok" if added else "already_hidden"}
 
@@ -631,6 +646,15 @@ def _classify(
         for c in ctors:
             proto_bits.extend(c.get("protocols") or ([c.get("protocol")] if c.get("protocol") else []))
         proto_bits.extend(c.get("protocol") or "tcp" for c in composes)
+
+        ctors.sort(key=lambda c: (c.get("name") or "", c.get("network_mode") or ""))
+        composes.sort(key=lambda c: (
+            c.get("project_dir") or "",
+            c.get("service_name") or "",
+            c.get("compose_file") or "",
+            c.get("host_ip") or "",
+            c.get("protocol") or "",
+        ))
 
         port_list.append({
             "port": port,

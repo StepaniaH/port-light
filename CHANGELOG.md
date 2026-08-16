@@ -48,6 +48,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Hiding a free port still occupies the map when included: `include_hidden` emits `status: "free"`; `GET /api/ports/{N}` no longer 404s that cell; numeric search uses `hidden_occupancy` instead of painting every hidden stub configured.
 - Locked numeric search no longer paints an unknown hit as configured; opening a 404 only claims a locked hide when hidden ports are actually withheld.
 - Stopped Docker last-publish recalls evict the oldest mapping, not the whole cache.
+- Locked numeric search probes `GET /api/ports/{N}` so a withheld occupied port is not painted free; a real free hit still goes green after the lookup.
+- `extends.file` interpolates the base file’s top-level `env_file`, not only its sibling `.env`.
+- Occupancy `If-None-Match` accepts weak tags and lists; container/compose rows are sorted so a Docker reorder is still `304`.
 
 ### Performance
 
