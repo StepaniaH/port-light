@@ -4,6 +4,11 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Changed
+
+- Occupancy classification moved from `backend/main.py` into `backend/classification.py`; Docker publish rows are typed (`PortMapping`) and grid rows documented as `OccupancyRow`. No API or behavior changes.
+- The repo now has a `.gitignore` (bytecode, virtualenvs, `.env`, `data/`, `custom_ports.json`).
+
 ## 0.6.0 — 2026-08-16
 
 ### Added

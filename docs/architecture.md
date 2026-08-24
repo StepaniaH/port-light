@@ -16,7 +16,7 @@ Browser  ──GET /──►  frontend/index.html
 2. `backend/port_scanner.py` — listening TCP/UDP sockets
 3. `backend/compose_scanner.py` — declared host ports in Compose files
 4. `backend/port_store.py` — manual / hidden / machine JSON
-5. `backend/main.py` `_classify()` — union, status, source type, conflicts
+5. `backend/classification.py` `classify()` — union, status, source type, conflicts (row contracts live in `backend/models.py`)
 6. `backend/known_ports.py` — names and access/internal flags
 
 Those three scanners plus the store snapshot are reused for about two seconds, so `GET /api/ports/{N}` (opening a free cell) does not walk Docker / `/proc` / Compose again. Concurrent polls share one in-flight scan. Classified JSON for the same range and hidden flags is reused too, so a `304` poll does not rebuild the occupancy table. `If-None-Match` accepts the strong tag, `W/"…"`, a comma list, or `*`. Container and Compose rows on each port are sorted before the ETag so a Docker list reorder is not a new map. A store write bumps a generation and drops the snapshot. The UI (`frontend/app.js`) filters, sorts, and searches **in the browser**. `include_hidden` is the exception: when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set, the server withholds those rows unless the request is authorized (`backend/auth.py`).
