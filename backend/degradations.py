@@ -39,7 +39,10 @@ def report(source: str, scope: str, reason: str) -> None:
         else:
             last = {"source": source, "scope": scope, "reason": reason, "ts": now}
             _recent.append(last)
-        should_log = (time.monotonic() - last.get("logged_at", 0.0)) >= _REPEAT_LOG_SECONDS
+        should_log = (
+            last.get("logged_at") is None
+            or (time.monotonic() - last["logged_at"]) >= _REPEAT_LOG_SECONDS
+        )
         if should_log:
             last["logged_at"] = time.monotonic()
     if should_log:

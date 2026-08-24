@@ -27,6 +27,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 - A Compose file that fails to parse (bad YAML, unreadable, not a mapping) no longer vanishes from the map: the stack is flagged like any other `compose_incomplete` case (amber pill) and reported in `/api/health` degradations. Empty YAML documents still parse as no services.
 - Compose files are loaded once per scan instead of up to three times (include discovery, macvlan names, service parsing).
+- The first degradation report after startup is no longer swallowed when the monotonic clock is younger than the repeat-suppression window (fresh containers and CI machines).
 
 ## 0.6.0 — 2026-08-16
 

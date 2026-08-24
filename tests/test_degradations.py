@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import logging
-
 import pytest
 
 from backend import degradations
+from backend.degradations import _REPEAT_LOG_SECONDS
 
 
 @pytest.fixture(autouse=True)
@@ -39,21 +38,37 @@ def test_repeat_events_collapse():
 
 
 def test_log_line_is_single_record(caplog):
-    logger = logging.getLogger("port-light")
     with caplog.at_level("WARNING", logger="port-light"):
         degradations.report("listen", "ss", "scan failed")
-    seen = [(r.name, r.levelname, r.getMessage()) for r in caplog.records]
     assert any(
-        "source=listen scope=ss reason=scan failed" in msg
-        for _, _, msg in seen
-    ), (
-        f"propagate={logger.propagate}"
-        f" effective={logger.getEffectiveLevel()}"
-        f" manager_disable={logging.root.manager.disable}"
-        f" logger_disabled={logger.disabled}"
-        f" parent={logger.parent}"
-        f" own_handlers={logger.handlers!r}"
-        f" root_level={logging.getLogger().level}"
-        f" root_handlers={logging.getLogger().handlers!r}"
-        f" records={seen[-20:]!r}"
+        "source=listen scope=ss reason=scan failed" in record.getMessage()
+        for record in caplog.records
     )
+
+
+def test_first_report_logs_on_a_young_monotonic_clock(monkeypatch, caplog):
+    """A monotonic clock younger than the repeat window (fresh container, CI
+    VM) must not swallow the first report: "never logged" is not time 0.0."""
+    monkeypatch.setattr(degradations.time, "monotonic", lambda: 10.0)
+    with caplog.at_level("WARNING", logger="port-light"):
+        degradations.report("listen", "ss", "scan failed")
+    assert any(
+        "source=listen scope=ss reason=scan failed" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_repeat_report_within_window_logs_once(monkeypatch, caplog):
+    clock = {"t": 500.0}
+    monkeypatch.setattr(degradations.time, "monotonic", lambda: clock["t"])
+    with caplog.at_level("WARNING", logger="port-light"):
+        degradations.report("docker", "daemon", "unreachable")
+        clock["t"] += 1.0
+        degradations.report("docker", "daemon", "unreachable")
+        clock["t"] += _REPEAT_LOG_SECONDS + 1.0
+        degradations.report("docker", "daemon", "unreachable")
+    hits = sum(
+        "scope=daemon reason=unreachable" in record.getMessage()
+        for record in caplog.records
+    )
+    assert hits == 2
