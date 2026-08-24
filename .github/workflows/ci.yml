@@ -28,8 +28,12 @@ jobs:
       - name: Report failures
         if: failure()
         run: |
-          awk '/=+ FAILURES =+/,/=+ short test summary info =+/' pytest.log | head -60 | sed 's/^/::error::/'
-          tail -8 pytest.log | sed 's/^/::error::/'
+          {
+            echo '```'
+            awk '/=+ FAILURES =+/,/=+ short test summary info =+/' pytest.log | head -80
+            tail -6 pytest.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   frontend:
     runs-on: ubuntu-latest
