@@ -19,8 +19,9 @@ pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
 # set COMPOSE_SCAN_DIR to a folder of compose projects
 uvicorn backend.main:app --reload --port 2100
-ruff check backend tests
+ruff check backend tests mcp
 pytest
+node --test "frontend/test/**/*.test.mjs"
 ```
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants something like `PORT_LIGHT_DATA_DIR=./data`. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
