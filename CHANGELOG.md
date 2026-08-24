@@ -6,6 +6,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Added
 
+- Local history: state transitions are recorded to `history.db` in the data volume (default 7 days, `HISTORY_RETENTION_DAYS=0` disables). The detail drawer lists recent changes; `GET /api/ports/{n}/history?hours=N` queries it.
 - Live updates over SSE: `GET /api/events` pushes a refresh hint when the scan key or store generation changes; the UI pulls immediately. Interval polling remains as fallback.
 - Optional webhooks: get a JSON ping when a port starts being used or two Compose projects collide (`WEBHOOK_URL`, `WEBHOOK_EVENTS`, `WEBHOOK_SECRET`). Fire-and-forget; failures show up as degradations.
 - Free-port planner: a new toolbar action finds the largest contiguous free runs in the current range and can reserve one for you (`GET /api/free-runs`).

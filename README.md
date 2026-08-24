@@ -71,7 +71,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Process names come from `/host/proc` (inode → `comm`) when that mount is present — the usual image. Without it, the grid shows Docker container names. `ss -tlnp` names still need a host-network / bare-metal path.
 - Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
 
-Roadmap and design notes: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md).
+Roadmap and design notes: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md). Automation and coding-agent integrations: [docs/integrations.md](docs/integrations.md).
 
 ## Quick start
 

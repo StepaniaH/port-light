@@ -71,7 +71,7 @@
 - 挂了 `/host/proc` 时（镜像默认如此），监听端口可以从 inode 对上进程名。没挂则只能看到 Docker 的容器名。`ss -tlnp` 的进程名仍需要 host network 或裸机。
 - `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
 
-后续计划与设计：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。
+后续计划与设计：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。自动化与编码智能体集成：[docs/integrations.md](docs/integrations.md)。
 
 ## 快速开始
 

@@ -18,6 +18,6 @@ jobs:
       - name: Install
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Lint
-        run: ruff check backend tests
+        run: ruff check backend tests mcp
       - name: Test
         run: pytest
