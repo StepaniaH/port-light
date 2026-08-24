@@ -17,10 +17,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install
         run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Record dependency versions
+        run: pip freeze
       - name: Lint
         run: ruff check backend tests mcp
       - name: Test
-        run: pytest
+        run: |
+          set -o pipefail
+          python -m pytest --tb=short -ra 2>&1 | tee pytest.log
+      - name: Report failures
+        if: failure()
+        run: |
+          awk '/=+ short test summary info =+/,0' pytest.log | head -30 | sed 's/^/::error::/'
+          tail -8 pytest.log | sed 's/^/::error::/'
 
   frontend:
     runs-on: ubuntu-latest
