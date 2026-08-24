@@ -1716,3 +1716,27 @@ def test_container_label_names_feed_known_service():
                      include_hidden=False, hidden_locked=False)
     row2 = next(p for p in out2["ports"] if p["port"] == 8091)
     assert row2["known_service"]["name"] == "Host Key"
+
+
+def test_scan_with_ss_retries_past_help_flavored_variants(monkeypatch):
+    """`-h` means help in iproute2: it exits 0 with usage text, which used to be
+    mistaken for a legitimately empty listen table. The ladder must move on."""
+    from types import SimpleNamespace
+
+    from backend import port_scanner as ps
+
+    usage = "Usage: ss [ OPTIONS ]\nss [ OPTIONS ] [ STATE FILTER ]\n"
+    sample = 'tcp   LISTEN 0  4096  0.0.0.0:6379  0.0.0.0:*  users:(("redis",pid=9,fd=8))'
+    calls: list[list[str]] = []
+
+    def fake_run(args, capture_output, text, timeout):
+        calls.append(list(args))
+        if any(a.startswith("-") and "h" in a[1:] for a in args[1:]):
+            return SimpleNamespace(returncode=0, stdout=usage, stderr="")
+        return SimpleNamespace(returncode=0, stdout=sample, stderr="")
+
+    monkeypatch.setattr(ps.subprocess, "run", fake_run)
+    ports = ps._scan_with_ss()
+    assert [p.port for p in ports] == [6379]
+    assert calls, "no ss variants were tried"
+    assert all("-h" not in args[1:] for args in calls), "help flag still in the ladder"

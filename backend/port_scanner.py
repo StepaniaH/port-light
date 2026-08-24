@@ -214,9 +214,9 @@ def _read_children(pid: int, proc_root: str) -> list[int]:
 
 def _scan_with_ss() -> list[ListeningPort]:
     last_error: Exception | None = None
+    # No "-h" anywhere: in iproute2 that means help, which exits 0 with usage
+    # text and used to be mistaken for a legitimately empty listen table.
     for args in (
-        ["ss", "-tulnphH"],
-        ["ss", "-tulnph"],
         ["ss", "-tulnpH"],
         ["ss", "-tulnp"],
     ):
@@ -234,6 +234,11 @@ def _scan_with_ss() -> list[ListeningPort]:
             parsed = parse_ss_line(line)
             if parsed:
                 ports.append(parsed)
+        if not ports and result.stdout.strip():
+            # Output we could not parse a single listener from is a format
+            # surprise, not an idle machine — let the next variant try.
+            last_error = ValueError(f"unparseable ss output from {args}")
+            continue
         return ports
     if last_error:
         raise last_error
