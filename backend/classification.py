@@ -9,10 +9,11 @@ import ipaddress
 
 from .docker_scanner import safe_http_url
 from .known_ports import get_known_port
+from .models import OccupancyRow
 from .port_scanner import is_host_netns_mode
 
 
-def free_port_payload(port: int, *, hidden: bool) -> dict:
+def free_port_payload(port: int, *, hidden: bool) -> OccupancyRow:
     return {
         "port": port,
         "status": "free",
@@ -181,7 +182,7 @@ def classify(
     all_ports = set(listening_map) | set(container_map) | set(compose_map) | set(manual_map)
     hidden_status: dict[int, str] = {}
 
-    port_list: list[dict] = []
+    port_list: list[OccupancyRow] = []
     for port in sorted(all_ports | hidden):
         lp_info = listening_map.get(port)
         ctors = container_map.get(port, [])
