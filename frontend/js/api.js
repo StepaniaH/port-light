@@ -1,13 +1,11 @@
 /* Data layer: host catalog helpers, URL builders, fetchers, and the
    occupancy poll loop. */
 
-import { S } from './state.js?v=57';
-import { grid, hostBoards, markRefreshed, setSyncError } from './dom.js?v=57';
-import { t, escapeHtml } from './text.js?v=57';
-import { modalOpen } from './modal.js?v=57';
-
-// Set by app.js once the grid renderer exists; avoids a module cycle.
-export const hooks = { render: () => {} };
+import { S } from './state.js?v=58';
+import { grid, hostBoards, markRefreshed, setSyncError } from './dom.js?v=58';
+import { t, escapeHtml } from './text.js?v=58';
+import { modalOpen } from './modal.js?v=58';
+import { render } from './grid.js?v=58';
 
 
   export function hasPeers() {
@@ -308,7 +306,7 @@ export const hooks = { render: () => {} };
     } finally {
       S.hostRetrying[hostId] = false;
     }
-    if (shouldRender) hooks.render();
+    if (shouldRender) render();
   }
   export function tick() {
     if (S.route.name === 'settings') return;
@@ -335,7 +333,7 @@ export const hooks = { render: () => {} };
       const key = occupancyFingerprint();
       if (key !== S.occupancyKey) {
         S.occupancyKey = key;
-        hooks.render();
+        render();
       }
     }).then(function () {
       if (!hasPeers()) fetchHealth();

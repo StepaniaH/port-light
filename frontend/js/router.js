@@ -1,11 +1,12 @@
 /* Hash router: #/, #/settings/:panel, #/port/:n, #/h/:host(/port/:n). */
 
-import { S, SETTINGS_PANELS } from './state.js?v=57';
-import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=57';
-import { hostById, tick, hasPeers } from './api.js?v=57';
-import { t } from './text.js?v=57';
-import { render, applyPendingGridFocus } from './grid.js?v=57';
-import { bridge } from './bridge.js';
+import { S, SETTINGS_PANELS } from './state.js?v=58';
+import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=58';
+import { hostById, tick, hasPeers } from './api.js?v=58';
+import { t } from './text.js?v=58';
+import { render, applyPendingGridFocus } from './grid.js?v=58';
+import { closeDetail, showPortDetail } from './detail.js?v=58';
+import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './settings.js?v=58';
 
 
   export function parseHash(hash) {
@@ -39,7 +40,7 @@ import { bridge } from './bridge.js';
   export function leaveSettingsOrStay() {
     if (!S.settingsDirty || S.route.name !== 'settings') return true;
     if (!window.confirm(t('settings.discard'))) return false;
-    bridge.revertUnsavedSettings();
+    revertUnsavedSettings();
     return true;
   }
 
@@ -63,15 +64,15 @@ import { bridge } from './bridge.js';
     syncHeaderHeight();
     if (onSettings) {
       S.pendingGridFocus = null;
-      bridge.closeDetail(true);
+      closeDetail(true);
       S.settingsPanel = S.route.section || 'appearance';
       const want = '#/settings/' + S.settingsPanel;
       if ((location.hash || '') !== want) history.replaceState(null, '', want);
       if (prev === 'settings') {
-        bridge.showSettingsPanel(S.settingsPanel);
+        showSettingsPanel(S.settingsPanel);
         return;
       }
-      bridge.loadSettingsPage();
+      loadSettingsPage();
       return;
     }
     if (prev === 'settings') tick();
@@ -82,10 +83,10 @@ import { bridge } from './bridge.js';
       S.selectedHostId = S.route.hostId || 'local';
       S.focusHostId = S.selectedHostId;
       if (S.currentData || hasPeers()) render();
-      else bridge.showPortDetail(S.route.port);
+      else showPortDetail(S.route.port);
       return;
     }
-    bridge.closeDetail(true);
+    closeDetail(true);
     if (S.currentData || hasPeers()) render();
     applyPendingGridFocus();
   }

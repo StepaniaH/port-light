@@ -71,3 +71,36 @@ export const S = {
   lastHiddenLocked: null,
   portsAbort: null,
 };
+
+export function applyTheme() {
+  var th = S.settings.theme || 'system';
+  if (th === 'system') {
+    th = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', th);
+}
+
+export function applyAppearance() {
+  applyTheme();
+  document.documentElement.setAttribute('data-density', S.settings.grid_density || 'comfortable');
+  try {
+    localStorage.setItem('port-light-settings', JSON.stringify({
+      theme: S.settings.theme,
+      grid_density: S.settings.grid_density,
+      locale: S.settings.locale || 'auto',
+    }));
+  } catch (e) {}
+}
+
+export function saveView() {
+  try {
+    localStorage.setItem('port-light-view', JSON.stringify({
+      sort: S.sortMode,
+      status: S.statusFilter,
+      kinds: Array.from(S.kindFilters),
+      showHidden: S.showHidden,
+      rangeStart: S.rangeStart,
+      rangeEnd: S.rangeEnd,
+    }));
+  } catch (e) {}
+}

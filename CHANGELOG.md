@@ -12,7 +12,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Changed
 
-- The frontend entry loads as a native ES module from `/static/js/`, with shared text, kind-chip, and focus-trap helpers in small sibling modules. Module chunks revalidate (`Cache-Control: no-cache`); classic assets keep their immutable cache and `?v=` busting. Still no build step.
+- The frontend is now a set of native ES modules under `/static/js/` (state store, data layer, router, grid, detail drawer, settings), with `app.js` reduced to boot and event wiring. Module chunks revalidate (`Cache-Control: no-cache`); classic assets keep their immutable cache and `?v=` busting. Still no build step.
 - IP-address and protocol normalization helpers from the four scanners are consolidated in `backend/netaddr.py`. No behavior changes.
 - Occupancy classification moved from `backend/main.py` into `backend/classification.py`; Docker publish rows are typed (`PortMapping`) and grid rows documented as `OccupancyRow`. No API or behavior changes.
 - The repo now has a `.gitignore` (bytecode, virtualenvs, `.env`, `data/`, `custom_ports.json`).

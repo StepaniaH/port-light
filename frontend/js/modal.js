@@ -1,6 +1,6 @@
 /* Generic modal helpers (add-port and hidden-unlock dialogs). */
 
-import { S } from './state.js?v=57';
+import { S } from './state.js?v=58';
 
 export function openModal(id) {
   S.focusBack = document.activeElement;

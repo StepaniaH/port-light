@@ -1,11 +1,11 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S, CARD_FIELD_KEYS } from './state.js?v=57';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=57';
-import { KIND_MATCHERS } from './kinds.js?v=57';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=57';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl, portHash, api, fetchPorts, renderScanners } from './api.js?v=57';
-import { bridge } from './bridge.js';
+import { S, CARD_FIELD_KEYS } from './state.js?v=58';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=58';
+import { KIND_MATCHERS } from './kinds.js?v=58';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=58';
+import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl, portHash, api, fetchPorts, renderScanners } from './api.js?v=58';
+import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=58';
 
 
   export function syncFilterUI() {
@@ -486,11 +486,11 @@ import { bridge } from './bridge.js';
     }
     if (S.selectedPort !== null) {
       const entry = portFromList(S.selectedPort, S.selectedHostId);
-      if (entry) bridge.renderDetail(entry);
+      if (entry) renderDetail(entry);
       else if (S.route.name === 'port') {
         S.detailShownPort = null;
-        bridge.showPortDetail(S.selectedPort);
-      } else bridge.closeDetail(true);
+        showPortDetail(S.selectedPort);
+      } else closeDetail(true);
     }
   }
 
@@ -599,7 +599,7 @@ import { bridge } from './bridge.js';
         const port = parseInt(el.dataset.port, 10);
         const hid = el.dataset.host || 'local';
         if (S.selectedPort === port && (S.selectedHostId || 'local') === hid && S.route.name === 'port') {
-          bridge.closeDetail();
+          closeDetail();
           return;
         }
         S.selectedPort = port;
@@ -610,7 +610,7 @@ import { bridge } from './bridge.js';
           location.hash = want;
         } else {
           const entry = displayPorts.find(function (p) { return p.port === port; });
-          bridge.showPortDetail(port, entry);
+          showPortDetail(port, entry);
         }
         if (S.settings.copy_on_click) {
           navigator.clipboard.writeText(String(port)).then(function () {
