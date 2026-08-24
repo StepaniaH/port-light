@@ -699,6 +699,55 @@ def test_required_env_and_extends_env(tmp_path):
     assert 7411 in {p.port for p in scan_compose_files(str(tmp_path))}
 
 
+def test_scan_parses_each_compose_file_once(tmp_path, monkeypatch):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "base.yml").write_text(
+        "services:\n  s:\n    ports: ['7700:80']\n",
+        encoding="utf-8",
+    )
+    appdir = tmp_path / "app"
+    appdir.mkdir()
+    (appdir / "compose.yml").write_text(
+        "include:\n  - ../shared/base.yml\nservices:\n  web:\n    ports: ['7710:80']\n",
+        encoding="utf-8",
+    )
+    from backend import compose_scanner as cs
+
+    counts: dict[str, int] = {}
+    real = cs._compose_doc_uncached
+
+    def counting(filepath, *a, **kw):
+        name = os.path.basename(str(filepath))
+        counts[name] = counts.get(name, 0) + 1
+        return real(filepath, *a, **kw)
+
+    monkeypatch.setattr(cs, "_compose_doc_uncached", counting)
+    scan = cs.scan_compose_tree(str(tmp_path))
+    assert {p.port for p in scan.ports} == {7700, 7710}
+    # Without the per-scan cache, base.yml was loaded for include discovery,
+    # macvlan names, and service parsing — three loads for one file.
+    assert counts == {"compose.yml": 1, "base.yml": 1}
+
+
+def test_broken_base_compose_file_marks_incomplete(tmp_path):
+    good = tmp_path / "good"
+    bad = tmp_path / "bad"
+    good.mkdir()
+    bad.mkdir()
+    (good / "compose.yml").write_text(
+        "services:\n  web:\n    ports: ['7610:80']\n",
+        encoding="utf-8",
+    )
+    (bad / "compose.yml").write_text(
+        "services:\n  web:\n  - ports: [oops\n",
+        encoding="utf-8",
+    )
+    scan = scan_compose_tree(str(tmp_path))
+    assert scan.incomplete is True
+    assert {p.port for p in scan.ports} == {7610}
+
+
 def test_compose_would_fail_skips_project_not_siblings(tmp_path):
     ok = tmp_path / "ok"
     bad = tmp_path / "bad"
