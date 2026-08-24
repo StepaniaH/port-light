@@ -275,6 +275,17 @@
         "label": "URL scheme",
         "help": "Auto uses https for 443/8443/9443 and names containing HTTPS."
       }
+    },
+    "auto": {
+      "title": "Automation",
+      "blurb": "What this instance currently exposes to scripts and agents.",
+      "agentToken": "Agent token",
+      "suggest": "Port suggestions API",
+      "suggestValue": "open — /api/ports/suggest",
+      "metrics": "Metrics endpoint",
+      "webhook": "Webhook",
+      "history": "History retention (days)",
+      "events": "Change stream (SSE)"
     }
   },
   "choice": {

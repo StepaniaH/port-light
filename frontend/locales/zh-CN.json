@@ -275,6 +275,17 @@
         "label": "URL 协议",
         "help": "自动会在 443/8443/9443 以及名称含 HTTPS 时使用 https。"
       }
+    },
+    "auto": {
+      "title": "自动化与集成",
+      "blurb": "当前实例对脚本与智能体开放的能力。",
+      "agentToken": "智能体令牌（AGENT_TOKEN）",
+      "suggest": "端口建议接口",
+      "suggestValue": "开放 — /api/ports/suggest",
+      "metrics": "指标端点（METRICS_ENABLED）",
+      "webhook": "Webhook（WEBHOOK_URL）",
+      "history": "历史保留天数",
+      "events": "变更推送（SSE）"
     }
   },
   "choice": {

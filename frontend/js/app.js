@@ -1,42 +1,42 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyTheme, applyAppearance, saveView } from './state.js?v=59';
-import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js?v=59';
-import { KIND_MATCHERS } from './kinds.js?v=59';
-import { moveChipFocus, trapTab } from './a11y.js?v=59';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyTheme, applyAppearance, saveView } from './state.js?v=60';
+import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js?v=60';
+import { KIND_MATCHERS } from './kinds.js?v=60';
+import { moveChipFocus, trapTab } from './a11y.js?v=60';
 import {
   appEl, grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop, detailContent,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn, settingsBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=59';
-import { openModal, closeModals, modalOpen } from './modal.js?v=59';
-import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=59';
+} from './dom.js?v=60';
+import { openModal, closeModals, modalOpen } from './modal.js?v=60';
+import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=60';
 import {
   render, renderSummary, renderHostSwitcher, renderHostBoards, portFromList,
   freeStub, pendingStub, prefetchKnown, getCellLabel, hiddenOccupancy,
   probeLockedHit, buildSearchContext, getKnownForFree, matchesFilter, sortPorts,
   renderGrid, showCopyToast, snapshotGridFocus, syncAddButton, syncFilterUI,
   syncHiddenButton, applyPendingGridFocus, gridRootFrom, moveGridFocus,
-} from './grid.js?v=59';
+} from './grid.js?v=60';
 import {
   hasPeers, listedHosts, hostById, hostName,
   occupancyUrl, portApiUrl, gridHash, portHash, dataForHost,
   api, fetchMeta, fetchHealth, fetchHostHealth, fetchHosts,
   fetchPorts, retryHost, setupRefresh, loadPorts, renderScanners, tick,
   startEventStream,
-} from './api.js?v=59';
+} from './api.js?v=60';
 import {
   closeDetail, showPortDetail, showDetailError, syncDetailModal, unlockHidden,
   addManualPort,
-} from './detail.js?v=59';
+} from './detail.js?v=60';
 import {
   loadSettingsPage, showSettingsPanel, goSettingsPanel, saveSettingsPage,
   applyServerSettings, revertUnsavedSettings, markDirty, syncDependentSettings,
   fetchSettings, syncLocaleTrigger, closeLocaleMenu, moveLocaleHighlight,
   renderPeersEditor, readPeersDraftFromForm,
-} from './settings.js?v=59';
+} from './settings.js?v=60';
 
 (function () {
   'use strict';

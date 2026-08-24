@@ -57,6 +57,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with one-click reservation
+- Coding-agent ready: `GET /api/ports/suggest` hands out genuinely free ports (with optional reservation or expiring leases), plus an MCP stdio server and an agent skill under `skills/`
 - Local history: port state transitions land in `history.db` inside your data volume (default 7 days; `HISTORY_RETENTION_DAYS=0` disables) — the detail drawer shows recent changes and `GET /api/ports/{n}/history` exposes them
 - Optional webhooks: `WEBHOOK_URL` + `WEBHOOK_EVENTS=new_listener,conflict` POST JSON when a port starts being used or two stacks collide
 - Instant refresh: open UIs subscribe to `GET /api/events` (SSE) and re-poll the moment occupancy changes, instead of waiting for the next 5s tick

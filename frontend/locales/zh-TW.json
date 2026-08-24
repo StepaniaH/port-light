@@ -275,6 +275,17 @@
         "label": "URL 通訊協定",
         "help": "自動會在 443/8443/9443 以及名稱含 HTTPS 時使用 https。"
       }
+    },
+    "auto": {
+      "title": "自動化與整合",
+      "blurb": "目前實例對腳本與智慧代理開放的能力。",
+      "agentToken": "智慧代理權杖（AGENT_TOKEN）",
+      "suggest": "連接埠建議介面",
+      "suggestValue": "開放 — /api/ports/suggest",
+      "metrics": "指標端點（METRICS_ENABLED）",
+      "webhook": "Webhook（WEBHOOK_URL）",
+      "history": "歷史保留天數",
+      "events": "變更推送（SSE）"
     }
   },
   "choice": {

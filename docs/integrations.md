@@ -28,7 +28,18 @@ curl -s "http://127.0.0.1:2100/api/ports/suggest?count=2&reserve=true&label=prev
   reserved manually, or hidden.
 - `reserve=true` records the returned ports as manual entries (configured /
   amber on every map). Release with `DELETE /api/manual-ports/{port}`.
+- `ttl=<seconds>` (60–604800) turns reservations into leases: they disappear
+  on their own once expired. The response carries `expires_at`.
+- `scope=all` also avoids ports occupied on configured peers. Unreachable
+  peers are skipped and logged as degradations; the response reports
+  `"scope": "all:<reachable>/<total>"`.
 - `count` is capped at 64.
+
+### Agent token
+
+Set `AGENT_TOKEN` to require an `X-Agent-Token` header on
+`/api/ports/suggest`. Basic Auth credentials continue to work alongside it;
+every other endpoint is unaffected.
 
 ### Largest contiguous runs
 
@@ -116,8 +127,8 @@ above instead of guessing ports.
 ### MCP server (experimental)
 
 `mcp/server.py` is a dependency-free MCP stdio server wrapping the same
-endpoints as five tools: `suggest_ports`, `check_port`, `list_occupancy`,
-`port_history`, `release_port`.
+endpoints as six tools: `suggest_ports`, `check_port`, `list_occupancy`,
+`port_history`, `list_degradations`, `release_port`.
 
 ```bash
 PORT_LIGHT_URL=http://127.0.0.1:2100 python mcp/server.py

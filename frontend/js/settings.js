@@ -1,11 +1,11 @@
 /* Settings view: three panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyAppearance, saveView } from './state.js?v=59';
-import { t, tx, escapeHtml, errorText } from './text.js?v=59';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=59';
-import { moveChipFocus } from './a11y.js?v=59';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=59';
-import { render, syncHiddenButton } from './grid.js?v=59';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyAppearance, saveView } from './state.js?v=60';
+import { t, tx, escapeHtml, errorText } from './text.js?v=60';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=60';
+import { moveChipFocus } from './a11y.js?v=60';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=60';
+import { render, syncHiddenButton } from './grid.js?v=60';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -395,7 +395,8 @@ import { render, syncHiddenButton } from './grid.js?v=59';
         settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
         extraAdvanced +
-        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div>'));
+        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div>'),
+        settingsCard('settings.auto.title', 'settings.auto.blurb', '<div id="settings-automation"></div>'));
 
     const env = doc.env_only || {};
     const envHost = document.getElementById('settings-env-only');
@@ -412,6 +413,29 @@ import { render, syncHiddenButton } from './grid.js?v=59';
           (doc.source === 'auto' || doc.source === 'env' || doc.source === 'file') ? 'settings.source.' + doc.source : '',
         ),
       ].join('');
+    }
+    const autoHost = document.getElementById('settings-automation');
+    if (autoHost) {
+      const a = S.meta && S.meta.automation ? S.meta.automation : null;
+      if (!a) {
+        autoHost.innerHTML = '';
+      } else {
+        const flag = (v) => [t(v ? 'settings.on' : 'settings.off'), v ? 'settings.on' : 'settings.off'];
+        const [agentV, agentK] = flag(a.agent_token);
+        const [metricV, metricK] = flag(a.metrics);
+        const [webhookV, webhookK] = flag(a.webhook);
+        const histV = a.history_days > 0 ? String(a.history_days) : t('settings.off');
+        const histK = a.history_days > 0 ? '' : 'settings.off';
+        const [evV, evK] = flag(a.events_stream);
+        autoHost.innerHTML = [
+          kvRow('settings.auto.agentToken', agentV, agentK),
+          kvRow('settings.auto.suggest', t('settings.auto.suggestValue'), 'settings.auto.suggestValue'),
+          kvRow('settings.auto.metrics', metricV, metricK),
+          kvRow('settings.auto.webhook', webhookV, webhookK),
+          kvRow('settings.auto.history', histV, histK),
+          kvRow('settings.auto.events', evV, evK),
+        ].join('');
+      }
     }
     showSettingsPanel(S.route.section || S.settingsPanel);
     syncDependentSettings();

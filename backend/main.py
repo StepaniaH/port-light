@@ -125,6 +125,15 @@ def meta() -> dict:
         "refresh_ms": values["refresh_ms"],
         "theme": values["theme"],
         "grid_density": values["grid_density"],
+        "automation": {
+            "agent_token": bool(os.environ.get("AGENT_TOKEN", "").strip()),
+            "metrics": os.environ.get("METRICS_ENABLED", "").strip().lower()
+                       in ("1", "true", "yes", "on"),
+            "webhook": bool(os.environ.get("WEBHOOK_URL", "").strip()),
+            "history_days": history.retention_days(),
+            "events_stream": True,
+            "suggest_peers": bool(hosts.list_public_peers()),
+        },
     }
 
 

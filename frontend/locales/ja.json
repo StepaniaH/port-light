@@ -275,6 +275,17 @@
         "label": "URL のスキーム",
         "help": "自動は 443/8443/9443 と HTTPS を含む名前で https を使います。"
       }
+    },
+    "auto": {
+      "title": "自動化と統合",
+      "blurb": "このインスタンスがスクリプトやエージェントに公開している機能。",
+      "agentToken": "エージェントトークン（AGENT_TOKEN）",
+      "suggest": "ポート提案API",
+      "suggestValue": "公開 — /api/ports/suggest",
+      "metrics": "メトリクス（METRICS_ENABLED）",
+      "webhook": "Webhook（WEBHOOK_URL）",
+      "history": "履歴保持日数",
+      "events": "変更ストリーム（SSE）"
     }
   },
   "choice": {
