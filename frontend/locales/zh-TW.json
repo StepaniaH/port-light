@@ -8,7 +8,8 @@
     "add": "新增連接埠",
     "showHidden": "顯示隱藏的連接埠",
     "hiddenVisible": "正在顯示隱藏的連接埠",
-    "settings": "設定"
+    "settings": "設定",
+    "findFree": "尋找空閒連接埠"
   },
   "legend": {
     "inUse": "使用中",
@@ -341,5 +342,15 @@
     "lan": "區域網路",
     "link": "連結本機",
     "localhost": "localhost"
+  },
+  "planner": {
+    "title": "尋找空閒連接埠",
+    "count": "需要幾個連接埠？",
+    "label": "預留標籤",
+    "find": "尋找連續空閒段",
+    "none": "此範圍內沒有連續空閒段。",
+    "run": "{start}–{end}（連續 {size} 個）",
+    "reserve": "預留",
+    "reserved": "已預留 {count} 個連接埠。"
   }
 }

@@ -1,11 +1,11 @@
 /* Settings view: three panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyAppearance, saveView } from './state.js?v=58';
-import { t, tx, escapeHtml, errorText } from './text.js?v=58';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=58';
-import { moveChipFocus } from './a11y.js?v=58';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=58';
-import { render, syncHiddenButton } from './grid.js?v=58';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyAppearance, saveView } from './state.js?v=59';
+import { t, tx, escapeHtml, errorText } from './text.js?v=59';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=59';
+import { moveChipFocus } from './a11y.js?v=59';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=59';
+import { render, syncHiddenButton } from './grid.js?v=59';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');

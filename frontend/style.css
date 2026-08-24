@@ -1115,3 +1115,8 @@ a:focus-visible,
   .chip, .icon-btn, .port-cell, .switch .track, .switch .track::after,
   .port-cell .copy-toast, .detail-copy-port .copy-toast, .locale-menu { transition: none; }
 }
+
+/* Free-port planner */
+.free-results { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; max-height: 40vh; overflow-y: auto; }
+.free-run { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 8px; border: 1px solid var(--border, #ccc); border-radius: 6px; }

@@ -585,3 +585,49 @@ def favicon() -> FileResponse:
 app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
 
 
+
+
+@app.get("/api/free-runs")
+def free_runs(
+    count: int = Query(default=1, ge=1, le=64),
+    start: int | None = Query(default=None, ge=1, le=65535),
+    end: int | None = Query(default=None, ge=1, le=65535),
+) -> dict:
+    """Largest contiguous free-port runs inside a window.
+
+    Read-only planning aid: nothing is reserved here — use the manual-ports
+    API to claim a run once chosen.
+    """
+    values = _values()
+    lo = start if start is not None else values["port_range_start"]
+    hi = end if end is not None else values["port_range_end"]
+    if hi < lo:
+        lo, hi = hi, lo
+    snap = _scan_snapshot(values)
+    manuals, hidden = snap["user_state"]
+    result = classify(
+        snap["listening"],
+        snap["containers"],
+        snap["compose_scan"].ports,
+        manuals,
+        hidden,
+        lo,
+        hi,
+        True,
+        hidden_locked=False,
+        options=values,
+    )
+    taken = {row["port"] for row in result["ports"]}
+    taken.update(hidden)
+    runs: list[dict] = []
+    cursor = lo
+    while cursor <= hi:
+        if cursor in taken:
+            cursor += 1
+            continue
+        run_start = cursor
+        while cursor <= hi and cursor not in taken:
+            cursor += 1
+        runs.append({"start": run_start, "end": cursor - 1, "size": cursor - run_start})
+    runs.sort(key=lambda r: (-r["size"], r["start"]))
+    return {"count": count, "start": lo, "end": hi, "runs": runs[:10]}

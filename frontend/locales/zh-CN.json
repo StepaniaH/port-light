@@ -8,7 +8,8 @@
     "add": "添加端口",
     "showHidden": "显示隐藏端口",
     "hiddenVisible": "正在显示隐藏端口",
-    "settings": "设置"
+    "settings": "设置",
+    "findFree": "查找空闲端口"
   },
   "legend": {
     "inUse": "占用中",
@@ -341,5 +342,15 @@
     "lan": "局域网",
     "link": "链路本地",
     "localhost": "localhost"
+  },
+  "planner": {
+    "title": "查找空闲端口",
+    "count": "需要几个端口？",
+    "label": "预留标签",
+    "find": "查找连续空闲段",
+    "none": "此范围内没有连续空闲段。",
+    "run": "{start}–{end}（连续 {size} 个）",
+    "reserve": "预留",
+    "reserved": "已预留 {count} 个端口。"
   }
 }

@@ -15,7 +15,7 @@
       if (s.grid_density) document.documentElement.setAttribute('data-density', s.grid_density);
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=58">
+  <link rel="stylesheet" href="/static/style.css?v=59">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -44,6 +44,9 @@
           </button>
           <button type="button" id="btn-add" class="icon-btn" data-i18n-title="action.add">
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 1.5a.75.75 0 0 1 .75.75v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0v-5h-5a.75.75 0 0 1 0-1.5h5v-5A.75.75 0 0 1 8 1.5z"/></svg>
+          </button>
+          <button type="button" id="btn-free" class="icon-btn" data-i18n-title="action.findFree">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M11.5 2a3.5 3.5 0 0 0-3.4 4.4L2.3 12.2a1 1 0 0 0 0 1.4l.1.1a1 1 0 0 0 1.4 0l5.8-5.8A3.5 3.5 0 1 0 11.5 2zm0 5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>
           </button>
           <button type="button" id="btn-unhide" class="icon-btn" data-i18n-title="action.showHidden" aria-pressed="false">
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 3c-3.2 0-5.9 2.1-7.2 5 1.3 2.9 4 5 7.2 5s5.9-2.1 7.2-5C13.9 5.1 11.2 3 8 3zm0 8.2A3.2 3.2 0 1 1 8 4.8a3.2 3.2 0 0 1 0 6.4zM8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8z"/></svg>
@@ -135,6 +138,24 @@
       </form>
     </div>
 
+    <div id="free-modal" class="modal hidden" role="dialog" aria-labelledby="free-title" aria-modal="true">
+      <form class="modal-content" id="free-form">
+        <h2 id="free-title" data-i18n="planner.title">Find free ports</h2>
+        <label><span data-i18n="planner.count">How many ports do you need?</span>
+          <input type="number" id="free-count" min="1" max="64" value="1" required>
+        </label>
+        <label><span data-i18n="planner.label">Label for reservation</span>
+          <input type="text" id="free-label" maxlength="80" data-i18n-placeholder="modal.optional">
+        </label>
+        <div id="free-results" class="free-results" hidden></div>
+        <p id="free-error" class="modal-hint is-error hidden" hidden role="alert"></p>
+        <div class="modal-actions">
+          <button type="button" id="free-cancel" class="btn-secondary" data-i18n="modal.cancel">Cancel</button>
+          <button type="submit" id="free-find" class="btn-primary" data-i18n="planner.find">Find runs</button>
+        </div>
+      </form>
+    </div>
+
     <div id="unhide-modal" class="modal hidden" role="dialog" aria-labelledby="unhide-title" aria-modal="true">
       <form class="modal-content" id="unhide-form">
         <h2 id="unhide-title" data-i18n="modal.unhideTitle">Show hidden ports</h2>
@@ -151,7 +172,7 @@
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=58"></script>
-  <script type="module" src="/static/js/app.js?v=58"></script>
+  <script src="/static/i18n.js?v=59"></script>
+  <script type="module" src="/static/js/app.js?v=59"></script>
 </body>
 </html>

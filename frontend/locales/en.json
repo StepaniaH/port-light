@@ -8,7 +8,8 @@
     "add": "Add port",
     "showHidden": "Show hidden ports",
     "hiddenVisible": "Hidden ports visible",
-    "settings": "Settings"
+    "settings": "Settings",
+    "findFree": "Find free ports"
   },
   "legend": {
     "inUse": "in use",
@@ -341,5 +342,15 @@
     "lan": "LAN",
     "link": "link-local",
     "localhost": "localhost"
+  },
+  "planner": {
+    "title": "Find free ports",
+    "count": "How many ports do you need?",
+    "label": "Label for reservation",
+    "find": "Find runs",
+    "none": "No free runs in this range.",
+    "run": "{start}–{end} ({size} free)",
+    "reserve": "Reserve",
+    "reserved": "Reserved {count} ports."
   }
 }

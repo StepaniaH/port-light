@@ -1,41 +1,41 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyTheme, applyAppearance, saveView } from './state.js?v=58';
-import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js?v=58';
-import { KIND_MATCHERS } from './kinds.js?v=58';
-import { moveChipFocus, trapTab } from './a11y.js?v=58';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyTheme, applyAppearance, saveView } from './state.js?v=59';
+import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js?v=59';
+import { KIND_MATCHERS } from './kinds.js?v=59';
+import { moveChipFocus, trapTab } from './a11y.js?v=59';
 import {
   appEl, grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop, detailContent,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn, settingsBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=58';
-import { openModal, closeModals, modalOpen } from './modal.js?v=58';
-import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=58';
+} from './dom.js?v=59';
+import { openModal, closeModals, modalOpen } from './modal.js?v=59';
+import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=59';
 import {
   render, renderSummary, renderHostSwitcher, renderHostBoards, portFromList,
   freeStub, pendingStub, prefetchKnown, getCellLabel, hiddenOccupancy,
   probeLockedHit, buildSearchContext, getKnownForFree, matchesFilter, sortPorts,
   renderGrid, showCopyToast, snapshotGridFocus, syncAddButton, syncFilterUI,
   syncHiddenButton, applyPendingGridFocus, gridRootFrom, moveGridFocus,
-} from './grid.js?v=58';
+} from './grid.js?v=59';
 import {
   hasPeers, listedHosts, hostById, hostName,
   occupancyUrl, portApiUrl, gridHash, portHash, dataForHost,
   api, fetchMeta, fetchHealth, fetchHostHealth, fetchHosts,
   fetchPorts, retryHost, setupRefresh, loadPorts, renderScanners, tick,
-} from './api.js?v=58';
+} from './api.js?v=59';
 import {
   closeDetail, showPortDetail, showDetailError, syncDetailModal, unlockHidden,
   addManualPort,
-} from './detail.js?v=58';
+} from './detail.js?v=59';
 import {
   loadSettingsPage, showSettingsPanel, goSettingsPanel, saveSettingsPage,
   applyServerSettings, revertUnsavedSettings, markDirty, syncDependentSettings,
   fetchSettings, syncLocaleTrigger, closeLocaleMenu, moveLocaleHighlight,
   renderPeersEditor, readPeersDraftFromForm,
-} from './settings.js?v=58';
+} from './settings.js?v=59';
 
 (function () {
   'use strict';
@@ -320,6 +320,66 @@ import {
   document.getElementById('add-form').addEventListener('submit', function (e) {
     e.preventDefault();
     addManualPort();
+  });
+
+  document.getElementById('btn-free').addEventListener('click', function () {
+    if (hasPeers() && S.focusHostId !== 'local') return;
+    openModal('free-modal');
+  });
+  document.getElementById('free-cancel').addEventListener('click', closeModals);
+  document.getElementById('free-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const countInput = document.getElementById('free-count');
+    const count = Math.min(64, Math.max(1, parseInt(countInput.value, 10) || 1));
+    const resultsEl = document.getElementById('free-results');
+    const errEl = document.getElementById('free-error');
+    errEl.hidden = true; errEl.classList.add('hidden');
+    resultsEl.hidden = true; resultsEl.innerHTML = '';
+    try {
+      const res = await api('/api/free-runs?count=' + count +
+        '&start=' + S.rangeStart + '&end=' + S.rangeEnd);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const body = await res.json();
+      if (!body.runs || !body.runs.length) {
+        resultsEl.hidden = false;
+        resultsEl.textContent = t('planner.none');
+        return;
+      }
+      resultsEl.hidden = false;
+      resultsEl.innerHTML = body.runs.map(function (r) {
+        return '<div class="free-run">' +
+          '<span>' + escapeHtml(t('planner.run', { start: r.start, end: r.end, size: r.size })) + '</span>' +
+          '<button type="button" class="btn-secondary" data-reserve="' + r.start + ':' + r.end + '">' +
+          escapeHtml(t('planner.reserve')) + '</button></div>';
+      }).join('');
+    } catch (err) {
+      errEl.hidden = false; errEl.classList.remove('hidden');
+      errEl.textContent = errorText({}, 0) ;
+      console.error('free-runs error:', err);
+    }
+  });
+  document.getElementById('free-results').addEventListener('click', async function (e) {
+    const btn = e.target.closest('[data-reserve]');
+    if (!btn) return;
+    const parts = btn.getAttribute('data-reserve').split(':');
+    const startR = parseInt(parts[0], 10), endR = parseInt(parts[1], 10);
+    const want = Math.min(64, Math.max(1, parseInt(document.getElementById('free-count').value, 10) || 1));
+    const lastR = Math.min(endR, startR + want - 1);
+    const label = document.getElementById('free-label').value.trim();
+    btn.disabled = true;
+    let ok = 0;
+    for (let port = startR; port <= lastR; port++) {
+      try {
+        const res = await api('/api/manual-ports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ port: port, label: label }),
+        });
+        if (res.ok) ok++;
+      } catch (err) {}
+    }
+    closeModals();
+    tick();
   });
 
   unhideBtn.addEventListener('click', function () {

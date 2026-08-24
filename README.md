@@ -56,6 +56,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Appearance presets on Settings: system / dark / light plus Gruvbox, Catppuccin, Nord, Dracula, Tokyo Night, One Dark, Solarized, Everforest, Rosé Pine, and Kanagawa. Compact grid, UI language (English, 简体中文, 繁體中文, 日本語). Also via Compose env.
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
+- Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with one-click reservation
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
 - Vanilla HTML/CSS/JS frontend — no npm, no build step
 
