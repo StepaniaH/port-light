@@ -144,6 +144,58 @@ def health() -> dict:
     }
 
 
+def _metrics_enabled() -> bool:
+    return os.environ.get("METRICS_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+@app.get("/api/metrics")
+def metrics() -> Response:
+    """Prometheus text exposition over the current occupancy snapshot.
+
+    Disabled unless ``METRICS_ENABLED`` is set. Aggregates only — the
+    endpoint never emits ports, names, or URLs. Hidden rows are included in
+    the aggregates (they are real occupancy) but never identified.
+    """
+    if not _metrics_enabled():
+        raise HTTPException(status_code=404, detail="not found")
+    values = _values()
+    snap = _scan_snapshot(values)
+    manuals, hidden = snap["user_state"]
+    result = classify(
+        snap["listening"],
+        snap["containers"],
+        snap["compose_scan"].ports,
+        manuals,
+        hidden,
+        values["port_range_start"],
+        values["port_range_end"],
+        True,
+        hidden_locked=False,
+        options=values,
+    )
+    summary = result["summary"]
+    lines = [
+        "# TYPE port_light_up gauge",
+        "port_light_up 1",
+        "# TYPE port_light_ports gauge",
+        f'port_light_ports{{status="used"}} {summary["used"]}',
+        f'port_light_ports{{status="configured"}} {summary["configured"]}',
+        f'port_light_ports{{status="free"}} {summary["free"]}',
+        "# TYPE port_light_hidden gauge",
+        f"port_light_hidden {summary['hidden']}",
+        "# TYPE port_light_degradations gauge",
+        f"port_light_degradations {len(degradations.recent(20))}",
+        "# TYPE port_light_compose_files gauge",
+        f"port_light_compose_files {snap['compose_scan'].files_scanned}",
+        "# TYPE port_light_compose_incomplete gauge",
+        f"port_light_compose_incomplete {1 if snap['compose_scan'].incomplete else 0}",
+    ]
+    return Response(
+        content="\n".join(lines) + "\n",
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
 def _scan_key(values: dict) -> tuple:
     return (
         os.environ.get("PORT_LIGHT_DATA_DIR", "/data"),

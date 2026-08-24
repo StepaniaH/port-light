@@ -123,6 +123,7 @@ Open `http://localhost:2100`.
 | `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. |
 | `PORT_LIGHT_PEERS` | unset | JSON array of `{name, url, username?, password?}` used when the data file has no `peers` key, or when `PORT_LIGHT_SETTINGS_SOURCE=env`. Same lock as Settings. |
 | `PORT_LIGHT_LOG_LEVEL` | `warning` | Backend log level (`debug` / `info` / `warning` / `error`). Degraded scans (Docker unreachable, unreadable Compose file, …) log one line and show up in `/api/health` under `degradations`. Env-only. |
+| `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
 
 Most of the table (except paths and secrets) can also be changed on **Settings** in the UI. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
 
