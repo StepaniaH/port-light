@@ -61,7 +61,7 @@
 - 可选 Webhook：设置 `WEBHOOK_URL` 与 `WEBHOOK_EVENTS=new_listener,conflict` 后，端口开始被占用或两个栈冲突时 POST JSON 通知
 - 即时刷新：打开的界面通过 `GET /api/events`（SSE）订阅变更，占用一变就重新拉取，不必等下一个 5 秒轮询
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
-- 前端是原生 HTML/CSS/JS，没有 npm，没有构建步骤
+- 前端是原生 HTML/CSS/JS（native ES modules），没有 npm，没有构建步骤
 
 ### 已知限制（部署前请读）
 

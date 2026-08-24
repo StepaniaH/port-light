@@ -61,7 +61,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Optional webhooks: `WEBHOOK_URL` + `WEBHOOK_EVENTS=new_listener,conflict` POST JSON when a port starts being used or two stacks collide
 - Instant refresh: open UIs subscribe to `GET /api/events` (SSE) and re-poll the moment occupancy changes, instead of waiting for the next 5s tick
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
-- Vanilla HTML/CSS/JS frontend — no npm, no build step
+- Vanilla HTML/CSS/JS frontend served as native ES modules — no npm, no build step
 
 ### Known limits (read before you deploy)
 

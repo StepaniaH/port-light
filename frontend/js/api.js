@@ -349,10 +349,6 @@ import { render } from './grid.js?v=59';
     });
   }
 
-  export function stopEventStream() {
-    if (eventStream) { eventStream.close(); eventStream = null; }
-  }
-
   export function setupRefresh() {
     if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
     if (!eventStream) startEventStream();
