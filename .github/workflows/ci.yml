@@ -4,9 +4,6 @@ on:
   push:
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -37,15 +34,6 @@ jobs:
             tail -6 pytest.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Archive raw log for diagnosis
-        if: failure()
-        run: |
-          git config user.name "ci-diag"
-          git config user.email "ci-diag@users.noreply.github.com"
-          git checkout -B ci-log
-          git add -f pytest.log
-          git commit -m "pytest log from run $GITHUB_RUN_ID (py${{ matrix.python-version }})"
-          git push "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-log --force
 
   frontend:
     runs-on: ubuntu-latest
