@@ -81,7 +81,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.6.0
+    image: stepaniah/port-light:v0.7.0
     container_name: port-light
     restart: unless-stopped
     ports:
