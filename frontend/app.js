@@ -1125,17 +1125,24 @@
     }
   }
 
+  function fpSummary(s) {
+    if (!s) return s;
+    const copy = Object.assign({}, s);
+    delete copy.stale;
+    return copy;
+  }
+
   function occupancyFingerprint() {
     if (!hasPeers()) {
       if (!currentData) return '';
-      return JSON.stringify({ ports: currentData.ports, summary: currentData.summary });
+      return JSON.stringify({ ports: currentData.ports, summary: fpSummary(currentData.summary) });
     }
     return JSON.stringify(listedHosts().map(function (h) {
       const m = hostMaps[h.id] || {};
       return {
         id: h.id,
         ports: m.data && m.data.ports,
-        summary: m.data && m.data.summary,
+        summary: m.data && fpSummary(m.data.summary),
         error: m.error || '',
         scanners: m.scanners || null,
       };

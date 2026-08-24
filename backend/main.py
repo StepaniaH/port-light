@@ -50,6 +50,7 @@ def _store_write_error(_request: Request, exc: port_store.StoreWriteError) -> JS
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 _OCC_TTL = 2.0
+_STALE_SERVE_AFTER = 4.0
 _occ_lock = threading.Lock()
 _occ_wait = threading.Condition(_occ_lock)
 _occ_snap: dict | None = None
@@ -159,16 +160,24 @@ def _scan_snapshot(values: dict) -> dict:
     Opening `#/port/N` otherwise re-walks the same trees the grid just polled.
     Store writes bump ``store_generation`` so a hide / rename is visible immediately.
     Concurrent polls share one in-flight scan instead of walking twice.
+    When a rebuild runs longer than ``_STALE_SERVE_AFTER``, waiters get the
+    last good snapshot marked ``stale`` instead of blocking indefinitely.
     """
     global _occ_snap, _occ_building
     key = _scan_key(values)
     now = time.monotonic()
+    deadline = now + min(2 * _OCC_TTL, _STALE_SERVE_AFTER)
     with _occ_wait:
         snap = _occ_snap
         if snap and snap["key"] == key and now - snap["at"] < _OCC_TTL:
             return snap
         while _occ_building:
-            _occ_wait.wait(timeout=5)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 and snap is not None:
+                stale = dict(snap)
+                stale["stale"] = True
+                return stale
+            _occ_wait.wait(timeout=0.25 if remaining <= 0 else min(0.25, remaining))
             snap = _occ_snap
             now = time.monotonic()
             if snap and snap["key"] == key and now - snap["at"] < _OCC_TTL:
@@ -216,11 +225,16 @@ def _packed_occupancy(
     show_hidden = bool(include_hidden and may_see)
     hidden_locked = hidden_ports_withheld() and not may_see
     snap = _scan_snapshot(values)
+    stale = bool(snap.get("stale"))
     pkey = (start, end, show_hidden, hidden_locked)
-    with _occ_lock:
-        packed = snap.get("packed", {}).get(pkey)
-        if packed is not None:
-            return packed
+    if not stale:
+        # A stale copy shares the memoized results of its source snapshot;
+        # those are served as-is only when they can carry the stale marker,
+        # i.e. never here — stale requests always re-classify below.
+        with _occ_lock:
+            packed = snap.get("packed", {}).get(pkey)
+            if packed is not None:
+                return packed
     manuals, hidden = snap["user_state"]
     result = classify(
         snap["listening"],
@@ -237,6 +251,10 @@ def _packed_occupancy(
     result["summary"]["compose_truncated"] = snap["compose_scan"].truncated
     result["summary"]["compose_incomplete"] = snap["compose_scan"].incomplete
     result["summary"]["compose_files"] = snap["compose_scan"].files_scanned
+    if stale:
+        result["summary"]["stale"] = True
+        body, etag = _json_etag(result)
+        return (result, body, etag)
     body, etag = _json_etag(result)
     packed = (result, body, etag)
     with _occ_lock:

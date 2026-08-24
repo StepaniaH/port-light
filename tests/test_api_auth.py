@@ -233,6 +233,82 @@ def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
     assert n["k"] == 1
 
 
+def test_slow_rebuild_serves_previous_snapshot(monkeypatch, tmp_path):
+    import threading
+    import time
+
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    import backend.main as main
+    from backend.compose_scanner import ComposeScan
+    from backend.port_scanner import ListeningPort
+
+    main._occ_snap = None
+    main._occ_building = False
+    monkeypatch.setattr(main, "scan_containers", lambda: [])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
+    monkeypatch.setattr(main, "_STALE_SERVE_AFTER", 0.2)
+
+    state = {"slow": False}
+    release = threading.Event()
+
+    def fake_listen(**_kw):
+        if state["slow"]:
+            release.wait(timeout=5)
+        return [ListeningPort(port=2200, protocol="tcp", ip="0.0.0.0")]
+
+    monkeypatch.setattr(main, "scan_listening_ports", fake_listen)
+
+    client = TestClient(app)
+    first = client.get("/api/ports")
+    assert first.status_code == 200
+    assert any(row["port"] == 2200 for row in first.json()["ports"])
+    assert "stale" not in first.json()["summary"]
+
+    state["slow"] = True
+    main._occ_snap["at"] -= main._OCC_TTL + 0.05
+    builder_started = threading.Event()
+    results = []
+
+    def builder():
+        builder_started.set()
+        results.append(client.get("/api/ports"))
+
+    tb = threading.Thread(target=builder)
+    tb.start()
+    assert builder_started.wait(timeout=2)
+    time.sleep(0.1)
+
+    waiter_started = threading.Event()
+    def waiter():
+        waiter_started.set()
+        results.append(client.get("/api/ports"))
+
+    tw = threading.Thread(target=waiter)
+    tw.start()
+    assert waiter_started.wait(timeout=2)
+
+    stale_body = None
+    # Only the blocked-out waiter is served inside this window; the builder
+    # stays parked in the fake scanner until `release` below.
+    for _ in range(40):
+        time.sleep(0.05)
+        if len(results) >= 1 and results[-1].json()["summary"].get("stale") is True:
+            stale_body = results[-1].json()
+            break
+    assert stale_body is not None, "waiter was not served within the stale deadline"
+    assert any(row["port"] == 2200 for row in stale_body["ports"])
+
+    release.set()
+    tb.join(timeout=5)
+    tw.join(timeout=5)
+    fresh = client.get("/api/ports")
+    assert fresh.status_code == 200
+    assert "stale" not in fresh.json()["summary"]
+    assert any(row["port"] == 2200 for row in fresh.json()["ports"])
+
+
 def test_concurrent_polls_share_one_scan(monkeypatch, tmp_path):
     import threading
     import time
