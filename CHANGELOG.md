@@ -10,6 +10,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Changed
 
+- IP-address and protocol normalization helpers from the four scanners are consolidated in `backend/netaddr.py`. No behavior changes.
 - Occupancy classification moved from `backend/main.py` into `backend/classification.py`; Docker publish rows are typed (`PortMapping`) and grid rows documented as `OccupancyRow`. No API or behavior changes.
 - The repo now has a `.gitignore` (bytecode, virtualenvs, `.env`, `data/`, `custom_ports.json`).
 

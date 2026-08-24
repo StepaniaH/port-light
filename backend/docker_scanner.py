@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, replace
 from urllib.parse import urlparse
 
 from .models import PortMapping
+from .netaddr import binding_ips, prefixless, strip_brackets
 from .port_scanner import descendant_pids, is_host_netns_mode, socket_inodes_for_tree
 from . import degradations
 
@@ -275,8 +276,8 @@ def extract_ports(attrs: dict) -> list[PortMapping]:
         if hp < 1 or hp > 65535:
             return
         host_ip = host_ip or "0.0.0.0"
-        if isinstance(host_ip, str) and host_ip.startswith("[") and host_ip.endswith("]") and ":" in host_ip:
-            host_ip = host_ip[1:-1]
+        if isinstance(host_ip, str):
+            host_ip = strip_brackets(host_ip)
         protocol = str(protocol or "tcp").lower()
         key = (hp, host_ip, cp, protocol)
         if key in seen:
@@ -307,7 +308,7 @@ def extract_ports(attrs: dict) -> list[PortMapping]:
                 if not isinstance(b, dict):
                     continue
                 hp = _usable_host_port(b.get("HostPort"))
-                hips = _binding_ips(b.get("HostIp"))
+                hips = binding_ips(b.get("HostIp"))
                 if hp is None:
                     pending_ips.extend(hips)
                     continue
@@ -343,15 +344,6 @@ def extract_ports(attrs: dict) -> list[PortMapping]:
         _remember_publish(cid, published)
         return published + expose
     return ports
-
-
-def _binding_ips(raw) -> list[str]:
-    text = "" if raw is None else str(raw).strip()
-    if not text:
-        return ["0.0.0.0", "::"]
-    if text.startswith("[") and text.endswith("]") and ":" in text:
-        text = text[1:-1]
-    return [text] if text else ["0.0.0.0", "::"]
 
 
 def _merge_recalled(current: list[PortMapping], recalled: list[PortMapping]) -> list[PortMapping]:
@@ -462,25 +454,16 @@ def _usable_host_port(raw) -> int | None:
     return hp
 
 
-def _strip_net_ip(raw) -> str:
-    text = str(raw or "").strip()
-    if not text:
-        return ""
-    if "/" in text:
-        text = text.split("/", 1)[0].strip()
-    return text
-
-
 def _macvlan_ips(net: dict) -> list[str]:
     ips: list[str] = []
     for key in ("IPAddress", "GlobalIPv6Address", "IPv6Address"):
-        ip = _strip_net_ip(net.get(key))
+        ip = prefixless(net.get(key))
         if ip and ip not in ips:
             ips.append(ip)
     ipam = net.get("IPAMConfig")
     if isinstance(ipam, dict):
         for key in ("IPv4Address", "IPv6Address"):
-            ip = _strip_net_ip(ipam.get(key))
+            ip = prefixless(ipam.get(key))
             if ip and ip not in ips:
                 ips.append(ip)
     for key in ("SecondaryIPAddresses", "SecondaryIPv6Addresses"):
@@ -489,9 +472,9 @@ def _macvlan_ips(net: dict) -> list[str]:
             continue
         for item in extra:
             if isinstance(item, str):
-                ip = _strip_net_ip(item)
+                ip = prefixless(item)
             elif isinstance(item, dict):
-                ip = _strip_net_ip(
+                ip = prefixless(
                     item.get("Addr") or item.get("IPAddress") or item.get("IPv6Address"),
                 )
             else:

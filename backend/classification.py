@@ -10,6 +10,7 @@ import ipaddress
 from .docker_scanner import safe_http_url
 from .known_ports import get_known_port
 from .models import OccupancyRow
+from .netaddr import clean_bind_ip, proto_family_of
 from .port_scanner import is_host_netns_mode
 
 
@@ -326,10 +327,7 @@ def proto_label(protocols: list[str]) -> str:
 
 
 def strip_bind_ip(ip: str | None) -> str:
-    text = (ip or "").strip()
-    if text.startswith("[") and text.endswith("]") and ":" in text:
-        text = text[1:-1]
-    return text.split("%", 1)[0]
+    return clean_bind_ip(ip)
 
 
 def bind_key(ip: str | None) -> str:
@@ -356,12 +354,7 @@ def binds_overlap(a: str | None, b: str | None) -> bool:
 
 
 def proto_family(proto: str | None) -> str:
-    base = (proto or "tcp").lower().replace("6", "")
-    if base.startswith("udp"):
-        return "udp"
-    if base.startswith("sctp"):
-        return "sctp"
-    return "tcp"
+    return proto_family_of(proto)
 
 
 def compose_conflict(composes: list[dict]) -> bool:

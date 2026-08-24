@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from .netaddr import clean_bind_ip, proto_base
 from .port_scanner import is_host_netns_mode
 
 _SKIP_DIRS = frozenset({
@@ -191,10 +192,7 @@ def _project_display_name(raw_name, fallback: str) -> str:
 
 
 def _norm_proto(proto) -> str:
-    text = str(proto or "tcp").strip().lower() or "tcp"
-    if "/" in text:
-        text = text.split("/", 1)[0] or "tcp"
-    return text
+    return proto_base(proto)
 
 
 def _is_host_network(net: str | None) -> bool:
@@ -970,13 +968,7 @@ def _overlay_compose_docs(base: dict, child: dict) -> dict:
 def _normalize_host_ip(host_ip) -> str | None:
     if host_ip is None:
         return None
-    text = str(host_ip).strip()
-    if not text:
-        return None
-    if text.startswith("[") and text.endswith("]") and ":" in text:
-        text = text[1:-1]
-    if "%" in text:
-        text = text.split("%", 1)[0]
+    text = clean_bind_ip(str(host_ip))
     return text or None
 
 

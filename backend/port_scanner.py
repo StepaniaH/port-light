@@ -12,7 +12,6 @@ Falls back to local ``/proc/net/*`` if neither host proc nor ss work.
 
 from __future__ import annotations
 
-import ipaddress
 import os
 import re
 import shutil
@@ -24,6 +23,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 
 from . import degradations
+from .netaddr import normalize_ip
 
 
 @dataclass
@@ -405,26 +405,6 @@ def parse_proc_net_line(line: str, protocol: str) -> ListeningPort | None:
         port=port, protocol=protocol, ip=ip,
         process_name=None, pid=None, inode=inode,
     )
-
-
-def normalize_ip(ip: str) -> str:
-    """Collapse IPv4-mapped IPv6, zone ids, and wildcard forms."""
-    if not ip:
-        return "0.0.0.0"
-    text = ip.strip()
-    if text in ("*",):
-        return "0.0.0.0"
-    if "%" in text:
-        text = text.split("%", 1)[0]
-    try:
-        addr = ipaddress.ip_address(text)
-    except ValueError:
-        return text
-    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
-        return str(addr.ipv4_mapped)
-    if addr.is_unspecified:
-        return "0.0.0.0" if addr.version == 4 else "::"
-    return str(addr)
 
 
 def _fill_process_names(
