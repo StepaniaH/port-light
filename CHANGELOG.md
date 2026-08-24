@@ -14,6 +14,11 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Occupancy classification moved from `backend/main.py` into `backend/classification.py`; Docker publish rows are typed (`PortMapping`) and grid rows documented as `OccupancyRow`. No API or behavior changes.
 - The repo now has a `.gitignore` (bytecode, virtualenvs, `.env`, `data/`, `custom_ports.json`).
 
+### Fixed
+
+- A Compose file that fails to parse (bad YAML, unreadable, not a mapping) no longer vanishes from the map: the stack is flagged like any other `compose_incomplete` case (amber pill) and reported in `/api/health` degradations. Empty YAML documents still parse as no services.
+- Compose files are loaded once per scan instead of up to three times (include discovery, macvlan names, service parsing).
+
 ## 0.6.0 — 2026-08-16
 
 ### Added
