@@ -4,6 +4,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Added
+
+- Degraded scans are no longer silent: when Docker is unreachable, the listen table is untrusted, `ss` fails, or the data file is quarantined, one line goes to the log (`PORT_LIGHT_LOG_LEVEL`, default `warning`) and the newest events appear in `/api/health` under `degradations`.
+
 ### Changed
 
 - Occupancy classification moved from `backend/main.py` into `backend/classification.py`; Docker publish rows are typed (`PortMapping`) and grid rows documented as `OccupancyRow`. No API or behavior changes.

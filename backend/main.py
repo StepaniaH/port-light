@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
@@ -14,7 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import hosts, port_store, settings as app_settings
+from . import degradations, hosts, port_store
+from . import settings as app_settings
 from .auth import (
     auth_configured,
     basic_auth_middleware,
@@ -33,6 +35,12 @@ from .port_scanner import (
 )
 
 VERSION = "0.6.0"
+
+_log_level = os.environ.get("PORT_LIGHT_LOG_LEVEL", "").strip().upper()
+if not logging.getLogger("port-light").handlers and not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=getattr(logging, _log_level, logging.WARNING) if _log_level else logging.WARNING,
+    )
 
 app = FastAPI(title="Port-Light", version=VERSION)
 
@@ -128,6 +136,7 @@ def health() -> dict:
             "docker": docker_available(),
             "compose": os.path.isdir(compose_dir),
         },
+        "degradations": degradations.recent(5),
     }
 
 

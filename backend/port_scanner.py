@@ -23,6 +23,8 @@ import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 
+from . import degradations
+
 
 @dataclass
 class ListeningPort:
@@ -105,12 +107,13 @@ def scan_listening_ports(
         pass
 
     if not host_listen_trusted():
+        degradations.report("listen", "host", "untrusted listen table")
         return []
 
     try:
         return _scan_with_ss()
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        pass
+        degradations.report("listen", "ss", "scan failed")
 
     try:
         return _scan_with_proc(prefer_pids=prefer_pids)

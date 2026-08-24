@@ -29,6 +29,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+from . import degradations
+
 
 class StoreWriteError(Exception):
     """Raised when the data file cannot be written."""
@@ -64,6 +66,7 @@ def _load() -> dict:
             os.replace(f, corrupt)
         except OSError:
             pass
+        degradations.report("store", f.name, "corrupt file quarantined")
         return {"manual_ports": [], "hidden_ports": [], "machines": [], "peers": []}
     except OSError:
         return {"manual_ports": [], "hidden_ports": [], "machines": [], "peers": []}

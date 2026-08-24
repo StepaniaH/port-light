@@ -28,6 +28,25 @@ def test_health_unauthenticated(monkeypatch):
     assert "listen_source" in body["scanners"]
 
 
+def test_health_reports_recent_degradations(monkeypatch):
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    from backend import degradations
+
+    degradations.reset()
+    try:
+        degradations.report("docker", "daemon", "unreachable")
+        client = TestClient(app)
+        res = client.get("/api/health")
+        assert res.status_code == 200
+        events = res.json()["degradations"]
+        assert len(events) == 1
+        assert events[0]["source"] == "docker"
+        assert events[0]["scope"] == "daemon"
+    finally:
+        degradations.reset()
+
+
 def test_root_requires_basic_auth(monkeypatch):
     monkeypatch.setenv("AUTH_USER", "admin")
     monkeypatch.setenv("AUTH_PASSWORD", "s3cret")

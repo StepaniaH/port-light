@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from .models import PortMapping
 from .port_scanner import descendant_pids, is_host_netns_mode, socket_inodes_for_tree
+from . import degradations
 
 try:
     import docker
@@ -85,6 +86,7 @@ def docker_available() -> bool:
             ok = bool(client.ping())
         except Exception:
             _drop_client()
+            degradations.report("docker", "daemon", "unreachable")
             ok = False
     with _LOCK:
         _AVAIL, _AVAIL_AT = ok, time.monotonic()
@@ -120,6 +122,7 @@ def scan_containers() -> list[ContainerInfo]:
         containers = client.containers.list(all=True)
     except Exception:
         _drop_client()
+        degradations.report("docker", "daemon", "list failed")
         return []
     _mark_available(True)
 
