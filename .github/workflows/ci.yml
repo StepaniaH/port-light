@@ -24,11 +24,11 @@ jobs:
       - name: Test
         run: |
           set -o pipefail
-          python -m pytest --tb=short -ra 2>&1 | tee pytest.log
+          python -m pytest --tb=long -ra 2>&1 | tee pytest.log
       - name: Report failures
         if: failure()
         run: |
-          awk '/=+ short test summary info =+/,0' pytest.log | head -30 | sed 's/^/::error::/'
+          awk '/=+ FAILURES =+/,/=+ short test summary info =+/' pytest.log | head -60 | sed 's/^/::error::/'
           tail -8 pytest.log | sed 's/^/::error::/'
 
   frontend:

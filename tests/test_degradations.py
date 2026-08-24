@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from backend import degradations
@@ -37,9 +39,17 @@ def test_repeat_events_collapse():
 
 
 def test_log_line_is_single_record(caplog):
+    logger = logging.getLogger("port-light")
     with caplog.at_level("WARNING", logger="port-light"):
         degradations.report("listen", "ss", "scan failed")
+    seen = [(r.name, r.levelname, r.getMessage()) for r in caplog.records]
     assert any(
-        "source=listen scope=ss reason=scan failed" in record.getMessage()
-        for record in caplog.records
+        "source=listen scope=ss reason=scan failed" in msg
+        for _, _, msg in seen
+    ), (
+        f"propagate={logger.propagate}"
+        f" effective={logger.getEffectiveLevel()}"
+        f" root_level={logging.getLogger().level}"
+        f" root_handlers={logging.getLogger().handlers!r}"
+        f" records={seen[-20:]!r}"
     )
