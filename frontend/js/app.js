@@ -1,5 +1,6 @@
 /* Port-Light frontend */
 
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES } from './state.js';
 import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js';
 import { KIND_MATCHERS } from './kinds.js';
 import { moveChipFocus, trapTab } from './a11y.js';
@@ -7,70 +8,6 @@ import { moveChipFocus, trapTab } from './a11y.js';
 (function () {
   'use strict';
 
-  let currentData = null;
-  let hostCatalog = { local: { id: 'local', name: '', local: true }, peers: [], readonly: false };
-  let hostMaps = {};
-  let focusHostId = 'local';
-  let selectedHostId = 'local';
-  const hostAborts = {};
-  const hostEtags = {};
-  const hostRetrying = {};
-  let peersDraft = [];
-  let statusFilter = 'all';
-  let kindFilters = new Set();
-  let sortMode = 'port-asc';
-  let searchTerm = '';
-  let searchPortNum = null;
-  let selectedPort = null;
-  let rangeStart = 1;
-  let rangeEnd = 9999;
-  let rangeFromView = false;
-  let showHidden = false;
-  let settings = {
-    locale: 'auto',
-    theme: 'system',
-    grid_density: 'comfortable',
-    show_status_text: false,
-    show_access_badge: true,
-    show_protocol_badge: true,
-    copy_on_click: true,
-    auto_refresh: true,
-    refresh_ms: 5000,
-    port_range_start: 1,
-    port_range_end: 9999,
-    guess_urls: true,
-    url_host: '',
-    url_scheme: 'auto',
-  };
-  let settingsDoc = null;
-  let settingsDirty = false;
-  let settingsPanel = 'appearance';
-  const SETTINGS_PANELS = ['appearance', 'occupancy', 'advanced'];
-  const CARD_FIELD_KEYS = {
-    show_status_text: true,
-    show_access_badge: true,
-    show_protocol_badge: true,
-  };
-  const CORE_THEMES = ['system', 'dark', 'light'];
-  let refreshTimer = null;
-  let meta = { hidden_unlock_required: false, hidden_ports_withheld: false, version: '', settings_readonly: false };
-  let hiddenUnlock = sessionStorage.getItem('port-light-hidden-unlock') || '';
-  let route = { name: 'grid' };
-  let pendingAfterUnlock = null;
-  let pendingUnlockFocus = 'eye';
-  let focusBack = null;
-  let pendingGridFocus = null;
-  let occupancyKey = '';
-  let portsEtag = '';
-  let portsEtagUrl = '';
-  let portDetailGen = 0;
-  let detailShownPort = null;
-  const knownCache = {};
-  const knownInflight = {};
-  let knownRenderFrame = 0;
-  const lockedHitCache = {};
-  const lockedHitInflight = {};
-  let lastHiddenLocked = null;
 
   const appEl = document.getElementById('app');
   const grid = document.getElementById('grid');
@@ -89,37 +26,37 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   try {
     const cached = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
-    if (cached.theme) settings.theme = cached.theme;
-    if (cached.grid_density) settings.grid_density = cached.grid_density;
-    if (cached.locale) settings.locale = cached.locale;
+    if (cached.theme) S.settings.theme = cached.theme;
+    if (cached.grid_density) S.settings.grid_density = cached.grid_density;
+    if (cached.locale) S.settings.locale = cached.locale;
   } catch (e) {}
   try {
     const view = JSON.parse(localStorage.getItem('port-light-view') || '{}');
-    if (view.sort) sortMode = view.sort;
-    if (view.status && view.status !== 'running') statusFilter = view.status;
+    if (view.sort) S.sortMode = view.sort;
+    if (view.status && view.status !== 'running') S.statusFilter = view.status;
     if (Array.isArray(view.kinds)) {
-      kindFilters = new Set(view.kinds);
+      S.kindFilters = new Set(view.kinds);
     } else if (Array.isArray(view.filters) && view.filters.length) {
       view.filters.forEach(function (f) {
         if (f === 'all') return;
-        if (f === 'used' || f === 'configured') statusFilter = f;
-        else kindFilters.add(f);
+        if (f === 'used' || f === 'configured') S.statusFilter = f;
+        else S.kindFilters.add(f);
       });
     }
-    if (typeof view.showHidden === 'boolean') showHidden = view.showHidden;
-    if (kindFilters.has('hidden')) showHidden = true;
+    if (typeof view.showHidden === 'boolean') S.showHidden = view.showHidden;
+    if (S.kindFilters.has('hidden')) S.showHidden = true;
     if (view.rangeStart >= 1 && view.rangeStart <= 65535) {
-      rangeStart = view.rangeStart;
-      rangeFromView = true;
+      S.rangeStart = view.rangeStart;
+      S.rangeFromView = true;
     }
     if (view.rangeEnd >= 1 && view.rangeEnd <= 65535) {
-      rangeEnd = view.rangeEnd;
-      rangeFromView = true;
+      S.rangeEnd = view.rangeEnd;
+      S.rangeFromView = true;
     }
   } catch (e) {}
 
   function applyTheme() {
-    var th = settings.theme || 'system';
+    var th = S.settings.theme || 'system';
     if (th === 'system') {
       th = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     }
@@ -128,12 +65,12 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   function applyAppearance() {
     applyTheme();
-    document.documentElement.setAttribute('data-density', settings.grid_density || 'comfortable');
+    document.documentElement.setAttribute('data-density', S.settings.grid_density || 'comfortable');
     try {
       localStorage.setItem('port-light-settings', JSON.stringify({
-        theme: settings.theme,
-        grid_density: settings.grid_density,
-        locale: settings.locale || 'auto',
+        theme: S.settings.theme,
+        grid_density: S.settings.grid_density,
+        locale: S.settings.locale || 'auto',
       }));
     } catch (e) {}
   }
@@ -141,28 +78,28 @@ import { moveChipFocus, trapTab } from './a11y.js';
   function saveView() {
     try {
       localStorage.setItem('port-light-view', JSON.stringify({
-        sort: sortMode,
-        status: statusFilter,
-        kinds: Array.from(kindFilters),
-        showHidden: showHidden,
-        rangeStart: rangeStart,
-        rangeEnd: rangeEnd,
+        sort: S.sortMode,
+        status: S.statusFilter,
+        kinds: Array.from(S.kindFilters),
+        showHidden: S.showHidden,
+        rangeStart: S.rangeStart,
+        rangeEnd: S.rangeEnd,
       }));
     } catch (e) {}
   }
 
   function syncFilterUI() {
     document.querySelectorAll('#filters .chip').forEach(function (c) {
-      const on = kindFilters.has(c.dataset.filter);
+      const on = S.kindFilters.has(c.dataset.filter);
       c.classList.toggle('active', on);
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
   }
 
   function syncHiddenButton() {
-    unhideBtn.classList.toggle('active', showHidden);
-    unhideBtn.setAttribute('aria-pressed', showHidden ? 'true' : 'false');
-    const title = t(showHidden ? 'action.hiddenVisible' : 'action.showHidden');
+    unhideBtn.classList.toggle('active', S.showHidden);
+    unhideBtn.setAttribute('aria-pressed', S.showHidden ? 'true' : 'false');
+    const title = t(S.showHidden ? 'action.hiddenVisible' : 'action.showHidden');
     unhideBtn.title = title;
     unhideBtn.setAttribute('aria-label', title);
   }
@@ -174,12 +111,12 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function hasPeers() {
-    return !!(hostCatalog.peers && hostCatalog.peers.length);
+    return !!(S.hostCatalog.peers && S.hostCatalog.peers.length);
   }
 
   function listedHosts() {
-    const local = hostCatalog.local || { id: 'local', name: '', local: true };
-    return [local].concat(hostCatalog.peers || []);
+    const local = S.hostCatalog.local || { id: 'local', name: '', local: true };
+    return [local].concat(S.hostCatalog.peers || []);
   }
 
   function hostById(id) {
@@ -196,9 +133,9 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function occupancyFocusTarget() {
-    if (route.name === 'settings') return document.getElementById('settings-form');
+    if (S.route.name === 'settings') return document.getElementById('settings-form');
     if (hasPeers()) {
-      return document.getElementById('host-grid-' + focusHostId)
+      return document.getElementById('host-grid-' + S.focusHostId)
         || document.querySelector('.host-grid')
         || hostSwitcher;
     }
@@ -206,7 +143,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function occupancyUrl(hostId) {
-    const q = 'range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
+    const q = 'range_start=' + S.rangeStart + '&range_end=' + S.rangeEnd + '&include_hidden=' + S.showHidden;
     if (!hasPeers() && hostId === 'local') return '/api/ports?' + q;
     return '/api/hosts/' + encodeURIComponent(hostId) + '/ports?' + q;
   }
@@ -217,28 +154,28 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function gridHash(hostId) {
-    hostId = hostId || focusHostId;
+    hostId = hostId || S.focusHostId;
     if (!hasPeers() || hostId === 'local') return '#/';
     return '#/h/' + hostId;
   }
 
   function portHash(hostId, port) {
-    hostId = hostId || selectedHostId || focusHostId;
+    hostId = hostId || S.selectedHostId || S.focusHostId;
     if (!hasPeers() || hostId === 'local') return '#/port/' + port;
     return '#/h/' + hostId + '/port/' + port;
   }
 
   function dataForHost(hostId) {
     if (!hasPeers() || hostId === 'local') {
-      if (hostMaps.local && hostMaps.local.data) return hostMaps.local.data;
-      return currentData;
+      if (S.hostMaps.local && S.hostMaps.local.data) return S.hostMaps.local.data;
+      return S.currentData;
     }
-    return hostMaps[hostId] && hostMaps[hostId].data;
+    return S.hostMaps[hostId] && S.hostMaps[hostId].data;
   }
 
   try {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
-      if ((settings.theme || 'system') === 'system') applyTheme();
+      if ((S.settings.theme || 'system') === 'system') applyTheme();
     });
   } catch (e) {}
   window.addEventListener('resize', function () {
@@ -255,7 +192,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
     if (parts[0] === 'settings') {
       let section = parts[1];
       if (SETTINGS_PANELS.indexOf(section) < 0) {
-        section = route.name === 'settings' && settingsPanel ? settingsPanel : 'appearance';
+        section = S.route.name === 'settings' && S.settingsPanel ? S.settingsPanel : 'appearance';
       }
       return { name: 'settings', section: section };
     }
@@ -278,7 +215,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function leaveSettingsOrStay() {
-    if (!settingsDirty || route.name !== 'settings') return true;
+    if (!S.settingsDirty || S.route.name !== 'settings') return true;
     if (!window.confirm(t('settings.discard'))) return false;
     revertUnsavedSettings();
     return true;
@@ -287,7 +224,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
   document.addEventListener('click', function (e) {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = e.target.closest && e.target.closest('a[href^="#"]');
-    if (!a || !settingsDirty || route.name !== 'settings') return;
+    if (!a || !S.settingsDirty || S.route.name !== 'settings') return;
     const next = parseHash(a.getAttribute('href'));
     if (next.name === 'settings') return;
     if (!leaveSettingsOrStay()) e.preventDefault();
@@ -295,16 +232,16 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   function applyRoute() {
     const next = parseRoute();
-    if (settingsDirty && route.name === 'settings' && next.name !== 'settings') {
+    if (S.settingsDirty && S.route.name === 'settings' && next.name !== 'settings') {
       if (!leaveSettingsOrStay()) {
-        const stay = '#/settings/' + settingsPanel;
+        const stay = '#/settings/' + S.settingsPanel;
         if ((location.hash || '') !== stay) location.hash = stay;
         return;
       }
     }
-    const prev = route.name;
-    route = next;
-    const onSettings = route.name === 'settings';
+    const prev = S.route.name;
+    S.route = next;
+    const onSettings = S.route.name === 'settings';
     document.getElementById('view-grid').classList.toggle('hidden', onSettings);
     document.getElementById('view-settings').classList.toggle('hidden', !onSettings);
     appEl.classList.toggle('page-settings', onSettings);
@@ -312,31 +249,31 @@ import { moveChipFocus, trapTab } from './a11y.js';
     settingsBtn.setAttribute('aria-current', onSettings ? 'page' : 'false');
     syncHeaderHeight();
     if (onSettings) {
-      pendingGridFocus = null;
+      S.pendingGridFocus = null;
       closeDetail(true);
-      settingsPanel = route.section || 'appearance';
-      const want = '#/settings/' + settingsPanel;
+      S.settingsPanel = S.route.section || 'appearance';
+      const want = '#/settings/' + S.settingsPanel;
       if ((location.hash || '') !== want) history.replaceState(null, '', want);
       if (prev === 'settings') {
-        showSettingsPanel(settingsPanel);
+        showSettingsPanel(S.settingsPanel);
         return;
       }
       loadSettingsPage();
       return;
     }
     if (prev === 'settings') tick();
-    if (route.hostId && hostById(route.hostId)) focusHostId = route.hostId;
-    else if (route.name !== 'settings') focusHostId = 'local';
-    if (route.name === 'port') {
-      selectedPort = route.port;
-      selectedHostId = route.hostId || 'local';
-      focusHostId = selectedHostId;
-      if (currentData || hasPeers()) render();
-      else showPortDetail(route.port);
+    if (S.route.hostId && hostById(S.route.hostId)) S.focusHostId = S.route.hostId;
+    else if (S.route.name !== 'settings') S.focusHostId = 'local';
+    if (S.route.name === 'port') {
+      S.selectedPort = S.route.port;
+      S.selectedHostId = S.route.hostId || 'local';
+      S.focusHostId = S.selectedHostId;
+      if (S.currentData || hasPeers()) render();
+      else showPortDetail(S.route.port);
       return;
     }
     closeDetail(true);
-    if (currentData || hasPeers()) render();
+    if (S.currentData || hasPeers()) render();
     applyPendingGridFocus();
   }
 
@@ -357,13 +294,13 @@ import { moveChipFocus, trapTab } from './a11y.js';
     if (!btn) return;
     if (btn.dataset.status) {
       const f = btn.dataset.status;
-      statusFilter = statusFilter === f ? 'all' : f;
+      S.statusFilter = S.statusFilter === f ? 'all' : f;
     } else if (btn.dataset.kind === 'hidden') {
-      if (kindFilters.has('hidden')) kindFilters.delete('hidden');
+      if (S.kindFilters.has('hidden')) S.kindFilters.delete('hidden');
       else {
         const vis = ensureHiddenVisible('stat');
         if (vis === 'blocked') return;
-        kindFilters.add('hidden');
+        S.kindFilters.add('hidden');
         syncFilterUI();
         saveView();
         if (vis === 'ready') render();
@@ -379,18 +316,18 @@ import { moveChipFocus, trapTab } from './a11y.js';
     const chip = e.target.closest('.chip');
     if (!chip) return;
     const f = chip.dataset.filter;
-    if (kindFilters.has(f)) kindFilters.delete(f);
+    if (S.kindFilters.has(f)) S.kindFilters.delete(f);
     else {
       if (f === 'hidden') {
         const vis = ensureHiddenVisible('chip');
         if (vis === 'blocked') return;
-        kindFilters.add('hidden');
+        S.kindFilters.add('hidden');
         syncFilterUI();
         saveView();
         if (vis === 'ready') render();
         return;
       }
-      kindFilters.add(f);
+      S.kindFilters.add(f);
     }
     syncFilterUI();
     saveView();
@@ -405,11 +342,11 @@ import { moveChipFocus, trapTab } from './a11y.js';
   });
 
   function ensureHiddenVisible(opener) {
-    if (showHidden) return 'ready';
-    if (meta.hidden_unlock_required && !hiddenUnlock) {
-      pendingUnlockFocus = opener || 'eye';
-      pendingAfterUnlock = function () {
-        kindFilters.add('hidden');
+    if (S.showHidden) return 'ready';
+    if (S.meta.hidden_unlock_required && !S.hiddenUnlock) {
+      S.pendingUnlockFocus = opener || 'eye';
+      S.pendingAfterUnlock = function () {
+        S.kindFilters.add('hidden');
         syncFilterUI();
         saveView();
         render();
@@ -417,7 +354,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       openModal('unhide-modal');
       return 'blocked';
     }
-    showHidden = true;
+    S.showHidden = true;
     syncHiddenButton();
     saveView();
     tick();
@@ -425,17 +362,17 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   sortSelect.addEventListener('change', function (e) {
-    sortMode = e.target.value;
+    S.sortMode = e.target.value;
     saveView();
     render();
   });
 
   searchInput.addEventListener('input', function (e) {
     const val = e.target.value.trim();
-    searchTerm = val.toLowerCase();
-    searchPortNum = /^\d+$/.test(val) ? parseInt(val, 10) : null;
-    if (searchPortNum !== null && (searchPortNum < 1 || searchPortNum > 65535)) {
-      searchPortNum = null;
+    S.searchTerm = val.toLowerCase();
+    S.searchPortNum = /^\d+$/.test(val) ? parseInt(val, 10) : null;
+    if (S.searchPortNum !== null && (S.searchPortNum < 1 || S.searchPortNum > 65535)) {
+      S.searchPortNum = null;
     }
     searchInput.classList.toggle('search-active', !!val);
     render();
@@ -455,18 +392,18 @@ import { moveChipFocus, trapTab } from './a11y.js';
   function updateRange() {
     let s = parseInt(rangeStartInput.value, 10);
     let e = parseInt(rangeEndInput.value, 10);
-    if (!(s >= 1 && s <= 65535)) s = rangeStart;
-    if (!(e >= 1 && e <= 65535)) e = rangeEnd;
+    if (!(s >= 1 && s <= 65535)) s = S.rangeStart;
+    if (!(e >= 1 && e <= 65535)) e = S.rangeEnd;
     if (e < s) {
       const tmp = s;
       s = e;
       e = tmp;
     }
-    rangeStart = s;
-    rangeEnd = e;
+    S.rangeStart = s;
+    S.rangeEnd = e;
     rangeStartInput.value = s;
     rangeEndInput.value = e;
-    rangeFromView = true;
+    S.rangeFromView = true;
     saveView();
     tick();
   }
@@ -474,7 +411,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
   document.getElementById('btn-refresh').addEventListener('click', function () { tick(); });
 
   function openModal(id) {
-    focusBack = document.activeElement;
+    S.focusBack = document.activeElement;
     document.getElementById(id).classList.remove('hidden');
     document.documentElement.classList.add('modal-open');
     const err = document.getElementById('add-error');
@@ -499,16 +436,16 @@ import { moveChipFocus, trapTab } from './a11y.js';
   function closeModals() {
     document.querySelectorAll('.modal').forEach(function (m) { m.classList.add('hidden'); });
     document.documentElement.classList.remove('modal-open');
-    pendingAfterUnlock = null;
-    if (focusBack && typeof focusBack.focus === 'function') focusBack.focus();
-    focusBack = null;
+    S.pendingAfterUnlock = null;
+    if (S.focusBack && typeof S.focusBack.focus === 'function') S.focusBack.focus();
+    S.focusBack = null;
   }
   function modalOpen() {
     return !!document.querySelector('.modal:not(.hidden)');
   }
 
   document.getElementById('btn-add').addEventListener('click', function () {
-    if (hasPeers() && focusHostId !== 'local') return;
+    if (hasPeers() && S.focusHostId !== 'local') return;
     openModal('add-modal');
   });
   document.getElementById('add-cancel').addEventListener('click', closeModals);
@@ -518,21 +455,21 @@ import { moveChipFocus, trapTab } from './a11y.js';
   });
 
   unhideBtn.addEventListener('click', function () {
-    if (showHidden) {
-      showHidden = false;
-      kindFilters.delete('hidden');
+    if (S.showHidden) {
+      S.showHidden = false;
+      S.kindFilters.delete('hidden');
       syncHiddenButton();
       syncFilterUI();
       saveView();
       tick();
       return;
     }
-    if (meta.hidden_unlock_required && !hiddenUnlock) {
-      pendingUnlockFocus = 'eye';
+    if (S.meta.hidden_unlock_required && !S.hiddenUnlock) {
+      S.pendingUnlockFocus = 'eye';
       openModal('unhide-modal');
       return;
     }
-    showHidden = true;
+    S.showHidden = true;
     syncHiddenButton();
     saveView();
     tick();
@@ -555,19 +492,19 @@ import { moveChipFocus, trapTab } from './a11y.js';
     if (e.key === 'Escape') {
       if (modalOpen()) { closeModals(); return; }
       if (closeLocaleMenu({ focusTrigger: true })) return;
-      if (route.name === 'settings') {
+      if (S.route.name === 'settings') {
         if (!leaveSettingsOrStay()) return;
         location.hash = '#/';
         return;
       }
-      if (searchTerm || searchPortNum !== null) {
-        if (!detailPanel.classList.contains('hidden') || selectedPort !== null) {
+      if (S.searchTerm || S.searchPortNum !== null) {
+        if (!detailPanel.classList.contains('hidden') || S.selectedPort !== null) {
           closeDetail();
           return;
         }
         searchInput.value = '';
-        searchTerm = '';
-        searchPortNum = null;
+        S.searchTerm = '';
+        S.searchPortNum = null;
         searchInput.classList.remove('search-active');
         render();
         return;
@@ -600,7 +537,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       if (e.key === 'Tab') { closeLocaleMenu(); return; }
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
-      if (route.name === 'settings' && !(settingsDoc && settingsDoc.readonly)) {
+      if (S.route.name === 'settings' && !(S.settingsDoc && S.settingsDoc.readonly)) {
         e.preventDefault();
         const form = document.getElementById('settings-form');
         if (form) form.requestSubmit();
@@ -610,12 +547,12 @@ import { moveChipFocus, trapTab } from './a11y.js';
     if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (route.name === 'settings' || modalOpen()) return;
+    if (S.route.name === 'settings' || modalOpen()) return;
     e.preventDefault();
     searchInput.focus();
   });
   window.addEventListener('beforeunload', function (e) {
-    if (!settingsDirty) return;
+    if (!S.settingsDirty) return;
     e.preventDefault();
     e.returnValue = '';
   });
@@ -713,8 +650,8 @@ import { moveChipFocus, trapTab } from './a11y.js';
       if (!btn) return;
       const id = btn.getAttribute('data-host-switch');
       if (!id) return;
-      focusHostId = id;
-      if (route.name === 'port' && selectedHostId !== id) {
+      S.focusHostId = id;
+      if (S.route.name === 'port' && S.selectedHostId !== id) {
         location.hash = gridHash(id);
         return;
       }
@@ -736,9 +673,9 @@ import { moveChipFocus, trapTab } from './a11y.js';
       const board = e.target.closest('.host-board');
       if (!board) return;
       const id = board.getAttribute('data-host');
-      if (!id || id === focusHostId) return;
-      focusHostId = id;
-      if (route.name === 'port') {
+      if (!id || id === S.focusHostId) return;
+      S.focusHostId = id;
+      if (S.route.name === 'port') {
         render();
         return;
       }
@@ -776,24 +713,24 @@ import { moveChipFocus, trapTab } from './a11y.js';
   document.getElementById('settings-fields').addEventListener('change', function (e) {
     const field = e.target && e.target.name;
     if (field === 'theme' || field === 'grid_density' || field === 'locale') {
-      if (field === 'theme') settings.theme = e.target.value;
-      if (field === 'grid_density') settings.grid_density = e.target.value;
-      if (field === 'locale') settings.locale = e.target.value;
+      if (field === 'theme') S.settings.theme = e.target.value;
+      if (field === 'grid_density') S.settings.grid_density = e.target.value;
+      if (field === 'locale') S.settings.locale = e.target.value;
       applyAppearance();
       if (field === 'locale' && window.PortLightI18n) {
-        PortLightI18n.load(settings.locale).then(function () {
+        PortLightI18n.load(S.settings.locale).then(function () {
           PortLightI18n.applyDom();
           syncLocaleTrigger();
           syncHiddenButton();
-          if (settingsDoc) {
+          if (S.settingsDoc) {
             const lead = document.getElementById('settings-lead');
-            lead.textContent = t(settingsDoc.readonly ? 'settings.leadReadonly' : 'settings.lead');
+            lead.textContent = t(S.settingsDoc.readonly ? 'settings.leadReadonly' : 'settings.lead');
           }
           const status = document.getElementById('settings-status');
-          if (settingsDirty && status && !status.classList.contains('is-error')) {
+          if (S.settingsDirty && status && !status.classList.contains('is-error')) {
             status.textContent = t('settings.unsaved');
           }
-          if (currentData) render();
+          if (S.currentData) render();
           syncHeaderHeight();
         });
       }
@@ -806,10 +743,10 @@ import { moveChipFocus, trapTab } from './a11y.js';
     const add = e.target.closest('#peer-add');
     if (add) {
       e.preventDefault();
-      if (hostCatalog.readonly || (settingsDoc && settingsDoc.readonly)) return;
+      if (S.hostCatalog.readonly || (S.settingsDoc && S.settingsDoc.readonly)) return;
       readPeersDraftFromForm();
-      if (peersDraft.length >= 6) return;
-      peersDraft.push({ id: '', name: '', url: '', username: '', password: '', has_auth: false, clear_auth: false });
+      if (S.peersDraft.length >= 6) return;
+      S.peersDraft.push({ id: '', name: '', url: '', username: '', password: '', has_auth: false, clear_auth: false });
       renderPeersEditor(false);
       markDirty();
       return;
@@ -820,8 +757,8 @@ import { moveChipFocus, trapTab } from './a11y.js';
       e.preventDefault();
       readPeersDraftFromForm();
       const i = parseInt(row.getAttribute('data-peer-index'), 10);
-      if (!isNaN(i)) peersDraft.splice(i, 1);
-      renderPeersEditor(!!(settingsDoc && settingsDoc.readonly) || !!hostCatalog.readonly);
+      if (!isNaN(i)) S.peersDraft.splice(i, 1);
+      renderPeersEditor(!!(S.settingsDoc && S.settingsDoc.readonly) || !!S.hostCatalog.readonly);
       markDirty();
       return;
     }
@@ -829,11 +766,11 @@ import { moveChipFocus, trapTab } from './a11y.js';
       e.preventDefault();
       readPeersDraftFromForm();
       const i = parseInt(row.getAttribute('data-peer-index'), 10);
-      if (!isNaN(i) && peersDraft[i]) {
-        peersDraft[i].clear_auth = true;
-        peersDraft[i].has_auth = false;
-        peersDraft[i].username = '';
-        peersDraft[i].password = '';
+      if (!isNaN(i) && S.peersDraft[i]) {
+        S.peersDraft[i].clear_auth = true;
+        S.peersDraft[i].has_auth = false;
+        S.peersDraft[i].username = '';
+        S.peersDraft[i].password = '';
       }
       renderPeersEditor(false);
       markDirty();
@@ -841,8 +778,8 @@ import { moveChipFocus, trapTab } from './a11y.js';
   });
 
   function markDirty() {
-    if (settingsDoc && settingsDoc.readonly) return;
-    settingsDirty = true;
+    if (S.settingsDoc && S.settingsDoc.readonly) return;
+    S.settingsDirty = true;
     const status = document.getElementById('settings-status');
     status.className = '';
     status.textContent = t('settings.unsaved');
@@ -850,7 +787,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   function apiHeaders(extra) {
     const headers = Object.assign({}, extra || {});
-    if (hiddenUnlock) headers['X-Hidden-Unlock'] = hiddenUnlock;
+    if (S.hiddenUnlock) headers['X-Hidden-Unlock'] = S.hiddenUnlock;
     return headers;
   }
 
@@ -865,12 +802,12 @@ import { moveChipFocus, trapTab } from './a11y.js';
   async function fetchMeta() {
     try {
       const res = await api('/api/meta');
-      if (res.ok) meta = await res.json();
+      if (res.ok) S.meta = await res.json();
     } catch (err) {
       console.error('meta error:', err);
     }
     const ver = document.getElementById('app-version');
-    if (ver && meta.version) ver.textContent = 'v' + meta.version;
+    if (ver && S.meta.version) ver.textContent = 'v' + S.meta.version;
   }
 
   async function fetchHealth() {
@@ -878,7 +815,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       const res = await api('/api/health');
       if (!res.ok) return;
       const body = await res.json();
-      renderScanners(body.scanners || {}, document.getElementById('scanner-pills'), currentData);
+      renderScanners(body.scanners || {}, document.getElementById('scanner-pills'), S.currentData);
     } catch (err) {}
   }
 
@@ -888,8 +825,8 @@ import { moveChipFocus, trapTab } from './a11y.js';
       const res = await api(url);
       if (!res.ok) return;
       const body = await res.json();
-      if (!hostMaps[hostId]) hostMaps[hostId] = {};
-      hostMaps[hostId].scanners = body.scanners || {};
+      if (!S.hostMaps[hostId]) S.hostMaps[hostId] = {};
+      S.hostMaps[hostId].scanners = body.scanners || {};
     } catch (err) {}
   }
 
@@ -930,31 +867,30 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function revertUnsavedSettings() {
-    settingsDirty = false;
-    if (!settingsDoc) return;
-    applyServerSettings(settingsDoc);
+    S.settingsDirty = false;
+    if (!S.settingsDoc) return;
+    applyServerSettings(S.settingsDoc);
     if (!window.PortLightI18n) return;
-    PortLightI18n.load(settings.locale || 'auto').then(function () {
+    PortLightI18n.load(S.settings.locale || 'auto').then(function () {
       PortLightI18n.applyDom();
       syncHiddenButton();
-      if (currentData) render();
+      if (S.currentData) render();
       syncHeaderHeight();
     });
   }
 
   function applyServerSettings(doc) {
-    settingsDoc = doc;
-    settings = Object.assign({}, settings, doc.values || {});
-    if (!rangeFromView) {
-      rangeStart = settings.port_range_start;
-      rangeEnd = settings.port_range_end;
-      rangeStartInput.value = rangeStart;
-      rangeEndInput.value = rangeEnd;
+    S.settingsDoc = doc;
+    S.settings = Object.assign({}, S.settings, doc.values || {});
+    if (!S.rangeFromView) {
+      S.rangeStart = S.settings.port_range_start;
+      S.rangeEnd = S.settings.port_range_end;
+      rangeStartInput.value = S.rangeStart;
+      rangeEndInput.value = S.rangeEnd;
     }
     applyAppearance();
   }
 
-  let portsAbort = null;
 
   function markRefreshed() {
     const el = document.getElementById('sync-age');
@@ -979,41 +915,41 @@ import { moveChipFocus, trapTab } from './a11y.js';
   async function fetchHosts() {
     try {
       const res = await api('/api/hosts');
-      if (!res.ok) return hostCatalog;
+      if (!res.ok) return S.hostCatalog;
       const body = await res.json();
-      hostCatalog = {
+      S.hostCatalog = {
         local: body.local || { id: 'local', name: '', local: true },
         peers: Array.isArray(body.peers) ? body.peers : [],
         readonly: !!body.readonly,
       };
     } catch (err) {}
-    if (!hostById(focusHostId)) focusHostId = 'local';
-    return hostCatalog;
+    if (!hostById(S.focusHostId)) S.focusHostId = 'local';
+    return S.hostCatalog;
   }
 
   async function fetchPorts(opts) {
     const isolated = !!(opts && opts.isolated);
-    if (portsAbort) portsAbort.abort();
+    if (S.portsAbort) S.portsAbort.abort();
     const ac = new AbortController();
     if (!isolated) {
-      portsAbort = ac;
+      S.portsAbort = ac;
       grid.setAttribute('aria-busy', 'true');
     }
     try {
-      const url = '/api/ports?range_start=' + rangeStart + '&range_end=' + rangeEnd + '&include_hidden=' + showHidden;
+      const url = '/api/ports?range_start=' + S.rangeStart + '&range_end=' + S.rangeEnd + '&include_hidden=' + S.showHidden;
       const headers = {};
-      if (!isolated && portsEtag && portsEtagUrl === url) headers['If-None-Match'] = portsEtag;
+      if (!isolated && S.portsEtag && S.portsEtagUrl === url) headers['If-None-Match'] = S.portsEtag;
       const res = await api(url, { signal: ac.signal, headers: headers });
       if (res.status === 304) return { ok: true, unchanged: true };
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const etag = res.headers.get('etag');
       const data = await res.json();
       if (!isolated) {
-        portsEtag = etag || '';
-        portsEtagUrl = url;
+        S.portsEtag = etag || '';
+        S.portsEtagUrl = url;
       } else if (data.summary && !data.summary.hidden_locked) {
-        portsEtag = etag || '';
-        portsEtagUrl = url;
+        S.portsEtag = etag || '';
+        S.portsEtagUrl = url;
       }
       return { ok: true, data: data };
     } catch (err) {
@@ -1021,7 +957,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       console.error('fetch error:', err);
       return { ok: false, stale: false };
     } finally {
-      if (!isolated && portsAbort === ac) grid.setAttribute('aria-busy', 'false');
+      if (!isolated && S.portsAbort === ac) grid.setAttribute('aria-busy', 'false');
     }
   }
 
@@ -1034,11 +970,11 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   function occupancyFingerprint() {
     if (!hasPeers()) {
-      if (!currentData) return '';
-      return JSON.stringify({ ports: currentData.ports, summary: fpSummary(currentData.summary) });
+      if (!S.currentData) return '';
+      return JSON.stringify({ ports: S.currentData.ports, summary: fpSummary(S.currentData.summary) });
     }
     return JSON.stringify(listedHosts().map(function (h) {
-      const m = hostMaps[h.id] || {};
+      const m = S.hostMaps[h.id] || {};
       return {
         id: h.id,
         ports: m.data && m.data.ports,
@@ -1051,15 +987,15 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   async function fetchHostOccupancy(hostId, opts) {
     const isolated = !!(opts && opts.isolated);
-    if (hostAborts[hostId]) hostAborts[hostId].abort();
+    if (S.hostAborts[hostId]) S.hostAborts[hostId].abort();
     const ac = new AbortController();
-    hostAborts[hostId] = ac;
+    S.hostAborts[hostId] = ac;
     const root = document.getElementById('host-grid-' + hostId) || (hostId === 'local' ? grid : null);
     if (!isolated && root) root.setAttribute('aria-busy', 'true');
     try {
       const url = occupancyUrl(hostId);
       const headers = {};
-      const tag = hostEtags[hostId];
+      const tag = S.hostEtags[hostId];
       if (!isolated && tag && tag.url === url && tag.etag) headers['If-None-Match'] = tag.etag;
       const res = await api(url, { signal: ac.signal, headers: headers });
       if (res.status === 304) return { ok: true, unchanged: true };
@@ -1072,7 +1008,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       const etag = res.headers.get('etag');
       const data = await res.json();
       if (!isolated || (data.summary && !data.summary.hidden_locked)) {
-        hostEtags[hostId] = { etag: etag || '', url: url };
+        S.hostEtags[hostId] = { etag: etag || '', url: url };
       }
       return { ok: true, data: data };
     } catch (err) {
@@ -1080,7 +1016,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       console.error('fetch error:', err);
       return { ok: false, stale: false };
     } finally {
-      if (!isolated && hostAborts[hostId] === ac && root) root.setAttribute('aria-busy', 'false');
+      if (!isolated && S.hostAborts[hostId] === ac && root) root.setAttribute('aria-busy', 'false');
     }
   }
 
@@ -1092,18 +1028,18 @@ import { moveChipFocus, trapTab } from './a11y.js';
     let localOk = false;
     ids.forEach(function (id, i) {
       const result = results[i];
-      if (!hostMaps[id]) hostMaps[id] = {};
+      if (!S.hostMaps[id]) S.hostMaps[id] = {};
       if (!result || result.stale) return;
       if (result.unchanged) {
         if (id === 'local') localOk = true;
         return;
       }
       if (result.ok && result.data) {
-        hostMaps[id].data = result.data;
-        hostMaps[id].error = '';
+        S.hostMaps[id].data = result.data;
+        S.hostMaps[id].error = '';
         if (id === 'local') localOk = true;
       } else {
-        hostMaps[id].error = result.auth ? 'auth' : 'down';
+        S.hostMaps[id].error = result.auth ? 'auth' : 'down';
       }
     });
     await Promise.all(ids.map(fetchHostHealth));
@@ -1113,71 +1049,71 @@ import { moveChipFocus, trapTab } from './a11y.js';
     } else {
       setSyncError(true);
     }
-    const focused = dataForHost(focusHostId);
-    if (focused) currentData = focused;
-    else if (hostMaps.local && hostMaps.local.data) currentData = hostMaps.local.data;
-    return currentData;
+    const focused = dataForHost(S.focusHostId);
+    if (focused) S.currentData = focused;
+    else if (S.hostMaps.local && S.hostMaps.local.data) S.currentData = S.hostMaps.local.data;
+    return S.currentData;
   }
 
   async function retryHost(hostId) {
-    if (!hostId || hostRetrying[hostId]) return;
-    hostRetrying[hostId] = true;
+    if (!hostId || S.hostRetrying[hostId]) return;
+    S.hostRetrying[hostId] = true;
     const btn = hostBoards && hostBoards.querySelector('[data-host-retry="' + hostId + '"]');
     if (btn) btn.disabled = true;
     let shouldRender = false;
     try {
       const result = await fetchHostOccupancy(hostId);
-      if (!hostMaps[hostId]) hostMaps[hostId] = {};
+      if (!S.hostMaps[hostId]) S.hostMaps[hostId] = {};
       if (result && !result.stale) {
         if (result.unchanged) {
-          hostMaps[hostId].error = '';
+          S.hostMaps[hostId].error = '';
         } else if (result.ok && result.data) {
-          hostMaps[hostId].data = result.data;
-          hostMaps[hostId].error = '';
+          S.hostMaps[hostId].data = result.data;
+          S.hostMaps[hostId].error = '';
         } else {
-          hostMaps[hostId].error = result.auth ? 'auth' : 'down';
+          S.hostMaps[hostId].error = result.auth ? 'auth' : 'down';
         }
       }
       if (!result || result.stale) return;
       await fetchHostHealth(hostId);
-      occupancyKey = occupancyFingerprint();
-      if (hostId === focusHostId && hostMaps[hostId].data) {
-        currentData = hostMaps[hostId].data;
+      S.occupancyKey = occupancyFingerprint();
+      if (hostId === S.focusHostId && S.hostMaps[hostId].data) {
+        S.currentData = S.hostMaps[hostId].data;
       }
-      if (hostId === 'local') setSyncError(!!hostMaps[hostId].error);
-      if (!hostMaps[hostId].error) markRefreshed();
+      if (hostId === 'local') setSyncError(!!S.hostMaps[hostId].error);
+      if (!S.hostMaps[hostId].error) markRefreshed();
       shouldRender = true;
     } finally {
-      hostRetrying[hostId] = false;
+      S.hostRetrying[hostId] = false;
     }
     if (shouldRender) render();
   }
 
   function tick() {
-    if (route.name === 'settings') return;
+    if (S.route.name === 'settings') return;
     if (modalOpen()) return;
-    const wantHidden = showHidden;
+    const wantHidden = S.showHidden;
     loadPorts().then(function (data) {
-      if (route.name === 'settings') return;
-      if (showHidden !== wantHidden) return;
+      if (S.route.name === 'settings') return;
+      if (S.showHidden !== wantHidden) return;
       if (!hasPeers()) {
         if (!data) return;
-        if (data === currentData && occupancyKey) return;
-        currentData = data;
+        if (data === S.currentData && S.occupancyKey) return;
+        S.currentData = data;
       } else if (data) {
-        currentData = dataForHost(focusHostId) || data;
-      } else if (!currentData) {
+        S.currentData = dataForHost(S.focusHostId) || data;
+      } else if (!S.currentData) {
         return;
       }
-      const lockedNow = !!(currentData && currentData.summary && currentData.summary.hidden_locked);
-      if (lockedNow !== lastHiddenLocked) {
-        lastHiddenLocked = lockedNow;
-        Object.keys(lockedHitCache).forEach(function (k) { delete lockedHitCache[k]; });
-        Object.keys(lockedHitInflight).forEach(function (k) { delete lockedHitInflight[k]; });
+      const lockedNow = !!(S.currentData && S.currentData.summary && S.currentData.summary.hidden_locked);
+      if (lockedNow !== S.lastHiddenLocked) {
+        S.lastHiddenLocked = lockedNow;
+        Object.keys(S.lockedHitCache).forEach(function (k) { delete S.lockedHitCache[k]; });
+        Object.keys(S.lockedHitInflight).forEach(function (k) { delete S.lockedHitInflight[k]; });
       }
       const key = occupancyFingerprint();
-      if (key !== occupancyKey) {
-        occupancyKey = key;
+      if (key !== S.occupancyKey) {
+        S.occupancyKey = key;
         render();
       }
     }).then(function () {
@@ -1192,7 +1128,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
     if (result.unchanged) {
       setSyncError(false);
       markRefreshed();
-      return currentData;
+      return S.currentData;
     }
     if (!result.ok || !result.data) {
       setSyncError(true);
@@ -1204,10 +1140,10 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function setupRefresh() {
-    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-    if (settings.auto_refresh) {
+    if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
+    if (S.settings.auto_refresh) {
       tick();
-      refreshTimer = setInterval(tick, settings.refresh_ms || 5000);
+      S.refreshTimer = setInterval(tick, S.settings.refresh_ms || 5000);
     } else {
       tick();
     }
@@ -1215,18 +1151,18 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
-      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
       return;
     }
-    if (settings.auto_refresh) setupRefresh();
+    if (S.settings.auto_refresh) setupRefresh();
   });
 
   function loadSettingsPage() {
     Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
       const doc = pair[0];
       if (!doc) return;
-      settingsDoc = doc;
-      peersDraft = (hostCatalog.peers || []).map(clonePeerRow);
+      S.settingsDoc = doc;
+      S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
       renderSettingsForm(doc);
     });
   }
@@ -1266,7 +1202,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   function showSettingsPanel(id) {
     if (SETTINGS_PANELS.indexOf(id) < 0) id = 'appearance';
-    settingsPanel = id;
+    S.settingsPanel = id;
     document.querySelectorAll('#settings-nav [role="tab"]').forEach(function (btn) {
       const on = btn.getAttribute('data-settings-panel') === id;
       btn.setAttribute('aria-selected', on ? 'true' : 'false');
@@ -1295,16 +1231,16 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   function renderSettingsForm(doc) {
     const values = Object.assign({}, doc.values || {});
-    if (rangeFromView) {
-      values.port_range_start = rangeStart;
-      values.port_range_end = rangeEnd;
+    if (S.rangeFromView) {
+      values.port_range_start = S.rangeStart;
+      values.port_range_end = S.rangeEnd;
     }
     const fields = doc.fields || [];
     const host = document.getElementById('settings-fields');
     const lead = document.getElementById('settings-lead');
     const saveBtn = document.getElementById('settings-save');
     const status = document.getElementById('settings-status');
-    settingsDirty = false;
+    S.settingsDirty = false;
     status.className = '';
     status.textContent = '';
     lead.textContent = t(doc.readonly ? 'settings.leadReadonly' : 'settings.lead');
@@ -1362,9 +1298,9 @@ import { moveChipFocus, trapTab } from './a11y.js';
         ),
       ].join('');
     }
-    showSettingsPanel(route.section || settingsPanel);
+    showSettingsPanel(S.route.section || S.settingsPanel);
     syncDependentSettings();
-    renderPeersEditor(!!doc.readonly || !!hostCatalog.readonly);
+    renderPeersEditor(!!doc.readonly || !!S.hostCatalog.readonly);
   }
 
   function kvRow(labelKey, value, valueKey) {
@@ -1556,7 +1492,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
     const host = document.getElementById('settings-peers');
     if (!host) return;
     const locked = !!readonly;
-    const rows = (peersDraft || []).map(function (row, i) {
+    const rows = (S.peersDraft || []).map(function (row, i) {
       const disabled = locked ? ' disabled' : '';
       const keep = row.has_auth && !row.clear_auth
         ? ' placeholder="' + escapeHtml(t('hosts.passwordKeep')) + '"'
@@ -1583,7 +1519,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
         '<button type="button" class="btn-secondary" data-peer-remove' + disabled + '>' +
         escapeHtml(t('hosts.remove')) + '</button></div></div>';
     }).join('');
-    const canAdd = !locked && peersDraft.length < 6;
+    const canAdd = !locked && S.peersDraft.length < 6;
     host.innerHTML = '<div class="peer-list">' + rows + '</div>' +
       '<p class="field-help" data-i18n="hosts.max">' + escapeHtml(t('hosts.max')) + '</p>' +
       '<p class="field-help" data-i18n="hosts.dockerHint">' + escapeHtml(t('hosts.dockerHint')) + '</p>' +
@@ -1597,7 +1533,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
     const rows = host.querySelectorAll('.peer-row');
     const next = [];
     rows.forEach(function (row, i) {
-      const prev = peersDraft[i] || {};
+      const prev = S.peersDraft[i] || {};
       next.push({
         id: row.getAttribute('data-peer-id') || prev.id || '',
         name: ((row.querySelector('[data-peer-field="name"]') || {}).value || ''),
@@ -1608,12 +1544,12 @@ import { moveChipFocus, trapTab } from './a11y.js';
         clear_auth: !!prev.clear_auth,
       });
     });
-    peersDraft = next;
+    S.peersDraft = next;
   }
 
   function peersPayload() {
     readPeersDraftFromForm();
-    return peersDraft.map(function (row) {
+    return S.peersDraft.map(function (row) {
       const name = String(row.name || '').trim();
       const url = String(row.url || '').trim();
       if (!name || !url) return null;
@@ -1631,11 +1567,11 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   async function saveSettingsPage() {
-    if (settingsDoc && settingsDoc.readonly) return;
+    if (S.settingsDoc && S.settingsDoc.readonly) return;
     const status = document.getElementById('settings-status');
     const form = document.getElementById('settings-form');
     const patch = {};
-    const fields = settingsDoc && settingsDoc.fields ? settingsDoc.fields : [];
+    const fields = S.settingsDoc && S.settingsDoc.fields ? S.settingsDoc.fields : [];
     for (let i = 0; i < fields.length; i++) {
       const f = fields[i];
       const el = form.elements[f.key];
@@ -1664,14 +1600,14 @@ import { moveChipFocus, trapTab } from './a11y.js';
       status.textContent = errorText(body, res.status);
       return;
     }
-    const saved = settingsDoc && settingsDoc.values ? settingsDoc.values : settings;
+    const saved = S.settingsDoc && S.settingsDoc.values ? S.settingsDoc.values : S.settings;
     const rangeEdited = patch.port_range_start !== saved.port_range_start
       || patch.port_range_end !== saved.port_range_end;
-    if (rangeEdited) rangeFromView = false;
+    if (rangeEdited) S.rangeFromView = false;
     applyServerSettings(body);
-    rangeFromView = true;
+    S.rangeFromView = true;
     saveView();
-    if (!(hostCatalog && hostCatalog.readonly)) {
+    if (!(S.hostCatalog && S.hostCatalog.readonly)) {
       const hostRes = await api('/api/hosts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1684,18 +1620,18 @@ import { moveChipFocus, trapTab } from './a11y.js';
         status.textContent = errorText(hostBody, hostRes.status);
         return;
       }
-      hostCatalog = {
-        local: hostBody.local || hostCatalog.local,
+      S.hostCatalog = {
+        local: hostBody.local || S.hostCatalog.local,
         peers: Array.isArray(hostBody.peers) ? hostBody.peers : [],
         readonly: !!hostBody.readonly,
       };
-      peersDraft = (hostCatalog.peers || []).map(clonePeerRow);
+      S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
     }
     renderSettingsForm(body);
     setupRefresh();
     status.className = 'is-ok';
     status.textContent = t('settings.saved');
-    settingsDirty = false;
+    S.settingsDirty = false;
   }
 
   function syncDetailModal() {
@@ -1741,12 +1677,12 @@ import { moveChipFocus, trapTab } from './a11y.js';
       hostSwitcher.classList.remove('hidden');
       renderHostSwitcher();
       renderHostBoards();
-      const focused = dataForHost(focusHostId);
+      const focused = dataForHost(S.focusHostId);
       if (focused && focused.summary) {
-        currentData = focused;
+        S.currentData = focused;
         renderSummary(focused.summary);
-      } else if (currentData && currentData.summary) {
-        renderSummary(currentData.summary);
+      } else if (S.currentData && S.currentData.summary) {
+        renderSummary(S.currentData.summary);
       }
     } else {
       grid.hidden = false;
@@ -1761,16 +1697,16 @@ import { moveChipFocus, trapTab } from './a11y.js';
         hostSwitcher.classList.add('hidden');
         hostSwitcher.innerHTML = '';
       }
-      if (!currentData) return;
-      renderSummary(currentData.summary);
-      renderGrid(currentData.ports, grid, currentData, 'local');
+      if (!S.currentData) return;
+      renderSummary(S.currentData.summary);
+      renderGrid(S.currentData.ports, grid, S.currentData, 'local');
     }
-    if (selectedPort !== null) {
-      const entry = portFromList(selectedPort, selectedHostId);
+    if (S.selectedPort !== null) {
+      const entry = portFromList(S.selectedPort, S.selectedHostId);
       if (entry) renderDetail(entry);
-      else if (route.name === 'port') {
-        detailShownPort = null;
-        showPortDetail(selectedPort);
+      else if (S.route.name === 'port') {
+        S.detailShownPort = null;
+        showPortDetail(S.selectedPort);
       } else closeDetail(true);
     }
   }
@@ -1778,7 +1714,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
   function syncAddButton() {
     const btn = document.getElementById('btn-add');
     if (!btn) return;
-    const local = !hasPeers() || focusHostId === 'local';
+    const local = !hasPeers() || S.focusHostId === 'local';
     btn.disabled = !local;
     const title = local ? t('action.add') : t('hosts.localOnly');
     btn.title = title;
@@ -1794,7 +1730,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
   function renderHostSwitcher() {
     if (!hostSwitcher) return;
     hostSwitcher.innerHTML = listedHosts().map(function (h) {
-      const on = h.id === focusHostId;
+      const on = h.id === S.focusHostId;
       return '<button type="button" class="host-chip' + (on ? ' active' : '') +
         '" role="tab" aria-selected="' + (on ? 'true' : 'false') +
         '" data-host-switch="' + escapeHtml(h.id) + '">' +
@@ -1807,7 +1743,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
     const restore = snapshotGridFocus();
     const hosts = listedHosts();
     hostBoards.innerHTML = hosts.map(function (h) {
-      return '<article class="host-board' + (h.id === focusHostId ? ' is-active' : '') +
+      return '<article class="host-board' + (h.id === S.focusHostId ? ' is-active' : '') +
         '" data-host="' + escapeHtml(h.id) + '">' +
         '<header class="host-board-head"><div class="host-board-title">' +
         escapeHtml(h.name || h.id) +
@@ -1822,7 +1758,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
         '" tabindex="-1" role="region" data-i18n-aria="grid.aria"></div></article>';
     }).join('');
     hosts.forEach(function (h) {
-      const map = hostMaps[h.id] || {};
+      const map = S.hostMaps[h.id] || {};
       const root = document.getElementById('host-grid-' + h.id);
       const err = hostBoards.querySelector('[data-host-error="' + h.id + '"]');
       const counts = hostBoards.querySelector('[data-host-counts="' + h.id + '"]');
@@ -1833,7 +1769,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
         const text = err.querySelector('span');
         if (text) text.textContent = t(map.error === 'auth' ? 'hosts.authFailed' : 'hosts.unreachable');
         const retry = err.querySelector('[data-host-retry]');
-        if (retry) retry.disabled = !!hostRetrying[h.id];
+        if (retry) retry.disabled = !!S.hostRetrying[h.id];
       }
       if (map.data && map.data.summary && counts) {
         counts.textContent = t('hosts.counts', {
@@ -1850,7 +1786,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function portFromList(port, hostId) {
-    const data = dataForHost(hostId || selectedHostId || 'local') || currentData;
+    const data = dataForHost(hostId || S.selectedHostId || 'local') || S.currentData;
     if (!data || !data.ports) return null;
     return data.ports.find(function (p) { return p.port === port; }) || null;
   }
@@ -1860,7 +1796,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       port: port,
       status: 'free',
       source_type: 'unknown',
-      known_service: knownCache[port] || null,
+      known_service: S.knownCache[port] || null,
       containers: [],
       compose_configs: [],
       urls: [],
@@ -1874,7 +1810,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       port: port,
       status: 'free',
       source_type: 'unknown',
-      known_service: knownCache[port] || null,
+      known_service: S.knownCache[port] || null,
       containers: [],
       compose_configs: [],
       urls: [],
@@ -1885,22 +1821,22 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function showPortDetail(port, fallback) {
-    const hostId = selectedHostId || 'local';
+    const hostId = S.selectedHostId || 'local';
     const local = portFromList(port, hostId);
     if (local) {
-      detailShownPort = port;
+      S.detailShownPort = port;
       renderDetail(local);
       return;
     }
-    if (detailShownPort === port && route.hostId === hostId) return;
+    if (S.detailShownPort === port && S.route.hostId === hostId) return;
     renderDetail(fallback && fallback.port === port ? fallback : pendingStub(port));
-    const gen = ++portDetailGen;
-    detailShownPort = port;
+    const gen = ++S.portDetailGen;
+    S.detailShownPort = port;
     const openedHost = hostId;
     api(portApiUrl(hostId, port) + '?include_hidden=true').then(function (res) {
-      if (gen !== portDetailGen || selectedPort !== port || selectedHostId !== openedHost) return null;
+      if (gen !== S.portDetailGen || S.selectedPort !== port || S.selectedHostId !== openedHost) return null;
       if (res.status === 404) {
-        const data = dataForHost(openedHost) || currentData;
+        const data = dataForHost(openedHost) || S.currentData;
         const locked = !!(data && data.summary && data.summary.hidden_locked);
         renderDetail(Object.assign(freeStub(port), {
           _missing: true,
@@ -1910,51 +1846,51 @@ import { moveChipFocus, trapTab } from './a11y.js';
         return null;
       }
       if (!res.ok) {
-        detailShownPort = null;
+        S.detailShownPort = null;
         showDetailError(t('detail.actionFailed'));
         return null;
       }
       return res.json();
     }).then(function (row) {
-      if (!row || gen !== portDetailGen || selectedPort !== port || selectedHostId !== openedHost) return;
-      if (row.known_service) knownCache[port] = row.known_service;
+      if (!row || gen !== S.portDetailGen || S.selectedPort !== port || S.selectedHostId !== openedHost) return;
+      if (row.known_service) S.knownCache[port] = row.known_service;
       renderDetail(row);
     }).catch(function () {
-      if (gen === portDetailGen) detailShownPort = null;
+      if (gen === S.portDetailGen) S.detailShownPort = null;
     });
   }
 
   function prefetchKnown(port) {
-    if (knownCache[port] !== undefined || knownInflight[port]) return;
-    knownInflight[port] = true;
+    if (S.knownCache[port] !== undefined || S.knownInflight[port]) return;
+    S.knownInflight[port] = true;
     api('/api/known-ports/' + port).then(function (res) {
       if (res.status === 404) {
-        knownCache[port] = null;
+        S.knownCache[port] = null;
         return null;
       }
       if (!res.ok) {
-        knownCache[port] = null;
+        S.knownCache[port] = null;
         return null;
       }
       return res.json();
     }).then(function (body) {
-      delete knownInflight[port];
+      delete S.knownInflight[port];
       if (!body) return;
-      knownCache[port] = {
+      S.knownCache[port] = {
         name: body.name,
         description: body.description,
         category: body.category,
         is_access_port: body.is_access_port,
       };
-      if (currentData && searchPortNum !== null && !knownRenderFrame) {
-        knownRenderFrame = requestAnimationFrame(function () {
-          knownRenderFrame = 0;
-          if (currentData && searchPortNum !== null) render();
+      if (S.currentData && S.searchPortNum !== null && !S.knownRenderFrame) {
+        S.knownRenderFrame = requestAnimationFrame(function () {
+          S.knownRenderFrame = 0;
+          if (S.currentData && S.searchPortNum !== null) render();
         });
       }
     }).catch(function () {
-      knownCache[port] = null;
-      delete knownInflight[port];
+      S.knownCache[port] = null;
+      delete S.knownInflight[port];
     });
   }
 
@@ -1966,13 +1902,13 @@ import { moveChipFocus, trapTab } from './a11y.js';
     }
     let html = '';
     if (hasPeers()) {
-      html += '<span class="legend-host">' + escapeHtml(t('hosts.legendHost', { name: hostName(focusHostId) })) + '</span>';
+      html += '<span class="legend-host">' + escapeHtml(t('hosts.legendHost', { name: hostName(S.focusHostId) })) + '</span>';
     }
-    html += toggle(statusFilter === 'used', 'data-status="used"', 'used', s.used, t('legend.inUse')) +
-      toggle(statusFilter === 'configured', 'data-status="configured"', 'configured', s.configured, t('legend.configured')) +
+    html += toggle(S.statusFilter === 'used', 'data-status="used"', 'used', s.used, t('legend.inUse')) +
+      toggle(S.statusFilter === 'configured', 'data-status="configured"', 'configured', s.configured, t('legend.configured')) +
       '<span class="stat is-static"><span class="dot free"></span><span class="num">' + s.free + '</span> ' + t('legend.free') + '</span>';
     if (s.hidden > 0) {
-      html += toggle(kindFilters.has('hidden'), 'data-kind="hidden"', 'hidden', s.hidden,
+      html += toggle(S.kindFilters.has('hidden'), 'data-kind="hidden"', 'hidden', s.hidden,
         t('legend.hidden') + (s.hidden_locked ? ' (' + t('legend.locked') + ')' : ''));
     }
     summary.innerHTML = html;
@@ -2001,19 +1937,19 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   function probeLockedHit(port, hostId) {
     const key = (hostId || 'local') + ':' + port;
-    if (lockedHitCache[key] || lockedHitInflight[key]) return;
-    lockedHitInflight[key] = true;
+    if (S.lockedHitCache[key] || S.lockedHitInflight[key]) return;
+    S.lockedHitInflight[key] = true;
     api(portApiUrl(hostId || 'local', port)).then(function (res) {
-      lockedHitCache[key] = res.status === 404 ? 'locked' : 'free';
-      delete lockedHitInflight[key];
-      if (searchPortNum === port) render();
+      S.lockedHitCache[key] = res.status === 404 ? 'locked' : 'free';
+      delete S.lockedHitInflight[key];
+      if (S.searchPortNum === port) render();
     }).catch(function () {
-      delete lockedHitInflight[key];
+      delete S.lockedHitInflight[key];
     });
   }
 
   function buildSearchContext(ports, hitPort, dataCtx, hostId) {
-    dataCtx = dataCtx || currentData;
+    dataCtx = dataCtx || S.currentData;
     hostId = hostId || 'local';
     const allPortNums = new Set(ports.map(function (p) { return p.port; }));
     const hitExists = allPortNums.has(hitPort);
@@ -2039,7 +1975,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
       if (hiddenNums.has(hitPort)) {
         result.push(synthetic(hitPort, true));
       } else if (locked) {
-        const kind = lockedHitCache[(hostId || 'local') + ':' + hitPort];
+        const kind = S.lockedHitCache[(hostId || 'local') + ':' + hitPort];
         if (kind === 'free') {
           result.push(synthetic(hitPort, false));
         } else {
@@ -2107,16 +2043,16 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function getKnownForFree(port) {
-    if (Object.prototype.hasOwnProperty.call(knownCache, port)) return knownCache[port];
+    if (Object.prototype.hasOwnProperty.call(S.knownCache, port)) return S.knownCache[port];
     const found = portFromList(port);
     if (found && found.known_service) return found.known_service;
     return null;
   }
 
   function matchesFilter(p) {
-    if (statusFilter === 'used' && p.status !== 'used') return false;
-    if (statusFilter === 'configured' && p.status !== 'configured') return false;
-    const kinds = Array.from(kindFilters);
+    if (S.statusFilter === 'used' && p.status !== 'used') return false;
+    if (S.statusFilter === 'configured' && p.status !== 'configured') return false;
+    const kinds = Array.from(S.kindFilters);
     for (let i = 0; i < kinds.length; i++) {
       const match = KIND_MATCHERS[kinds[i]];
       if (match && !match(p)) return false;
@@ -2125,7 +2061,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function sortPorts(arr) {
-    switch (sortMode) {
+    switch (S.sortMode) {
       case 'port-desc': return arr.sort(function (a, b) { return b.port - a.port; });
       case 'name-asc':
         return arr.sort(function (a, b) { return collate(getCellLabel(a) || '~', getCellLabel(b) || '~'); });
@@ -2142,22 +2078,22 @@ import { moveChipFocus, trapTab } from './a11y.js';
 
   function renderGrid(ports, rootEl, dataCtx, hostId, restore) {
     rootEl = rootEl || grid;
-    dataCtx = dataCtx || currentData;
+    dataCtx = dataCtx || S.currentData;
     hostId = hostId || 'local';
     ports = ports || [];
     let displayPorts;
 
-    if (searchPortNum !== null) {
-      displayPorts = buildSearchContext(ports, searchPortNum, dataCtx, hostId).filter(function (p) {
-        if (p.port === searchPortNum) return true;
+    if (S.searchPortNum !== null) {
+      displayPorts = buildSearchContext(ports, S.searchPortNum, dataCtx, hostId).filter(function (p) {
+        if (p.port === S.searchPortNum) return true;
         return matchesFilter(p);
       });
     } else {
       displayPorts = ports.filter(function (p) {
-        if (!searchTerm && (p.port < rangeStart || p.port > rangeEnd)) return false;
-        if (!showHidden && p.is_hidden) return false;
+        if (!S.searchTerm && (p.port < S.rangeStart || p.port > S.rangeEnd)) return false;
+        if (!S.showHidden && p.is_hidden) return false;
         if (!matchesFilter(p)) return false;
-        if (searchTerm) {
+        if (S.searchTerm) {
           const haystack = [
             String(p.port), p.process || '', p.manual_label || '',
             p.known_service ? p.known_service.name : '',
@@ -2175,7 +2111,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
             p.known_service ? (p.known_service.category || '') : '',
             ...(p.urls || []),
           ].join(' ').toLowerCase();
-          if (!haystack.includes(searchTerm)) return false;
+          if (!haystack.includes(S.searchTerm)) return false;
         }
         return true;
       });
@@ -2192,14 +2128,14 @@ import { moveChipFocus, trapTab } from './a11y.js';
     }
 
     const cellSelected = function (p) {
-      return p.port === selectedPort && (selectedHostId || 'local') === hostId;
+      return p.port === S.selectedPort && (S.selectedHostId || 'local') === hostId;
     };
 
     if (displayPorts.length === 0) {
       const inRange = (dataCtx.ports || []).filter(function (p) {
-        return p.port >= rangeStart && p.port <= rangeEnd && (showHidden || !p.is_hidden);
+        return p.port >= S.rangeStart && p.port <= S.rangeEnd && (S.showHidden || !p.is_hidden);
       });
-      const noFacet = !searchTerm && searchPortNum === null && kindFilters.size === 0 && statusFilter === 'all';
+      const noFacet = !S.searchTerm && S.searchPortNum === null && S.kindFilters.size === 0 && S.statusFilter === 'all';
       const key = noFacet && inRange.length === 0 ? 'grid.emptyNone' : 'grid.empty';
       const active = document.activeElement;
       const gridHadFocus = active === rootEl || (active && rootEl.contains(active));
@@ -2215,17 +2151,17 @@ import { moveChipFocus, trapTab } from './a11y.js';
       if (p.is_hidden) cls += ' hidden';
       const conflict = p.conflict ? ' conflict' : '';
       const selected = cellSelected(p) ? ' selected' : '';
-      const isSearchHit = searchPortNum !== null && p.port === searchPortNum;
+      const isSearchHit = S.searchPortNum !== null && p.port === S.searchPortNum;
       const searchHit = isSearchHit ? ' search-hit' : '';
-      const searchNear = searchPortNum !== null && !isSearchHit ? ' search-near' : '';
+      const searchNear = S.searchPortNum !== null && !isSearchHit ? ' search-near' : '';
       const label = getCellLabel(p);
       const labelText = label ? '<div class="port-label">' + escapeHtml(label) + '</div>' : '';
       const statusLabel = lockedHit ? t('legend.locked') : t('status.' + p.status);
-      const statusText = settings.show_status_text && !lockedHit && p.status !== 'free'
+      const statusText = S.settings.show_status_text && !lockedHit && p.status !== 'free'
         ? '<span class="status-text">' + escapeHtml(t('status.' + p.status)) + '</span>' : '';
-      const accessBadge = settings.show_access_badge && p.known_service && p.known_service.is_access_port
+      const accessBadge = S.settings.show_access_badge && p.known_service && p.known_service.is_access_port
         ? '<span class="access-badge">' + escapeHtml(t('grid.web')) + '</span>' : '';
-      const protoBadge = settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp'
+      const protoBadge = S.settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp'
         ? '<span class="proto-badge">' + escapeHtml(p.protocol) + '</span>' : '';
 
       const ariaParts = [String(p.port), statusLabel, label, p.protocol].filter(Boolean);
@@ -2244,13 +2180,13 @@ import { moveChipFocus, trapTab } from './a11y.js';
       el.addEventListener('click', function () {
         const port = parseInt(el.dataset.port, 10);
         const hid = el.dataset.host || 'local';
-        if (selectedPort === port && (selectedHostId || 'local') === hid && route.name === 'port') {
+        if (S.selectedPort === port && (S.selectedHostId || 'local') === hid && S.route.name === 'port') {
           closeDetail();
           return;
         }
-        selectedPort = port;
-        selectedHostId = hid;
-        focusHostId = hid;
+        S.selectedPort = port;
+        S.selectedHostId = hid;
+        S.focusHostId = hid;
         const want = portHash(hid, port);
         if (location.hash !== want) {
           location.hash = want;
@@ -2258,7 +2194,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
           const entry = displayPorts.find(function (p) { return p.port === port; });
           showPortDetail(port, entry);
         }
-        if (settings.copy_on_click) {
+        if (S.settings.copy_on_click) {
           navigator.clipboard.writeText(String(port)).then(function () {
             const live = document.querySelector('.detail-copy-port[data-copy-port="' + port + '"]')
               || rootEl.querySelector('.port-cell[data-port="' + port + '"]');
@@ -2303,9 +2239,9 @@ import { moveChipFocus, trapTab } from './a11y.js';
     if (p._pending) {
       html += '<p class="modal-hint">' + escapeHtml(t('detail.loading')) + '</p>';
     } else {
-    const remote = hasPeers() && selectedHostId && selectedHostId !== 'local';
+    const remote = hasPeers() && S.selectedHostId && S.selectedHostId !== 'local';
     if (remote) {
-      html += '<p class="modal-hint">' + escapeHtml(t('detail.remoteReadOnly', { name: hostName(selectedHostId) })) + '</p>';
+      html += '<p class="modal-hint">' + escapeHtml(t('detail.remoteReadOnly', { name: hostName(S.selectedHostId) })) + '</p>';
     }
     html += '<div class="row"><span class="key">' + escapeHtml(t('detail.status')) + '</span><span class="tag ' + p.status + '">' +
       escapeHtml(t('status.' + p.status) || p.status) + '</span></div>';
@@ -2497,28 +2433,28 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function closeDetail(skipHash) {
-    const hostId = selectedHostId || focusHostId;
-    if (selectedPort !== null) pendingGridFocus = { port: selectedPort, hostId: hostId };
-    const wasOpen = !detailPanel.classList.contains('hidden') || selectedPort !== null;
+    const hostId = S.selectedHostId || S.focusHostId;
+    if (S.selectedPort !== null) S.pendingGridFocus = { port: S.selectedPort, hostId: hostId };
+    const wasOpen = !detailPanel.classList.contains('hidden') || S.selectedPort !== null;
     setDetailOpen(false);
-    selectedPort = null;
-    detailShownPort = null;
-    portDetailGen += 1;
-    if (!skipHash && route.name === 'port') {
+    S.selectedPort = null;
+    S.detailShownPort = null;
+    S.portDetailGen += 1;
+    if (!skipHash && S.route.name === 'port') {
       location.hash = gridHash(hostId);
       return;
     }
-    if (wasOpen && (currentData || hasPeers()) && route.name !== 'settings') render();
+    if (wasOpen && (S.currentData || hasPeers()) && S.route.name !== 'settings') render();
     applyPendingGridFocus();
   }
 
   function applyPendingGridFocus() {
-    if (route.name === 'settings') {
-      pendingGridFocus = null;
+    if (S.route.name === 'settings') {
+      S.pendingGridFocus = null;
       return;
     }
-    const pending = pendingGridFocus;
-    pendingGridFocus = null;
+    const pending = S.pendingGridFocus;
+    S.pendingGridFocus = null;
     if (!pending) return;
     const port = pending.port || pending;
     const hostId = pending.hostId || 'local';
@@ -2550,15 +2486,15 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   window._portLightHide = function (port) {
-    if (hasPeers() && selectedHostId !== 'local') return;
+    if (hasPeers() && S.selectedHostId !== 'local') return;
     mutateDetail('/api/hidden/' + port, { method: 'POST' }, tick);
   };
   window._portLightUnhide = function (port) {
-    if (hasPeers() && selectedHostId !== 'local') return;
+    if (hasPeers() && S.selectedHostId !== 'local') return;
     mutateDetail('/api/hidden/' + port, { method: 'DELETE' }, tick);
   };
   window._portLightDeleteManual = function (port) {
-    if (hasPeers() && selectedHostId !== 'local') return;
+    if (hasPeers() && S.selectedHostId !== 'local') return;
     if (!window.confirm(t('detail.deleteConfirm', { port: port }))) return;
     mutateDetail('/api/manual-ports/' + port, { method: 'DELETE' }, function () {
       closeDetail();
@@ -2566,7 +2502,7 @@ import { moveChipFocus, trapTab } from './a11y.js';
     });
   };
   window._portLightSaveLabel = function (port, label) {
-    if (hasPeers() && selectedHostId !== 'local') return;
+    if (hasPeers() && S.selectedHostId !== 'local') return;
     mutateDetail('/api/manual-ports/' + port, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -2609,14 +2545,14 @@ import { moveChipFocus, trapTab } from './a11y.js';
   async function unlockHidden() {
     const password = document.getElementById('unhide-password').value;
     if (!password) return;
-    const prevUnlock = hiddenUnlock;
-    const prevShow = showHidden;
-    hiddenUnlock = password;
-    showHidden = true;
+    const prevUnlock = S.hiddenUnlock;
+    const prevShow = S.showHidden;
+    S.hiddenUnlock = password;
+    S.showHidden = true;
     const data = await loadPorts({ isolated: true });
     if (!data || (data.summary && data.summary.hidden_locked)) {
-      hiddenUnlock = prevUnlock;
-      showHidden = prevShow;
+      S.hiddenUnlock = prevUnlock;
+      S.showHidden = prevShow;
       if (!prevUnlock) sessionStorage.removeItem('port-light-hidden-unlock');
       const input = document.getElementById('unhide-password');
       const err = document.getElementById('unhide-error');
@@ -2633,18 +2569,18 @@ import { moveChipFocus, trapTab } from './a11y.js';
       return;
     }
     sessionStorage.setItem('port-light-hidden-unlock', password);
-    showHidden = true;
-    currentData = data;
-    const followup = pendingAfterUnlock;
-    pendingAfterUnlock = null;
+    S.showHidden = true;
+    S.currentData = data;
+    const followup = S.pendingAfterUnlock;
+    S.pendingAfterUnlock = null;
     closeModals();
     document.getElementById('unhide-password').value = '';
     syncHiddenButton();
     saveView();
     if (followup) followup();
     else render();
-    const focusKey = pendingUnlockFocus;
-    pendingUnlockFocus = 'eye';
+    const focusKey = S.pendingUnlockFocus;
+    S.pendingUnlockFocus = 'eye';
     let focusEl = unhideBtn;
     if (focusKey === 'chip') focusEl = document.querySelector('#filters [data-filter="hidden"]');
     else if (focusKey === 'stat') focusEl = document.querySelector('#summary button.stat[data-kind="hidden"]');
@@ -2652,9 +2588,9 @@ import { moveChipFocus, trapTab } from './a11y.js';
   }
 
   function startApp() {
-    sortSelect.value = sortMode;
-    rangeStartInput.value = rangeStart;
-    rangeEndInput.value = rangeEnd;
+    sortSelect.value = S.sortMode;
+    rangeStartInput.value = S.rangeStart;
+    rangeEndInput.value = S.rangeEnd;
     syncFilterUI();
     applyAppearance();
     fetchMeta()
@@ -2665,14 +2601,14 @@ import { moveChipFocus, trapTab } from './a11y.js';
       })
       .then(function () {
         return window.PortLightI18n
-          ? PortLightI18n.load(settings.locale || 'auto')
+          ? PortLightI18n.load(S.settings.locale || 'auto')
           : Promise.resolve();
       })
       .then(function () {
         if (window.PortLightI18n) PortLightI18n.applyDom();
-        if (showHidden && meta.hidden_unlock_required && !hiddenUnlock) {
-          showHidden = false;
-          kindFilters.delete('hidden');
+        if (S.showHidden && S.meta.hidden_unlock_required && !S.hiddenUnlock) {
+          S.showHidden = false;
+          S.kindFilters.delete('hidden');
         }
         syncHiddenButton();
         syncFilterUI();
