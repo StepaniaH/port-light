@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from backend.classification import (
+    bind_scope as _bind_scope,
+    bind_scope_many as _bind_scope_many,
+    classify as _classify,
+    collect_urls as _collect_urls,
+    compose_conflict as _compose_conflict,
+    proto_label as _proto_label,
+)
 from backend.compose_scanner import ComposePort
 from backend.docker_scanner import ContainerInfo
 from backend.main import (
-    _bind_scope,
-    _bind_scope_many,
-    _classify,
-    _collect_urls,
-    _compose_conflict,
     _etag_matched,
     _json_etag,
-    _proto_label,
 )
 from backend.port_scanner import ListeningPort
 

@@ -192,7 +192,7 @@ def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
     main._occ_snap = None
     main._occ_building = False
     n = {"k": 0}
-    real = main._classify
+    real = main.classify
 
     def wrapped(*args, **kwargs):
         n["k"] += 1
@@ -201,7 +201,7 @@ def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
-    monkeypatch.setattr(main, "_classify", wrapped)
+    monkeypatch.setattr(main, "classify", wrapped)
     client = TestClient(app)
     first = client.get("/api/ports")
     assert first.status_code == 200

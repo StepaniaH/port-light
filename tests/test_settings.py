@@ -101,7 +101,7 @@ def test_index_is_not_cached():
 
 
 def test_collect_urls_uses_url_host():
-    from backend.main import _collect_urls
+    from backend.classification import collect_urls as _collect_urls
     known = {"name": "Jellyfin", "is_access_port": True}
     urls = _collect_urls(8096, ["0.0.0.0"], [], known, {"guess_urls": True, "url_host": "nas.lan", "url_scheme": "https"})
     assert "https://nas.lan:8096" in urls
