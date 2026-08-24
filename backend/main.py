@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import degradations, hosts, port_store
+from . import degradations, hosts, webhooks, port_store
 from . import settings as app_settings
 from .auth import (
     auth_configured,
@@ -306,6 +306,8 @@ def _packed_occupancy(
     result["summary"]["compose_truncated"] = snap["compose_scan"].truncated
     result["summary"]["compose_incomplete"] = snap["compose_scan"].incomplete
     result["summary"]["compose_files"] = snap["compose_scan"].files_scanned
+    if not stale:
+        webhooks.observe(result["ports"])
     if stale:
         result["summary"]["stale"] = True
         body, etag = _json_etag(result)
