@@ -14,6 +14,7 @@ from backend.main import (
     _etag_matched,
     _json_etag,
 )
+from backend.models import PortMapping
 from backend.port_scanner import ListeningPort
 
 
@@ -172,15 +173,15 @@ def test_exited_container_keeps_bind_ips():
             status="exited",
             image="wiki",
             ports=[
-                {"host_port": 8080, "host_ip": "127.0.0.1", "container_port": 80, "protocol": "tcp"},
-                {"host_port": 8080, "host_ip": "10.0.0.5", "container_port": 80, "protocol": "tcp"},
+                PortMapping(host_port=8080, host_ip="127.0.0.1", container_port=80, protocol="tcp"),
+                PortMapping(host_port=8080, host_ip="10.0.0.5", container_port=80, protocol="tcp"),
             ],
         ),
         ContainerInfo(
             name="dns",
             status="exited",
             image="coredns",
-            ports=[{"host_port": 53, "host_ip": "0.0.0.0", "container_port": 53, "protocol": "udp"}],
+            ports=[PortMapping(host_port=53, host_ip="0.0.0.0", container_port=53, protocol="udp")],
         ),
     ]
     out = _classify(
@@ -205,8 +206,8 @@ def test_container_tcp_and_udp_same_port():
             status="exited",
             image="coredns",
             ports=[
-                {"host_port": 53, "host_ip": "0.0.0.0", "container_port": 53, "protocol": "udp"},
-                {"host_port": 53, "host_ip": "0.0.0.0", "container_port": 53, "protocol": "tcp"},
+                PortMapping(host_port=53, host_ip="0.0.0.0", container_port=53, protocol="udp"),
+                PortMapping(host_port=53, host_ip="0.0.0.0", container_port=53, protocol="tcp"),
             ],
         ),
     ]
@@ -229,7 +230,7 @@ def test_classify_used_configured_hidden_conflict():
             name="jellyfin",
             status="running",
             image="jellyfin/jellyfin",
-            ports=[{"host_port": 8096, "host_ip": "0.0.0.0", "container_port": 8096, "protocol": "tcp"}],
+            ports=[PortMapping(host_port=8096, host_ip="0.0.0.0", container_port=8096, protocol="tcp")],
             urls=["https://media.home.arpa"],
             network_mode="bridge",
         ),
@@ -342,13 +343,13 @@ def test_paused_container_is_used():
             name="wiki",
             status="paused",
             image="wiki",
-            ports=[{"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"}],
+            ports=[PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp")],
         ),
         ContainerInfo(
             name="api",
             status="restarting",
             image="api",
-            ports=[{"host_port": 3000, "host_ip": "0.0.0.0", "container_port": 3000, "protocol": "tcp"}],
+            ports=[PortMapping(host_port=3000, host_ip="0.0.0.0", container_port=3000, protocol="tcp")],
         ),
     ]
     out = _classify(
@@ -368,8 +369,8 @@ def test_nginx_vhost_follows_virtual_port():
             status="running",
             image="wiki",
             ports=[
-                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
-                {"host_port": 9000, "host_ip": "0.0.0.0", "container_port": 9000, "protocol": "tcp"},
+                PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp"),
+                PortMapping(host_port=9000, host_ip="0.0.0.0", container_port=9000, protocol="tcp"),
             ],
             vhost_urls=["https://wiki.lan"],
             vhost_port=80,
@@ -390,7 +391,7 @@ def test_nginx_vhost_follows_virtual_port():
             name="app",
             status="running",
             image="app",
-            ports=[{"host_port": 9000, "host_ip": "0.0.0.0", "container_port": 9000, "protocol": "tcp"}],
+            ports=[PortMapping(host_port=9000, host_ip="0.0.0.0", container_port=9000, protocol="tcp")],
             vhost_urls=["https://app.lan"],
             vhost_port=80,
         ),
@@ -411,10 +412,10 @@ def test_host_network_expose_is_configured_until_listen():
             status="running",
             image="app",
             network_mode="host",
-            ports=[{
-                "host_port": 8080, "host_ip": "0.0.0.0",
-                "container_port": 8080, "protocol": "tcp", "source": "expose",
-            }],
+            ports=[PortMapping(
+                host_port=8080, host_ip="0.0.0.0",
+                container_port=8080, protocol="tcp", source="expose",
+            )],
         ),
     ]
     out = _classify(
@@ -441,8 +442,8 @@ def test_label_urls_follow_web_mapping():
             urls=["https://wiki.lan"],
             label_port=80,
             ports=[
-                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
-                {"host_port": 9000, "host_ip": "0.0.0.0", "container_port": 9000, "protocol": "tcp"},
+                PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp"),
+                PortMapping(host_port=9000, host_ip="0.0.0.0", container_port=9000, protocol="tcp"),
             ],
         ),
     ]
@@ -510,7 +511,7 @@ def test_listen_tcp_keeps_published_udp():
             name="dns",
             status="running",
             image="coredns",
-            ports=[{"host_port": 53, "host_ip": "0.0.0.0", "container_port": 53, "protocol": "udp"}],
+            ports=[PortMapping(host_port=53, host_ip="0.0.0.0", container_port=53, protocol="udp")],
         ),
     ]
     compose = [
@@ -598,7 +599,7 @@ def test_listen_ips_union_docker_bind_scope():
             name="wiki",
             status="running",
             image="wiki",
-            ports=[{"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"}],
+            ports=[PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp")],
         ),
     ]
     row = _classify(
@@ -618,8 +619,8 @@ def test_label_urls_do_not_paint_sidecar_ports():
             image="app",
             urls=["https://app.lan"],
             ports=[
-                {"host_port": 3000, "host_ip": "0.0.0.0", "container_port": 3000, "protocol": "tcp"},
-                {"host_port": 5432, "host_ip": "0.0.0.0", "container_port": 5432, "protocol": "tcp"},
+                PortMapping(host_port=3000, host_ip="0.0.0.0", container_port=3000, protocol="tcp"),
+                PortMapping(host_port=5432, host_ip="0.0.0.0", container_port=5432, protocol="tcp"),
             ],
         ),
     ]
@@ -643,8 +644,8 @@ def test_vhost_mismatch_does_not_paint_sidecars():
             vhost_urls=["https://app.lan"],
             vhost_port=3000,
             ports=[
-                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
-                {"host_port": 5432, "host_ip": "0.0.0.0", "container_port": 5432, "protocol": "tcp"},
+                PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp"),
+                PortMapping(host_port=5432, host_ip="0.0.0.0", container_port=5432, protocol="tcp"),
             ],
         ),
     ]
@@ -668,8 +669,8 @@ def test_unmatched_label_port_falls_back_to_web_mapping():
             urls=["https://wiki.lan"],
             label_port=3000,
             ports=[
-                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
-                {"host_port": 9000, "host_ip": "0.0.0.0", "container_port": 9000, "protocol": "tcp"},
+                PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp"),
+                PortMapping(host_port=9000, host_ip="0.0.0.0", container_port=9000, protocol="tcp"),
             ],
         ),
     ]
@@ -719,10 +720,10 @@ def test_bridge_container_pid_does_not_steal_host_listen():
             image="jellyfin",
             network_mode="bridge",
             pid=100,
-            ports=[{
-                "host_port": 8096, "host_ip": "0.0.0.0",
-                "container_port": 8096, "protocol": "tcp",
-            }],
+            ports=[PortMapping(
+                host_port=8096, host_ip="0.0.0.0",
+                container_port=8096, protocol="tcp",
+            )],
         ),
     ]
     listening = [
@@ -754,8 +755,8 @@ def test_traefik_metrics_port_does_not_take_wiki_url():
             urls=["https://wiki.lan"],
             label_port=_traefik_service_port(labels),
             ports=[
-                {"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"},
-                {"host_port": 8082, "host_ip": "0.0.0.0", "container_port": 8082, "protocol": "tcp"},
+                PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp"),
+                PortMapping(host_port=8082, host_ip="0.0.0.0", container_port=8082, protocol="tcp"),
             ],
         ),
     ]
@@ -808,11 +809,11 @@ def test_hidden_free_port_emitted_when_included():
 def test_classify_container_order_is_stable():
     a = ContainerInfo(
         name="zeta", status="running", image="z",
-        ports=[{"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"}],
+        ports=[PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp")],
     )
     b = ContainerInfo(
         name="alpha", status="running", image="a",
-        ports=[{"host_port": 8080, "host_ip": "0.0.0.0", "container_port": 80, "protocol": "tcp"}],
+        ports=[PortMapping(host_port=8080, host_ip="0.0.0.0", container_port=80, protocol="tcp")],
     )
     r1 = _classify(
         [], [a, b], [], [], hidden_ports=[],

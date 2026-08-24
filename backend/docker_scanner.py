@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from urllib.parse import urlparse
 
+from .models import PortMapping
 from .port_scanner import descendant_pids, is_host_netns_mode, socket_inodes_for_tree
 
 try:
@@ -95,7 +96,7 @@ class ContainerInfo:
     name: str
     status: str
     image: str
-    ports: list[dict] = field(default_factory=list)
+    ports: list[PortMapping] = field(default_factory=list)
     compose_project: str | None = None
     compose_service: str | None = None
     network_mode: str | None = None
@@ -234,9 +235,9 @@ def _attach_host_netns_sockets(
         c.socket_inodes = socket_inodes_for_tree(c.pid)
 
 
-def _add_expose_ports(ports: list[dict], exposed: dict) -> None:
+def _add_expose_ports(ports: list[PortMapping], exposed: dict) -> None:
     seen = {
-        (p["host_port"], p.get("host_ip"), p.get("container_port"), p.get("protocol"))
+        (p.host_port, p.host_ip, p.container_port, p.protocol)
         for p in ports
     }
     for spec in exposed or {}:
@@ -248,18 +249,18 @@ def _add_expose_ports(ports: list[dict], exposed: dict) -> None:
         if key in seen:
             continue
         seen.add(key)
-        ports.append({
-            "host_port": cp,
-            "host_ip": "0.0.0.0",
-            "container_port": cp,
-            "protocol": protocol,
-            "source": "expose",
-        })
+        ports.append(PortMapping(
+            host_port=cp,
+            host_ip="0.0.0.0",
+            container_port=cp,
+            protocol=protocol,
+            source="expose",
+        ))
 
 
-def extract_ports(attrs: dict) -> list[dict]:
+def extract_ports(attrs: dict) -> list[PortMapping]:
     """Host→container mappings from PortBindings, NetworkSettings, and host-network ExposedPorts."""
-    ports: list[dict] = []
+    ports: list[PortMapping] = []
     seen: set[tuple] = set()
 
     def _add(host_port, host_ip, container_port, protocol, source="publish"):
@@ -277,18 +278,18 @@ def extract_ports(attrs: dict) -> list[dict]:
         key = (hp, host_ip, cp, protocol)
         if key in seen:
             if source != "expose":
-                for row in ports:
-                    if (row["host_port"], row["host_ip"], row["container_port"], row["protocol"]) == key:
-                        row["source"] = source
+                for i, row in enumerate(ports):
+                    if (row.host_port, row.host_ip, row.container_port, row.protocol) == key:
+                        ports[i] = replace(row, source=source)
             return
         seen.add(key)
-        ports.append({
-            "host_port": hp,
-            "host_ip": host_ip,
-            "container_port": cp,
-            "protocol": protocol,
-            "source": source,
-        })
+        ports.append(PortMapping(
+            host_port=hp,
+            host_ip=host_ip,
+            container_port=cp,
+            protocol=protocol,
+            source=source,
+        ))
 
     def _add_bindings(spec_map):
         for spec, binding_list in (spec_map or {}).items():
@@ -328,8 +329,8 @@ def extract_ports(attrs: dict) -> list[dict]:
 
     cid = str(attrs.get("Id") or "")
     status = str((attrs.get("State") or {}).get("Status") or "").lower()
-    published = [p for p in ports if p.get("source") != "expose"]
-    expose = [p for p in ports if p.get("source") == "expose"]
+    published = [p for p in ports if p.source != "expose"]
+    expose = [p for p in ports if p.source == "expose"]
     stopped = status not in ("running", "paused", "restarting")
     if cid and stopped:
         recalled = _recall_publish(cid)
@@ -350,18 +351,18 @@ def _binding_ips(raw) -> list[str]:
     return [text] if text else ["0.0.0.0", "::"]
 
 
-def _merge_recalled(current: list[dict], recalled: list[dict]) -> list[dict]:
+def _merge_recalled(current: list[PortMapping], recalled: list[PortMapping]) -> list[PortMapping]:
     keys = {
-        (p["host_port"], p.get("host_ip"), p.get("container_port"), p.get("protocol"))
+        (p.host_port, p.host_ip, p.container_port, p.protocol)
         for p in current
     }
-    out = [dict(p) for p in current]
+    out = list(current)
     for p in recalled:
-        key = (p["host_port"], p.get("host_ip"), p.get("container_port"), p.get("protocol"))
+        key = (p.host_port, p.host_ip, p.container_port, p.protocol)
         if key in keys:
             continue
         keys.add(key)
-        out.append(dict(p))
+        out.append(p)
     return out
 
 
@@ -375,17 +376,17 @@ def _lru_put(store: dict, key: str, value, max_size: int) -> None:
     store[key] = value
 
 
-def _remember_publish(cid: str, ports: list[dict]) -> None:
+def _remember_publish(cid: str, ports: list[PortMapping]) -> None:
     with _LOCK:
-        _lru_put(_LAST_PUBLISH, cid, [dict(p) for p in ports], _LAST_PUBLISH_MAX)
+        _lru_put(_LAST_PUBLISH, cid, list(ports), _LAST_PUBLISH_MAX)
 
 
-def _recall_publish(cid: str) -> list[dict]:
+def _recall_publish(cid: str) -> list[PortMapping]:
     with _LOCK:
         rows = _LAST_PUBLISH.get(cid)
         if rows is not None:
             _LAST_PUBLISH[cid] = _LAST_PUBLISH.pop(cid)
-    return [dict(p) for p in rows] if rows else []
+    return list(rows) if rows else []
 
 
 def _network_driver(client, net_id: str) -> str:
@@ -406,14 +407,14 @@ def _network_driver(client, net_id: str) -> str:
     return driver
 
 
-def _macvlan_ports(client, attrs: dict, existing: list[dict]) -> list[dict]:
+def _macvlan_ports(client, attrs: dict, existing: list[PortMapping]) -> list[PortMapping]:
     """macvlan/ipvlan IPs are reachable on the LAN without Docker PortBindings."""
-    extra: list[dict] = []
+    extra: list[PortMapping] = []
     networks = (attrs.get("NetworkSettings") or {}).get("Networks") or {}
     exposed = (attrs.get("Config") or {}).get("ExposedPorts") or {}
     if not isinstance(networks, dict) or not exposed:
         return extra
-    seen = {(p["host_port"], p.get("host_ip"), p.get("protocol")) for p in existing}
+    seen = {(p.host_port, p.host_ip, p.protocol) for p in existing}
     for name, net in networks.items():
         if not isinstance(net, dict):
             continue
@@ -433,13 +434,13 @@ def _macvlan_ports(client, attrs: dict, existing: list[dict]) -> list[dict]:
                 if row_key in seen:
                     continue
                 seen.add(row_key)
-                extra.append({
-                    "host_port": cp,
-                    "host_ip": ip,
-                    "container_port": cp,
-                    "protocol": protocol,
-                    "source": "macvlan",
-                })
+                extra.append(PortMapping(
+                    host_port=cp,
+                    host_ip=ip,
+                    container_port=cp,
+                    protocol=protocol,
+                    source="macvlan",
+                ))
     return extra
 
 
@@ -595,7 +596,7 @@ def extract_label_urls(
     env: list | None = None,
     *,
     include_nginx: bool = True,
-    ports: list[dict] | None = None,
+    ports: list[PortMapping] | None = None,
 ) -> list[str]:
     """Traefik Host() / HostSNI() / HostHeader(), Caddy sites, nginx-proxy VIRTUAL_HOST."""
     urls: list[str] = []
@@ -744,7 +745,7 @@ def _label_is_off(val) -> bool:
     return str(val).strip().lower() in ("false", "0", "no", "off")
 
 
-def expand_unraid_webui(val: str, ports: list[dict] | None = None) -> str:
+def expand_unraid_webui(val: str, ports: list[PortMapping] | None = None) -> str:
     """Turn Unraid ``http://[IP]:[PORT:8096]/`` templates into a real URL."""
     text = (val or "").strip()
     missing = False
@@ -753,13 +754,15 @@ def expand_unraid_webui(val: str, ports: list[dict] | None = None) -> str:
         nonlocal missing
         n = int(match.group(1))
         for row in ports or []:
+            cp = row.container_port
+            hp = row.host_port
+            if cp is None:
+                continue
             try:
-                cp = int(row.get("container_port"))
-                hp = int(row.get("host_port"))
+                if int(cp) == n and 1 <= int(hp) <= 65535:
+                    return str(hp)
             except (TypeError, ValueError):
                 continue
-            if cp == n and 1 <= hp <= 65535:
-                return str(hp)
         if ports is None:
             return str(n)
         missing = True

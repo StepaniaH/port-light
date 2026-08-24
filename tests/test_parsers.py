@@ -15,6 +15,7 @@ from backend.compose_scanner import (
     scan_compose_tree,
     substitute_vars,
 )
+from backend.models import PortMapping
 from backend.docker_scanner import (
     ContainerInfo,
     _attach_host_netns_sockets,
@@ -397,8 +398,9 @@ def test_extract_port_bindings_and_homepage():
         "Config": {"ExposedPorts": {}},
     }
     ports = extract_ports(attrs)
-    assert ports[0]["host_port"] == 8096
-    assert ports[0]["host_ip"] == "127.0.0.1"
+    assert all(isinstance(row, PortMapping) for row in ports)
+    assert ports[0].host_port == 8096
+    assert ports[0].host_ip == "127.0.0.1"
     v6 = extract_ports({
         "HostConfig": {
             "NetworkMode": "bridge",
@@ -409,7 +411,7 @@ def test_extract_port_bindings_and_homepage():
         "NetworkSettings": {"Ports": {}},
         "Config": {"ExposedPorts": {}},
     })
-    assert v6[0]["host_ip"] == "::1"
+    assert v6[0].host_ip == "::1"
     urls = extract_label_urls({
         "homepage.href": "http://photos.lan:2283",
         "traefik.http.routers.x.rule": "HostRegexp(`*.home.arpa`)",
@@ -467,7 +469,7 @@ def test_long_syntax_and_ipv4_host():
         "Config": {"ExposedPorts": {"53/udp": {}, "80/tcp": {}}},
     }
     ports = extract_ports(attrs)
-    mapped = {(p["host_port"], p["protocol"]) for p in ports}
+    mapped = {(p.host_port, p.protocol) for p in ports}
     assert (53, "udp") in mapped
     assert (80, "tcp") in mapped
 
@@ -847,8 +849,8 @@ def test_macvlan_includes_ipv6(monkeypatch):
         }}},
         "Config": {"ExposedPorts": {"80/tcp": {}}},
     }, [])
-    assert extra[0]["host_ip"] == "fd12::10"
-    assert extra[0]["host_port"] == 80
+    assert extra[0].host_ip == "fd12::10"
+    assert extra[0].host_port == 80
     both = _macvlan_ports(None, {
         "NetworkSettings": {"Networks": {"lan": {
             "NetworkID": "abc",
@@ -857,7 +859,7 @@ def test_macvlan_includes_ipv6(monkeypatch):
         }}},
         "Config": {"ExposedPorts": {"443/tcp": {}}},
     }, [])
-    ips = {row["host_ip"] for row in both}
+    ips = {row.host_ip for row in both}
     assert ips == {"10.0.0.9", "fd12::10"}
 
 
@@ -937,7 +939,7 @@ def test_dual_stack_empty_hostport_copies_sibling():
         "Config": {"ExposedPorts": {}},
     }
     ports = extract_ports(attrs)
-    ips = {p["host_ip"] for p in ports if p["host_port"] == 32768}
+    ips = {p.host_ip for p in ports if p.host_port == 32768}
     assert ips == {"0.0.0.0", "::"}
 
 
@@ -952,7 +954,7 @@ def test_ephemeral_binding_filled_from_network_settings():
         },
         "Config": {"ExposedPorts": {}},
     }
-    assert {p["host_port"] for p in extract_ports(attrs)} == {32768}
+    assert {p.host_port for p in extract_ports(attrs)} == {32768}
 
 
 def test_macvlan_secondary_and_prefixed_ipv6(monkeypatch):
@@ -969,7 +971,7 @@ def test_macvlan_secondary_and_prefixed_ipv6(monkeypatch):
         }}},
         "Config": {"ExposedPorts": {"80/tcp": {}}},
     }, [])
-    ips = {row["host_ip"] for row in extra}
+    ips = {row.host_ip for row in extra}
     assert ips == {"10.0.0.9", "fd12::10", "10.0.0.10"}
 
 
@@ -1061,7 +1063,7 @@ def test_host_netns_mode_paths():
         "NetworkSettings": {"Ports": {}},
         "Config": {"ExposedPorts": {"53/udp": {}}},
     }
-    mapped = {(p["host_port"], p["protocol"]) for p in extract_ports(attrs)}
+    mapped = {(p.host_port, p.protocol) for p in extract_ports(attrs)}
     assert (53, "udp") in mapped
 
 
@@ -1335,7 +1337,7 @@ def test_ss_service_name_and_caddy_wildcard():
     assert extract_label_urls({"caddy": "https://*.home.arpa"}) == []
     mapped = extract_label_urls(
         {"net.unraid.docker.webui": "http://[IP]:[PORT:8096]/"},
-        ports=[{"host_port": 18096, "container_port": 8096}],
+        ports=[PortMapping(host_port=18096, host_ip="0.0.0.0", container_port=8096, protocol="tcp")],
     )
     assert "http://localhost:18096" in mapped
 
@@ -1353,7 +1355,7 @@ def test_stopped_ephemeral_keeps_last_host_port():
         },
         "Config": {"ExposedPorts": {}},
     }
-    assert extract_ports(running)[0]["host_port"] == 32768
+    assert extract_ports(running)[0].host_port == 32768
     stopped = {
         "Id": "deadbeefstopped1",
         "State": {"Status": "exited"},
@@ -1365,7 +1367,7 @@ def test_stopped_ephemeral_keeps_last_host_port():
         "Config": {"ExposedPorts": {}},
     }
     recalled = extract_ports(stopped)
-    assert recalled[0]["host_port"] == 32768
+    assert recalled[0].host_port == 32768
 
 
 def test_host_netns_joiner_gets_expose():
@@ -1382,7 +1384,7 @@ def test_host_netns_joiner_gets_expose():
         [vpn, helper],
         {"fff111aaa222": {"8080/tcp": {}}},
     )
-    assert any(p["host_port"] == 8080 and p["source"] == "expose" for p in helper.ports)
+    assert any(p.host_port == 8080 and p.source == "expose" for p in helper.ports)
 
 
 def test_included_compose_yml_is_not_its_own_stack(tmp_path):
@@ -1424,7 +1426,7 @@ def test_external_macvlan_static_ip(tmp_path):
 def test_unraid_unmapped_webui_port_is_dropped():
     assert extract_label_urls(
         {"net.unraid.docker.webui": "http://[IP]:[PORT:8096]/"},
-        ports=[{"host_port": 18096, "container_port": 80}],
+        ports=[PortMapping(host_port=18096, host_ip="0.0.0.0", container_port=80, protocol="tcp")],
     ) == []
 
 
@@ -1538,7 +1540,7 @@ def test_empty_hostip_records_dual_stack():
         "NetworkSettings": {"Ports": {}},
         "Config": {"ExposedPorts": {}},
     }
-    ips = {p["host_ip"] for p in extract_ports(attrs) if p["host_port"] == 50000}
+    ips = {p.host_ip for p in extract_ports(attrs) if p.host_port == 50000}
     assert ips == {"0.0.0.0", "::"}
 
 
@@ -1561,7 +1563,7 @@ def test_stopped_mixed_publish_keeps_ephemeral():
         },
         "Config": {"ExposedPorts": {}},
     }
-    assert {p["host_port"] for p in extract_ports(running)} == {8080, 32768}
+    assert {p.host_port for p in extract_ports(running)} == {8080, 32768}
     stopped = {
         "Id": "deadbeefmixed1",
         "State": {"Status": "exited"},
@@ -1575,7 +1577,7 @@ def test_stopped_mixed_publish_keeps_ephemeral():
         "NetworkSettings": {"Ports": None},
         "Config": {"ExposedPorts": {}},
     }
-    assert {p["host_port"] for p in extract_ports(stopped)} == {8080, 32768}
+    assert {p.host_port for p in extract_ports(stopped)} == {8080, 32768}
 
 
 def test_homepage_template_href_is_dropped():
@@ -1608,7 +1610,7 @@ def test_stopped_macvlan_uses_ipam_config(monkeypatch):
         }}},
         "Config": {"ExposedPorts": {"80/tcp": {}}},
     }, [])
-    ips = {row["host_ip"] for row in extra}
+    ips = {row.host_ip for row in extra}
     assert ips == {"192.168.1.50", "fd12::10"}
 
 
@@ -1616,10 +1618,10 @@ def test_last_publish_evicts_oldest(monkeypatch):
     import backend.docker_scanner as ds
     monkeypatch.setattr(ds, "_LAST_PUBLISH", {})
     monkeypatch.setattr(ds, "_LAST_PUBLISH_MAX", 2)
-    _remember_publish("aaaa", [{"host_port": 1}])
-    _remember_publish("bbbb", [{"host_port": 2}])
-    _remember_publish("aaaa", [{"host_port": 11}])
-    _remember_publish("cccc", [{"host_port": 3}])
+    _remember_publish("aaaa", [PortMapping(host_port=1, host_ip="0.0.0.0", container_port=None, protocol="tcp")])
+    _remember_publish("bbbb", [PortMapping(host_port=2, host_ip="0.0.0.0", container_port=None, protocol="tcp")])
+    _remember_publish("aaaa", [PortMapping(host_port=11, host_ip="0.0.0.0", container_port=None, protocol="tcp")])
+    _remember_publish("cccc", [PortMapping(host_port=3, host_ip="0.0.0.0", container_port=None, protocol="tcp")])
     assert _recall_publish("bbbb") == []
-    assert _recall_publish("aaaa")[0]["host_port"] == 11
-    assert _recall_publish("cccc")[0]["host_port"] == 3
+    assert _recall_publish("aaaa")[0].host_port == 11
+    assert _recall_publish("cccc")[0].host_port == 3

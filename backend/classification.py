@@ -120,11 +120,11 @@ def classify(
 
     for c in containers:
         for p in c.ports:
-            _add_container(p["host_port"], c, {
-                "host_ip": p.get("host_ip"),
-                "protocol": p.get("protocol"),
-                "container_port": p.get("container_port"),
-                "source": p.get("source") or "publish",
+            _add_container(p.host_port, c, {
+                "host_ip": p.host_ip,
+                "protocol": p.protocol,
+                "container_port": p.container_port,
+                "source": p.source or "publish",
             })
         if c.socket_inodes:
             for inode in c.socket_inodes:
@@ -480,16 +480,16 @@ def fallback_url_hosts(
 
 def label_url_host_ports(c) -> list[int] | None:
     """Host ports that should receive Traefik/homepage URLs. None = inode-only."""
-    mappings = [p for p in (c.ports or []) if p.get("host_port")]
+    mappings = [p for p in (c.ports or []) if p.host_port]
     hosts: list[int] = []
     cport_to_hosts: dict[int, list[int]] = {}
     for p in mappings:
         try:
-            hp = int(p["host_port"])
+            hp = int(p.host_port)
         except (TypeError, ValueError):
             continue
         hosts.append(hp)
-        cp = p.get("container_port")
+        cp = p.container_port
         if cp is None:
             continue
         try:
@@ -511,16 +511,16 @@ def vhost_url_host_ports(c) -> list[int] | None:
     """Host ports that should receive nginx-proxy VIRTUAL_HOST URLs."""
     if not getattr(c, "vhost_urls", None):
         return []
-    mappings = [p for p in (c.ports or []) if p.get("host_port")]
+    mappings = [p for p in (c.ports or []) if p.host_port]
     hosts: list[int] = []
     cport_to_hosts: dict[int, list[int]] = {}
     for p in mappings:
         try:
-            hp = int(p["host_port"])
+            hp = int(p.host_port)
         except (TypeError, ValueError):
             continue
         hosts.append(hp)
-        cp = p.get("container_port")
+        cp = p.container_port
         if cp is None:
             continue
         try:
