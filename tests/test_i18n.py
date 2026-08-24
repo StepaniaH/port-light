@@ -83,7 +83,7 @@ def test_settings_fields_have_locale_copy():
 def test_markup_i18n_keys_exist_in_english():
     english = json.loads((LOCALES_DIR / "en.json").read_text(encoding="utf-8"))
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-    js = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    js = (ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
     keys = set(re.findall(r'data-i18n(?:-placeholder|-title|-aria)?="([a-zA-Z0-9_.]+)"', html + js))
     keys |= set(re.findall(r"""\bt\(\s*['"]([a-zA-Z0-9_.]+)['"]""", js))
     keys = {key for key in keys if key and not key.endswith('.')}
@@ -102,5 +102,5 @@ def test_cache_bust_matches_index():
     assert match
     version = match.group(1)
     assert f"i18n.js?v={version}" in html
-    assert f"app.js?v={version}" in html
+    assert f"js/app.js?v={version}" in html
     assert f"style.css?v={version}" in html

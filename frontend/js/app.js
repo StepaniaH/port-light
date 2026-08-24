@@ -1,41 +1,11 @@
 /* Port-Light frontend */
 
+import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js';
+import { KIND_MATCHERS } from './kinds.js';
+import { moveChipFocus, trapTab } from './a11y.js';
+
 (function () {
   'use strict';
-
-  function t(key, vars) {
-    return window.PortLightI18n ? window.PortLightI18n.t(key, vars) : key;
-  }
-
-  function tx(prefix, value) {
-    if (!value) return '';
-    const key = prefix + '.' + value;
-    const out = t(key);
-    return out === key ? value : out;
-  }
-
-  function collate(a, b) {
-    const loc = window.PortLightI18n ? PortLightI18n.locale() : undefined;
-    try {
-      return String(a || '').localeCompare(String(b || ''), loc, { numeric: true, sensitivity: 'base' });
-    } catch (err) {
-      return String(a || '').localeCompare(String(b || ''));
-    }
-  }
-
-  function errorText(body, status) {
-    const detail = body && body.detail;
-    if (typeof detail === 'string' && detail) return detail;
-    if (Array.isArray(detail)) {
-      const parts = detail.map(function (item) {
-        if (typeof item === 'string') return item;
-        if (item && item.msg) return item.msg;
-        return '';
-      }).filter(Boolean);
-      if (parts.length) return parts.join('; ');
-    }
-    return t('error.httpStatus', { status: status });
-  }
 
   let currentData = null;
   let hostCatalog = { local: { id: 'local', name: '', local: true }, peers: [], readonly: false };
@@ -116,35 +86,6 @@
   const sortSelect = document.getElementById('sort-select');
   const unhideBtn = document.getElementById('btn-unhide');
   const settingsBtn = document.getElementById('btn-settings');
-
-  const KIND_MATCHERS = {
-    running: function (p) {
-      return p.containers && p.containers.some(function (c) {
-        return c.status === 'running' || c.status === 'paused' || c.status === 'restarting';
-      });
-    },
-    system: function (p) {
-      return p.source_type === 'system' || (p.known_service && p.known_service.category === 'system');
-    },
-    docker: function (p) {
-      return p.source_type === 'docker' || (p.containers && p.containers.length > 0);
-    },
-    access: function (p) {
-      return p.known_service && p.known_service.is_access_port;
-    },
-    udp: function (p) {
-      return (p.protocol || '').indexOf('udp') !== -1;
-    },
-    localhost: function (p) {
-      return p.bind_scope === 'localhost';
-    },
-    public: function (p) {
-      return p.bind_scope === 'public';
-    },
-    hidden: function (p) {
-      return !!p.is_hidden;
-    },
-  };
 
   try {
     const cached = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
@@ -455,20 +396,6 @@
     saveView();
     render();
   });
-
-  function moveChipFocus(container, key) {
-    const chips = Array.prototype.slice.call(container.querySelectorAll('button'));
-    const idx = chips.indexOf(document.activeElement);
-    if (idx < 0) return false;
-    let next = idx;
-    if (key === 'ArrowRight' || key === 'ArrowDown') next = Math.min(chips.length - 1, idx + 1);
-    else if (key === 'ArrowLeft' || key === 'ArrowUp') next = Math.max(0, idx - 1);
-    else if (key === 'Home') next = 0;
-    else if (key === 'End') next = chips.length - 1;
-    else return false;
-    if (chips[next]) chips[next].focus();
-    return true;
-  }
 
   document.getElementById('filters').addEventListener('keydown', function (e) {
     if (moveChipFocus(this, e.key)) e.preventDefault();
@@ -1028,33 +955,6 @@
   }
 
   let portsAbort = null;
-
-  function trapTab(e, root) {
-    if (!root) return;
-    const nodes = root.querySelectorAll(
-      'button, input, select, textarea, a[href], summary, [tabindex]:not([tabindex="-1"])'
-    );
-    const list = Array.prototype.filter.call(nodes, function (el) {
-      if (el.disabled) return false;
-      if (el.closest && el.closest('[inert]')) return false;
-      return el.getClientRects().length > 0 || el === document.activeElement;
-    });
-    if (!list.length) return;
-    const first = list[0];
-    const last = list[list.length - 1];
-    if (!root.contains(document.activeElement)) {
-      e.preventDefault();
-      (e.shiftKey ? last : first).focus();
-      return;
-    }
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
 
   function markRefreshed() {
     const el = document.getElementById('sync-age');
@@ -2749,23 +2649,6 @@
     if (focusKey === 'chip') focusEl = document.querySelector('#filters [data-filter="hidden"]');
     else if (focusKey === 'stat') focusEl = document.querySelector('#summary button.stat[data-kind="hidden"]');
     if (focusEl) focusEl.focus({ preventScroll: true });
-  }
-
-  function escapeHtml(text) {
-    if (text === 0) return '0';
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
-  }
-
-  function safeHref(url) {
-    if (!url) return '';
-    const text = String(url).trim();
-    const lower = text.toLowerCase();
-    if (lower.indexOf('http://') !== 0 && lower.indexOf('https://') !== 0) return '';
-    if (/[\s<>]/.test(text)) return '';
-    return text;
   }
 
   function startApp() {
