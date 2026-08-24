@@ -6,6 +6,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Added
 
+- Live updates over SSE: `GET /api/events` pushes a refresh hint when the scan key or store generation changes; the UI pulls immediately. Interval polling remains as fallback.
 - Free-port planner: a new toolbar action finds the largest contiguous free runs in the current range and can reserve one for you (`GET /api/free-runs`).
 - Name ports with labels: `port-light.port.<container-or-host-port>.name` (and `.category`) on a container override the known-services name for its published rows.
 - `GET /api/metrics` (opt-in via `METRICS_ENABLED=1`): Prometheus text exposition of used / configured / free counts, hidden ports, degradation count, and Compose file stats. Aggregates only; Basic Auth applies.

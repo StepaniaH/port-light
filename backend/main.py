@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -585,6 +585,33 @@ def favicon() -> FileResponse:
 app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
 
 
+
+
+def _event_lines():
+    """SSE frames: hello on connect, then ``refresh`` when occupancy may have changed."""
+    last = _scan_key(_values())
+    yield "retry: 3000\n\n"
+    yield "event: hello\ndata: {}\n\n"
+    while True:
+        time.sleep(0.5)
+        sig = _scan_key(_values())
+        if sig != last:
+            last = sig
+            yield "event: refresh\ndata: {}\n\n"
+
+
+@app.get("/api/events")
+def events() -> Response:
+    """Server-sent events: nudges open UIs the moment occupancy may have changed.
+
+    Purely a hint — clients still pull ``GET /api/ports`` (its ETag does the
+    real work).
+    """
+    return StreamingResponse(
+        _event_lines(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/free-runs")

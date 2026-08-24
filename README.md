@@ -57,6 +57,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with one-click reservation
+- Instant refresh: open UIs subscribe to `GET /api/events` (SSE) and re-poll the moment occupancy changes, instead of waiting for the next 5s tick
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
 - Vanilla HTML/CSS/JS frontend — no npm, no build step
 

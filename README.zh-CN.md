@@ -57,6 +57,7 @@
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
 - 查找空闲端口：工具栏按钮（或 `GET /api/free-runs?count=N`）返回范围内最大的连续空闲段，可一键预留
+- 即时刷新：打开的界面通过 `GET /api/events`（SSE）订阅变更，占用一变就重新拉取，不必等下一个 5 秒轮询
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
 - 前端是原生 HTML/CSS/JS，没有 npm，没有构建步骤
 

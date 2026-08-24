@@ -25,6 +25,7 @@ import {
   occupancyUrl, portApiUrl, gridHash, portHash, dataForHost,
   api, fetchMeta, fetchHealth, fetchHostHealth, fetchHosts,
   fetchPorts, retryHost, setupRefresh, loadPorts, renderScanners, tick,
+  startEventStream,
 } from './api.js?v=59';
 import {
   closeDetail, showPortDetail, showDetailError, syncDetailModal, unlockHidden,
@@ -891,6 +892,7 @@ import {
         syncHiddenButton();
         syncFilterUI();
         applyRoute();
+        startEventStream();
         setupRefresh();
         syncHeaderHeight();
       });

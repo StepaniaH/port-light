@@ -339,8 +339,23 @@ import { render } from './grid.js?v=59';
       if (!hasPeers()) fetchHealth();
     });
   }
+  let eventStream = null;
+
+  export function startEventStream() {
+    if (!window.EventSource || eventStream) return;
+    eventStream = new EventSource('/api/events');
+    eventStream.addEventListener('refresh', function () {
+      if (S.settings.auto_refresh && S.route.name !== 'settings' && !modalOpen()) tick();
+    });
+  }
+
+  export function stopEventStream() {
+    if (eventStream) { eventStream.close(); eventStream = null; }
+  }
+
   export function setupRefresh() {
     if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
+    if (!eventStream) startEventStream();
     if (S.settings.auto_refresh) {
       tick();
       S.refreshTimer = setInterval(tick, S.settings.refresh_ms || 5000);
