@@ -352,5 +352,8 @@
     "run": "{start}–{end} ({size} free)",
     "reserve": "Reserve",
     "reserved": "Reserved {count} ports."
+  },
+  "history": {
+    "title": "Recent changes (24h)"
   }
 }

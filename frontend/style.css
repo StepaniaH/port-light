@@ -1120,3 +1120,8 @@ a:focus-visible,
 .free-results { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; max-height: 40vh; overflow-y: auto; }
 .free-run { display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 6px 8px; border: 1px solid var(--border, #ccc); border-radius: 6px; }
+
+/* Port history strip in the detail drawer */
+#detail-history { margin-top: 10px; }
+#detail-history .history-title { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; opacity: .7; margin: 0 0 4px; }
+#detail-history .history-event { font-size: 12px; padding: 2px 0; }

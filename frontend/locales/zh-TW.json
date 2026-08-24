@@ -352,5 +352,8 @@
     "run": "{start}–{end}（連續 {size} 個）",
     "reserve": "預留",
     "reserved": "已預留 {count} 個連接埠。"
+  },
+  "history": {
+    "title": "最近變動（24 小時）"
   }
 }

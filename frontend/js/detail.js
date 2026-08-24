@@ -257,6 +257,7 @@ import { closeModals, modalOpen } from './modal.js?v=59';
     }
 
     detailContent.innerHTML = html;
+    loadPortHistory(p.port);
     const closeBtn = detailContent.querySelector('[data-close-detail]');
     if (closeBtn) closeBtn.addEventListener('click', function () { closeDetail(); });
     const hideBtn = detailContent.querySelector('[data-hide-port]');
@@ -419,3 +420,30 @@ import { closeModals, modalOpen } from './modal.js?v=59';
     tick();
   }
 
+
+
+  const HISTORY_STATE_KEYS = {
+    used: 'summary.used',
+    configured: 'summary.configured',
+    free: 'summary.free',
+  };
+
+  async function loadPortHistory(port) {
+    try {
+      const res = await api('/api/ports/' + port + '/history?hours=24');
+      if (!res.ok) return;
+      const body = await res.json();
+      const host = document.getElementById('detail-history');
+      if (!host || !body.events || !body.events.length) return;
+      const loc = window.PortLightI18n ? PortLightI18n.locale() : undefined;
+      const items = body.events.slice(-5).map(function (ev) {
+        const time = new Date(ev.ts * 1000).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
+        const stateKey = HISTORY_STATE_KEYS[ev.state];
+        const stateText = stateKey ? t(stateKey) : ev.state;
+        const who = (ev.holders && ev.holders.length) ? ' · ' + ev.holders.join(', ') : '';
+        return '<div class="history-event">' + escapeHtml(time + ' — ' + stateText + who) + '</div>';
+      }).join('');
+      host.innerHTML = '<h3 class="history-title">' + escapeHtml(t('history.title')) + '</h3>' + items;
+      host.hidden = false;
+    } catch (err) { /* history is best-effort */ }
+  }

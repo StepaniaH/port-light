@@ -352,5 +352,8 @@
     "run": "{start}–{end}（{size} 連続）",
     "reserve": "予約",
     "reserved": "{count} ポートを予約しました。"
+  },
+  "history": {
+    "title": "直近の変更（24時間）"
   }
 }

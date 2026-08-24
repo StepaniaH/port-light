@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import json
 import logging
 import os
@@ -15,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import degradations, hosts, webhooks, port_store
+from . import degradations, history, hosts, webhooks, port_store
 from . import settings as app_settings
 from .auth import (
     auth_configured,
@@ -308,6 +309,10 @@ def _packed_occupancy(
     result["summary"]["compose_files"] = snap["compose_scan"].files_scanned
     if not stale:
         webhooks.observe(result["ports"])
+        try:
+            history.record(result["ports"])
+        except sqlite3.Error:
+            pass
     if stale:
         result["summary"]["stale"] = True
         body, etag = _json_etag(result)
@@ -511,6 +516,19 @@ def get_port(
                 return row
         return free_port_payload(port, hidden=True)
     return free_port_payload(port, hidden=False)
+
+
+@app.get("/api/ports/{port}/history")
+def port_history(
+    port: int,
+    hours: int = Query(default=24, ge=1, le=720),
+    request: Request = None,
+) -> dict:
+    if port < 1 or port > 65535:
+        raise HTTPException(status_code=400, detail="port out of range")
+    if not history.enabled():
+        raise HTTPException(status_code=404, detail="not found")
+    return {"port": port, "events": history.query(port, hours)}
 
 
 @app.get("/api/known-ports/{port}")

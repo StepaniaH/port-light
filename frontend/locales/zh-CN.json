@@ -352,5 +352,8 @@
     "run": "{start}–{end}（连续 {size} 个）",
     "reserve": "预留",
     "reserved": "已预留 {count} 个端口。"
+  },
+  "history": {
+    "title": "最近变动（24 小时）"
   }
 }
