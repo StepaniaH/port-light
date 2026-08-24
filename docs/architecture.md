@@ -49,7 +49,7 @@ macvlan/ipvlan networks: `ExposedPorts` plus the network IPv4/IPv6 addresses (in
 
 Traefik `Host(\`…\`)` / `Host(\`a\`, \`b\`)` / `HostSNI(\`…\`)` / `HostHeader(\`…\`)` rules (http when the router entrypoint is `web`/`http` without TLS; regexp templates are dropped), a `caddy:` / `caddy_0` site address (including `http://…`; wildcards are dropped), nginx-proxy `VIRTUAL_HOST` / `LETSENCRYPT_HOST` (on the published mapping whose container port is `VIRTUAL_PORT`, default 80; unmatched `VIRTUAL_PORT` falls through to 80/443/8080/8443 or the lowest host port), and Unraid `net.unraid.docker.webui` (`[IP]` / `[PORT:n]` resolved to the host port when that container port is published; dropped when mappings are known and `n` is not) become `urls` on the port. `traefik.enable=false` drops Traefik hosts (homepage/wud hrefs still count; `{{hostname}}` templates are dropped). Label URLs attach to the Traefik Host() router's service port, else 80/443/8080/8443, else the lowest host port when several mappings exist (not every sidecar, and not the first unrelated `loadbalancer.server.port`). Host-network inode-only rows (empty published list) use the same web/lowest heuristic on attributed listen ports.
 
-Stopped containers still contribute PortBindings — those become amber if nothing is listening.
+Containers may carry `port-light.port.<n>.name` / `.category` labels (n = a host or container port); classification merges them into the row's known-service name (`from_label: true`). Stopped containers still contribute PortBindings — those become amber if nothing is listening.
 
 ## Compose
 

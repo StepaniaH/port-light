@@ -108,6 +108,7 @@ class ContainerInfo:
     vhost_urls: list[str] = field(default_factory=list)
     vhost_port: int | None = None
     label_port: int | None = None
+    port_labels: dict = field(default_factory=dict)
     socket_inodes: set[int] = field(default_factory=set)
     container_id: str | None = None
     pids: set[int] = field(default_factory=set)
@@ -155,6 +156,7 @@ def scan_containers() -> list[ContainerInfo]:
             vhost_urls=vurls,
             vhost_port=vport,
             label_port=_traefik_service_port(labels),
+            port_labels=extract_port_labels(labels),
             container_id=cid,
         ))
         if cid:
@@ -482,6 +484,32 @@ def _macvlan_ips(net: dict) -> list[str]:
             if ip and ip not in ips:
                 ips.append(ip)
     return ips
+
+
+_PORT_LIGHT_LABEL = re.compile(r"^port-light\.port\.(\d+)\.(name|category)$")
+
+
+def extract_port_labels(labels: dict | None) -> dict:
+    """``port-light.port.<container-port>.name|category`` labels, keyed by port.
+
+    Values are trimmed and capped at 80 chars; anything malformed is ignored.
+    """
+    out: dict = {}
+    for key, val in (labels or {}).items():
+        m = _PORT_LIGHT_LABEL.match(str(key or ""))
+        if not m:
+            continue
+        try:
+            cp = int(m.group(1))
+        except ValueError:
+            continue
+        if not 1 <= cp <= 65535:
+            continue
+        text = str(val or "").strip()[:80]
+        if not text:
+            continue
+        out.setdefault(cp, {})[m.group(2)] = text
+    return out
 
 
 def _traefik_service_port(labels: dict | None) -> int | None:

@@ -118,6 +118,7 @@ def classify(
             "protocols": [proto] if proto else [],
             "protocol": proto,
             "container_port": cport,
+            "port_labels": dict(getattr(c, "port_labels", None) or {}),
         })
 
     for c in containers:
@@ -226,6 +227,22 @@ def classify(
             source_type = "unknown"
 
         known = get_known_port(port)
+        pl_hit = None
+        for c in ctors:
+            labs = c.get("port_labels") or {}
+            hit = labs.get(port)
+            if hit is None and c.get("container_port") is not None:
+                hit = labs.get(c["container_port"])
+            if hit and (hit.get("name") or hit.get("category")):
+                pl_hit = hit
+                break
+        if pl_hit:
+            known = dict(known or {})
+            if pl_hit.get("name"):
+                known["name"] = pl_hit["name"]
+            if pl_hit.get("category"):
+                known["category"] = pl_hit["category"]
+            known["from_label"] = True
         ips = list((lp_info.get("ips") if lp_info else None) or [])
         for c in ctors:
             for hip in c.get("bind_ips") or []:
@@ -242,6 +259,7 @@ def classify(
         urls = collect_urls(port, ips, ctors, known, options) if has_occ else []
         for c in ctors:
             c.pop("vhost_host_ports", None)
+            c.pop("port_labels", None)
             c.pop("label_host_ports", None)
             c.pop("expose_only", None)
         proto_bits = []

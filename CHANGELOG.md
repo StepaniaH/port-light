@@ -6,6 +6,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Added
 
+- Name ports with labels: `port-light.port.<container-or-host-port>.name` (and `.category`) on a container override the known-services name for its published rows.
 - `GET /api/metrics` (opt-in via `METRICS_ENABLED=1`): Prometheus text exposition of used / configured / free counts, hidden ports, degradation count, and Compose file stats. Aggregates only; Basic Auth applies.
 - Degraded scans are no longer silent: when Docker is unreachable, the listen table is untrusted, `ss` fails, or the data file is quarantined, one line goes to the log (`PORT_LIGHT_LOG_LEVEL`, default `warning`) and the newest events appear in `/api/health` under `degradations`.
 - When a background rebuild runs long (slow `ss`, big Compose tree), polls now get the last good occupancy snapshot with `summary.stale: true` instead of blocking; stale results are never cached.

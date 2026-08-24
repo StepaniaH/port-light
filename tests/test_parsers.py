@@ -1674,3 +1674,45 @@ def test_last_publish_evicts_oldest(monkeypatch):
     assert _recall_publish("bbbb") == []
     assert _recall_publish("aaaa")[0].host_port == 11
     assert _recall_publish("cccc")[0].host_port == 3
+
+
+def test_extract_port_labels_parses_and_ignores_junk():
+    from backend.docker_scanner import extract_port_labels
+
+    labels = {
+        "port-light.port.8080.name": "My App UI",
+        "port-light.port.8080.category": "web",
+        "port-light.port.53/udp.name": "bad key",
+        "port-light.port.70000.name": "out of range",
+        "port-light.port.9000.name": "   ",
+        "com.docker.compose.project": "wiki",
+    }
+    out = extract_port_labels(labels)
+    assert out == {8080: {"name": "My App UI", "category": "web"}}
+
+
+def test_container_label_names_feed_known_service():
+    from backend.classification import classify as _classify
+
+    host = ContainerInfo(
+        name="app", status="running", image="app", network_mode="bridge",
+        ports=[PortMapping(host_port=8090, host_ip="0.0.0.0", container_port=80, protocol="tcp")],
+        port_labels={80: {"name": "App UI", "category": "web"}},
+    )
+    out = _classify([], [host], [], [], hidden_ports=[],
+                    range_start=1, range_end=65535,
+                    include_hidden=False, hidden_locked=False)
+    row = next(p for p in out["ports"] if p["port"] == 8090)
+    assert row["known_service"]["name"] == "App UI"
+    assert row["known_service"]["from_label"] is True
+    # label keyed by host port also matches
+    host2 = ContainerInfo(
+        name="app2", status="running", image="app2", network_mode="bridge",
+        ports=[PortMapping(host_port=8091, host_ip="0.0.0.0", container_port=80, protocol="tcp")],
+        port_labels={8091: {"name": "Host Key"}},
+    )
+    out2 = _classify([], [host2], [], [], hidden_ports=[],
+                     range_start=1, range_end=65535,
+                     include_hidden=False, hidden_locked=False)
+    row2 = next(p for p in out2["ports"] if p["port"] == 8091)
+    assert row2["known_service"]["name"] == "Host Key"
