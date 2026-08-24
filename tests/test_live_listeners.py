@@ -67,6 +67,20 @@ def test_real_listener_appears_in_occupancy(client):
     assert bound is not None, "no free port in probe range"
     sock, port = bound
     try:
+        import shutil
+
+        from backend import port_scanner as ps
+
+        listening = ps.scan_listening_ports()
+        raw_hit = [p.asdict() if hasattr(p, "asdict") else vars(p) for p in listening if p.port == port]
+        assert raw_hit, (
+            f"listen scanner missed bound port {port}:"
+            f" which_ss={shutil.which('ss')}"
+            f" source={ps.listen_scan_source()}"
+            f" trusted={ps.host_listen_trusted()}"
+            f" n_listening={len(listening)}"
+            f" sample={[p.port for p in listening[:10]]}"
+        )
         data = _occupancy(client)
         row = next((p for p in data["ports"] if p["port"] == port), None)
         assert row is not None, f"bound listener on {port} missing from /api/ports"
