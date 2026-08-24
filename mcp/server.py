@@ -53,6 +53,12 @@ TOOLS = [
                 "reserve": {"type": "boolean", "default": False},
                 "label": {"type": "string",
                           "description": "Label stored with reserved ports"},
+                "ttl": {"type": "integer", "minimum": 60, "maximum": 604800,
+                        "description": "Turn reservations into leases that "
+                                       "expire after this many seconds"},
+                "scope": {"type": "string", "enum": ["self", "all"],
+                          "default": "self",
+                          "description": "all also avoids ports occupied on peers"},
             },
         },
     },
@@ -90,6 +96,13 @@ TOOLS = [
             },
             "required": ["port"],
         },
+    },
+    {
+        "name": "list_degradations",
+        "description": "Recent degraded-scan events (Docker unreachable, "
+                       "unreadable Compose file, ...). Empty list means every "
+                       "scanner is healthy.",
+        "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "release_port",
@@ -146,6 +159,7 @@ def trim_row(row: dict) -> dict:
 
 def run_tool(name: str, args: dict) -> dict:
     if name == "suggest_ports":
+        from urllib.parse import quote
         qs = [f"count={int(args.get('count', 1))}"]
         if args.get("start") is not None:
             qs.append(f"start={int(args['start'])}")
@@ -153,9 +167,13 @@ def run_tool(name: str, args: dict) -> dict:
             qs.append(f"end={int(args['end'])}")
         if args.get("reserve"):
             qs.append("reserve=true")
+        if args.get("ttl") is not None:
+            qs.append(f"ttl={int(args['ttl'])}")
+        scope = args.get("scope")
+        if scope in ("self", "all"):
+            qs.append(f"scope={scope}")
         label = str(args.get("label", ""))
         if label:
-            from urllib.parse import quote
             qs.append("label=" + quote(label))
         return api_get("/api/ports/suggest?" + "&".join(qs))
 
@@ -174,6 +192,9 @@ def run_tool(name: str, args: dict) -> dict:
     if name == "port_history":
         hours = int(args.get("hours", 24))
         return api_get(f"/api/ports/{int(args['port'])}/history?hours={hours}")
+
+    if name == "list_degradations":
+        return {"degradations": api_get("/api/health").get("degradations", [])}
 
     if name == "release_port":
         api_delete(f"/api/manual-ports/{int(args['port'])}")

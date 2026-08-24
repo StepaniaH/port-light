@@ -7,6 +7,7 @@ import sqlite3
 import json
 import logging
 import os
+import secrets
 import threading
 import time
 from pathlib import Path
@@ -95,6 +96,7 @@ class ManualPortCreate(BaseModel):
     port: int = Field(ge=1, le=65535)
     label: str = ""
     machine: str = "localhost"
+    ttl: int | None = Field(default=None, ge=60, le=604800)
 
 
 class ManualPortUpdate(BaseModel):
@@ -462,17 +464,27 @@ def get_ports(
 
 @app.get("/api/ports/suggest")
 def suggest_ports(
+    request: Request,
     count: int = Query(default=1, ge=1, le=64),
     start: int | None = Query(default=None, ge=1, le=65535),
     end: int | None = Query(default=None, ge=1, le=65535),
     reserve: bool = Query(default=False),
     label: str = Query(default=""),
+    ttl: int | None = Query(default=None, ge=60, le=604800),
+    scope: str = Query(default="self", pattern="^(self|all)$"),
 ) -> dict:
     """Suggest free ports, optionally reserving them as manual entries.
 
     Reserved ports turn amber (configured) on every map and are excluded
     from future suggestions. Release them with ``DELETE /api/manual-ports/{n}``.
+    ``ttl`` seconds turns the reservation into a lease that expires on its own.
     """
+    expected_token = os.environ.get("AGENT_TOKEN", "").strip()
+    if expected_token:
+        supplied = request.headers.get("x-agent-token", "") if request else ""
+        if not secrets.compare_digest(supplied, expected_token):
+            raise HTTPException(
+                status_code=403, detail="valid X-Agent-Token header required")
     values = _values()
     lo = start if start is not None else values["port_range_start"]
     hi = end if end is not None else values["port_range_end"]
@@ -494,6 +506,24 @@ def suggest_ports(
     )
     taken = {row["port"] for row in result["ports"]}
     taken.update(hidden)
+    scope_label = "self"
+    if scope == "all":
+        peers = hosts.list_public_peers()
+        reachable = 0
+        for peer in peers:
+            status, data, _etag = hosts.fetch_peer_json(
+                peer, "/api/ports",
+                {"range_start": str(lo), "range_end": str(hi),
+                 "include_hidden": "false"},
+            )
+            if status == 200 and data:
+                reachable += 1
+                taken.update(row["port"] for row in data.get("ports", []))
+            else:
+                degradations.report(
+                    "suggest", peer.get("name") or peer.get("url", ""),
+                    "peer unreachable")
+        scope_label = f"all:{reachable}/{len(peers)}"
     picks: list[int] = []
     cursor = lo
     while cursor <= hi and len(picks) < count:
@@ -502,10 +532,14 @@ def suggest_ports(
         cursor += 1
     reserved: list[int] = []
     failed: list[int] = []
+    expires_at = None
+    if ttl is not None:
+        reserve = True
+        expires_at = int(time.time()) + ttl
     if reserve:
         for port in picks:
             try:
-                port_store.add_manual_port(port, label, "localhost")
+                port_store.add_manual_port(port, label, "localhost", ttl)
                 reserved.append(port)
             except port_store.StoreWriteError:
                 failed.append(port)
@@ -513,6 +547,8 @@ def suggest_ports(
         "ports": picks,
         "reserved": reserved,
         "failed": failed,
+        "expires_at": expires_at,
+        "scope": scope_label,
         "range": {"start": lo, "end": hi},
     }
 

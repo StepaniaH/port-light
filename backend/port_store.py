@@ -27,6 +27,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 from . import degradations
@@ -145,11 +146,15 @@ def _manuals_from(data: dict) -> list[dict]:
         port = _entry_port(entry)
         if port is None:
             continue
-        out.append({
+        item = {
             "port": port,
             "label": str(entry.get("label") or ""),
             "machine": _entry_machine(entry),
-        })
+        }
+        exp = entry.get("expires_at")
+        if isinstance(exp, (int, float)):
+            item["expires_at"] = int(exp)
+        out.append(item)
     return out
 
 
@@ -165,18 +170,52 @@ def _hidden_from(data: dict) -> list[int]:
     return out
 
 
+def _now() -> int:
+    return int(time.time())
+
+
+def _drop_expired_locked(data: dict) -> bool:
+    """Remove expired leases from data.manual_ports. Returns True if changed."""
+    now = _now()
+    mp = data.get("manual_ports", [])
+    kept = []
+    changed = False
+    for entry in mp:
+        if not isinstance(entry, dict):
+            kept.append(entry)
+            continue
+        exp = entry.get("expires_at")
+        if isinstance(exp, (int, float)) and exp <= now:
+            changed = True
+            continue
+        kept.append(entry)
+    if changed:
+        data["manual_ports"] = kept
+        _save(data)
+    return changed
+
+
 def get_manual_ports() -> list[dict]:
-    return _manuals_from(_load())
+    with _LOCK:
+        data = _load()
+        _drop_expired_locked(data)
+    return _manuals_from(data)
 
 
 def occupancy_user_state() -> tuple[list[dict], list[int]]:
     """One locked snapshot so occupancy does not tear across two reads."""
     with _LOCK:
         data = _load()
+        _drop_expired_locked(data)
     return _manuals_from(data), _hidden_from(data)
 
 
-def add_manual_port(port: int, label: str = "", machine: str = "localhost") -> dict:
+def add_manual_port(
+    port: int,
+    label: str = "",
+    machine: str = "localhost",
+    ttl: int | None = None,
+) -> dict:
     with _LOCK:
         data = _load()
         mp = data.setdefault("manual_ports", [])
@@ -188,6 +227,8 @@ def add_manual_port(port: int, label: str = "", machine: str = "localhost") -> d
                 continue
             kept.append(entry)
         entry = {"port": port, "label": label, "machine": machine}
+        if ttl is not None:
+            entry["expires_at"] = _now() + max(60, min(int(ttl), 604800))
         kept.append(entry)
         data["manual_ports"] = kept
         _save(data)

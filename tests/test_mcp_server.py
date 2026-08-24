@@ -22,11 +22,11 @@ def test_initialize_negotiates_protocol_version():
     assert reply["result"]["serverInfo"]["name"] == "port-light"
 
 
-def test_tools_list_exposes_five_tools():
+def test_tools_list_exposes_all_tools():
     reply = mcp.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {t["name"] for t in reply["result"]["tools"]}
     assert {"suggest_ports", "check_port", "list_occupancy",
-            "port_history", "release_port"} == names
+            "port_history", "list_degradations", "release_port"} == names
 
 
 def test_notification_returns_nothing():
@@ -84,3 +84,35 @@ def test_tool_failure_reports_iserror(monkeypatch):
 def test_unknown_method_is_protocol_error():
     reply = mcp.handle_request({"jsonrpc": "2.0", "id": 6, "method": "nope"})
     assert reply["error"]["code"] == -32601
+
+
+def test_suggest_passes_ttl_and_scope(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(mcp, "api_get", lambda path: seen.update(path=path) or {})
+    mcp.handle_request({
+        "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+        "params": {"name": "suggest_ports",
+                   "arguments": {"count": 2, "ttl": 3600, "scope": "all",
+                                 "reserve": True}},
+    })
+    assert "ttl=3600" in seen["path"]
+    assert "scope=all" in seen["path"]
+    assert "reserve=true" in seen["path"]
+
+
+def test_list_degradations_reads_health(monkeypatch):
+    monkeypatch.setattr(mcp, "api_get",
+                        lambda path: {"degradations": [{"source": "docker"}]}
+                        if path == "/api/health" else (_ for _ in ()).throw(AssertionError(path)))
+    reply = mcp.handle_request({
+        "jsonrpc": "2.0", "id": 8, "method": "tools/call",
+        "params": {"name": "list_degradations", "arguments": {}},
+    })
+    data = json.loads(reply["result"]["content"][0]["text"])
+    assert data["degradations"][0]["source"] == "docker"
+
+
+def test_tools_list_includes_new_tool():
+    reply = mcp.handle_request({"jsonrpc": "2.0", "id": 9, "method": "tools/list"})
+    names = {t["name"] for t in reply["result"]["tools"]}
+    assert "list_degradations" in names
