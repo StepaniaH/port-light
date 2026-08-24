@@ -49,6 +49,10 @@ def test_log_line_is_single_record(caplog):
     ), (
         f"propagate={logger.propagate}"
         f" effective={logger.getEffectiveLevel()}"
+        f" manager_disable={logging.root.manager.disable}"
+        f" logger_disabled={logger.disabled}"
+        f" parent={logger.parent}"
+        f" own_handlers={logger.handlers!r}"
         f" root_level={logging.getLogger().level}"
         f" root_handlers={logging.getLogger().handlers!r}"
         f" records={seen[-20:]!r}"
