@@ -460,6 +460,65 @@ def get_ports(
     return Response(content=body, media_type="application/json", headers=headers)
 
 
+@app.get("/api/ports/suggest")
+def suggest_ports(
+    count: int = Query(default=1, ge=1, le=64),
+    start: int | None = Query(default=None, ge=1, le=65535),
+    end: int | None = Query(default=None, ge=1, le=65535),
+    reserve: bool = Query(default=False),
+    label: str = Query(default=""),
+) -> dict:
+    """Suggest free ports, optionally reserving them as manual entries.
+
+    Reserved ports turn amber (configured) on every map and are excluded
+    from future suggestions. Release them with ``DELETE /api/manual-ports/{n}``.
+    """
+    values = _values()
+    lo = start if start is not None else values["port_range_start"]
+    hi = end if end is not None else values["port_range_end"]
+    if hi < lo:
+        lo, hi = hi, lo
+    snap = _scan_snapshot(values)
+    manuals, hidden = snap["user_state"]
+    result = classify(
+        snap["listening"],
+        snap["containers"],
+        snap["compose_scan"].ports,
+        manuals,
+        hidden,
+        lo,
+        hi,
+        True,
+        hidden_locked=False,
+        options=values,
+    )
+    taken = {row["port"] for row in result["ports"]}
+    taken.update(hidden)
+    picks: list[int] = []
+    cursor = lo
+    while cursor <= hi and len(picks) < count:
+        if cursor not in taken:
+            picks.append(cursor)
+        cursor += 1
+    reserved: list[int] = []
+    failed: list[int] = []
+    if reserve:
+        for port in picks:
+            try:
+                port_store.add_manual_port(port, label, "localhost")
+                reserved.append(port)
+            except port_store.StoreWriteError:
+                failed.append(port)
+    return {
+        "ports": picks,
+        "reserved": reserved,
+        "failed": failed,
+        "range": {"start": lo, "end": hi},
+    }
+
+
+
+
 @app.get("/api/ports/{port}")
 def get_port(
     port: int,
