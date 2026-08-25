@@ -19,6 +19,7 @@ import { render, syncHiddenButton } from './grid.js?v=68';
       const doc = pair[0];
       if (!doc) return;
       S.settingsDoc = doc;
+      S.customThemes = Array.isArray(doc.custom_themes) ? doc.custom_themes : [];
       S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
       renderSettingsForm(doc);
     });

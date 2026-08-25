@@ -14,7 +14,7 @@ const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
 const { automationCardsHtml, renderField, renderModePicker, renderPalettePicker, renderSettingsForm, themeEditorHtml } = await import('../js/settings.js?' + V);
-const { SETTINGS_PANELS, applyDisplayScale } = await import('../js/state.js?' + V);
+const { SETTINGS_PANELS, S, applyDisplayScale } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
 const mod = { renderSettingsForm, themeEditorHtml, renderField };
@@ -259,4 +259,20 @@ test('applyDisplayScale maps anchors exactly at 0/50/100', () => {
   assert.equal(html.style.getPropertyValue('--cell-gap'), '6px');
   assert.equal(html.style.getPropertyValue('--cell-pad-t'), '8px');
   assert.equal(html.style.getPropertyValue('--cell-pad-b'), '8px');
+});
+
+test('palette picker lists custom themes with badge and delete hook', () => {
+  S.customThemes = [{
+    id: 'abcd1234', name: 'Smoke Amber', basedOn: 'gruvbox', mode: 'dark',
+    colors: { used: '#e8a33d', configured: '#ffd166', free: '#9ccc65' },
+  }];
+  try {
+    const html = renderPalettePicker(['gruvbox'], '', 'dark', '');
+    assert.match(html, /Smoke Amber/);
+    assert.match(html, /data-delete-theme="abcd1234"/);
+    assert.match(html, /settings\.theme\.customBadge/);
+    assert.match(html, /@custom:abcd1234/);
+  } finally {
+    S.customThemes = [];
+  }
 });
