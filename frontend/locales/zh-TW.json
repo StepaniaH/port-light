@@ -167,7 +167,8 @@
       "advanced": "進階"
     },
     "theme": {
-      "palettes": "配色"
+      "palettes": "配色",
+      "builtin": "內建"
     },
     "cards": {
       "title": "卡片",
@@ -217,9 +218,13 @@
         "label": "語言",
         "help": "自動跟隨瀏覽器語言。"
       },
-      "theme": {
+      "theme_mode": {
         "label": "主題",
-        "help": "系統跟隨瀏覽器。「Gruvbox」等是命名配色預設。"
+        "help": "跟隨系統明暗。配色在所選明暗內著色。"
+      },
+      "theme_palette": {
+        "label": "配色",
+        "help": "疊加的色彩家族。不適用的會置灰。"
       },
       "grid_density": {
         "label": "網格密度",
@@ -335,15 +340,12 @@
     "dark": "深色",
     "light": "淺色",
     "gruvbox": "Gruvbox",
-    "gruvbox-light": "Gruvbox 淺色",
     "catppuccin": "Catppuccin",
-    "catppuccin-latte": "Catppuccin Latte",
     "nord": "Nord",
     "dracula": "Dracula",
     "tokyo-night": "Tokyo Night",
     "one-dark": "One Dark",
     "solarized": "Solarized",
-    "solarized-light": "Solarized 淺色",
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",

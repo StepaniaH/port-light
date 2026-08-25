@@ -167,7 +167,8 @@
       "advanced": "詳細"
     },
     "theme": {
-      "palettes": "パレット"
+      "palettes": "パレット",
+      "builtin": "組み込み"
     },
     "cards": {
       "title": "カード",
@@ -217,9 +218,13 @@
         "label": "言語",
         "help": "自動はブラウザの言語に合わせます。"
       },
-      "theme": {
+      "theme_mode": {
         "label": "テーマ",
-        "help": "システムはブラウザに合わせます。Gruvbox などは配色プリセットです。"
+        "help": "システムに従う。パレットは選択した明暗の中で着色します。"
+      },
+      "theme_palette": {
+        "label": "パレット",
+        "help": "重ねるカラーファミリー。利用できないものはグレーアウトします。"
       },
       "grid_density": {
         "label": "グリッド密度",
@@ -335,15 +340,12 @@
     "dark": "ダーク",
     "light": "ライト",
     "gruvbox": "Gruvbox",
-    "gruvbox-light": "Gruvbox Light",
     "catppuccin": "Catppuccin",
-    "catppuccin-latte": "Catppuccin Latte",
     "nord": "Nord",
     "dracula": "Dracula",
     "tokyo-night": "Tokyo Night",
     "one-dark": "One Dark",
     "solarized": "Solarized",
-    "solarized-light": "Solarized Light",
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",

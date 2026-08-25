@@ -167,7 +167,8 @@
       "advanced": "Advanced"
     },
     "theme": {
-      "palettes": "Palettes"
+      "palettes": "Palettes",
+      "builtin": "Built-in"
     },
     "cards": {
       "title": "Cards",
@@ -217,9 +218,13 @@
         "label": "Language",
         "help": "Auto follows the browser."
       },
-      "theme": {
+      "theme_mode": {
         "label": "Theme",
-        "help": "System follows the browser. Named palettes are presets."
+        "help": "System follows the OS. Palettes recolor within the chosen brightness."
+      },
+      "theme_palette": {
+        "label": "Palette",
+        "help": "Color family layered on top. Unavailable ones grey out."
       },
       "grid_density": {
         "label": "Grid density",
@@ -335,15 +340,12 @@
     "dark": "Dark",
     "light": "Light",
     "gruvbox": "Gruvbox",
-    "gruvbox-light": "Gruvbox Light",
     "catppuccin": "Catppuccin",
-    "catppuccin-latte": "Catppuccin Latte",
     "nord": "Nord",
     "dracula": "Dracula",
     "tokyo-night": "Tokyo Night",
     "one-dark": "One Dark",
     "solarized": "Solarized",
-    "solarized-light": "Solarized Light",
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",
