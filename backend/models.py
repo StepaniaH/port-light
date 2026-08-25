@@ -41,6 +41,7 @@ class OccupancyRow(TypedDict, total=False):
     compose_configs: list[dict]
     manual_label: str | None
     machine: str
+    expires_at: int | None
     known_service: dict | None
     is_hidden: bool
     conflict: bool

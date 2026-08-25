@@ -166,6 +166,20 @@ def test_classify_skips_junk_manual_rows():
     assert out["summary"]["hidden"] == 1
 
 
+def test_manual_lease_row_carries_expires_at():
+    out = _classify(
+        [], [], [],
+        [{"port": 9091, "label": "agent", "expires_at": 1_900_000_000},
+         {"port": 9092, "label": "plain"}],
+        hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    rows = {row["port"]: row for row in out["ports"]}
+    assert rows[9091]["expires_at"] == 1_900_000_000
+    assert rows[9092]["expires_at"] is None
+
+
 def test_exited_container_keeps_bind_ips():
     containers = [
         ContainerInfo(

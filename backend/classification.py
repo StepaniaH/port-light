@@ -179,6 +179,8 @@ def classify(
         manual_map[port] = {
             "label": mp.get("label", "") or "",
             "machine": mp.get("machine", "localhost") or "localhost",
+            "expires_at": int(mp["expires_at"])
+            if isinstance(mp.get("expires_at"), (int, float)) else None,
         }
 
     all_ports = set(listening_map) | set(container_map) | set(compose_map) | set(manual_map)
@@ -292,6 +294,7 @@ def classify(
             "compose_configs": composes,
             "manual_label": manual["label"] if manual else None,
             "machine": manual["machine"] if manual else "localhost",
+            "expires_at": manual["expires_at"] if manual else None,
             "known_service": known,
             "is_hidden": port in hidden_ports,
             "conflict": compose_conflict(composes),
