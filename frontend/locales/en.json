@@ -279,8 +279,6 @@
       }
     },
     "auto": {
-      "title": "Automation",
-      "blurb": "What this instance currently exposes to scripts and agents.",
       "agentToken": "Agent token",
       "suggest": "Port suggestions API",
       "suggestValue": "open — /api/ports/suggest",
@@ -310,7 +308,7 @@
         "disabled": "History is disabled (HISTORY_RETENTION_DAYS=0), so usage is not recorded.",
         "total": "Calls",
         "activeLeases": "Active leases",
-        "lastUsed": "Last used",
+        "lastUsed": "Last used: {time}",
         "never": "never",
         "thTime": "When",
         "thCount": "Ports",
@@ -323,7 +321,6 @@
         "blurb": "Reserved by agents through the suggest API, freed automatically at expiry.",
         "none": "No active leases.",
         "release": "Release",
-        "released": "Released",
         "remaining": "{time} left"
       }
     }

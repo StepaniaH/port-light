@@ -18,3 +18,8 @@ export function fmtRemaining(secs) {
   if (secs >= 60) return Math.round(secs / 60) + 'm';
   return '<1m';
 }
+
+export function formatAgo(ts) {
+  if (!ts) return '';
+  return fmtRemaining(Math.max(0, Math.round(Date.now() / 1000 - ts)));
+}

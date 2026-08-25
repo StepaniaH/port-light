@@ -49,6 +49,8 @@ function useI18n() {
       const dict = {
         'settings.auto.activity.total': 'Calls',
         'settings.auto.activity.activeLeases': 'Active leases',
+        'settings.auto.activity.lastUsed': 'Last used: {time}',
+        'settings.auto.activity.never': 'never',
         'settings.auto.leases.none': 'No active leases.',
       };
       const raw = dict[key] != null ? dict[key] : key;
@@ -113,7 +115,7 @@ test('successful release refreshes meta and re-renders activity and lease cards 
       await releaseLease(8081, btn);
     });
     assert.equal(S.meta.automation.agent_events.active_leases, 0);
-    assert.match(panel.innerHTML, /data-auto-summary>Calls: 3 · Active leases: 0</);
+    assert.match(panel.innerHTML, /data-auto-summary>Calls: 3 · Active leases: 0 · Last used: \d+m</);
     assert.doesNotMatch(panel.innerHTML, /data-release-port="8081"/);
     assert.ok(panel.innerHTML.includes('No active leases.'));
     assert.doesNotMatch(panel.innerHTML, /data-stale/);

@@ -65,18 +65,59 @@ test('lease rows render ports with release hooks', () => {
 test('activity summary resolves labels through the activity subtree', () => {
   const saved = globalThis.window.PortLightI18n;
   globalThis.window.PortLightI18n = {
-    t(key) {
+    t(key, vars) {
       const dict = {
         'settings.auto.activity.total': 'Calls',
         'settings.auto.activity.activeLeases': 'Active leases',
+        'settings.auto.activity.lastUsed': 'Last used: {time}',
+        'settings.auto.activity.never': 'never',
       };
-      return dict[key] || key;
+      const raw = dict[key] != null ? dict[key] : key;
+      return vars ? raw.replace(/\{(\w+)\}/g, (_, name) => String(vars[name])) : raw;
     },
   };
   try {
     const html = automationCardsHtml(withEvents());
-    assert.match(html, /data-auto-summary>Calls: 2 · Active leases: 1</);
+    assert.match(html, /data-auto-summary>Calls: 2 · Active leases: 1 · Last used: \d+m</);
     assert.doesNotMatch(html, /· settings\.auto\./);
+  } finally {
+    if (saved) globalThis.window.PortLightI18n = saved;
+    else delete globalThis.window.PortLightI18n;
+  }
+});
+
+test('activity summary shows relative last-used time for recent use', () => {
+  const saved = globalThis.window.PortLightI18n;
+  globalThis.window.PortLightI18n = {
+    t(key, vars) {
+      const raw = key === 'settings.auto.activity.lastUsed' ? 'Last used: {time}' : key;
+      return vars ? raw.replace(/\{(\w+)\}/g, (_, name) => String(vars[name])) : raw;
+    },
+  };
+  try {
+    const html = automationCardsHtml(withEvents());
+    assert.match(html, /data-auto-summary>[^<]*Last used: 5m</);
+  } finally {
+    if (saved) globalThis.window.PortLightI18n = saved;
+    else delete globalThis.window.PortLightI18n;
+  }
+});
+
+test('activity summary falls back to never without last_used_at', () => {
+  const saved = globalThis.window.PortLightI18n;
+  globalThis.window.PortLightI18n = {
+    t(key, vars) {
+      const raw = key === 'settings.auto.activity.lastUsed'
+        ? 'Last used: {time}'
+        : key === 'settings.auto.activity.never' ? 'never' : key;
+      return vars ? raw.replace(/\{(\w+)\}/g, (_, name) => String(vars[name])) : raw;
+    },
+  };
+  try {
+    const events = withEvents().agent_events;
+    events.last_used_at = null;
+    const html = automationCardsHtml(Object.assign({}, base, { agent_events: events }));
+    assert.match(html, /data-auto-summary>[^<]*Last used: never</);
   } finally {
     if (saved) globalThis.window.PortLightI18n = saved;
     else delete globalThis.window.PortLightI18n;

@@ -279,8 +279,6 @@
       }
     },
     "auto": {
-      "title": "自動化與整合",
-      "blurb": "目前實例對腳本與智慧代理開放的能力。",
       "agentToken": "智慧代理權杖（AGENT_TOKEN）",
       "suggest": "連接埠建議介面",
       "suggestValue": "開放 — /api/ports/suggest",
@@ -310,7 +308,7 @@
         "disabled": "歷史紀錄未啟用（HISTORY_RETENTION_DAYS=0），不會記錄使用情況。",
         "total": "呼叫數",
         "activeLeases": "活躍租約",
-        "lastUsed": "最近使用",
+        "lastUsed": "最近使用: {time}",
         "never": "從未",
         "thTime": "時間",
         "thCount": "連接埠數",
@@ -323,7 +321,6 @@
         "blurb": "由 agent 透過 suggest API 保留，到期自動釋放。",
         "none": "目前沒有活躍租約。",
         "release": "釋放",
-        "released": "已釋放",
         "remaining": "剩餘 {time}"
       }
     }

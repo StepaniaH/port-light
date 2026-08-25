@@ -4,7 +4,7 @@ import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyAppearance, save
 import { t, tx, escapeHtml, errorText } from './text.js?v=61';
 import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=61';
 import { moveChipFocus } from './a11y.js?v=61';
-import { remainingSeconds, fmtRemaining } from './leases.js?v=61';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=61';
 import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=61';
 import { render, syncHiddenButton } from './grid.js?v=61';
 
@@ -401,7 +401,10 @@ import { render, syncHiddenButton } from './grid.js?v=61';
     const activity = ev
       ? '<p class="auto-summary" data-auto-summary>' +
         escapeHtml(t('settings.auto.activity.total')) + ': ' + ev.total + ' · ' +
-        escapeHtml(t('settings.auto.activity.activeLeases')) + ': ' + (ev.active_leases || 0) + '</p>' +
+        escapeHtml(t('settings.auto.activity.activeLeases')) + ': ' + (ev.active_leases || 0) + ' · ' +
+        escapeHtml(t('settings.auto.activity.lastUsed', {
+          time: ev.last_used_at ? formatAgo(ev.last_used_at) : t('settings.auto.activity.never'),
+        })) + '</p>' +
         '<table class="auto-table"><thead><tr>' +
         ['thTime', 'thCount', 'thScope', 'thLabel', 'thLeased']
           .map(k => '<th>' + escapeHtml(t('settings.auto.activity.' + k)) + '</th>').join('') +

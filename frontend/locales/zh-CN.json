@@ -279,8 +279,6 @@
       }
     },
     "auto": {
-      "title": "自动化与集成",
-      "blurb": "当前实例对脚本与智能体开放的能力。",
       "agentToken": "智能体令牌（AGENT_TOKEN）",
       "suggest": "端口建议接口",
       "suggestValue": "开放 — /api/ports/suggest",
@@ -310,7 +308,7 @@
         "disabled": "历史记录未启用（HISTORY_RETENTION_DAYS=0），不记录使用情况。",
         "total": "调用数",
         "activeLeases": "活跃租约",
-        "lastUsed": "最近使用",
+        "lastUsed": "最近使用: {time}",
         "never": "从未",
         "thTime": "时间",
         "thCount": "端口数",
@@ -323,7 +321,6 @@
         "blurb": "由 agent 通过 suggest API 预留，到期自动释放。",
         "none": "当前没有活跃租约。",
         "release": "释放",
-        "released": "已释放",
         "remaining": "剩余 {time}"
       }
     }

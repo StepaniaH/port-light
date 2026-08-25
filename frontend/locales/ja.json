@@ -279,8 +279,6 @@
       }
     },
     "auto": {
-      "title": "自動化と統合",
-      "blurb": "このインスタンスがスクリプトやエージェントに公開している機能。",
       "agentToken": "エージェントトークン（AGENT_TOKEN）",
       "suggest": "ポート提案API",
       "suggestValue": "公開 — /api/ports/suggest",
@@ -310,7 +308,7 @@
         "disabled": "履歴が無効（HISTORY_RETENTION_DAYS=0）のため、利用は記録されません。",
         "total": "呼び出し数",
         "activeLeases": "有効なリース",
-        "lastUsed": "最終利用",
+        "lastUsed": "最終利用: {time}",
         "never": "なし",
         "thTime": "時刻",
         "thCount": "ポート数",
@@ -323,7 +321,6 @@
         "blurb": "エージェントが suggest API で確保したもので、期限切れになると自動解放されます。",
         "none": "有効なリースはありません。",
         "release": "解放",
-        "released": "解放済み",
         "remaining": "残り{time}"
       }
     }
