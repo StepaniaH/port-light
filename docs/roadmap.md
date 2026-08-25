@@ -2,6 +2,10 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.7.2
+
+- No hardcoded ports in agent-facing copy: MCP snippets derive their URL from the instance (`/api/meta` → `listen_port`, env `PORT_LIGHT_PORT`) or fall back to placeholders; the agent skill points at your dashboard URL instead of a literal localhost port
+
 ## Shipped in 0.7.1
 
 - Automation tab: MCP registration snippets, agent-skill install hint, suggest-call activity log, active leases with release buttons

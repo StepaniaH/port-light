@@ -2,6 +2,12 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## 0.7.2 — 2026-08-25
+
+- The Automation connect card no longer hardcodes the docker-exec MCP endpoint: the backend now exposes its listen port via `/api/meta` (`PORT_LIGHT_PORT`, new env var, default `2100` in the Dockerfile/compose) and the snippet is built from it, falling back to a `<port>` placeholder with a hint explaining the container-internal target (all four locales)
+- `skills/port-light/SKILL.md` no longer tells agents to export a literal `http://127.0.0.1:2100`; it points at whatever URL you use to open the dashboard, so host-mapped ports and reverse proxies work
+- The Dockerfile `HEALTHCHECK`, container `CMD`, and the compose healthcheck all read `PORT_LIGHT_PORT` instead of repeating the port
+
 ## 0.7.1 — 2026-08-25
 
 - Settings gains an **Automation** tab: copy-paste MCP registration (docker-exec or source forms), agent-skill install hint, curl examples, live usage activity, and an active-leases list with release buttons
