@@ -119,7 +119,8 @@ docker compose up -d
 | `PORT_LIGHT_DATA_DIR` | `/data` | 手动端口、隐藏列表、已保存设置（JSON） |
 | `PORT_LIGHT_PORT` | `2100` | uvicorn 在容器内监听的端口；经 `/api/meta` 暴露，自动化面板据此生成 MCP 片段，不再写死 |
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称（只能用环境变量） |
-| `THEME` | `system` | `system` / `dark` / `light`，或命名配色（`gruvbox`、`catppuccin`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`solarized`、`everforest`、`rose-pine`、`kanagawa`，以及 `*-light` / `catppuccin-latte`） |
+| `THEME_MODE` | `system` | `system` / `dark` / `light`，解析后的明暗；配色跟随明暗 |
+| `THEME_PALETTE` | 内置 | 叠在明暗之上的配色族：`gruvbox`、`catppuccin`、`solarized`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`everforest`、`rose-pine`、`kanagawa`。留空使用内置颜色。 |
 | `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
 | `GRID_DENSITY` | `comfortable` | 旧版密度开关：在未保存过卡片大小时，`compact` 会把 `card_scale` 初始为 100；其余情况忽略。界面上的开关已由卡片 / 文字滑杆取代。 |
 | `REFRESH_MS` | `5000` | 自动刷新间隔 |

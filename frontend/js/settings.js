@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=67';
-import { t, tx, escapeHtml, errorText } from './text.js?v=67';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=67';
-import { moveChipFocus } from './a11y.js?v=67';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=67';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=67';
-import { render, syncHiddenButton } from './grid.js?v=67';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=68';
+import { t, tx, escapeHtml, errorText } from './text.js?v=68';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=68';
+import { moveChipFocus } from './a11y.js?v=68';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=68';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=68';
+import { render, syncHiddenButton } from './grid.js?v=68';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -741,13 +741,6 @@ import { render, syncHiddenButton } from './grid.js?v=67';
         if (file) { file.value = ''; file.click(); }
         return;
       }
-      const colorInput = e.target.closest('[data-editor-color]');
-      if (colorInput) {
-        const hexInput = document.querySelector('[data-editor-hex="' + colorInput.getAttribute('data-editor-color') + '"]');
-        if (hexInput) hexInput.value = colorInput.value;
-        previewEditorColor(colorInput.getAttribute('data-editor-color'), colorInput.value);
-        return;
-      }
       const btn = e.target.closest('[data-delete-theme]');
       if (!btn) return;
       const id = btn.getAttribute('data-delete-theme');
@@ -771,6 +764,14 @@ import { render, syncHiddenButton } from './grid.js?v=67';
         applyDisplayScale(
           Number((document.querySelector('input[name="card_scale"]') || {}).value || 50),
           Number((document.querySelector('input[name="text_scale"]') || {}).value || 50));
+        return;
+      }
+      const colorRow = e.target && e.target.closest ? e.target.closest('[data-editor-color]') : null;
+      if (colorRow) {
+        const key = colorRow.getAttribute('data-editor-color');
+        const hexInput = document.querySelector('[data-editor-hex="' + key + '"]');
+        if (hexInput) hexInput.value = colorRow.value;
+        previewEditorColor(key, colorRow.value);
         return;
       }
       const hexInput = e.target && e.target.closest ? e.target.closest('[data-editor-hex]') : null;

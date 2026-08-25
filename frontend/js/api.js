@@ -1,11 +1,11 @@
 /* Data layer: host catalog helpers, URL builders, fetchers, and the
    occupancy poll loop. */
 
-import { S } from './state.js?v=67';
-import { grid, hostBoards, markRefreshed, setSyncError } from './dom.js?v=67';
-import { t, escapeHtml } from './text.js?v=67';
-import { modalOpen } from './modal.js?v=67';
-import { render } from './grid.js?v=67';
+import { S } from './state.js?v=68';
+import { grid, hostBoards, markRefreshed, setSyncError } from './dom.js?v=68';
+import { t, escapeHtml } from './text.js?v=68';
+import { modalOpen } from './modal.js?v=68';
+import { render } from './grid.js?v=68';
 
 
   export function hasPeers() {
