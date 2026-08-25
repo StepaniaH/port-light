@@ -170,6 +170,16 @@
       "palettes": "Palettes",
       "builtin": "Built-in"
     },
+    "sections": {
+      "theme": {
+        "title": "Theme",
+        "blurb": "Brightness, palette, and your own custom palettes."
+      },
+      "language": {
+        "title": "Language",
+        "blurb": "Interface language."
+      }
+    },
     "cards": {
       "title": "Cards",
       "blurb": "Status text and badges on each occupancy cell."

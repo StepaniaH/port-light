@@ -12,9 +12,11 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { automationCardsHtml, renderModePicker, renderPalettePicker } = await import('../js/settings.js?' + V);
+const { automationCardsHtml, renderModePicker, renderPalettePicker, renderSettingsForm } = await import('../js/settings.js?' + V);
 const { SETTINGS_PANELS } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
+
+const mod = { renderSettingsForm };
 
 const base = {
   agent_token: false,
@@ -188,4 +190,33 @@ test('palette preview resolves variant per current mode', () => {
   const choices = ['', 'gruvbox'];
   assert.match(renderPalettePicker(choices, '', 'light', ''), /data-theme-preview="gruvbox-light"/);
   assert.match(renderPalettePicker(choices, '', 'dark', ''), /data-theme-preview="gruvbox"(?!-)/);
+});
+
+test('appearance panel renders theme/layout/language sections in order', () => {
+  const { renderSettingsForm } = mod;
+  const host = document.createElement('div');
+  host.id = 'settings-fields';
+  document.body.appendChild(host);
+  const lead = document.createElement('p');
+  lead.id = 'settings-lead';
+  document.body.appendChild(lead);
+  const status = document.createElement('p');
+  status.id = 'settings-status';
+  document.body.appendChild(status);
+  const save = document.createElement('button');
+  save.id = 'settings-save';
+  document.body.appendChild(save);
+  globalThis.window.PortLightI18n = {
+    t(key) { return key; },
+    load() { return Promise.resolve('en'); },
+    applyDom() {},
+  };
+  renderSettingsForm({
+    values: {}, fields: [], readonly: false, source: 'auto',
+    env_only: {}, origins: {},
+  });
+  const panels = host.querySelectorAll('[data-settings-panel="appearance"] .settings-card > header h2');
+  const titles = Array.from(panels).map((el) => el.getAttribute('data-i18n'));
+  assert.deepEqual(titles, ['settings.sections.theme.title', 'settings.cards.title', 'settings.sections.language.title']);
+  host.remove(); lead.remove(); status.remove(); save.remove();
 });

@@ -170,6 +170,16 @@
       "palettes": "配色",
       "builtin": "内置"
     },
+    "sections": {
+      "theme": {
+        "title": "主题",
+        "blurb": "明暗、色板与你的自定义色板。"
+      },
+      "language": {
+        "title": "语言",
+        "blurb": "界面显示语言。"
+      }
+    },
     "cards": {
       "title": "卡片",
       "blurb": "每张占用卡片上的状态文字和标记。"

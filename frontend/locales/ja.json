@@ -170,6 +170,16 @@
       "palettes": "パレット",
       "builtin": "組み込み"
     },
+    "sections": {
+      "theme": {
+        "title": "テーマ",
+        "blurb": "明るさ・パレットと自分のカスタムパレット。"
+      },
+      "language": {
+        "title": "言語",
+        "blurb": "インターフェースの表示言語。"
+      }
+    },
     "cards": {
       "title": "カード",
       "blurb": "各占有カードの状態テキストとバッジ。"

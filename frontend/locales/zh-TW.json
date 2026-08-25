@@ -170,6 +170,16 @@
       "palettes": "配色",
       "builtin": "內建"
     },
+    "sections": {
+      "theme": {
+        "title": "主題",
+        "blurb": "明暗、色板與你的自訂色板。"
+      },
+      "language": {
+        "title": "語言",
+        "blurb": "介面顯示語言。"
+      }
+    },
     "cards": {
       "title": "卡片",
       "blurb": "每張佔用卡片上的狀態文字與標記。"

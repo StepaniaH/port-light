@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=63';
-import { t, tx, escapeHtml, errorText } from './text.js?v=63';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=63';
-import { moveChipFocus } from './a11y.js?v=63';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=63';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=63';
-import { render, syncHiddenButton } from './grid.js?v=63';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=64';
+import { t, tx, escapeHtml, errorText } from './text.js?v=64';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=64';
+import { moveChipFocus } from './a11y.js?v=64';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=64';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=64';
+import { render, syncHiddenButton } from './grid.js?v=64';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -571,7 +571,10 @@ import { render, syncHiddenButton } from './grid.js?v=63';
     }
 
     const appearanceFields = byGroup.appearance || [];
-    const lookFields = appearanceFields.filter(function (f) { return !CARD_FIELD_KEYS[f.key]; });
+    const themeFields = appearanceFields.filter(function (f) {
+      return !CARD_FIELD_KEYS[f.key] && f.key !== 'locale' && f.key !== 'grid_density';
+    });
+    const languageFields = appearanceFields.filter(function (f) { return f.key === 'locale'; });
     const cardFields = appearanceFields.filter(function (f) { return CARD_FIELD_KEYS[f.key]; });
     const knownGroups = { appearance: true, grid: true, scanning: true, links: true };
     const extraAdvanced = groupOrder.filter(function (g) { return !knownGroups[g]; }).map(function (g) {
@@ -580,8 +583,11 @@ import { render, syncHiddenButton } from './grid.js?v=63';
 
     host.innerHTML =
       settingsPanelHtml('appearance',
-        settingsCard('settings.groups.appearance.title', 'settings.groups.appearance.blurb', rowsFor(lookFields)) +
-        settingsCard('settings.cards.title', 'settings.cards.blurb', rowsFor(cardFields))) +
+        settingsCard('settings.sections.theme.title', 'settings.sections.theme.blurb',
+          '<div data-appearance-section="theme">' + rowsFor(themeFields) + '</div>') +
+        settingsCard('settings.cards.title', 'settings.cards.blurb', rowsFor(cardFields)) +
+        settingsCard('settings.sections.language.title', 'settings.sections.language.blurb',
+          rowsFor(languageFields))) +
       settingsPanelHtml('occupancy',
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +
