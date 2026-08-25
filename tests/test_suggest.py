@@ -19,6 +19,11 @@ def _env(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
+    from backend import agent_events
+
+    agent_events.reset()
+    yield
+    agent_events.reset()
 
 
 def test_suggest_skips_taken_ports(monkeypatch):
@@ -132,3 +137,40 @@ def test_agent_token_gate(monkeypatch):
     via_basic = client.get("/api/ports/suggest",
                            auth=("admin", ""))
     assert via_basic.status_code != 403 or True  # no auth configured → header still required
+
+
+def test_suggest_records_event(monkeypatch):
+    from backend import agent_events
+
+    client = TestClient(app)
+    res = client.get("/api/ports/suggest",
+                     params={"count": 2, "start": 7000, "end": 7010})
+    assert res.status_code == 200
+    rows = agent_events.recent()
+    assert len(rows) == 1
+    assert rows[0]["count"] == 2
+    assert rows[0]["scope"] == "self"
+    assert rows[0]["leased"] is False
+
+
+def test_suggest_records_lease_and_label(monkeypatch):
+    from backend import agent_events
+
+    client = TestClient(app)
+    client.get("/api/ports/suggest",
+               params={"count": 1, "start": 7100, "end": 7109,
+                       "reserve": True, "ttl": 3600, "label": "job"})
+    row = agent_events.recent()[0]
+    assert row["leased"] is True
+    assert row["label"] == "job"
+
+
+def test_suggest_token_failure_not_recorded(monkeypatch):
+    from backend import agent_events
+
+    monkeypatch.setenv("AGENT_TOKEN", "sekrit")
+    client = TestClient(app)
+    res = client.get("/api/ports/suggest",
+                     params={"count": 1, "start": 7200, "end": 7209})
+    assert res.status_code == 403
+    assert agent_events.recent() == []

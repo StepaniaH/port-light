@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import degradations, history, hosts, webhooks, port_store
+from . import agent_events, degradations, history, hosts, webhooks, port_store
 from . import settings as app_settings
 from .auth import (
     auth_configured,
@@ -113,9 +113,37 @@ def _values() -> dict:
     return values
 
 
+def _active_leases() -> list[dict]:
+    now = int(time.time())
+    rows = []
+    for entry in port_store.get_manual_ports():
+        exp = entry.get("expires_at")
+        if exp and int(exp) > now:
+            rows.append({"port": int(entry["port"]),
+                         "label": entry.get("label") or "",
+                         "expires_at": int(exp)})
+    return rows[:64]
+
+
 @app.get("/api/meta")
 def meta() -> dict:
     values, _ = app_settings.resolve()
+    automation = {
+        "agent_token": bool(os.environ.get("AGENT_TOKEN", "").strip()),
+        "metrics": os.environ.get("METRICS_ENABLED", "").strip().lower()
+                   in ("1", "true", "yes", "on"),
+        "webhook": bool(os.environ.get("WEBHOOK_URL", "").strip()),
+        "history_days": history.retention_days(),
+        "events_stream": True,
+        "suggest_peers": bool(hosts.list_public_peers()),
+    }
+    if agent_events.enabled():
+        leases = _active_leases()
+        automation["agent_events"] = {
+            **agent_events.summary(),
+            "active_leases": len(leases),
+            "lease_rows": leases,
+        }
     return {
         "version": VERSION,
         "auth_required": auth_configured(),
@@ -125,15 +153,7 @@ def meta() -> dict:
         "refresh_ms": values["refresh_ms"],
         "theme": values["theme"],
         "grid_density": values["grid_density"],
-        "automation": {
-            "agent_token": bool(os.environ.get("AGENT_TOKEN", "").strip()),
-            "metrics": os.environ.get("METRICS_ENABLED", "").strip().lower()
-                       in ("1", "true", "yes", "on"),
-            "webhook": bool(os.environ.get("WEBHOOK_URL", "").strip()),
-            "history_days": history.retention_days(),
-            "events_stream": True,
-            "suggest_peers": bool(hosts.list_public_peers()),
-        },
+        "automation": automation,
     }
 
 
@@ -552,6 +572,7 @@ def suggest_ports(
                 reserved.append(port)
             except port_store.StoreWriteError:
                 failed.append(port)
+    agent_events.record(len(picks), scope_label, label, bool(reserved))
     return {
         "ports": picks,
         "reserved": reserved,
