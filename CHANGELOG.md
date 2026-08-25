@@ -8,6 +8,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `GET /api/ports/suggest` calls are now recorded locally (time, count, scope, label, leased — never tokens or IPs) and summarized under `/api/meta` → `automation.agent_events`; retention follows `HISTORY_RETENTION_DAYS`
 - Lease visibility: cards whose reservation carries a TTL show a badge on the grid and an expiry countdown in the detail drawer
 - The published image now includes `mcp/server.py` and `skills/port-light/SKILL.md`, so Docker users can register the MCP server without cloning the repo
+- Themes: brightness (system / light / dark) and color palette are now independent controls; the palette list shows one entry per family and follows the chosen brightness. Replaces the `theme` setting with `theme_mode` + `theme_palette` — saved values migrate automatically; the `THEME` env var is replaced by `THEME_MODE` and `THEME_PALETTE`.
 
 ## 0.7.0 — 2026-08-24
 
