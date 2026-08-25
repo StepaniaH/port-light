@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from . import degradations
 from . import port_store
 
 Origin = Literal["default", "env", "file"]
@@ -45,14 +46,16 @@ FIELDS: tuple[FieldSpec, ...] = (
         choices=("auto", "en", "zh-CN", "zh-TW", "ja"),
     ),
     FieldSpec(
-        "theme", "choice", "THEME", "system", "appearance", "Theme",
-        "System follows the browser. Named palettes are presets.",
+        "theme_mode", "choice", "THEME_MODE", "system", "appearance", "Theme",
+        "System follows the OS. Palettes recolor within the chosen brightness.",
+        choices=("system", "dark", "light"),
+    ),
+    FieldSpec(
+        "theme_palette", "choice", "THEME_PALETTE", "", "appearance", "Palette",
+        "Color family layered on top. Empty uses the built-in colors.",
         choices=(
-            "system", "dark", "light",
-            "gruvbox", "gruvbox-light",
-            "catppuccin", "catppuccin-latte",
+            "", "gruvbox", "catppuccin", "solarized",
             "nord", "dracula", "tokyo-night", "one-dark",
-            "solarized", "solarized-light",
             "everforest", "rose-pine", "kanagawa",
         ),
     ),
@@ -123,6 +126,38 @@ FIELDS: tuple[FieldSpec, ...] = (
 )
 
 _FIELD_BY_KEY = {f.key: f for f in FIELDS}
+
+_LIGHT_ALIAS = {
+    "gruvbox-light": "gruvbox",
+    "catppuccin-latte": "catppuccin",
+    "solarized-light": "solarized",
+}
+
+
+def migrate_theme(raw: Any) -> tuple[str, str]:
+    """Map a legacy ``theme`` value onto (theme_mode, theme_palette)."""
+    text = "" if raw is None else str(raw).strip()
+    if not text:
+        return "system", ""
+    if text in ("system", "dark", "light"):
+        return text, ""
+    if text in _LIGHT_ALIAS:
+        return "light", _LIGHT_ALIAS[text]
+    palette = _FIELD_BY_KEY["theme_palette"]
+    if text in palette.choices:
+        return "dark", text
+    degradations.report("settings", "theme", "unknown value reset")
+    return "system", ""
+
+
+def _migrate_stored(stored: dict[str, Any]) -> dict[str, Any]:
+    legacy = stored.get("theme")
+    if legacy is None or "theme_mode" in stored or "theme_palette" in stored:
+        return stored
+    out = {k: v for k, v in stored.items() if k != "theme"}
+    mode, palette = migrate_theme(legacy)
+    out["theme_mode"], out["theme_palette"] = mode, palette
+    return out
 
 
 def settings_source() -> SourceMode:
@@ -200,7 +235,7 @@ def _parse_env(spec: FieldSpec) -> Any | None:
 
 
 def resolve() -> tuple[dict[str, Any], dict[str, Origin]]:
-    stored = port_store.get_stored_settings()
+    stored = _migrate_stored(port_store.get_stored_settings())
     mode = settings_source()
     values: dict[str, Any] = {}
     origins: dict[str, Origin] = {}

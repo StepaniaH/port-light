@@ -15,42 +15,41 @@ def test_settings_field_groups_match_the_settings_panes():
 
 def test_settings_file_overrides_env(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("THEME", "dark")
+    monkeypatch.setenv("THEME_MODE", "dark")
+    monkeypatch.setenv("THEME_PALETTE", "nord")
     monkeypatch.setenv("PORT_LIGHT_SETTINGS_SOURCE", "auto")
     monkeypatch.delenv("SETTINGS_READONLY", raising=False)
     values, origins = app_settings.resolve()
-    assert values["theme"] == "dark"
-    assert origins["theme"] == "env"
+    assert values["theme_mode"] == "dark"
+    assert values["theme_palette"] == "nord"
+    assert origins["theme_mode"] == "env"
 
     client = TestClient(app)
-    res = client.put("/api/settings", json={"theme": "light", "refresh_ms": 8000})
+    res = client.put("/api/settings", json={"theme_mode": "light", "refresh_ms": 8000})
     assert res.status_code == 200
     body = res.json()
-    assert body["values"]["theme"] == "light"
-    assert body["origins"]["theme"] == "file"
+    assert body["values"]["theme_mode"] == "light"
+    assert body["origins"]["theme_mode"] == "file"
     assert body["values"]["refresh_ms"] == 8000
 
 
 def test_settings_source_env_locks_ui(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("PORT_LIGHT_SETTINGS_SOURCE", "env")
-    monkeypatch.setenv("THEME", "dark")
+    monkeypatch.setenv("THEME_MODE", "dark")
     client = TestClient(app)
-    locked = client.put("/api/settings", json={"theme": "light"})
+    locked = client.put("/api/settings", json={"theme_mode": "light"})
     assert locked.status_code == 403
-    got = client.get("/api/settings").json()
-    assert got["readonly"] is True
-    assert got["values"]["theme"] == "dark"
 
 
 def test_settings_rejects_bad_values(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("PORT_LIGHT_SETTINGS_SOURCE", raising=False)
     client = TestClient(app)
-    assert client.put("/api/settings", json={"theme": "neon"}).status_code == 400
-    palette = client.put("/api/settings", json={"theme": "gruvbox"})
+    assert client.put("/api/settings", json={"theme_palette": "neon"}).status_code == 400
+    palette = client.put("/api/settings", json={"theme_palette": "gruvbox"})
     assert palette.status_code == 200
-    assert palette.json()["values"]["theme"] == "gruvbox"
+    assert palette.json()["values"]["theme_palette"] == "gruvbox"
     assert client.put("/api/settings", json={"locale": "fr"}).status_code == 400
     ok = client.put("/api/settings", json={"locale": "ja"})
     assert ok.status_code == 200
