@@ -66,6 +66,16 @@ FIELDS: tuple[FieldSpec, ...] = (
         choices=("comfortable", "compact"),
     ),
     FieldSpec(
+        "card_scale", "int", "CARD_SCALE", 50, "appearance", "Card size",
+        "0 is roomiest, 100 packs cards tightest. Replaces grid density.",
+        min=0, max=100,
+    ),
+    FieldSpec(
+        "text_scale", "int", "TEXT_SCALE", 50, "appearance", "Text size",
+        "Grid text size from small (0) to large (100).",
+        min=0, max=100,
+    ),
+    FieldSpec(
         "show_status_text", "bool", "SHOW_STATUS_TEXT", False, "appearance",
         "Status text on cards", "Short in-use / configured label on each card.",
     ),
@@ -272,6 +282,8 @@ def resolve() -> tuple[dict[str, Any], dict[str, Origin]]:
                 values[spec.key], origins[spec.key] = env_val, "env"
             else:
                 values[spec.key], origins[spec.key] = spec.default, "default"
+    if origins["card_scale"] == "default" and values["grid_density"] == "compact":
+        values["card_scale"] = 100
     start, end = values["port_range_start"], values["port_range_end"]
     if end < start:
         values["port_range_end"] = start

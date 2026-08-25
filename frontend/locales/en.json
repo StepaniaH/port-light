@@ -258,6 +258,14 @@
         "label": "Grid density",
         "help": "Compact packs more port cards on screen."
       },
+      "card_scale": {
+        "label": "Card size",
+        "help": "0 is roomiest, 100 packs cards tightest."
+      },
+      "text_scale": {
+        "label": "Text size",
+        "help": "Grid text size from small (0) to large (100)."
+      },
       "show_status_text": {
         "label": "Status text on cards",
         "help": "Short in-use / configured label on each card."

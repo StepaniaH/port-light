@@ -106,3 +106,26 @@ def test_collect_urls_uses_url_host():
     assert "https://nas.lan:8096" in urls
     off = _collect_urls(8096, ["0.0.0.0"], [], known, {"guess_urls": False})
     assert off == []
+
+
+def test_display_scales_default_50(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    values, _ = app_settings.resolve()
+    assert values["card_scale"] == 50
+    assert values["text_scale"] == 50
+
+
+def test_compact_density_seeds_card_scale(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("GRID_DENSITY", "compact")
+    values, _ = app_settings.resolve()
+    assert values["card_scale"] == 100
+    assert values["grid_density"] == "compact"
+
+
+def test_saved_card_scale_beats_density_seed(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("GRID_DENSITY", "compact")
+    app_settings.apply_patch({"card_scale": 30})
+    values, _ = app_settings.resolve()
+    assert values["card_scale"] == 30
