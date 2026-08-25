@@ -122,13 +122,31 @@ See the environment tables in the README for the full variable list.
 `skills/port-light/SKILL.md` packages the suggest/check/release flow for
 skill-capable coding agents (Claude Code and compatible tools). Copy or link
 it into the agent's skills directory; it teaches the agent to call the API
-above instead of guessing ports.
+above instead of guessing ports. The published image includes it at
+`/app/skills/port-light/SKILL.md`.
 
 ### MCP server (experimental)
 
 `mcp/server.py` is a dependency-free MCP stdio server wrapping the same
 endpoints as six tools: `suggest_ports`, `check_port`, `list_occupancy`,
 `port_history`, `list_degradations`, `release_port`.
+
+The published image ships the server at `/app/mcp/server.py`, so Docker
+deployments do not need a source checkout:
+
+```json
+{
+  "mcpServers": {
+    "port-light": {
+      "command": "docker",
+      "args": ["exec", "-i", "port-light", "python", "mcp/server.py"],
+      "env": {"PORT_LIGHT_URL": "http://127.0.0.1:2100"}
+    }
+  }
+}
+```
+
+The agent skill rides along at `/app/skills/port-light/SKILL.md`.
 
 ```bash
 PORT_LIGHT_URL=http://127.0.0.1:2100 python mcp/server.py

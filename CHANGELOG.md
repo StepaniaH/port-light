@@ -2,6 +2,13 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## Unreleased
+
+- Settings gains an **Automation** tab: copy-paste MCP registration (docker-exec or source forms), agent-skill install hint, curl examples, live usage activity, and an active-leases list with release buttons
+- `GET /api/ports/suggest` calls are now recorded locally (time, count, scope, label, leased — never tokens or IPs) and summarized under `/api/meta` → `automation.agent_events`; retention follows `HISTORY_RETENTION_DAYS`
+- Lease visibility: cards whose reservation carries a TTL show a badge on the grid and an expiry countdown in the detail drawer
+- The published image now includes `mcp/server.py` and `skills/port-light/SKILL.md`, so Docker users can register the MCP server without cloning the repo
+
 ## 0.7.0 — 2026-08-24
 
 ### Added

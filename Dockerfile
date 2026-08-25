@@ -19,6 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
+COPY mcp/ ./mcp/
+COPY skills/ ./skills/
 
 # Ensure files are readable by non-root users (e.g. when container runs with --user 1000:1000)
 RUN chmod -R a+r /app
