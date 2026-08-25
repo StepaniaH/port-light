@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=61';
-import { t, tx, escapeHtml, errorText } from './text.js?v=61';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=61';
-import { moveChipFocus } from './a11y.js?v=61';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=61';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=61';
-import { render, syncHiddenButton } from './grid.js?v=61';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=62';
+import { t, tx, escapeHtml, errorText } from './text.js?v=62';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=62';
+import { moveChipFocus } from './a11y.js?v=62';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=62';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=62';
+import { render, syncHiddenButton } from './grid.js?v=62';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -276,6 +276,9 @@ import { render, syncHiddenButton } from './grid.js?v=61';
       const input = labelEl.querySelector('input[name="theme_palette"]');
       if (!input) return;
       const family = input.value;
+      const previewId = family === '' ? mode
+        : (PALETTE_VARIANTS[family].indexOf('light') >= 0 && mode === 'light' ? family + '-light' : family);
+      labelEl.setAttribute('data-theme-preview', previewId);
       if (family === '') return;
       const available = paletteAvailable(family, mode);
       input.disabled = !available;

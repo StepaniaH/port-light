@@ -1,49 +1,50 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyTheme, applyAppearance, saveView } from './state.js?v=61';
-import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js?v=61';
-import { KIND_MATCHERS } from './kinds.js?v=61';
-import { moveChipFocus, trapTab } from './a11y.js?v=61';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyTheme, applyAppearance, saveView } from './state.js?v=62';
+import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js?v=62';
+import { KIND_MATCHERS } from './kinds.js?v=62';
+import { moveChipFocus, trapTab } from './a11y.js?v=62';
 import {
   appEl, grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop, detailContent,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn, settingsBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=61';
-import { openModal, closeModals, modalOpen } from './modal.js?v=61';
-import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=61';
+} from './dom.js?v=62';
+import { openModal, closeModals, modalOpen } from './modal.js?v=62';
+import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=62';
 import {
   render, renderSummary, renderHostSwitcher, renderHostBoards, portFromList,
   freeStub, pendingStub, prefetchKnown, getCellLabel, hiddenOccupancy,
   probeLockedHit, buildSearchContext, getKnownForFree, matchesFilter, sortPorts,
   renderGrid, showCopyToast, snapshotGridFocus, syncAddButton, syncFilterUI,
   syncHiddenButton, applyPendingGridFocus, gridRootFrom, moveGridFocus,
-} from './grid.js?v=61';
+} from './grid.js?v=62';
 import {
   hasPeers, listedHosts, hostById, hostName,
   occupancyUrl, portApiUrl, gridHash, portHash, dataForHost,
   api, fetchMeta, fetchHealth, fetchHostHealth, fetchHosts,
   fetchPorts, retryHost, setupRefresh, loadPorts, renderScanners, tick,
   startEventStream,
-} from './api.js?v=61';
+} from './api.js?v=62';
 import {
   closeDetail, showPortDetail, showDetailError, syncDetailModal, unlockHidden,
   addManualPort,
-} from './detail.js?v=61';
+} from './detail.js?v=62';
 import {
   loadSettingsPage, showSettingsPanel, goSettingsPanel, saveSettingsPage,
   applyServerSettings, revertUnsavedSettings, markDirty, syncDependentSettings,
   fetchSettings, syncLocaleTrigger, closeLocaleMenu, moveLocaleHighlight,
   renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
-} from './settings.js?v=61';
+} from './settings.js?v=62';
 
 (function () {
   'use strict';
 
   try {
     const cached = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
-    if (cached.theme) S.settings.theme = cached.theme;
+    if (cached.theme_mode) S.settings.theme_mode = cached.theme_mode;
+    if (typeof cached.theme_palette === 'string') S.settings.theme_palette = cached.theme_palette;
     if (cached.grid_density) S.settings.grid_density = cached.grid_density;
     if (cached.locale) S.settings.locale = cached.locale;
   } catch (e) {}

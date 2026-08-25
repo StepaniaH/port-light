@@ -9,9 +9,14 @@
   <script>
     try {
       var s = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
-      var t = s.theme || 'system';
-      if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', t);
+      var m = s.theme_mode === 'light' || s.theme_mode === 'dark'
+        ? s.theme_mode
+        : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-mode', m);
+      var PAL = {gruvbox:['dark','light'],catppuccin:['dark','light'],solarized:['dark','light'],nord:['dark'],dracula:['dark'],'tokyo-night':['dark'],'one-dark':['dark'],everforest:['dark'],'rose-pine':['dark'],kanagawa:['dark']};
+      if (typeof s.theme_palette === 'string' && s.theme_palette && PAL[s.theme_palette] && PAL[s.theme_palette].indexOf(m) >= 0) {
+        document.documentElement.setAttribute('data-palette', s.theme_palette);
+      }
       if (s.grid_density) document.documentElement.setAttribute('data-density', s.grid_density);
     } catch (e) {}
   </script>
