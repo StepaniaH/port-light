@@ -53,7 +53,8 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
 - One UI can pull occupancy maps from other Port-Light instances (LAN / Tailscale). Each host still scans itself.
-- Appearance on Settings: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. Compact grid, UI language (English, 简体中文, 繁體中文, 日本語). Also via Compose env.
+- Appearance on Settings: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. UI language (English, 简体中文, 繁體中文, 日本語). Also via Compose env.
+- Make it yours: fork any palette in the advanced theme editor (15 core colors, server-stored, import/export as JSON) and tune card and text size with continuous sliders.
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with one-click reservation
@@ -121,7 +122,7 @@ Open `http://localhost:2100`.
 | `THEME_MODE` | `system` | `system` / `dark` / `light` — the resolved brightness; palettes follow it |
 | `THEME_PALETTE` | built-in | Color family layered on top: `gruvbox`, `catppuccin`, `solarized`, `nord`, `dracula`, `tokyo-night`, `one-dark`, `everforest`, `rose-pine`, `kanagawa`. Empty uses the built-in colors. |
 | `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`. Auto follows the browser. |
-| `GRID_DENSITY` | `comfortable` | `comfortable` or `compact` |
+| `GRID_DENSITY` | `comfortable` | Legacy: `compact` seeds `card_scale` to 100 while no card size is saved; otherwise ignored. The UI toggle is replaced by the card/text sliders. |
 | `REFRESH_MS` | `5000` | Auto-refresh interval |
 | `URL_HOST` | empty | Hostname used in guessed `http(s)://` links |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |

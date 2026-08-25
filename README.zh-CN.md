@@ -53,7 +53,8 @@
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
 - 一个界面可以拉取其他 Port-Light 实例的占用图（局域网 / Tailscale）。每台机器仍自己扫描。
-- 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；紧凑网格、界面语言（English / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
+- 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；界面语言（English / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
+- 随心定制：在内置色板上分叉出自定义色板（15 个核心颜色，服务端存储，支持 JSON 导入导出），并用连续滑杆微调卡片与文字大小。
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
 - 查找空闲端口：工具栏按钮（或 `GET /api/free-runs?count=N`）返回范围内最大的连续空闲段，可一键预留
@@ -120,7 +121,7 @@ docker compose up -d
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称（只能用环境变量） |
 | `THEME` | `system` | `system` / `dark` / `light`，或命名配色（`gruvbox`、`catppuccin`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`solarized`、`everforest`、`rose-pine`、`kanagawa`，以及 `*-light` / `catppuccin-latte`） |
 | `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
-| `GRID_DENSITY` | `comfortable` | `comfortable` 或 `compact` |
+| `GRID_DENSITY` | `comfortable` | 旧版密度开关：在未保存过卡片大小时，`compact` 会把 `card_scale` 初始为 100；其余情况忽略。界面上的开关已由卡片 / 文字滑杆取代。 |
 | `REFRESH_MS` | `5000` | 自动刷新间隔 |
 | `URL_HOST` | 空 | 猜测链接里用的主机名 |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
