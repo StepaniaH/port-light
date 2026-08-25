@@ -36,7 +36,7 @@ from .port_scanner import (
     scan_listening_ports,
 )
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 
 _log_level = os.environ.get("PORT_LIGHT_LOG_LEVEL", "").strip().upper()
 if not logging.getLogger("port-light").handlers and not logging.getLogger().handlers:

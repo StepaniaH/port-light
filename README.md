@@ -53,7 +53,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
 - One UI can pull occupancy maps from other Port-Light instances (LAN / Tailscale). Each host still scans itself.
-- Appearance presets on Settings: system / dark / light plus Gruvbox, Catppuccin, Nord, Dracula, Tokyo Night, One Dark, Solarized, Everforest, Rosé Pine, and Kanagawa. Compact grid, UI language (English, 简体中文, 繁體中文, 日本語). Also via Compose env.
+- Appearance on Settings: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. Compact grid, UI language (English, 简体中文, 繁體中文, 日本語). Also via Compose env.
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with one-click reservation
@@ -81,7 +81,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.0
+    image: stepaniah/port-light:v0.7.1
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -117,7 +117,8 @@ Open `http://localhost:2100`.
 | `PORT_RANGE_END` | `9999` | End of that range (does not fill the grid with green cells) |
 | `PORT_LIGHT_DATA_DIR` | `/data` | Manual ports, hidden list, and saved settings (JSON) |
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | Extra / overriding port names (env only) |
-| `THEME` | `system` | `system` / `dark` / `light`, or a named palette (`gruvbox`, `catppuccin`, `nord`, `dracula`, `tokyo-night`, `one-dark`, `solarized`, `everforest`, `rose-pine`, `kanagawa`, and `*-light` / `catppuccin-latte` variants) |
+| `THEME_MODE` | `system` | `system` / `dark` / `light` — the resolved brightness; palettes follow it |
+| `THEME_PALETTE` | built-in | Color family layered on top: `gruvbox`, `catppuccin`, `solarized`, `nord`, `dracula`, `tokyo-night`, `one-dark`, `everforest`, `rose-pine`, `kanagawa`. Empty uses the built-in colors. |
 | `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`. Auto follows the browser. |
 | `GRID_DENSITY` | `comfortable` | `comfortable` or `compact` |
 | `REFRESH_MS` | `5000` | Auto-refresh interval |

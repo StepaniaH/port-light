@@ -15,7 +15,7 @@ Pin a `v*` tag on hosts you care about.
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.0
+    image: stepaniah/port-light:v0.7.1
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -50,7 +50,7 @@ docker run -d \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  stepaniah/port-light:v0.7.0
+  stepaniah/port-light:v0.7.1
 ```
 
 ## Build from this repo
@@ -88,7 +88,7 @@ services:
       - internal
 
   port-light:
-    image: stepaniah/port-light:v0.7.0
+    image: stepaniah/port-light:v0.7.1
     restart: unless-stopped
     ports:
       - "2100:2100"
@@ -155,7 +155,7 @@ podman run -d --name port-light --restart unless-stopped \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  docker.io/stepaniah/port-light:v0.7.0
+  docker.io/stepaniah/port-light:v0.7.1
 ```
 
 Rootless socket is typically `$XDG_RUNTIME_DIR/podman/podman.sock`. SELinux hosts often need `:z` (or `:Z`) on the volume flags.
@@ -181,7 +181,7 @@ To keep GitOps / Compose as the only source:
 ```yaml
 environment:
   PORT_LIGHT_SETTINGS_SOURCE: env
-  THEME: dark
+  THEME_MODE: dark
   LOCALE: en
   URL_HOST: nas.lan
 ```

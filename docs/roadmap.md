@@ -2,6 +2,13 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.7.1
+
+- Automation tab: MCP registration snippets, agent-skill install hint, suggest-call activity log, active leases with release buttons
+- Agent visibility: local agent-event store beside the history db, lease badges and expiry countdown on the grid, `expires_at` on `/api/ports`
+- Image ships `mcp/server.py` and `skills/port-light/SKILL.md`
+- Themes: brightness (system / light / dark) and color palette are independent controls; legacy `theme` values and the `THEME` env var migrate to `THEME_MODE` + `THEME_PALETTE`
+
 ## Shipped in 0.7.0
 
 - Live updates over SSE, local history timeline, optional webhooks and metrics
