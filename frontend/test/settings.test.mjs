@@ -12,7 +12,7 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { automationCardsHtml } = await import('../js/settings.js?' + V);
+const { automationCardsHtml, renderModePicker, renderPalettePicker } = await import('../js/settings.js?' + V);
 const { SETTINGS_PANELS } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
@@ -144,4 +144,36 @@ test('lease rows show remaining time through the remaining key', () => {
 test('automation panel is registered between occupancy and advanced', () => {
   assert.deepEqual(SETTINGS_PANELS, ['appearance', 'occupancy', 'automation', 'advanced']);
   assert.deepEqual(parseHash('#/settings/automation'), { name: 'settings', section: 'automation' });
+});
+
+test('mode picker renders three core radios named theme_mode', () => {
+  const html = renderModePicker(['system', 'dark', 'light'], 'system', '');
+  assert.match(html, /name="theme_mode" value="system"/);
+  assert.match(html, /name="theme_mode" value="dark"/);
+  assert.match(html, /name="theme_mode" value="light"/);
+  assert.doesNotMatch(html, /name="theme"/);
+});
+
+test('palette picker renders builtin plus ten families', () => {
+  const choices = ['', 'gruvbox', 'catppuccin', 'solarized', 'nord', 'dracula',
+    'tokyo-night', 'one-dark', 'everforest', 'rose-pine', 'kanagawa'];
+  const html = renderPalettePicker(choices, '', 'dark', '');
+  assert.match(html, /name="theme_palette" value=""/);
+  assert.match(html, /name="theme_palette" value="dracula"/);
+  assert.equal((html.match(/label class="theme-swatch/g) || []).length, 11);
+});
+
+test('palette picker greys mismatched single-variant families', () => {
+  const choices = ['', 'nord', 'dracula', 'gruvbox'];
+  const light = renderPalettePicker(choices, '', 'light', '');
+  assert.match(light, /is-unavailable[^>]*>\s*<input type="radio" name="theme_palette" value="dracula"[^>]*disabled/s);
+  assert.doesNotMatch(light, /value="gruvbox"[^>]*disabled/);
+  const dark = renderPalettePicker(choices, '', 'dark', '');
+  assert.doesNotMatch(dark, /value="dracula"[^>]*disabled/);
+});
+
+test('palette preview resolves variant per current mode', () => {
+  const choices = ['', 'gruvbox'];
+  assert.match(renderPalettePicker(choices, '', 'light', ''), /data-theme-preview="gruvbox-light"/);
+  assert.match(renderPalettePicker(choices, '', 'dark', ''), /data-theme-preview="gruvbox"(?!-)/);
 });

@@ -1,6 +1,6 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyAppearance, saveView } from './state.js?v=61';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=61';
 import { t, tx, escapeHtml, errorText } from './text.js?v=61';
 import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=61';
 import { moveChipFocus } from './a11y.js?v=61';
@@ -204,31 +204,70 @@ import { render, syncHiddenButton } from './grid.js?v=61';
       '<div class="locale-menu" id="locale-menu" role="listbox" aria-label="' + label + '">' + rows + '</div></div>';
   }
 
-  export function renderThemePicker(choices, value, disabled) {
+  function modeSwatch(c, current, disabled) {
+    const on = c === current;
+    const preview = c === 'system'
+      ? '<span class="theme-swatch-preview is-system" aria-hidden="true">' +
+        '<span class="theme-swatch-half dark"></span><span class="theme-swatch-half light"></span></span>'
+      : '<span class="theme-swatch-preview" aria-hidden="true"><i class="used"></i><i class="configured"></i><i class="free"></i></span>';
+    return '<label class="theme-swatch" data-theme-preview="' + escapeHtml(c) + '">' +
+      '<input type="radio" name="theme_mode" value="' + escapeHtml(c) + '"' +
+      (on ? ' checked' : '') + disabled + '>' + preview +
+      '<span class="theme-swatch-name" data-i18n="choice.' + c + '">' +
+      escapeHtml(choiceLabel(c)) + '</span></label>';
+  }
+
+  export function renderModePicker(choices, value, disabled) {
     const current = choices.indexOf(value) >= 0 ? value : 'system';
-    const label = escapeHtml(t('settings.fields.theme.label'));
-    function swatch(c) {
-      const on = c === current;
-      const preview = c === 'system'
-        ? '<span class="theme-swatch-preview is-system" aria-hidden="true">' +
-          '<span class="theme-swatch-half dark"></span><span class="theme-swatch-half light"></span></span>'
-        : '<span class="theme-swatch-preview" aria-hidden="true"><i class="used"></i><i class="configured"></i><i class="free"></i></span>';
-      return '<label class="theme-swatch" data-theme-preview="' + escapeHtml(c) + '">' +
-        '<input type="radio" name="theme" value="' + escapeHtml(c) + '"' +
-        (on ? ' checked' : '') + disabled + '>' + preview +
-        '<span class="theme-swatch-name" data-i18n="choice.' + c + '">' +
-        escapeHtml(choiceLabel(c)) + '</span></label>';
-    }
+    const label = escapeHtml(t('settings.fields.theme_mode.label'));
     const core = CORE_THEMES.filter(function (c) { return choices.indexOf(c) >= 0; });
-    const palettes = choices.filter(function (c) { return CORE_THEMES.indexOf(c) < 0; });
     return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' +
-      '<div class="theme-picker-core">' + core.map(swatch).join('') + '</div>' +
-      (palettes.length
-        ? '<p class="theme-picker-label" data-i18n="settings.theme.palettes">' +
-          escapeHtml(t('settings.theme.palettes')) + '</p>' +
-          '<div class="theme-picker-palettes">' + palettes.map(swatch).join('') + '</div>'
-        : '') +
-      '</div>';
+      '<div class="theme-picker-core">' + core.map(function (c) {
+        return modeSwatch(c, current, disabled);
+      }).join('') + '</div></div>';
+  }
+
+  function currentMode() {
+    let prefersLight = false;
+    try {
+      prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+    } catch (e) {}
+    return resolveMode(S.settings.theme_mode || 'system', prefersLight);
+  }
+
+  export function renderPalettePicker(choices, value, resolvedModeValue, disabled) {
+    const current = choices.indexOf(value) >= 0 ? value : '';
+    const mode = resolvedModeValue || currentMode();
+    const label = escapeHtml(t('settings.fields.theme_palette.label'));
+
+    function previewId(family) {
+      if (mode === 'light' && PALETTE_VARIANTS[family].indexOf('light') >= 0) {
+        return family + '-light';
+      }
+      return family;
+    }
+
+    function entry(family) {
+      const on = family === current;
+      const available = family === '' || paletteAvailable(family, mode);
+      const cls = available ? 'theme-swatch' : 'theme-swatch is-unavailable';
+      const dis = available ? disabled : ' disabled';
+      const previewIdResolved = family === '' ? mode : previewId(family);
+      const preview = '<span class="theme-swatch-preview" aria-hidden="true">' +
+        '<i class="used"></i><i class="configured"></i><i class="free"></i></span>';
+      const nameKey = family === '' ? 'settings.theme.builtin' : 'choice.' + family;
+      const nameText = family === '' ? escapeHtml(t('settings.theme.builtin')) : escapeHtml(choiceLabel(family));
+      return '<label class="' + cls + '" data-theme-preview="' + escapeHtml(previewIdResolved) + '">' +
+        '<input type="radio" name="theme_palette" value="' + escapeHtml(family) + '"' +
+        (on ? ' checked' : '') + dis + '>' + preview +
+        '<span class="theme-swatch-name" data-i18n="' + nameKey + '">' + nameText + '</span></label>';
+    }
+
+    const families = choices.filter(function (c) { return c !== ''; });
+    return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' +
+      '<p class="theme-picker-label" data-i18n="settings.theme.palettes">' +
+      escapeHtml(t('settings.theme.palettes')) + '</p>' +
+      '<div class="theme-picker-palettes">' + entry('').concat(families.map(entry).join('')) + '</div></div>';
   }
 
   export function renderField(f, value, readonly) {
@@ -241,8 +280,10 @@ import { render, syncHiddenButton } from './grid.js?v=61';
         (value ? ' checked' : '') + disabled + '><span class="track"></span></span>';
     } else if (f.key === 'locale') {
       control = renderLocaleList(f.choices || [], value, disabled);
-    } else if (f.key === 'theme') {
-      control = renderThemePicker(f.choices || [], value, disabled);
+    } else if (f.key === 'theme_mode') {
+      control = renderModePicker(f.choices || [], value, disabled);
+    } else if (f.key === 'theme_palette') {
+      control = renderPalettePicker(f.choices || [], value, currentMode(), disabled);
     } else if (f.type === 'choice') {
       const choices = f.choices || [];
       control = '<div class="segmented" role="radiogroup" aria-label="' +
@@ -260,7 +301,7 @@ import { render, syncHiddenButton } from './grid.js?v=61';
       control = '<input type="text" name="' + f.key + '" value="' + escapeHtml(String(value || '')) +
         '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + disabled + '>';
     }
-    const wide = f.key === 'theme' ? ' is-wide' : '';
+    const wide = f.key === 'theme_mode' || f.key === 'theme_palette' ? ' is-wide' : '';
     return '<' + tag + ' class="setting-row' + wide + '" data-setting="' + escapeHtml(f.key) + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
       '</span></span><span class="setting-control">' + control + originHint(f) +
