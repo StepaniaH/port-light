@@ -432,13 +432,18 @@ import { render, syncHiddenButton } from './grid.js?v=61';
 
   export async function releaseLease(port, btn) {
     btn.disabled = true;
-    const res = await api('/api/manual-ports/' + port, { method: 'DELETE' });
-    if (!res.ok) {
+    try {
+      const res = await api('/api/manual-ports/' + port, { method: 'DELETE' });
+      if (!res.ok) {
+        btn.disabled = false;
+        return;
+      }
+      const metaRes = await api('/api/meta');
+      if (metaRes.ok) S.meta = await metaRes.json();
+    } catch (err) {
       btn.disabled = false;
       return;
     }
-    const metaRes = await api('/api/meta');
-    if (metaRes.ok) S.meta = await metaRes.json();
     rerenderAutomationCards();
   }
 

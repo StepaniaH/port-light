@@ -137,6 +137,27 @@ test('failed release re-enables the button and skips the meta refresh', async ()
   assert.equal(panel.innerHTML, '<p data-keep>untouched</p>');
 });
 
+test('rejected fetch during release re-enables the button without an unhandled rejection', async () => {
+  S.meta = leasedMeta();
+  const panel = document.getElementById('settings-panel-automation');
+  panel.innerHTML = '<p data-keep>untouched</p>';
+  const btn = { disabled: true };
+  const savedFetch = globalThis.fetch;
+  globalThis.fetch = function () { return Promise.reject(new Error('unreachable')); };
+  let unhandled = null;
+  const onUnhandled = function (reason) { if (!unhandled) unhandled = reason; };
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    await releaseLease(8081, btn);
+    await new Promise(function (resolve) { setImmediate(resolve); });
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+    globalThis.fetch = savedFetch;
+  }
+  assert.equal(btn.disabled, false);
+  assert.equal(panel.innerHTML, '<p data-keep>untouched</p>');
+});
+
 test('copy click survives clipboard denial without an unhandled rejection', async () => {
   const savedForm = document.getElementById('settings-form');
   savedForm.elements = {};
