@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=64';
-import { t, tx, escapeHtml, errorText } from './text.js?v=64';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=64';
-import { moveChipFocus } from './a11y.js?v=64';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=64';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=64';
-import { render, syncHiddenButton } from './grid.js?v=64';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=65';
+import { t, tx, escapeHtml, errorText } from './text.js?v=65';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=65';
+import { moveChipFocus } from './a11y.js?v=65';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=65';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=65';
+import { render, syncHiddenButton } from './grid.js?v=65';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -99,6 +99,7 @@ import { render, syncHiddenButton } from './grid.js?v=64';
   export function applyServerSettings(doc) {
     S.settingsDoc = doc;
     S.settings = Object.assign({}, S.settings, doc.values || {});
+    S.customThemes = Array.isArray(doc.custom_themes) ? doc.custom_themes : [];
     if (!S.rangeFromView) {
       S.rangeStart = S.settings.port_range_start;
       S.rangeEnd = S.settings.port_range_end;
@@ -264,10 +265,32 @@ import { render, syncHiddenButton } from './grid.js?v=64';
     }
 
     const families = choices.filter(function (c) { return c !== ''; });
+
+    function customEntry(theme) {
+      const sel = CUSTOM_PREFIX + theme.id;
+      const on = sel === current;
+      const available = theme.mode === mode;
+      const cls = available ? 'theme-swatch is-custom' : 'theme-swatch is-custom is-unavailable';
+      const dis = available ? disabled : ' disabled';
+      const dots = ['used', 'configured', 'free'].map(function (kind) {
+        return '<i class="' + kind + '" style="background:' + escapeHtml(theme.colors[kind]) + '"></i>';
+      }).join('');
+      return '<span class="' + cls + '" data-theme-preview="">' +
+        '<label><input type="radio" name="theme_palette" value="' + escapeHtml(sel) + '"' +
+        (on ? ' checked' : '') + dis + '>' +
+        '<span class="theme-swatch-preview" aria-hidden="true">' + dots + '</span>' +
+        '<span class="theme-swatch-name">' + escapeHtml(theme.name) +
+        '<em class="theme-badge">' + escapeHtml(t('settings.theme.customBadge')) + '</em></span></label>' +
+        '<button type="button" class="btn-delete" data-delete-theme="' + escapeHtml(theme.id) + '"' +
+        disabled + '>' + escapeHtml(t('hosts.remove')) + '</button></span>';
+    }
+
+    const customs = (S.customThemes || []).filter(function (t) { return true; });
+
     return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' +
       '<p class="theme-picker-label" data-i18n="settings.theme.palettes">' +
       escapeHtml(t('settings.theme.palettes')) + '</p>' +
-      '<div class="theme-picker-palettes">' + entry('').concat(families.map(entry).join('')) + '</div></div>';
+      '<div class="theme-picker-palettes">' + entry('').concat(families.map(entry).join(''), customs.map(customEntry).join('')) + '</div></div>';
   }
 
   export function syncPaletteAvailability() {
@@ -276,6 +299,14 @@ import { render, syncHiddenButton } from './grid.js?v=64';
       const input = labelEl.querySelector('input[name="theme_palette"]');
       if (!input) return;
       const family = input.value;
+      if (family.indexOf(CUSTOM_PREFIX) === 0) {
+        const id = family.slice(CUSTOM_PREFIX.length);
+        const themeRow = (S.customThemes || []).find(function (x) { return x.id === id; });
+        const ok = !!themeRow && themeRow.mode === mode;
+        input.disabled = !ok;
+        labelEl.classList.toggle('is-unavailable', !ok);
+        return;
+      }
       const previewId = family === '' ? mode
         : (PALETTE_VARIANTS[family].indexOf('light') >= 0 && mode === 'light' ? family + '-light' : family);
       labelEl.setAttribute('data-theme-preview', previewId);
@@ -538,6 +569,22 @@ import { render, syncHiddenButton } from './grid.js?v=64';
     });
   }
 
+  let _themeDelegated = false;
+  function ensureThemeDelegates() {
+    if (_themeDelegated) return;
+    _themeDelegated = true;
+    document.addEventListener('click', async function (e) {
+      const btn = e.target.closest('[data-delete-theme]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-delete-theme');
+      const res = await api('/api/custom-themes/' + id, { method: 'DELETE' });
+      if (!res.ok) return;
+      const docRes = await api('/api/settings');
+      if (docRes.ok) applyServerSettings(await docRes.json());
+      renderSettingsForm(S.settingsDoc);
+    });
+  }
+
   export function renderSettingsForm(doc) {
     const values = Object.assign({}, doc.values || {});
     if (S.rangeFromView) {
@@ -617,6 +664,7 @@ import { render, syncHiddenButton } from './grid.js?v=64';
     showSettingsPanel(S.route.section || S.settingsPanel);
     syncDependentSettings();
     ensureAutomationDelegates();
+    ensureThemeDelegates();
     renderPeersEditor(!!doc.readonly || !!S.hostCatalog.readonly);
   }
 

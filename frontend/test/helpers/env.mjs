@@ -161,6 +161,17 @@ if (!globalThis.document) {
   };
 }
 
+function makeStyle() {
+  const props = {};
+  return {
+    setProperty(k, v) { props[k] = String(v); },
+    getPropertyValue(k) {
+      return Object.prototype.hasOwnProperty.call(props, k) ? props[k] : '';
+    },
+    removeProperty(k) { delete props[k]; },
+  };
+}
+
 function makeElement(tag) {
   const node = {
     tagName: tag,
@@ -181,7 +192,7 @@ function makeElement(tag) {
     removeAttribute(k) { delete node.attrs[k]; },
     addEventListener() {},
     focus() {},
-    style: { setProperty() {} },
+    style: makeStyle(),
     hidden: false,
     value: '',
     disabled: false,

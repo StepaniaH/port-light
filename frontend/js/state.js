@@ -20,6 +20,31 @@ export const PALETTE_VARIANTS = {
   kanagawa: ['dark'],
 };
 
+export const CUSTOM_PREFIX = '@custom:';
+
+const CUSTOM_VAR_NAMES = {
+  bg: '--bg', elevated: '--elevated', card: '--card', cardHover: '--card-hover',
+  border: '--border', text: '--text', textDim: '--text-dim', used: '--used',
+  configured: '--configured', free: '--free', accent: '--accent',
+  conflict: '--conflict', access: '--access', hidden: '--hidden', danger: '--danger',
+};
+
+export function customPaletteVars(colors) {
+  return Object.keys(CUSTOM_VAR_NAMES).map(function (key) {
+    return [CUSTOM_VAR_NAMES[key], colors[key]];
+  });
+}
+
+function clearCustomVars(html) {
+  Object.keys(CUSTOM_VAR_NAMES).forEach(function (key) {
+    html.style.removeProperty(CUSTOM_VAR_NAMES[key]);
+  });
+}
+
+function findCustom(id) {
+  return (S.customThemes || []).find(function (t) { return t.id === id; }) || null;
+}
+
 export const S = {
   currentData: null,
   hostCatalog: { local: { id: 'local', name: '', local: true }, peers: [], readonly: false },
@@ -57,6 +82,7 @@ export const S = {
     url_host: '',
     url_scheme: 'auto',
   },
+  customThemes: [],
   settingsDoc: null,
   settingsDirty: false,
   settingsPanel: 'appearance',
@@ -101,8 +127,18 @@ export function applyTheme() {
   var html = document.documentElement;
   html.setAttribute('data-mode', mode);
   html.removeAttribute('data-theme');
+  clearCustomVars(html);
   var pal = S.settings.theme_palette || '';
-  if (pal && paletteAvailable(pal, mode)) {
+  var customId = pal.indexOf(CUSTOM_PREFIX) === 0 ? pal.slice(CUSTOM_PREFIX.length) : '';
+  var custom = customId ? findCustom(customId) : null;
+  if (custom && custom.mode === mode) {
+    customPaletteVars(custom.colors).forEach(function (pair) {
+      html.style.setProperty(pair[0], pair[1]);
+    });
+    html.removeAttribute('data-palette');
+    return;
+  }
+  if (pal && !customId && paletteAvailable(pal, mode)) {
     html.setAttribute('data-palette', pal);
   } else {
     html.removeAttribute('data-palette');

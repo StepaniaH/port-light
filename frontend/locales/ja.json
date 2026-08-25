@@ -168,7 +168,8 @@
     },
     "theme": {
       "palettes": "パレット",
-      "builtin": "組み込み"
+      "builtin": "組み込み",
+      "customBadge": "カスタム"
     },
     "sections": {
       "theme": {

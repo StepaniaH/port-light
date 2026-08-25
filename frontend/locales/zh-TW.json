@@ -168,7 +168,8 @@
     },
     "theme": {
       "palettes": "配色",
-      "builtin": "內建"
+      "builtin": "內建",
+      "customBadge": "自訂"
     },
     "sections": {
       "theme": {

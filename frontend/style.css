@@ -921,6 +921,9 @@ a:focus-visible,
   font-size: 0.72rem; font-weight: 550; text-align: center; line-height: 1.25;
   color: var(--text);
 }
+.theme-swatch.is-custom > label { cursor: pointer; }
+.theme-swatch.is-custom .btn-delete { height: 22px; padding: 0 8px; font-size: 0.68rem; margin-left: 6px; }
+.theme-badge { font-style: normal; font-size: 0.62rem; opacity: 0.75; margin-left: 4px; }
 .theme-swatch[data-theme-preview="dark"] {
   --preview-bg: #0c1016; --preview-used: #58a6ff; --preview-cfg: #d4a017; --preview-free: #3fb950;
 }

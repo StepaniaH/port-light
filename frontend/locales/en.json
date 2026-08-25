@@ -168,7 +168,8 @@
     },
     "theme": {
       "palettes": "Palettes",
-      "builtin": "Built-in"
+      "builtin": "Built-in",
+      "customBadge": "Custom"
     },
     "sections": {
       "theme": {
