@@ -29,3 +29,11 @@ test('fmtRemaining picks the widest unit', () => {
   assert.equal(fmtRemaining(3 * 3600), '3h');
   assert.equal(fmtRemaining(47 * 3600), '2d');
 });
+
+test('badge text derivation matches drawer countdown', () => {
+  // Same inputs both surfaces use — pins the contract between them.
+  const exp = NOW + 58 * 60;
+  assert.equal(fmtRemaining(remainingSeconds(exp, NOW)), '58m');
+  const expOld = NOW + 25 * 3600;
+  assert.equal(fmtRemaining(remainingSeconds(expOld, NOW)), '1d');
+});

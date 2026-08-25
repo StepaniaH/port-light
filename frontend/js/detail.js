@@ -5,6 +5,7 @@ import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=61';
 import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=61';
 import { trapTab } from './a11y.js?v=61';
 import { api, portApiUrl, hasPeers, hostName, gridHash, loadPorts, tick, fetchPorts } from './api.js?v=61';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=61';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
@@ -213,6 +214,12 @@ import { closeModals, modalOpen } from './modal.js?v=61';
 
     if (p.manual_label) {
       html += '<div class="info-box"><span class="info-name">' + escapeHtml(t('detail.manual')) + '</span> — ' + escapeHtml(p.manual_label) + '</div>';
+    }
+
+    if (isLease(p)) {
+      const left = fmtRemaining(remainingSeconds(p.expires_at));
+      html += '<div class="info-box"><span class="info-name">' +
+        escapeHtml(t('detail.expiresIn', { time: left })) + '</span></div>';
     }
 
     if (!remote && (p.manual_label != null || p.source_type === 'manual')) {

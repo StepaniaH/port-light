@@ -3,6 +3,7 @@
 import { S, CARD_FIELD_KEYS } from './state.js?v=61';
 import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=61';
 import { KIND_MATCHERS } from './kinds.js?v=61';
+import { isLease } from './leases.js?v=61';
 import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=61';
 import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl, portHash, api, fetchPorts, renderScanners } from './api.js?v=61';
 import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=61';
@@ -581,6 +582,10 @@ import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=61';
         ? '<span class="access-badge">' + escapeHtml(t('grid.web')) + '</span>' : '';
       const protoBadge = S.settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp'
         ? '<span class="proto-badge">' + escapeHtml(p.protocol) + '</span>' : '';
+      const leaseBadge = isLease(p)
+        ? '<span class="lease-badge" role="img" aria-label="' + escapeHtml(t('grid.leaseBadge')) +
+          '" title="' + escapeHtml(t('grid.leaseBadge')) + '"></span>'
+        : '';
 
       const ariaParts = [String(p.port), statusLabel, label, p.protocol].filter(Boolean);
       return '<button type="button" class="port-cell ' + cls + conflict + selected + searchHit + searchNear + '"' +
@@ -590,7 +595,7 @@ import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=61';
         ' title="' + escapeHtml([p.port, p.protocol, p.bind_scope, label].filter(Boolean).join(' · ')) + '">' +
         '<div class="port-num">' + p.port + '</div>' +
         labelText +
-        '<div class="cell-meta"><span class="indicator"></span>' + protoBadge + accessBadge + statusText + '</div>' +
+        '<div class="cell-meta"><span class="indicator"></span>' + protoBadge + accessBadge + leaseBadge + statusText + '</div>' +
         '</button>';
     }).join('');
 

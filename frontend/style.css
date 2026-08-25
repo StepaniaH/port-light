@@ -1082,6 +1082,34 @@ a:focus-visible,
 #settings-status.is-error { color: var(--danger); }
 #settings-status.is-ok { color: var(--free); }
 
+/* ── Automation panel + lease badges ──── */
+
+.lease-badge {
+  display: inline-block;
+  width: .55em; height: .55em; flex-shrink: 0;
+  border: 1px solid var(--configured, #d79921);
+  border-radius: 50%;
+}
+.auto-table { width: 100%; border-collapse: collapse; font-size: .85em; }
+.auto-table th, .auto-table td {
+  text-align: left; padding: .25rem .45rem;
+  border-bottom: 1px solid var(--border);
+}
+.snippet { margin-bottom: .6rem; }
+.snippet-cap { margin: .35rem 0 .2rem; font-weight: 600; }
+.snippet pre {
+  background: var(--elevated); border: 1px solid var(--border);
+  padding: .5rem; overflow-x: auto; font-size: .8em; margin: 0 0 .25rem;
+}
+.auto-summary { font-weight: 600; }
+.lease-row {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .3rem 0; border-bottom: 1px solid var(--border);
+}
+.lease-port { font-weight: 600; min-width: 3.5em; }
+.lease-row .btn-delete { margin-left: auto; }
+.muted { opacity: .72; }
+
 /* ── Responsive ──── */
 
 @media (max-width: 900px) {
