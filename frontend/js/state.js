@@ -145,14 +145,37 @@ export function applyTheme() {
   }
 }
 
+const CARD_ANCHORS = { minW: [164, 112], gap: [10, 6], padX: [14, 10], padY: [12, 8], minH: [76, 52] };
+
+export function applyDisplayScale(cardScale, textScale) {
+  const html = document.documentElement;
+  const c = Math.max(0, Math.min(100, Number(cardScale) || 0));
+  const t = Math.max(0, Math.min(100, Number(textScale) || 0));
+  const k = c / 100;
+  Object.keys(CARD_ANCHORS).forEach(function (key) {
+    const pair = CARD_ANCHORS[key];
+    const value = Math.round(pair[0] + (pair[1] - pair[0]) * k);
+    const cssName = '--cell-' + key.toLowerCase().replace('minw', 'min-w').replace('padx', 'pad-x').replace('pady', 'pad-y').replace('minh', 'min-h');
+    html.style.setProperty(key === 'gap' ? '--cell-gap' : cssName, value + 'px');
+  });
+  let basePx = 16;
+  try {
+    basePx = parseFloat(getComputedStyle(html).fontSize) || 16;
+  } catch (e) {}
+  const fontPx = Math.max(12, Math.min(18, Math.round(basePx + (t - 50) * 0.08)));
+  html.style.setProperty('--port-font', fontPx + 'px');
+}
+
 export function applyAppearance() {
   applyTheme();
-  document.documentElement.setAttribute('data-density', S.settings.grid_density || 'comfortable');
+  applyDisplayScale(S.settings.card_scale, S.settings.text_scale);
   try {
     localStorage.setItem('port-light-settings', JSON.stringify({
       theme_mode: S.settings.theme_mode,
       theme_palette: S.settings.theme_palette || '',
       grid_density: S.settings.grid_density,
+      card_scale: S.settings.card_scale,
+      text_scale: S.settings.text_scale,
       locale: S.settings.locale || 'auto',
     }));
   } catch (e) {}

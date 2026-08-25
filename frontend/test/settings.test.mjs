@@ -13,11 +13,11 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { automationCardsHtml, renderModePicker, renderPalettePicker, renderSettingsForm, themeEditorHtml } = await import('../js/settings.js?' + V);
-const { SETTINGS_PANELS } = await import('../js/state.js?' + V);
+const { automationCardsHtml, renderField, renderModePicker, renderPalettePicker, renderSettingsForm, themeEditorHtml } = await import('../js/settings.js?' + V);
+const { SETTINGS_PANELS, applyDisplayScale } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
-const mod = { renderSettingsForm, themeEditorHtml };
+const mod = { renderSettingsForm, themeEditorHtml, renderField };
 
 const base = {
   agent_token: false,
@@ -234,4 +234,25 @@ test('theme editor renders 15 color rows and controls', () => {
   assert.ok(out.includes('data-editor-export'));
   const locked = themeEditorHtml(true);
   assert.match(locked, /disabled/);
+});
+
+test('scale fields render as range inputs', () => {
+  const { renderField } = mod;
+  const card = renderField({ key: 'card_scale', type: 'int', min: 0, max: 100, group: 'appearance', origin: 'file' }, 72, false);
+  assert.match(card, /type="range"/);
+  assert.match(card, /value="72"/);
+  const text = renderField({ key: 'text_scale', type: 'int', min: 0, max: 100, group: 'appearance', origin: 'default' }, 50, false);
+  assert.match(text, /type="range"/);
+});
+
+test('applyDisplayScale maps anchors exactly at 0/50/100', () => {
+  const html = document.documentElement;
+  applyDisplayScale(0, 50);
+  assert.equal(html.style.getPropertyValue('--cell-min-w'), '164px');
+  applyDisplayScale(50, 50);
+  assert.equal(html.style.getPropertyValue('--cell-min-w'), '138px');
+  assert.equal(html.style.getPropertyValue('--cell-min-h'), '64px');
+  applyDisplayScale(100, 50);
+  assert.equal(html.style.getPropertyValue('--cell-min-w'), '112px');
+  assert.equal(html.style.getPropertyValue('--cell-gap'), '6px');
 });

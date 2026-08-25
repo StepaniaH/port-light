@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=66';
-import { t, tx, escapeHtml, errorText } from './text.js?v=66';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=66';
-import { moveChipFocus } from './a11y.js?v=66';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=66';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=66';
-import { render, syncHiddenButton } from './grid.js?v=66';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=67';
+import { t, tx, escapeHtml, errorText } from './text.js?v=67';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=67';
+import { moveChipFocus } from './a11y.js?v=67';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=67';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=67';
+import { render, syncHiddenButton } from './grid.js?v=67';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -490,6 +490,11 @@ import { render, syncHiddenButton } from './grid.js?v=66';
             escapeHtml(c) + '"' + (c === value ? ' checked' : '') + disabled +
             '><span data-i18n="choice.' + c + '">' + escapeHtml(choiceLabel(c)) + '</span></label>';
         }).join('') + '</div>';
+    } else if (f.type === 'int' && (f.key === 'card_scale' || f.key === 'text_scale')) {
+      const n = Number(value);
+      control = '<span class="slider-wrap"><input type="range" name="' + f.key + '"' +
+        ' min="0" max="100" step="1" value="' + (Number.isFinite(n) ? n : 50) + '"' + disabled + '>' +
+        '<output class="slider-out" data-slider-out="' + f.key + '">' + (Number.isFinite(n) ? n : 50) + '</output></span>';
     } else if (f.type === 'int') {
       const min = f.min != null ? ' min="' + f.min + '"' : '';
       const max = f.max != null ? ' max="' + f.max + '"' : '';
@@ -741,6 +746,15 @@ import { render, syncHiddenButton } from './grid.js?v=66';
         const hexInput = document.querySelector('[data-editor-hex="' + colorInput.getAttribute('data-editor-color') + '"]');
         if (hexInput) hexInput.value = colorInput.value;
         previewEditorColor(colorInput.getAttribute('data-editor-color'), colorInput.value);
+        return;
+      }
+      const range = e.target.closest('input[type="range"][name="card_scale"],input[type="range"][name="text_scale"]');
+      if (range) {
+        const out = document.querySelector('[data-slider-out="' + range.name + '"]');
+        if (out) out.textContent = range.value;
+        applyDisplayScale(
+          Number((document.querySelector('input[name="card_scale"]') || {}).value || 50),
+          Number((document.querySelector('input[name="text_scale"]') || {}).value || 50));
         return;
       }
       const btn = e.target.closest('[data-delete-theme]');

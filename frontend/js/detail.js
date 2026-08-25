@@ -1,17 +1,17 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=66';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=66';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=66';
-import { trapTab } from './a11y.js?v=66';
-import { api, portApiUrl, hasPeers, hostName, gridHash, loadPorts, tick, fetchPorts } from './api.js?v=66';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=66';
+import { S, saveView } from './state.js?v=67';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=67';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=67';
+import { trapTab } from './a11y.js?v=67';
+import { api, portApiUrl, hasPeers, hostName, gridHash, loadPorts, tick, fetchPorts } from './api.js?v=67';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=67';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=66';
-import { closeModals, modalOpen } from './modal.js?v=66';
+} from './grid.js?v=67';
+import { closeModals, modalOpen } from './modal.js?v=67';
 
   export function setDetailOpen(open) {
     appEl.classList.toggle('detail-open', open);
