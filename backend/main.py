@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import agent_events, degradations, history, hosts, webhooks, port_store
+from . import agent_events, degradations, history, hosts, webhooks, port_store, themes
 from . import settings as app_settings
 from .auth import (
     auth_configured,
@@ -386,7 +386,9 @@ def _json_etag(payload: dict) -> tuple[str, str]:
 
 @app.get("/api/settings")
 def get_settings() -> dict:
-    return app_settings.snapshot()
+    body = app_settings.snapshot()
+    body["custom_themes"] = themes.list_themes()
+    return body
 
 
 @app.put("/api/settings")
@@ -397,6 +399,46 @@ def put_settings(body: dict = Body(...)) -> dict:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/custom-themes")
+def get_custom_themes() -> dict:
+    return {"themes": themes.list_themes()}
+
+
+@app.post("/api/custom-themes")
+def post_custom_theme(body: dict = Body(...)) -> dict:
+    if app_settings.settings_readonly():
+        raise HTTPException(status_code=403,
+                            detail="settings are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY")
+    try:
+        return themes.add_theme(body)
+    except themes.ThemeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/custom-themes/{theme_id}")
+def put_custom_theme(theme_id: str, body: dict = Body(...)) -> dict:
+    if app_settings.settings_readonly():
+        raise HTTPException(status_code=403,
+                            detail="settings are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY")
+    try:
+        return themes.update_theme(theme_id, body)
+    except themes.ThemeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/custom-themes/{theme_id}")
+def delete_custom_theme(theme_id: str) -> dict:
+    if app_settings.settings_readonly():
+        raise HTTPException(status_code=403,
+                            detail="settings are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY")
+    if not themes.delete_theme(theme_id):
+        raise HTTPException(status_code=404, detail="no such theme")
+    current, _ = app_settings.resolve()
+    if current.get("theme_palette") == "@custom:" + theme_id:
+        app_settings.apply_patch({"theme_palette": ""})
+    return {"removed": theme_id}
 
 
 @app.get("/api/hosts")

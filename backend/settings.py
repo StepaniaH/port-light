@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -201,6 +202,10 @@ def _coerce(spec: FieldSpec, raw: Any) -> Any:
             raise ValueError(f"{spec.key} must be <= {spec.max}")
         return value
     text = "" if raw is None else str(raw).strip()
+    if spec.key == "theme_palette":
+        custom = re.fullmatch(r"@custom:([0-9a-f]{8})", text)
+        if custom:
+            return text
     if spec.kind == "choice":
         if text not in spec.choices:
             raise ValueError(f"{spec.key} must be one of {', '.join(spec.choices)}")
