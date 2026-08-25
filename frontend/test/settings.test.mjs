@@ -252,7 +252,11 @@ test('applyDisplayScale maps anchors exactly at 0/50/100', () => {
   applyDisplayScale(50, 50);
   assert.equal(html.style.getPropertyValue('--cell-min-w'), '138px');
   assert.equal(html.style.getPropertyValue('--cell-min-h'), '64px');
+  assert.equal(html.style.getPropertyValue('--cell-pad-t'), '10px');
+  assert.equal(html.style.getPropertyValue('--cell-pad-b'), '12px');
   applyDisplayScale(100, 50);
   assert.equal(html.style.getPropertyValue('--cell-min-w'), '112px');
   assert.equal(html.style.getPropertyValue('--cell-gap'), '6px');
+  assert.equal(html.style.getPropertyValue('--cell-pad-t'), '8px');
+  assert.equal(html.style.getPropertyValue('--cell-pad-b'), '8px');
 });

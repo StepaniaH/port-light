@@ -46,6 +46,8 @@ import {
     if (cached.theme_mode) S.settings.theme_mode = cached.theme_mode;
     if (typeof cached.theme_palette === 'string') S.settings.theme_palette = cached.theme_palette;
     if (cached.grid_density) S.settings.grid_density = cached.grid_density;
+    if (Number.isFinite(cached.card_scale)) S.settings.card_scale = cached.card_scale;
+    if (Number.isFinite(cached.text_scale)) S.settings.text_scale = cached.text_scale;
     if (cached.locale) S.settings.locale = cached.locale;
   } catch (e) {}
   try {

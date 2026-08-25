@@ -31,7 +31,8 @@ Measured from `frontend/style.css` today:
 | cell min column width | 164px | 138px | 112px |
 | grid gap | 10px | 8px | 6px |
 | cell padding X | 14px | 12px | 10px |
-| cell padding Y | 12px | 10px | 8px |
+| cell padding top | 12px | 10px | 8px |
+| cell padding bottom | 16px | 12px | 8px |
 | cell min-height | 76px | 64px | 52px |
 
 Linear interpolation between the Airy and Compact endpoints reproduces Comfortable exactly at 50: `value = airy + (compact − airy) × scale/100`.

@@ -145,17 +145,19 @@ export function applyTheme() {
   }
 }
 
-const CARD_ANCHORS = { minW: [164, 112], gap: [10, 6], padX: [14, 10], padY: [12, 8], minH: [76, 52] };
+const CARD_ANCHORS = { minW: [164, 112], gap: [10, 6], padX: [14, 10], padT: [12, 8], padB: [16, 8], minH: [76, 52] };
 
 export function applyDisplayScale(cardScale, textScale) {
   const html = document.documentElement;
-  const c = Math.max(0, Math.min(100, Number(cardScale) || 0));
-  const t = Math.max(0, Math.min(100, Number(textScale) || 0));
+  const cRaw = Number(cardScale);
+  const tRaw = Number(textScale);
+  const c = Math.max(0, Math.min(100, Number.isFinite(cRaw) ? cRaw : 50));
+  const t = Math.max(0, Math.min(100, Number.isFinite(tRaw) ? tRaw : 50));
   const k = c / 100;
   Object.keys(CARD_ANCHORS).forEach(function (key) {
     const pair = CARD_ANCHORS[key];
     const value = Math.round(pair[0] + (pair[1] - pair[0]) * k);
-    const cssName = '--cell-' + key.toLowerCase().replace('minw', 'min-w').replace('padx', 'pad-x').replace('pady', 'pad-y').replace('minh', 'min-h');
+    const cssName = '--cell-' + key.toLowerCase().replace('minw', 'min-w').replace('padx', 'pad-x').replace('padt', 'pad-t').replace('padb', 'pad-b').replace('minh', 'min-h');
     html.style.setProperty(key === 'gap' ? '--cell-gap' : cssName, value + 'px');
   });
   let basePx = 16;

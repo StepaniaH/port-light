@@ -748,15 +748,6 @@ import { render, syncHiddenButton } from './grid.js?v=67';
         previewEditorColor(colorInput.getAttribute('data-editor-color'), colorInput.value);
         return;
       }
-      const range = e.target.closest('input[type="range"][name="card_scale"],input[type="range"][name="text_scale"]');
-      if (range) {
-        const out = document.querySelector('[data-slider-out="' + range.name + '"]');
-        if (out) out.textContent = range.value;
-        applyDisplayScale(
-          Number((document.querySelector('input[name="card_scale"]') || {}).value || 50),
-          Number((document.querySelector('input[name="text_scale"]') || {}).value || 50));
-        return;
-      }
       const btn = e.target.closest('[data-delete-theme]');
       if (!btn) return;
       const id = btn.getAttribute('data-delete-theme');
@@ -773,6 +764,15 @@ import { render, syncHiddenButton } from './grid.js?v=67';
       if (e.target && e.target.id === 'editor-file') importEditorThemeFile(e.target);
     });
     document.addEventListener('input', function (e) {
+      const range = e.target && e.target.closest ? e.target.closest('input[type="range"][name="card_scale"],input[type="range"][name="text_scale"]') : null;
+      if (range) {
+        const out = document.querySelector('[data-slider-out="' + range.name + '"]');
+        if (out) out.textContent = range.value;
+        applyDisplayScale(
+          Number((document.querySelector('input[name="card_scale"]') || {}).value || 50),
+          Number((document.querySelector('input[name="text_scale"]') || {}).value || 50));
+        return;
+      }
       const hexInput = e.target && e.target.closest ? e.target.closest('[data-editor-hex]') : null;
       if (!hexInput || !/^#[0-9a-fA-F]{6}$/.test(hexInput.value)) return;
       const key = hexInput.getAttribute('data-editor-hex');

@@ -653,7 +653,7 @@ a:focus-visible,
   font: inherit; color: inherit;
   background: var(--card); border: 1px solid var(--border);
   border-left: 3px solid var(--border); border-radius: var(--radius);
-  padding: var(--cell-pad-y, 10px) var(--cell-pad-x, 12px); min-height: var(--cell-min-h, 64px);
+  padding: var(--cell-pad-t, 10px) var(--cell-pad-x, 12px) var(--cell-pad-b, 12px); min-height: var(--cell-min-h, 64px);
   cursor: pointer; position: relative;
   display: flex; flex-direction: column; gap: 4px;
 }
