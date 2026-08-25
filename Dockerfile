@@ -32,12 +32,15 @@ ENV PORT_RANGE_START=1
 ENV PORT_RANGE_END=9999
 ENV PORT_LIGHT_DATA_DIR=/data
 ENV CUSTOM_PORTS_FILE=/data/custom_ports.json
+# Port uvicorn listens on inside the container; /api/meta exposes it so the
+# Automation panel can render copy-paste MCP snippets without hardcoding.
+ENV PORT_LIGHT_PORT=2100
 
 RUN mkdir -p /data
 
 EXPOSE 2100
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:2100/api/health')"
+  CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/api/health' % os.environ['PORT_LIGHT_PORT'])"
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "2100"]
+CMD ["sh", "-c", "exec uvicorn backend.main:app --host 0.0.0.0 --port \"${PORT_LIGHT_PORT}\""]

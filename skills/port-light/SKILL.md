@@ -18,11 +18,12 @@ one answer: which ports are actually free.
 
 ## Setup
 
-All calls go to a Port-Light instance over HTTP. Default is the local
-machine; point at another host with its URL (LAN or Tailscale).
+All calls go to a Port-Light instance over HTTP. Point the variable at
+whatever URL you use to open that instance's dashboard in a browser
+(localhost, LAN, or Tailscale):
 
 ```bash
-export PORT_LIGHT_URL="http://127.0.0.1:2100"
+export PORT_LIGHT_URL="http://<your-host>:<your-port>"
 # optional, when the instance has Basic Auth:
 export PORT_LIGHT_AUTH="user:password"
 ```

@@ -116,6 +116,7 @@ docker compose up -d
 | `PORT_RANGE_START` | `1` | **空闲数量**统计的起始端口 |
 | `PORT_RANGE_END` | `9999` | 上述区间的结束（不会把网格填满绿格） |
 | `PORT_LIGHT_DATA_DIR` | `/data` | 手动端口、隐藏列表、已保存设置（JSON） |
+| `PORT_LIGHT_PORT` | `2100` | uvicorn 在容器内监听的端口；经 `/api/meta` 暴露，自动化面板据此生成 MCP 片段，不再写死 |
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称（只能用环境变量） |
 | `THEME` | `system` | `system` / `dark` / `light`，或命名配色（`gruvbox`、`catppuccin`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`solarized`、`everforest`、`rose-pine`、`kanagawa`，以及 `*-light` / `catppuccin-latte`） |
 | `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |

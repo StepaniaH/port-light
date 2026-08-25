@@ -125,6 +125,14 @@ def _active_leases() -> list[dict]:
     return rows[:64]
 
 
+def _listen_port() -> int | None:
+    raw = os.environ.get("PORT_LIGHT_PORT", "").strip()
+    try:
+        return int(raw) if raw else None
+    except ValueError:
+        return None
+
+
 @app.get("/api/meta")
 def meta() -> dict:
     values, _ = app_settings.resolve()
@@ -136,6 +144,7 @@ def meta() -> dict:
         "history_days": history.retention_days(),
         "events_stream": True,
         "suggest_peers": bool(hosts.list_public_peers()),
+        "listen_port": _listen_port(),
     }
     if agent_events.enabled():
         leases = _active_leases()

@@ -42,6 +42,18 @@ def test_meta_omits_block_when_history_disabled(monkeypatch):
     assert "agent_events" not in body["automation"]
 
 
+def test_meta_listen_port_follows_env(monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_PORT", "8899")
+    body = TestClient(app).get("/api/meta").json()
+    assert body["automation"]["listen_port"] == 8899
+
+
+def test_meta_listen_port_none_when_unset(monkeypatch):
+    monkeypatch.delenv("PORT_LIGHT_PORT", raising=False)
+    body = TestClient(app).get("/api/meta").json()
+    assert body["automation"]["listen_port"] is None
+
+
 def test_active_leases_listed_with_rows():
     from backend import port_store
 

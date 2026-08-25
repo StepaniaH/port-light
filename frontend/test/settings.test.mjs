@@ -38,10 +38,22 @@ const withEvents = () => Object.assign({}, base, {
 });
 
 test('connect card renders both MCP variants and curl without token', () => {
-  const html = automationCardsHtml(base);
+  const html = automationCardsHtml(Object.assign({}, base, { listen_port: 8899 }));
   assert.match(html, /"command":\s*"docker",\s*"args":\s*\[\s*"exec",\s*"-i",\s*"port-light",\s*"python",\s*"mcp\/server\.py"/);
   assert.match(html, /mcp\/server\.py/);
   assert.doesNotMatch(html, /X-Agent-Token/);
+});
+
+test('docker MCP env port follows meta listen_port', () => {
+  const html = automationCardsHtml(Object.assign({}, base, { listen_port: 8899 }));
+  const urls = html.match(/"PORT_LIGHT_URL":\s*"[^"]+"/g) || [];
+  assert.equal(urls.length, 2);
+  assert.ok(urls.includes('"PORT_LIGHT_URL": "http://127.0.0.1:8899"'));
+});
+
+test('docker MCP env falls back to placeholder without listen_port', () => {
+  const html = automationCardsHtml(base);
+  assert.match(html, /"PORT_LIGHT_URL":\s*"http:\/\/127\.0\.0\.1:&lt;port&gt;"/);
 });
 
 test('token gate adds placeholder header line only', () => {

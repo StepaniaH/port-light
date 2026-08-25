@@ -295,6 +295,7 @@
         "title": "エージェントを接続",
         "blurb": "コーディングエージェント向けのコピペ登録セット。MCP サーバーは suggest/check/release をラップします。",
         "mcpDocker": "MCP 登録 —— Compose / イメージデプロイ",
+        "dockerHint": "PORT_LIGHT_URL はコンテナ内部のポート（環境変数 PORT_LIGHT_PORT、既定 2100）を指します。コンテナ内のリスンポートを変更した場合は修正してください。",
         "mcpSource": "MCP 登録 —— ソースから実行",
         "skill": "Agent skill（Claude Code 互換）",
         "skillHint": "SKILL.md をエージェントの skills ディレクトリにコピーしてください。",

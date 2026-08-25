@@ -295,6 +295,7 @@
         "title": "Connect your agents",
         "blurb": "Copy-paste registration for coding agents. The MCP server wraps the suggest/check/release flow.",
         "mcpDocker": "MCP registration — Compose / image deployment",
+        "dockerHint": "PORT_LIGHT_URL points at the port inside the container (env PORT_LIGHT_PORT, default 2100). Adjust it if you changed the internal listen port.",
         "mcpSource": "MCP registration — running from source",
         "skill": "Agent skill (Claude Code and compatible)",
         "skillHint": "Copy SKILL.md into your agent's skills directory.",

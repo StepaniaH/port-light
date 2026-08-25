@@ -116,6 +116,7 @@ Open `http://localhost:2100`.
 | `PORT_RANGE_START` | `1` | Start of the range used for the **free** summary count |
 | `PORT_RANGE_END` | `9999` | End of that range (does not fill the grid with green cells) |
 | `PORT_LIGHT_DATA_DIR` | `/data` | Manual ports, hidden list, and saved settings (JSON) |
+| `PORT_LIGHT_PORT` | `2100` | Port uvicorn listens on inside the container; surfaced via `/api/meta` so the Automation panel builds MCP snippets without hardcoding |
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | Extra / overriding port names (env only) |
 | `THEME_MODE` | `system` | `system` / `dark` / `light` — the resolved brightness; palettes follow it |
 | `THEME_PALETTE` | built-in | Color family layered on top: `gruvbox`, `catppuccin`, `solarized`, `nord`, `dracula`, `tokyo-night`, `one-dark`, `everforest`, `rose-pine`, `kanagawa`. Empty uses the built-in colors. |

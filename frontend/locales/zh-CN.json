@@ -295,6 +295,7 @@
         "title": "接入你的 agent",
         "blurb": "复制即用的编码助手注册配置。MCP 服务封装了建议/查询/释放流程。",
         "mcpDocker": "MCP 注册 —— Compose / 镜像部署",
+        "dockerHint": "PORT_LIGHT_URL 指向容器内部的端口（环境变量 PORT_LIGHT_PORT，默认 2100）。若改过容器内监听端口，请相应修改。",
         "mcpSource": "MCP 注册 —— 源码运行",
         "skill": "Agent skill（Claude Code 及兼容工具）",
         "skillHint": "把 SKILL.md 复制到你 agent 的 skills 目录。",

@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=62';
-import { t, tx, escapeHtml, errorText } from './text.js?v=62';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=62';
-import { moveChipFocus } from './a11y.js?v=62';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=62';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=62';
-import { render, syncHiddenButton } from './grid.js?v=62';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=63';
+import { t, tx, escapeHtml, errorText } from './text.js?v=63';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=63';
+import { moveChipFocus } from './a11y.js?v=63';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=63';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=63';
+import { render, syncHiddenButton } from './grid.js?v=63';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -412,12 +412,13 @@ import { render, syncHiddenButton } from './grid.js?v=62';
 
   export function automationCardsHtml(a) {
     const origin = location.origin;
+    const port = Number(a.listen_port) > 0 ? String(a.listen_port) : '<port>';
     const mcpDocker = JSON.stringify({
       mcpServers: {
         'port-light': {
           command: 'docker',
           args: ['exec', '-i', 'port-light', 'python', 'mcp/server.py'],
-          env: { PORT_LIGHT_URL: 'http://127.0.0.1:2100' },
+          env: { PORT_LIGHT_URL: 'http://127.0.0.1:' + port },
         },
       },
     }, null, 2);
@@ -435,6 +436,7 @@ import { render, syncHiddenButton } from './grid.js?v=62';
 
     const connect =
       snippetBlock('settings.auto.connect.mcpDocker', 'al-mcp-docker', mcpDocker) +
+      '<p class="muted">' + escapeHtml(t('settings.auto.connect.dockerHint')) + '</p>' +
       snippetBlock('settings.auto.connect.mcpSource', 'al-mcp-src', mcpSource) +
       snippetBlock('settings.auto.connect.skill', 'al-skill',
         'docker exec port-light cat /app/skills/port-light/SKILL.md' +
