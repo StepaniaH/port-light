@@ -1,11 +1,12 @@
-/* Settings view: three panels, locale menu, theme picker, peers editor. */
+/* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyAppearance, saveView } from './state.js?v=60';
-import { t, tx, escapeHtml, errorText } from './text.js?v=60';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=60';
-import { moveChipFocus } from './a11y.js?v=60';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=60';
-import { render, syncHiddenButton } from './grid.js?v=60';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyAppearance, saveView } from './state.js?v=61';
+import { t, tx, escapeHtml, errorText } from './text.js?v=61';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=61';
+import { moveChipFocus } from './a11y.js?v=61';
+import { remainingSeconds, fmtRemaining } from './leases.js?v=61';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=61';
+import { render, syncHiddenButton } from './grid.js?v=61';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -344,6 +345,119 @@ import { render, syncHiddenButton } from './grid.js?v=60';
     }).filter(Boolean);
   }
 
+  function snippetBlock(captionKey, id, code) {
+    return '<div class="snippet"><p class="snippet-cap">' + escapeHtml(t(captionKey)) + '</p>' +
+      '<pre id="' + id + '">' + escapeHtml(code) + '</pre>' +
+      '<button type="button" class="btn-secondary" data-copy="' + id + '" data-label="' +
+      escapeHtml(t('settings.auto.connect.copy')) + '">' +
+      escapeHtml(t('settings.auto.connect.copy')) + '</button></div>';
+  }
+
+  export function automationCardsHtml(a) {
+    const origin = location.origin;
+    const mcpDocker = JSON.stringify({
+      mcpServers: {
+        'port-light': {
+          command: 'docker',
+          args: ['exec', '-i', 'port-light', 'python', 'mcp/server.py'],
+          env: { PORT_LIGHT_URL: 'http://127.0.0.1:2100' },
+        },
+      },
+    }, null, 2);
+    const mcpSource = JSON.stringify({
+      mcpServers: {
+        'port-light': {
+          command: 'python',
+          args: ['/path/to/port-light/mcp/server.py'],
+          env: { PORT_LIGHT_URL: origin },
+        },
+      },
+    }, null, 2);
+    let curl = 'curl -s "' + origin + '/api/ports/suggest?count=2&reserve=true&ttl=3600&label=preview"';
+    if (a.agent_token) curl += ' \\\n  -H "X-Agent-Token: <your-token>"';
+
+    const connect =
+      snippetBlock('settings.auto.connect.mcpDocker', 'al-mcp-docker', mcpDocker) +
+      snippetBlock('settings.auto.connect.mcpSource', 'al-mcp-src', mcpSource) +
+      snippetBlock('settings.auto.connect.skill', 'al-skill',
+        'docker exec port-light cat /app/skills/port-light/SKILL.md' +
+        ' > ~/.claude/skills/port-light/SKILL.md') +
+      '<p class="muted">' + escapeHtml(t('settings.auto.connect.skillHint')) + '</p>' +
+      snippetBlock('settings.auto.connect.curl', 'al-curl', curl) +
+      (a.agent_token ? '<p class="muted">' + escapeHtml(t('settings.auto.connect.curlToken')) + '</p>' : '');
+
+    const statusRows = [
+      kvRow('settings.auto.agentToken',
+        t(a.agent_token ? 'settings.on' : 'settings.off'),
+        a.agent_token ? 'settings.on' : 'settings.off'),
+      kvRow('settings.auto.suggest', t('settings.auto.suggestValue'), 'settings.auto.suggestValue'),
+      kvRow('settings.auto.metrics', t(a.metrics ? 'settings.on' : 'settings.off'), ''),
+      kvRow('settings.auto.webhook', t(a.webhook ? 'settings.on' : 'settings.off'), ''),
+      kvRow('settings.auto.history', a.history_days > 0 ? String(a.history_days) : t('settings.off'), ''),
+      kvRow('settings.auto.events', t(a.events_stream ? 'settings.on' : 'settings.off'), ''),
+    ].join('');
+
+    const ev = a.agent_events || null;
+    const activity = ev
+      ? '<p class="auto-summary" data-auto-summary>' +
+        escapeHtml(t('settings.auto.activity.total')) + ': ' + ev.total + ' · ' +
+        escapeHtml(t('settings.auto.activity.activeLeases')) + ': ' + (ev.active_leases || 0) + '</p>' +
+        '<table class="auto-table"><thead><tr>' +
+        ['thTime', 'thCount', 'thScope', 'thLabel', 'thLeased']
+          .map(k => '<th>' + escapeHtml(t('settings.auto.activity.' + k)) + '</th>').join('') +
+        '</tr></thead><tbody>' +
+        (ev.recent || []).map(r =>
+          '<tr><td>' + new Date(r.ts * 1000).toLocaleString() + '</td><td>' + r.count +
+          '</td><td>' + escapeHtml(r.scope) + '</td><td>' + escapeHtml(r.label || '—') +
+          '</td><td>' + (r.leased ? '✓' : '—') + '</td></tr>').join('') +
+        '</tbody></table>'
+      : '<p class="muted" data-auto="activity-disabled">' +
+        escapeHtml(t('settings.auto.activity.disabled')) + '</p>';
+
+    const leases = ev && (ev.lease_rows || []).length
+      ? (ev.lease_rows).map(l =>
+        '<div class="lease-row"><span class="lease-port">' + l.port + '</span>' +
+        '<span class="lease-label">' + escapeHtml(l.label || '—') + '</span>' +
+        '<span class="lease-left">' + escapeHtml(t('settings.auto.leases.remaining',
+          { time: fmtRemaining(remainingSeconds(l.expires_at)) })) + '</span>' +
+        '<button type="button" class="btn-delete" data-release-port="' + l.port + '">' +
+        escapeHtml(t('settings.auto.leases.release')) + '</button></div>').join('')
+      : '<p class="muted">' + escapeHtml(t('settings.auto.leases.none')) + '</p>';
+
+    return settingsCard('settings.auto.connect.title', 'settings.auto.connect.blurb', connect) +
+      settingsCard('settings.auto.status.title', 'settings.auto.status.blurb', statusRows) +
+      settingsCard('settings.auto.activity.title', 'settings.auto.activity.blurb', activity) +
+      settingsCard('settings.auto.leases.title', 'settings.auto.leases.blurb', leases);
+  }
+
+  async function releaseLease(port, btn) {
+    btn.textContent = t('settings.auto.leases.released');
+    btn.disabled = true;
+  }
+
+  let _delegated = false;
+  function ensureAutomationDelegates() {
+    if (_delegated) return;
+    _delegated = true;
+    document.addEventListener('click', function (e) {
+      const copyBtn = e.target.closest('[data-copy]');
+      if (copyBtn) {
+        const src = document.getElementById(copyBtn.getAttribute('data-copy'));
+        if (!src) return;
+        navigator.clipboard.writeText(src.textContent.trim()).then(function () {
+          copyBtn.textContent = t('settings.auto.connect.copied');
+          setTimeout(function () {
+            copyBtn.textContent = copyBtn.getAttribute('data-label') ||
+              t('settings.auto.connect.copy');
+          }, 1200);
+        });
+        return;
+      }
+      const relBtn = e.target.closest('[data-release-port]');
+      if (relBtn) releaseLease(Number(relBtn.getAttribute('data-release-port')), relBtn);
+    });
+  }
+
   export function renderSettingsForm(doc) {
     const values = Object.assign({}, doc.values || {});
     if (S.rangeFromView) {
@@ -391,12 +505,12 @@ import { render, syncHiddenButton } from './grid.js?v=60';
       settingsPanelHtml('occupancy',
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +
+      settingsPanelHtml('automation', automationCardsHtml(S.meta && S.meta.automation ? S.meta.automation : {})) +
       settingsPanelHtml('advanced',
         settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
         extraAdvanced +
-        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div>'),
-        settingsCard('settings.auto.title', 'settings.auto.blurb', '<div id="settings-automation"></div>'));
+        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div>'));
 
     const env = doc.env_only || {};
     const envHost = document.getElementById('settings-env-only');
@@ -414,31 +528,9 @@ import { render, syncHiddenButton } from './grid.js?v=60';
         ),
       ].join('');
     }
-    const autoHost = document.getElementById('settings-automation');
-    if (autoHost) {
-      const a = S.meta && S.meta.automation ? S.meta.automation : null;
-      if (!a) {
-        autoHost.innerHTML = '';
-      } else {
-        const flag = (v) => [t(v ? 'settings.on' : 'settings.off'), v ? 'settings.on' : 'settings.off'];
-        const [agentV, agentK] = flag(a.agent_token);
-        const [metricV, metricK] = flag(a.metrics);
-        const [webhookV, webhookK] = flag(a.webhook);
-        const histV = a.history_days > 0 ? String(a.history_days) : t('settings.off');
-        const histK = a.history_days > 0 ? '' : 'settings.off';
-        const [evV, evK] = flag(a.events_stream);
-        autoHost.innerHTML = [
-          kvRow('settings.auto.agentToken', agentV, agentK),
-          kvRow('settings.auto.suggest', t('settings.auto.suggestValue'), 'settings.auto.suggestValue'),
-          kvRow('settings.auto.metrics', metricV, metricK),
-          kvRow('settings.auto.webhook', webhookV, webhookK),
-          kvRow('settings.auto.history', histV, histK),
-          kvRow('settings.auto.events', evV, evK),
-        ].join('');
-      }
-    }
     showSettingsPanel(S.route.section || S.settingsPanel);
     syncDependentSettings();
+    ensureAutomationDelegates();
     renderPeersEditor(!!doc.readonly || !!S.hostCatalog.readonly);
   }
 

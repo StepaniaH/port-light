@@ -66,6 +66,10 @@ if (!globalThis.window) {
   globalThis.window = globalThis;
 }
 
+if (!globalThis.location) {
+  globalThis.location = { origin: 'http://127.0.0.1:2100' };
+}
+
 if (!globalThis.window.matchMedia) {
   globalThis.window.matchMedia = () => ({ matches: false });
 }

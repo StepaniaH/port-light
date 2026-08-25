@@ -1,7 +1,7 @@
 /* Shared mutable application state. One store, owned here; every view
    reads and writes through `S` so modules stay free of import cycles. */
 
-export const SETTINGS_PANELS = ['appearance', 'occupancy', 'advanced'];
+export const SETTINGS_PANELS = ['appearance', 'occupancy', 'automation', 'advanced'];
 
 export const CARD_FIELD_KEYS = {
   show_status_text: true,

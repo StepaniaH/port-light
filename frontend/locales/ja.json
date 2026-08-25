@@ -105,7 +105,8 @@
     "copyPort": "ポート番号をコピー",
     "publicBind": "全インターフェース",
     "publicBindHint": "このポートはホスト上の任意のアドレスからの接続を受け付けます。",
-    "remoteReadOnly": "読み取り専用 — このマップは {name} のものです。非表示・ラベル・追加はこのマシンにだけ効きます。"
+    "remoteReadOnly": "読み取り専用 — このマップは {name} のものです。非表示・ラベル・追加はこのマシンにだけ効きます。",
+    "expiresIn": "{time}後に失効"
   },
   "hosts": {
     "title": "ほかのマシン",
@@ -162,6 +163,7 @@
       "label": "設定の分類",
       "appearance": "外観",
       "occupancy": "ポートマップ",
+      "automation": "オートメーション",
       "advanced": "詳細"
     },
     "theme": {
@@ -285,7 +287,45 @@
       "metrics": "メトリクス（METRICS_ENABLED）",
       "webhook": "Webhook（WEBHOOK_URL）",
       "history": "履歴保持日数",
-      "events": "変更ストリーム（SSE）"
+      "events": "変更ストリーム（SSE）",
+      "connect": {
+        "title": "エージェントを接続",
+        "blurb": "コーディングエージェント向けのコピペ登録セット。MCP サーバーは suggest/check/release をラップします。",
+        "mcpDocker": "MCP 登録 —— Compose / イメージデプロイ",
+        "mcpSource": "MCP 登録 —— ソースから実行",
+        "skill": "Agent skill（Claude Code 互換）",
+        "skillHint": "SKILL.md をエージェントの skills ディレクトリにコピーしてください。",
+        "curl": "HTTP 例",
+        "curlToken": "このインスタンスは X-Agent-Token を要求します。<your-token> を実際の値に置き換えてください。",
+        "copy": "コピー",
+        "copied": "コピーしました！"
+      },
+      "status": {
+        "title": "公開インターフェース",
+        "blurb": "スクリプトやエージェントが現在利用できる機能。"
+      },
+      "activity": {
+        "title": "suggest API の利用状況",
+        "blurb": "GET /api/ports/suggest のローカル呼び出し記録。回数とラベルのみ——トークンやアドレスは記録しません。",
+        "disabled": "履歴が無効（HISTORY_RETENTION_DAYS=0）のため、利用は記録されません。",
+        "total": "呼び出し数",
+        "activeLeases": "有効なリース",
+        "lastUsed": "最終利用",
+        "never": "なし",
+        "thTime": "時刻",
+        "thCount": "ポート数",
+        "thScope": "スコープ",
+        "thLabel": "ラベル",
+        "thLeased": "リース"
+      },
+      "leases": {
+        "title": "有効なリース",
+        "blurb": "エージェントが suggest API で確保したもので、期限切れになると自動解放されます。",
+        "none": "有効なリースはありません。",
+        "release": "解放",
+        "released": "解放済み",
+        "remaining": "残り{time}"
+      }
     }
   },
   "choice": {
@@ -336,7 +376,8 @@
     "copied": "コピーしました",
     "web": "Web",
     "aria": "ポート占用グリッド",
-    "updated": "{time} に更新"
+    "updated": "{time} に更新",
+    "leaseBadge": "Agentリース"
   },
   "error": {
     "httpStatus": "リクエストに失敗しました（HTTP {status}）。"

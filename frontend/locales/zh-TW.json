@@ -105,7 +105,8 @@
     "copyPort": "複製連接埠號碼",
     "publicBind": "全部介面",
     "publicBindHint": "此連接埠接受主機上任意位址的連線。",
-    "remoteReadOnly": "唯讀 — 這張占用圖來自 {name}。隱藏、標籤與新增仍只作用於此機器。"
+    "remoteReadOnly": "唯讀 — 這張占用圖來自 {name}。隱藏、標籤與新增仍只作用於此機器。",
+    "expiresIn": "{time} 後到期"
   },
   "hosts": {
     "title": "其他機器",
@@ -162,6 +163,7 @@
       "label": "設定分類",
       "appearance": "外觀",
       "occupancy": "佔用圖",
+      "automation": "自動化",
       "advanced": "進階"
     },
     "theme": {
@@ -285,7 +287,45 @@
       "metrics": "指標端點（METRICS_ENABLED）",
       "webhook": "Webhook（WEBHOOK_URL）",
       "history": "歷史保留天數",
-      "events": "變更推送（SSE）"
+      "events": "變更推送（SSE）",
+      "connect": {
+        "title": "接入你的 agent",
+        "blurb": "複製即用的編碼助手註冊設定。MCP 服務封裝了建議/查詢/釋放流程。",
+        "mcpDocker": "MCP 註冊 —— Compose / 映像部署",
+        "mcpSource": "MCP 註冊 —— 原始碼執行",
+        "skill": "Agent skill（Claude Code 及相容工具）",
+        "skillHint": "把 SKILL.md 複製到你 agent 的 skills 目錄。",
+        "curl": "HTTP 範例",
+        "curlToken": "此實例已啟用 X-Agent-Token 驗證——請將 <your-token> 換成實際值。",
+        "copy": "複製",
+        "copied": "已複製！"
+      },
+      "status": {
+        "title": "對外介面",
+        "blurb": "腳本和 agent 目前能存取的能力。"
+      },
+      "activity": {
+        "title": "suggest API 使用活動",
+        "blurb": "GET /api/ports/suggest 的本機呼叫紀錄。只有次數與標籤——不含任何權杖或位址。",
+        "disabled": "歷史紀錄未啟用（HISTORY_RETENTION_DAYS=0），不會記錄使用情況。",
+        "total": "呼叫數",
+        "activeLeases": "活躍租約",
+        "lastUsed": "最近使用",
+        "never": "從未",
+        "thTime": "時間",
+        "thCount": "連接埠數",
+        "thScope": "範圍",
+        "thLabel": "標籤",
+        "thLeased": "租約"
+      },
+      "leases": {
+        "title": "活躍租約",
+        "blurb": "由 agent 透過 suggest API 保留，到期自動釋放。",
+        "none": "目前沒有活躍租約。",
+        "release": "釋放",
+        "released": "已釋放",
+        "remaining": "剩餘 {time}"
+      }
     }
   },
   "choice": {
@@ -336,7 +376,8 @@
     "copied": "已複製",
     "web": "網頁",
     "aria": "連接埠占用一覽",
-    "updated": "更新於 {time}"
+    "updated": "更新於 {time}",
+    "leaseBadge": "Agent 租約"
   },
   "error": {
     "httpStatus": "請求失敗（HTTP {status}）。"

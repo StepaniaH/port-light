@@ -105,7 +105,8 @@
     "copyPort": "Copy port number",
     "publicBind": "All interfaces",
     "publicBindHint": "This port accepts connections from any address on the host.",
-    "remoteReadOnly": "Read-only — this map is from {name}. Hide, labels, and add stay on this machine."
+    "remoteReadOnly": "Read-only — this map is from {name}. Hide, labels, and add stay on this machine.",
+    "expiresIn": "Expires in {time}"
   },
   "hosts": {
     "title": "Other machines",
@@ -162,6 +163,7 @@
       "label": "Settings sections",
       "appearance": "Appearance",
       "occupancy": "Occupancy",
+      "automation": "Automation",
       "advanced": "Advanced"
     },
     "theme": {
@@ -285,7 +287,45 @@
       "metrics": "Metrics endpoint",
       "webhook": "Webhook",
       "history": "History retention (days)",
-      "events": "Change stream (SSE)"
+      "events": "Change stream (SSE)",
+      "connect": {
+        "title": "Connect your agents",
+        "blurb": "Copy-paste registration for coding agents. The MCP server wraps the suggest/check/release flow.",
+        "mcpDocker": "MCP registration — Compose / image deployment",
+        "mcpSource": "MCP registration — running from source",
+        "skill": "Agent skill (Claude Code and compatible)",
+        "skillHint": "Copy SKILL.md into your agent's skills directory.",
+        "curl": "HTTP example",
+        "curlToken": "This instance requires X-Agent-Token — replace <your-token>.",
+        "copy": "Copy",
+        "copied": "Copied!"
+      },
+      "status": {
+        "title": "Exposed surfaces",
+        "blurb": "What scripts and agents can reach right now."
+      },
+      "activity": {
+        "title": "Suggest API activity",
+        "blurb": "Local call log for GET /api/ports/suggest. Counts and labels only — never tokens or addresses.",
+        "disabled": "History is disabled (HISTORY_RETENTION_DAYS=0), so usage is not recorded.",
+        "total": "Calls",
+        "activeLeases": "Active leases",
+        "lastUsed": "Last used",
+        "never": "never",
+        "thTime": "When",
+        "thCount": "Ports",
+        "thScope": "Scope",
+        "thLabel": "Label",
+        "thLeased": "Lease"
+      },
+      "leases": {
+        "title": "Active leases",
+        "blurb": "Reserved by agents through the suggest API, freed automatically at expiry.",
+        "none": "No active leases.",
+        "release": "Release",
+        "released": "Released",
+        "remaining": "{time} left"
+      }
     }
   },
   "choice": {
@@ -336,7 +376,8 @@
     "copied": "Copied",
     "web": "web",
     "aria": "Port occupancy grid",
-    "updated": "Updated {time}"
+    "updated": "Updated {time}",
+    "leaseBadge": "Agent lease"
   },
   "error": {
     "httpStatus": "Request failed (HTTP {status})."
