@@ -1,5 +1,6 @@
-/* Tests for frontend/js/settings.js — pure HTML builders for the Automation
-   panel. String assertions only; no DOM. Imports go through the same ?v=
+/* Tests for frontend/js/settings.js — HTML builders for the Automation panel
+   (string assertions) plus one render test for the appearance panel that runs
+   on the helpers/env.mjs DOM stubs. Imports go through the same ?v=
    specifier as the source modules so both sides share one live graph. */
 
 import { test } from 'node:test';
