@@ -17,6 +17,7 @@ import json
 import os
 import threading
 import urllib.request
+from urllib.parse import urlparse
 
 from . import degradations
 
@@ -46,8 +47,8 @@ def deliver(url: str, secret: str, body: dict) -> None:
     try:
         with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310 (owner-configured)
             resp.read(1024)
-    except Exception as exc:
-        host = getattr(exc, "filename", "") or url.split("/")[2] if "/" in url else url
+    except Exception:
+        host = urlparse(url).hostname or "target"
         degradations.report("webhook", str(host)[:80], "delivery failed")
 
 
@@ -64,7 +65,9 @@ def observe(rows: list[dict], max_events: int = 10, deliver=None) -> None:
     url = os.environ.get("WEBHOOK_URL", "").strip()
     if not url:
         return
-    if not (url.startswith("http://") or url.startswith("https://")):
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.username or parsed.password:
+        # Same policy as peer URLs: credentials belong in env, not the URL.
         return
     secret = os.environ.get("WEBHOOK_SECRET", "")
     wanted = _events_enabled()

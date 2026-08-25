@@ -133,6 +133,7 @@ Open `http://localhost:2100`.
 | `WEBHOOK_SECRET` | unset | Sent as `X-Port-Light-Secret`. |
 | `WEBHOOK_EVENTS` | unset | Comma list: `new_listener`, `conflict`. |
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
+| `AGENT_TOKEN` | unset | When set, `GET /api/ports/suggest` requires a matching `X-Agent-Token` header. Env-only. |
 
 Most of the table (except paths and secrets) can also be changed on **Settings** in the UI. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
 
@@ -143,13 +144,13 @@ If you bind-mount `custom_ports.json` in Compose, create the **file** on the hos
 ## Privacy
 
 - No telemetry or analytics.
-- The app does not phone home. The only optional outbound HTTP is occupancy pulls to Port-Light URLs you add (LAN / Tailscale).
+- The app does not phone home. Optional outbound HTTP is limited to occupancy pulls from Port-Light peers you add, and webhooks you configure (`WEBHOOK_URL`, `{event, port}` JSON only).
 - All scan data stays on the machine that runs that instance (listen tables, Docker API, Compose files, `/data` JSON).
 - Sibling `.env` files next to Compose stacks are read locally for `${VAR}` substitution and are never uploaded.
 
 ## Tech stack
 
-- Backend: Python 3.12, FastAPI, Uvicorn
+- Backend: Python 3.11+ (CI covers 3.11–3.13), FastAPI, Uvicorn
 - Frontend: static HTML/CSS/JS
 - Image: `python:3.12-slim` + `iproute2`
 

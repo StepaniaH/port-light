@@ -14,6 +14,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `GET /api/metrics` (opt-in via `METRICS_ENABLED=1`): Prometheus text exposition of used / configured / free counts, hidden ports, degradation count, and Compose file stats. Aggregates only; Basic Auth applies.
 - Degraded scans are no longer silent: when Docker is unreachable, the listen table is untrusted, `ss` fails, or the data file is quarantined, one line goes to the log (`PORT_LIGHT_LOG_LEVEL`, default `warning`) and the newest events appear in `/api/health` under `degradations`.
 - When a background rebuild runs long (slow `ss`, big Compose tree), polls now get the last good occupancy snapshot with `summary.stale: true` instead of blocking; stale results are never cached.
+- Agent-facing port suggestions: `GET /api/ports/suggest` hands out genuinely free ports with optional reservation, label, expiring leases (`ttl`), and `scope=all` across configured peers. Setting `AGENT_TOKEN` requires a matching `X-Agent-Token` header.
+- Automation integrations: a dependency-free MCP stdio server (`mcp/server.py`, six tools), an agent skill under `skills/port-light/`, and reference docs in `docs/integrations.md`. Settings → Advanced shows what the instance currently exposes (`/api/meta.automation`).
 
 ### Changed
 
@@ -28,6 +30,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - A Compose file that fails to parse (bad YAML, unreadable, not a mapping) no longer vanishes from the map: the stack is flagged like any other `compose_incomplete` case (amber pill) and reported in `/api/health` degradations. Empty YAML documents still parse as no services.
 - Compose files are loaded once per scan instead of up to three times (include discovery, macvlan names, service parsing).
 - Bare-metal installs never saw listening ports: the `ss` invocation carried a help flag that exits 0 with usage text, which was mistaken for an idle machine. The flag is gone, and unparseable `ss` output now falls through to the next variant instead of counting as "nothing listening".
+- A webhook URL with embedded credentials is now ignored (same policy as peer URLs), and failed deliveries report only the hostname.
 - The first degradation report after startup is no longer swallowed when the monotonic clock is younger than the repeat-suppression window (fresh containers and CI machines).
 
 ## 0.6.0 — 2026-08-16

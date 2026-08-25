@@ -133,6 +133,7 @@ docker compose up -d
 | `WEBHOOK_SECRET` | 未设置 | 以 `X-Port-Light-Secret` 头发送。 |
 | `WEBHOOK_EVENTS` | 未设置 | 逗号分隔：`new_listener`、`conflict`。 |
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
+| `AGENT_TOKEN` | 未设置 | 设置后，`GET /api/ports/suggest` 需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
 
 上表里除路径和密钥外，也可以在 Web UI 的 **Settings** 里改，写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
 
@@ -143,13 +144,13 @@ docker compose up -d
 ## 隐私
 
 - 无遥测、无统计。
-- 应用不会主动访问外网。唯一可选的出站 HTTP 是你在设置里添加的其他 Port-Light 地址（局域网 / Tailscale）上的占用图。
+- 应用不会主动访问外网。可选的出站 HTTP 仅限两类：你在设置里添加的其他 Port-Light 实例（占用拉取），以及你配置的 webhook（只发送 `{event, port}`）。
 - 扫描数据留在跑那份实例的机器上（监听表、Docker API、Compose 文件、`/data` 里的 JSON）。
 - Compose 旁边的 `.env` 只用于本地 `${VAR}` 替换，不会上传。
 
 ## 技术栈
 
-- 后端：Python 3.12、FastAPI、Uvicorn
+- 后端：Python 3.11+（CI 覆盖 3.11–3.13）、FastAPI、Uvicorn
 - 前端：静态 HTML/CSS/JS
 - 镜像：`python:3.12-slim` + `iproute2`
 

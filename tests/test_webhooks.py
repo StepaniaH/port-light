@@ -70,3 +70,31 @@ def test_unknown_events_ignored(monkeypatch):
     webhooks.observe(_rows((22, "used")), deliver=lambda *a: sent.append(a))
     webhooks.observe(_rows((22, "used"), (24, "used")), deliver=lambda *a: sent.append(a))
     assert sent == []
+
+
+def test_url_with_embedded_credentials_is_ignored(monkeypatch):
+    monkeypatch.setenv("WEBHOOK_URL", "http://user:pass@127.0.0.1:9/hook")
+    monkeypatch.setenv("WEBHOOK_EVENTS", "new_listener")
+    sent = []
+    webhooks.observe(_rows((22, "used")), deliver=lambda *a: sent.append(a))
+    webhooks.observe(_rows((22, "used"), (25, "used")), deliver=lambda *a: sent.append(a))
+    assert sent == []
+
+
+def test_failed_delivery_reports_host_without_credentials(monkeypatch, ):
+    from backend import degradations
+
+    degradations.reset()
+
+    def refuse(*args, **kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(webhooks.urllib.request, "urlopen", refuse)
+    webhooks.deliver("http://user:pass@hookhost.example:9/x", "", {"event": "new_listener", "port": 80})
+    events = degradations.recent()
+    assert any(
+        e["source"] == "webhook" and "hookhost.example" in e["scope"]
+        for e in events
+    ), events
+    assert all("user" not in e["scope"] and "pass" not in e["scope"] for e in events)
+    degradations.reset()

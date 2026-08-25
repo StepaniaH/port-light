@@ -2,6 +2,12 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.7.0
+
+- Live updates over SSE, local history timeline, optional webhooks and metrics
+- Free-run planner with one-click reservation, Docker label naming
+- Agent integrations: `GET /api/ports/suggest` (leases, peer-aware scope, token gate), MCP stdio server, agent skill
+
 ## Shipped in 0.6.0
 
 - Read-only multi-host viewer: the hub pulls peer `GET /api/ports`; each host still scans itself
