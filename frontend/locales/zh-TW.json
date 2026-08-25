@@ -171,6 +171,23 @@
       "builtin": "內建",
       "customBadge": "自訂"
     },
+    "editor": {
+      "summary": "進階：建立自訂色板",
+      "hint": "從目前色板開始，微調顏色後儲存。自訂色板會出現在選擇器中。",
+      "preset": "從目前色板填充",
+      "new": "新增自訂色板",
+      "save": "儲存",
+      "export": "匯出",
+      "import": "匯入",
+      "invalid": "修正標紅的顏色值並填寫名稱。",
+      "vars": {
+        "bg": "背景", "elevated": "浮層表面", "card": "卡片",
+        "cardHover": "卡片懸停", "border": "邊框", "text": "文字",
+        "textDim": "次要文字", "used": "佔用連接埠", "configured": "已設定連接埠",
+        "free": "空閒連接埠", "accent": "強調色", "conflict": "衝突",
+        "access": "存取徽標", "hidden": "隱藏", "danger": "危險"
+      }
+    },
     "sections": {
       "theme": {
         "title": "主題",

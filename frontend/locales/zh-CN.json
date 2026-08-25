@@ -171,6 +171,23 @@
       "builtin": "内置",
       "customBadge": "自定义"
     },
+    "editor": {
+      "summary": "高级：创建自定义色板",
+      "hint": "从当前色板开始，微调颜色后保存。自定义色板会出现在选择器中。",
+      "preset": "从当前色板填充",
+      "new": "新建自定义色板",
+      "save": "保存",
+      "export": "导出",
+      "import": "导入",
+      "invalid": "修正标红的颜色值并填写名称。",
+      "vars": {
+        "bg": "背景", "elevated": "浮层表面", "card": "卡片",
+        "cardHover": "卡片悬停", "border": "边框", "text": "文本",
+        "textDim": "次要文本", "used": "占用端口", "configured": "已配置端口",
+        "free": "空闲端口", "accent": "强调色", "conflict": "冲突",
+        "access": "访问徽标", "hidden": "隐藏", "danger": "危险"
+      }
+    },
     "sections": {
       "theme": {
         "title": "主题",

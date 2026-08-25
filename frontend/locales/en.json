@@ -171,6 +171,23 @@
       "builtin": "Built-in",
       "customBadge": "Custom"
     },
+    "editor": {
+      "summary": "Advanced: create a custom palette",
+      "hint": "Start from the current palette, tweak colors, then save. Custom palettes appear in the picker.",
+      "preset": "Fill from current palette",
+      "new": "New custom palette",
+      "save": "Save",
+      "export": "Export",
+      "import": "Import",
+      "invalid": "Fix the highlighted color values and give the palette a name.",
+      "vars": {
+        "bg": "Background", "elevated": "Elevated surfaces", "card": "Cards",
+        "cardHover": "Card hover", "border": "Borders", "text": "Text",
+        "textDim": "Secondary text", "used": "Used ports", "configured": "Configured ports",
+        "free": "Free ports", "accent": "Accent", "conflict": "Conflicts",
+        "access": "Access badge", "hidden": "Hidden", "danger": "Danger"
+      }
+    },
     "sections": {
       "theme": {
         "title": "Theme",

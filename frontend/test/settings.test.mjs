@@ -13,11 +13,11 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { automationCardsHtml, renderModePicker, renderPalettePicker, renderSettingsForm } = await import('../js/settings.js?' + V);
+const { automationCardsHtml, renderModePicker, renderPalettePicker, renderSettingsForm, themeEditorHtml } = await import('../js/settings.js?' + V);
 const { SETTINGS_PANELS } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
-const mod = { renderSettingsForm };
+const mod = { renderSettingsForm, themeEditorHtml };
 
 const base = {
   agent_token: false,
@@ -220,4 +220,18 @@ test('appearance panel renders theme/layout/language sections in order', () => {
   const titles = Array.from(panels).map((el) => el.getAttribute('data-i18n'));
   assert.deepEqual(titles, ['settings.sections.theme.title', 'settings.cards.title', 'settings.sections.language.title']);
   host.remove(); lead.remove(); status.remove(); save.remove();
+});
+
+test('theme editor renders 15 color rows and controls', () => {
+  const { themeEditorHtml } = mod;
+  const out = themeEditorHtml(false);
+  const rows = out.match(/data-editor-color=/g) || [];
+  assert.equal(rows.length, 15);
+  assert.ok(out.includes('id="theme-editor"'));
+  assert.ok(out.includes('data-editor-preset'));
+  assert.ok(out.includes('data-editor-save'));
+  assert.ok(out.includes('data-editor-import'));
+  assert.ok(out.includes('data-editor-export'));
+  const locked = themeEditorHtml(true);
+  assert.match(locked, /disabled/);
 });

@@ -171,6 +171,23 @@
       "builtin": "組み込み",
       "customBadge": "カスタム"
     },
+    "editor": {
+      "summary": "高度な設定：カスタムパレットを作成",
+      "hint": "現在のパレットを起点に色を調整して保存できます。カスタムパレットはセレクターに表示されます。",
+      "preset": "現在のパレットから生成",
+      "new": "新規カスタムパレット",
+      "save": "保存",
+      "export": "エクスポート",
+      "import": "インポート",
+      "invalid": "強調された色の値を修正し、名前を入力してください。",
+      "vars": {
+        "bg": "背景", "elevated": "浮き上がり面", "card": "カード",
+        "cardHover": "カードホバー", "border": "境界線", "text": "テキスト",
+        "textDim": "補助テキスト", "used": "使用中ポート", "configured": "設定済みポート",
+        "free": "空きポート", "accent": "アクセント", "conflict": "競合",
+        "access": "アクセスバッジ", "hidden": "非表示", "danger": "危険"
+      }
+    },
     "sections": {
       "theme": {
         "title": "テーマ",

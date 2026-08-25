@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=65';
-import { t, tx, escapeHtml, errorText } from './text.js?v=65';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=65';
-import { moveChipFocus } from './a11y.js?v=65';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=65';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=65';
-import { render, syncHiddenButton } from './grid.js?v=65';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=66';
+import { t, tx, escapeHtml, errorText } from './text.js?v=66';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=66';
+import { moveChipFocus } from './a11y.js?v=66';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=66';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=66';
+import { render, syncHiddenButton } from './grid.js?v=66';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -317,6 +317,156 @@ import { render, syncHiddenButton } from './grid.js?v=65';
     });
   }
 
+  const EDITOR_VARS = [
+    'bg', 'elevated', 'card', 'cardHover', 'border', 'text', 'textDim', 'used',
+    'configured', 'free', 'accent', 'conflict', 'access', 'hidden', 'danger',
+  ].map(function (key) {
+    return { key: key, labelKey: 'settings.editor.vars.' + key };
+  });
+
+  export function editorDefaults() {
+    const out = {};
+    EDITOR_VARS.forEach(function (row) { out[row.key] = '#000000'; });
+    return out;
+  }
+
+  export function themeEditorHtml(readonly) {
+    const dis = readonly ? ' disabled' : '';
+    const targets = ['<option value="">' + escapeHtml(t('settings.editor.new')) + '</option>']
+      .concat((S.customThemes || []).map(function (th) {
+        return '<option value="' + escapeHtml(th.id) + '">' + escapeHtml(th.name) + '</option>';
+      })).join('');
+    const rows = EDITOR_VARS.map(function (row) {
+      return '<div class="editor-row"><label for="ed-' + row.key + '" data-i18n="' + row.labelKey + '">' +
+        escapeHtml(t(row.labelKey)) + '</label>' +
+        '<input type="color" id="ed-' + row.key + '" data-editor-color="' + row.key + '" value="#000000"' + dis + '>' +
+        '<input type="text" class="range-input" maxlength="9" data-editor-hex="' + row.key + '" value="#000000"' + dis + '>' +
+        '</div>';
+    }).join('');
+    return '<details id="theme-editor"><summary data-i18n="settings.editor.summary">' +
+      escapeHtml(t('settings.editor.summary')) + '</summary>' +
+      '<p class="muted" data-i18n="settings.editor.hint">' + escapeHtml(t('settings.editor.hint')) + '</p>' +
+      '<div class="editor-actions">' +
+      '<button type="button" class="btn-secondary" data-editor-preset' + dis + '>' +
+      escapeHtml(t('settings.editor.preset')) + '</button>' +
+      '<select class="dropdown" id="editor-target"' + dis + '>' + targets + '</select>' +
+      '<input type="text" class="range-input" id="editor-name" maxlength="40" placeholder="' +
+      escapeHtml(t('modal.optional')) + '"' + dis + '>' +
+      '<button type="button" class="btn-secondary" data-editor-export' + dis + '>' +
+      escapeHtml(t('settings.editor.export')) + '</button>' +
+      '<input type="file" id="editor-file" accept=".json,application/json" hidden' + dis + '>' +
+      '<button type="button" class="btn-secondary" data-editor-import' + dis + '>' +
+      escapeHtml(t('settings.editor.import')) + '</button>' +
+      '<button type="button" class="btn-primary" data-editor-save' + dis + '>' +
+      escapeHtml(t('settings.editor.save')) + '</button>' +
+      '</div>' + rows + '</details>';
+  }
+
+  function rgbToHex(raw) {
+    const m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(raw || '');
+    if (!m) return /^#[0-9a-fA-F]{3,8}$/.test((raw || '').trim()) ? raw.trim() : '#000000';
+    return '#' + m.slice(1).map(function (n) {
+      return ('0' + Number(n).toString(16)).slice(-2);
+    }).join('');
+  }
+
+  const CUSTOM_CSS_NAMES = {
+    bg: '--bg', elevated: '--elevated', card: '--card', cardHover: '--card-hover',
+    border: '--border', text: '--text', textDim: '--text-dim', used: '--used',
+    configured: '--configured', free: '--free', accent: '--accent',
+    conflict: '--conflict', access: '--access', hidden: '--hidden', danger: '--danger',
+  };
+
+  export function fillEditorFromPreset() {
+    const cs = getComputedStyle(document.documentElement);
+    EDITOR_VARS.forEach(function (row) {
+      const hex = rgbToHex(cs.getPropertyValue(CUSTOM_CSS_NAMES[row.key]));
+      const color = document.querySelector('[data-editor-color="' + row.key + '"]');
+      const hexInput = document.querySelector('[data-editor-hex="' + row.key + '"]');
+      if (color) color.value = hex.slice(0, 7);
+      if (hexInput) hexInput.value = hex;
+    });
+  }
+
+  function collectEditorColors() {
+    const out = {};
+    let ok = true;
+    EDITOR_VARS.forEach(function (row) {
+      const hexInput = document.querySelector('[data-editor-hex="' + row.key + '"]');
+      const value = (hexInput && hexInput.value || '').trim();
+      if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value)) {
+        out[row.key] = value;
+      } else ok = false;
+    });
+    return ok ? out : null;
+  }
+
+  function previewEditorColor(key, hex) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+    document.documentElement.style.setProperty(CUSTOM_CSS_NAMES[key], hex);
+  }
+
+  async function saveEditorTheme(btn) {
+    const status = document.getElementById('settings-status');
+    const colors = collectEditorColors();
+    const name = ((document.getElementById('editor-name') || {}).value || '').trim();
+    const target = (document.getElementById('editor-target') || {}).value || '';
+    if (!colors || !name) {
+      if (status) { status.className = 'is-error'; status.textContent = t('settings.editor.invalid'); }
+      return;
+    }
+    const payload = { name: name, basedOn: '', mode: currentMode(), colors: colors };
+    const url = target ? '/api/custom-themes/' + encodeURIComponent(target) : '/api/custom-themes';
+    const res = await api(url, {
+      method: target ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      if (status) { status.className = 'is-error'; status.textContent = errorText(body, res.status); }
+      return;
+    }
+    const docRes = await api('/api/settings');
+    if (docRes.ok) applyServerSettings(await docRes.json());
+    renderSettingsForm(S.settingsDoc);
+    if (status) { status.className = 'is-ok'; status.textContent = t('settings.saved'); }
+  }
+
+  function exportEditorTheme() {
+    const colors = collectEditorColors() || editorDefaults();
+    const name = ((document.getElementById('editor-name') || {}).value || 'port-light-theme');
+    const blob = new Blob([JSON.stringify({ name: name, basedOn: '', mode: currentMode(), colors: colors }, null, 2)],
+      { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = String(name).replace(/[^a-z0-9_-]+/gi, '-') + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function importEditorThemeFile(file) {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    try {
+      const payload = JSON.parse(await f.text());
+      const res = await api('/api/custom-themes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: String(payload.name || f.name.replace(/\.json$/i, '')),
+          basedOn: String(payload.basedOn || ''),
+          mode: payload.mode === 'light' ? 'light' : 'dark',
+          colors: payload.colors || {},
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const docRes = await api('/api/settings');
+      if (docRes.ok) applyServerSettings(await docRes.json());
+      renderSettingsForm(S.settingsDoc);
+    } catch (err) { /* status line shows nothing on cancel; invalid files are rejected server-side */ }
+  }
+
   export function renderField(f, value, readonly) {
     const disabled = readonly ? ' disabled' : '';
     let control = '';
@@ -574,6 +724,25 @@ import { render, syncHiddenButton } from './grid.js?v=65';
     if (_themeDelegated) return;
     _themeDelegated = true;
     document.addEventListener('click', async function (e) {
+      const presetBtn = e.target.closest('[data-editor-preset]');
+      if (presetBtn) { fillEditorFromPreset(); return; }
+      const saveBtn = e.target.closest('[data-editor-save]');
+      if (saveBtn) { saveEditorTheme(saveBtn); return; }
+      const exportBtn = e.target.closest('[data-editor-export]');
+      if (exportBtn) { exportEditorTheme(); return; }
+      const importBtn = e.target.closest('[data-editor-import]');
+      if (importBtn) {
+        const file = document.getElementById('editor-file');
+        if (file) { file.value = ''; file.click(); }
+        return;
+      }
+      const colorInput = e.target.closest('[data-editor-color]');
+      if (colorInput) {
+        const hexInput = document.querySelector('[data-editor-hex="' + colorInput.getAttribute('data-editor-color') + '"]');
+        if (hexInput) hexInput.value = colorInput.value;
+        previewEditorColor(colorInput.getAttribute('data-editor-color'), colorInput.value);
+        return;
+      }
       const btn = e.target.closest('[data-delete-theme]');
       if (!btn) return;
       const id = btn.getAttribute('data-delete-theme');
@@ -582,6 +751,20 @@ import { render, syncHiddenButton } from './grid.js?v=65';
       const docRes = await api('/api/settings');
       if (docRes.ok) applyServerSettings(await docRes.json());
       renderSettingsForm(S.settingsDoc);
+    });
+    /* The file input and hex rows are rebuilt on every renderSettingsForm, so
+       these two are wired as document-level delegates rather than bound to
+       today's elements. */
+    document.addEventListener('change', function (e) {
+      if (e.target && e.target.id === 'editor-file') importEditorThemeFile(e.target);
+    });
+    document.addEventListener('input', function (e) {
+      const hexInput = e.target && e.target.closest ? e.target.closest('[data-editor-hex]') : null;
+      if (!hexInput || !/^#[0-9a-fA-F]{6}$/.test(hexInput.value)) return;
+      const key = hexInput.getAttribute('data-editor-hex');
+      const color = document.querySelector('[data-editor-color="' + key + '"]');
+      if (color) color.value = hexInput.value;
+      previewEditorColor(key, hexInput.value);
     });
   }
 
@@ -631,7 +814,7 @@ import { render, syncHiddenButton } from './grid.js?v=65';
     host.innerHTML =
       settingsPanelHtml('appearance',
         settingsCard('settings.sections.theme.title', 'settings.sections.theme.blurb',
-          '<div data-appearance-section="theme">' + rowsFor(themeFields) + '</div>') +
+          '<div data-appearance-section="theme">' + rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
         settingsCard('settings.cards.title', 'settings.cards.blurb', rowsFor(cardFields)) +
         settingsCard('settings.sections.language.title', 'settings.sections.language.blurb',
           rowsFor(languageFields))) +

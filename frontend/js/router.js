@@ -1,12 +1,12 @@
 /* Hash router: #/, #/settings/:panel, #/port/:n, #/h/:host(/port/:n). */
 
-import { S, SETTINGS_PANELS } from './state.js?v=65';
-import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=65';
-import { hostById, tick, hasPeers } from './api.js?v=65';
-import { t } from './text.js?v=65';
-import { render, applyPendingGridFocus } from './grid.js?v=65';
-import { closeDetail, showPortDetail } from './detail.js?v=65';
-import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './settings.js?v=65';
+import { S, SETTINGS_PANELS } from './state.js?v=66';
+import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=66';
+import { hostById, tick, hasPeers } from './api.js?v=66';
+import { t } from './text.js?v=66';
+import { render, applyPendingGridFocus } from './grid.js?v=66';
+import { closeDetail, showPortDetail } from './detail.js?v=66';
+import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './settings.js?v=66';
 
 
   export function parseHash(hash) {

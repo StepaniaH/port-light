@@ -971,6 +971,12 @@ a:focus-visible,
 }
 .theme-swatch.is-unavailable { opacity: 0.35; cursor: not-allowed; }
 .theme-swatch.is-unavailable .theme-swatch-preview { filter: grayscale(1); }
+#theme-editor { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+#theme-editor summary { cursor: pointer; color: var(--text); font-size: 0.82rem; }
+.editor-row { display: grid; grid-template-columns: 110px 44px 1fr; gap: 8px; align-items: center; margin-top: 6px; }
+.editor-row label { font-size: 0.72rem; color: var(--text-dim); }
+.editor-row input[type="color"] { width: 44px; height: 28px; padding: 0 2px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.editor-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
 .locale-dropdown { position: relative; width: 240px; }
 .locale-trigger {
   width: 100%; min-height: 44px; padding: 6px 10px;
