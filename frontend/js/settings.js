@@ -430,9 +430,22 @@ import { render, syncHiddenButton } from './grid.js?v=61';
       settingsCard('settings.auto.leases.title', 'settings.auto.leases.blurb', leases);
   }
 
-  async function releaseLease(port, btn) {
-    btn.textContent = t('settings.auto.leases.released');
+  export async function releaseLease(port, btn) {
     btn.disabled = true;
+    const res = await api('/api/manual-ports/' + port, { method: 'DELETE' });
+    if (!res.ok) {
+      btn.disabled = false;
+      return;
+    }
+    const metaRes = await api('/api/meta');
+    if (metaRes.ok) S.meta = await metaRes.json();
+    rerenderAutomationCards();
+  }
+
+  function rerenderAutomationCards() {
+    const panel = document.getElementById('settings-panel-automation');
+    if (!panel || !S.meta) return;
+    panel.innerHTML = automationCardsHtml(S.meta.automation || {});
   }
 
   let _delegated = false;
@@ -450,7 +463,7 @@ import { render, syncHiddenButton } from './grid.js?v=61';
             copyBtn.textContent = copyBtn.getAttribute('data-label') ||
               t('settings.auto.connect.copy');
           }, 1200);
-        });
+        }).catch(function () {});
         return;
       }
       const relBtn = e.target.closest('[data-release-port]');
