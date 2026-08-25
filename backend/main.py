@@ -151,7 +151,8 @@ def meta() -> dict:
         "hidden_ports_withheld": hidden_ports_withheld(),
         "settings_readonly": app_settings.settings_readonly(),
         "refresh_ms": values["refresh_ms"],
-        "theme": values["theme"],
+        "theme_mode": values["theme_mode"],
+        "theme_palette": values["theme_palette"],
         "grid_density": values["grid_density"],
         "automation": automation,
     }
