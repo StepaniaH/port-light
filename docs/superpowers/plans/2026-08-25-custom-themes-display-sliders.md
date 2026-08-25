@@ -870,7 +870,7 @@ In `renderPalettePicker(choices, value, resolvedModeValue, disabled)`:
         '<span class="theme-swatch-name">' + escapeHtml(t.name) +
         '<em class="theme-badge">' + escapeHtml(t('settings.theme.customBadge')) + '</em></span></label>' +
         '<button type="button" class="btn-delete" data-delete-theme="' + escapeHtml(t.id) + '"' +
-        disabled + '>' + escapeHtml(t('settings.auto.leases.release')) + '</button></span>';
+        disabled + '>' + escapeHtml(t('hosts.remove')) + '</button></span>';
     }
 
     const customs = (S.customThemes || []).filter(function (t) { return true; });
@@ -1310,6 +1310,17 @@ In `resolve()` insert before the start/end clamp:
     if origins["card_scale"] == "default" and values["grid_density"] == "compact":
         values["card_scale"] = 100
 ```
+
+Locale keys — `tests/test_i18n.py::test_settings_fields_have_locale_copy` requires
+`settings.fields.card_scale.{label,help}` and `settings.fields.text_scale.{label,help}`
+in **all four** files (labels mirror the FieldSpec labels/help above):
+
+en: `"Card size"` / `"0 is roomiest, 100 packs cards tightest."`,
+    `"Text size"` / `"Grid text size from small (0) to large (100)."`
+zh-CN: 「卡片尺寸」/「0 最宽松，100 最紧凑。」、 「文字大小」/「网格文字从小（0）到大（100）。」
+zh-TW: 「卡片尺寸」/「0 最寬鬆，100 最緊湊。」、 「文字大小」/「網格文字從小（0）到大（100）。」
+ja: 「カードサイズ」/「0 が最もゆったり、100 が最も詰め込み。」、
+    「文字サイズ」/「グリッドの文字サイズを小さく（0）～大きく（100）。」
 
 - [ ] **Step 4: Run suite**
 
