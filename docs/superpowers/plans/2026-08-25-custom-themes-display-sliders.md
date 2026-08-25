@@ -360,7 +360,7 @@ git commit -m "Add validated custom-theme store (themes.json)"
 **Interfaces:**
 - Consumes: everything Task 1 produced.
 - Produces:
-  - Routes: `GET /api/custom-themes` → `{themes: [...]}`; `POST /api/custom-themes` (201 body = created theme); `PUT /api/custom-themes/{id}`; `DELETE /api/custom-themes/{id}` → `{removed: id}`. Writes 403 under readonly, 400 on `ThemeError`, DELETE 404 unknown id.
+  - Routes: `GET /api/custom-themes` → `{themes: [...]}`; `POST /api/custom-themes` (200 body = created theme); `PUT /api/custom-themes/{id}`; `DELETE /api/custom-themes/{id}` → `{removed: id}`. Writes 403 under readonly, 400 on `ThemeError`, DELETE 404 unknown id.
   - `GET /api/settings` response gains top-level `custom_themes: [...]`.
   - `theme_palette` accepts values matching `@custom:[0-9a-f]{8}` (format check only; existence enforced at delete time by resetting selection).
 
