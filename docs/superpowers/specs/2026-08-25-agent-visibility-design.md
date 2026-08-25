@@ -65,15 +65,18 @@ CREATE INDEX IF NOT EXISTS idx_agent_events_ts ON agent_events(ts);
 "agent_events": {
   "total": 14,
   "last_used_at": 1756100000,
-  "active_leases": 2,
   "recent": [{"ts": 1756099940, "count": 2, "scope": "self",
-               "label": "preview", "leased": true}]
+               "label": "preview", "leased": true}],
+  "active_leases": 2,
+  "lease_rows": [{"port": 8081, "label": "preview", "expires_at": 1756103540}]
 }
 ```
 
 - `recent` capped at 10 rows, newest first; empty list when disabled.
 - `active_leases` counted from manual entries with `expires_at` in the future
-  (port_store already exposes `expires_at` per row).
+  (port_store already exposes `expires_at` per row); `lease_rows` carries the
+  matching `{port, label, expires_at}` rows (cap 64, mirroring the suggest cap)
+  so the Settings Leases card needs no additional endpoint.
 - The block is omitted entirely when history is disabled, so old UIs are safe.
 
 `suggest_ports`: records one event after a successful call (including calls
