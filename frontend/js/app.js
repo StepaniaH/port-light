@@ -35,7 +35,7 @@ import {
   loadSettingsPage, showSettingsPanel, goSettingsPanel, saveSettingsPage,
   applyServerSettings, revertUnsavedSettings, markDirty, syncDependentSettings,
   fetchSettings, syncLocaleTrigger, closeLocaleMenu, moveLocaleHighlight,
-  renderPeersEditor, readPeersDraftFromForm,
+  renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
 } from './settings.js?v=61';
 
 (function () {
@@ -118,7 +118,10 @@ import {
 
   try {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
-      if ((S.settings.theme || 'system') === 'system') applyTheme();
+      if ((S.settings.theme_mode || 'system') === 'system') {
+        applyTheme();
+        syncPaletteAvailability();
+      }
     });
   } catch (e) {}
   window.addEventListener('resize', function () {
@@ -582,11 +585,13 @@ import {
   });
   document.getElementById('settings-fields').addEventListener('change', function (e) {
     const field = e.target && e.target.name;
-    if (field === 'theme' || field === 'grid_density' || field === 'locale') {
-      if (field === 'theme') S.settings.theme = e.target.value;
+    if (field === 'theme_mode' || field === 'theme_palette' || field === 'grid_density' || field === 'locale') {
+      if (field === 'theme_mode') S.settings.theme_mode = e.target.value;
+      if (field === 'theme_palette') S.settings.theme_palette = e.target.value;
       if (field === 'grid_density') S.settings.grid_density = e.target.value;
       if (field === 'locale') S.settings.locale = e.target.value;
       applyAppearance();
+      if (field === 'theme_mode') syncPaletteAvailability();
       if (field === 'locale' && window.PortLightI18n) {
         PortLightI18n.load(S.settings.locale).then(function () {
           PortLightI18n.applyDom();

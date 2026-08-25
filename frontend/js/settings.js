@@ -270,6 +270,19 @@ import { render, syncHiddenButton } from './grid.js?v=61';
       '<div class="theme-picker-palettes">' + entry('').concat(families.map(entry).join('')) + '</div></div>';
   }
 
+  export function syncPaletteAvailability() {
+    const mode = currentMode();
+    document.querySelectorAll('.theme-swatch[data-theme-preview]').forEach(function (labelEl) {
+      const input = labelEl.querySelector('input[name="theme_palette"]');
+      if (!input) return;
+      const family = input.value;
+      if (family === '') return;
+      const available = paletteAvailable(family, mode);
+      input.disabled = !available;
+      labelEl.classList.toggle('is-unavailable', !available);
+    });
+  }
+
   export function renderField(f, value, readonly) {
     const disabled = readonly ? ' disabled' : '';
     let control = '';
