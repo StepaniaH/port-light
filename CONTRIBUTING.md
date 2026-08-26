@@ -40,7 +40,7 @@ still-equal-to-English values per locale.
 
 ## Locales
 
-UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`. English is the source tree; the other three files must use the same keys (`tests/test_i18n.py` checks this). `frontend/i18n.js` resolves `auto` from `navigator.languages`, sets `html lang`, and interpolates `{name}` placeholders. Do not concatenate translated fragments. Language names in `choice.*` stay in their own script in every file.
+UI copy lives in `frontend/locales/{en,fr,de,es,zh-CN,zh-TW,ja}.json`. English is the source tree; the other six files must use the same keys (`tests/test_i18n.py` checks this). `frontend/i18n.js` resolves `auto` from `navigator.languages`, sets `html lang`, and interpolates `{name}` placeholders. Do not concatenate translated fragments. Language names in `choice.*` stay in their own script in every file.
 
 Bump the `?v=` on `i18n.js` and the `CACHE_BUST` constant inside it when locale JSON changes.
 
