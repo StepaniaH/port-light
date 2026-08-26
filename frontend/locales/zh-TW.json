@@ -255,16 +255,8 @@
         "help": "疊加的色彩家族。不適用的會置灰。"
       },
       "grid_density": {
-        "label": "網格密度",
-        "help": "緊湊模式可在同一畫面顯示更多卡片。"
-      },
-      "card_scale": {
-        "label": "卡片尺寸",
-        "help": "0 最寬鬆，100 最緊湊。"
-      },
-      "text_scale": {
-        "label": "文字大小",
-        "help": "網格文字從小（0）到大（100）。"
+        "label": "卡片密度",
+        "help": "寬鬆舒展、標準適中、緊湊高密度三種視覺效果。"
       },
       "show_status_text": {
         "label": "卡片上的狀態文字",
@@ -389,7 +381,8 @@
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",
-    "comfortable": "舒適",
+    "loose": "寬鬆",
+    "standard": "標準",
     "compact": "緊湊",
     "http": "HTTP",
     "https": "HTTPS"

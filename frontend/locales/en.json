@@ -255,16 +255,8 @@
         "help": "Color family layered on top. Unavailable ones grey out."
       },
       "grid_density": {
-        "label": "Grid density",
-        "help": "Compact packs more port cards on screen."
-      },
-      "card_scale": {
-        "label": "Card size",
-        "help": "0 is roomiest, 100 packs cards tightest."
-      },
-      "text_scale": {
-        "label": "Text size",
-        "help": "Grid text size from small (0) to large (100)."
+        "label": "Card density",
+        "help": "Loose spreads cards out, Standard balances, Compact packs them tight."
       },
       "show_status_text": {
         "label": "Status text on cards",
@@ -389,7 +381,8 @@
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",
-    "comfortable": "Comfortable",
+    "loose": "Loose",
+    "standard": "Standard",
     "compact": "Compact",
     "http": "HTTP",
     "https": "HTTPS"

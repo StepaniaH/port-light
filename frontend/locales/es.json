@@ -255,16 +255,8 @@
         "help": "Familia de colores superpuesta. Las no disponibles aparecen en gris."
       },
       "grid_density": {
-        "label": "Densidad de la cuadrícula",
-        "help": "Compacto muestra más tarjetas de puertos en pantalla."
-      },
-      "card_scale": {
-        "label": "Tamaño de las tarjetas",
-        "help": "0 es el más espacioso, 100 aprieta las tarjetas al máximo."
-      },
-      "text_scale": {
-        "label": "Tamaño del texto",
-        "help": "Tamaño del texto de la cuadrícula, de pequeño (0) a grande (100)."
+        "label": "Densidad de tarjetas",
+        "help": "Espaciado ensancha las tarjetas, Estándar equilibra, Compacto las aprieta."
       },
       "show_status_text": {
         "label": "Texto de estado en las tarjetas",
@@ -389,7 +381,8 @@
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",
-    "comfortable": "Cómodo",
+    "loose": "Espaciado",
+    "standard": "Estándar",
     "compact": "Compacto",
     "http": "HTTP",
     "https": "HTTPS"

@@ -255,16 +255,8 @@
         "help": "Famille de couleurs par-dessus le thème. Les options indisponibles sont grisées."
       },
       "grid_density": {
-        "label": "Densité de la grille",
-        "help": "Compact affiche plus de cartes de ports à l'écran."
-      },
-      "card_scale": {
-        "label": "Taille des cartes",
-        "help": "0 est le plus aéré, 100 serre le plus les cartes."
-      },
-      "text_scale": {
-        "label": "Taille du texte",
-        "help": "Taille du texte de la grille, de petit (0) à grand (100)."
+        "label": "Densité des cartes",
+        "help": "Aéré étale les cartes, Standard équilibre, Compact les serre."
       },
       "show_status_text": {
         "label": "Texte d'état sur les cartes",
@@ -389,7 +381,8 @@
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",
-    "comfortable": "Confortable",
+    "loose": "Aéré",
+    "standard": "Standard",
     "compact": "Compact",
     "http": "HTTP",
     "https": "HTTPS"

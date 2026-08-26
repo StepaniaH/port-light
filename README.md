@@ -122,7 +122,7 @@ Open `http://localhost:2100`.
 | `THEME_MODE` | `system` | `system` / `dark` / `light` — the resolved brightness; palettes follow it |
 | `THEME_PALETTE` | built-in | Color family layered on top: `gruvbox`, `catppuccin`, `solarized`, `nord`, `dracula`, `tokyo-night`, `one-dark`, `everforest`, `rose-pine`, `kanagawa`. Empty uses the built-in colors. |
 | `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`. Auto follows the browser. |
-| `GRID_DENSITY` | `comfortable` | Legacy: `compact` seeds `card_scale` to 100 while no card size is saved; otherwise ignored. The UI toggle is replaced by the card/text sliders. |
+| `GRID_DENSITY` | `standard` | Card-density preset: `loose`, `standard`, or `compact`. A stored legacy `comfortable` behaves as `standard`. |
 | `REFRESH_MS` | `5000` | Auto-refresh interval |
 | `URL_HOST` | empty | Hostname used in guessed `http(s)://` links |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |

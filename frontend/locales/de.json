@@ -255,16 +255,8 @@
         "help": "Farbfamilie, die obendrauf gelegt wird. Nicht verfügbare werden ausgegraut."
       },
       "grid_density": {
-        "label": "Rasterdichte",
-        "help": "Kompakt packt mehr Portkarten auf den Bildschirm."
-      },
-      "card_scale": {
-        "label": "Kartengröße",
-        "help": "0 ist am geräumigsten, 100 packt die Karten am engsten zusammen."
-      },
-      "text_scale": {
-        "label": "Textgröße",
-        "help": "Textgröße im Raster von klein (0) bis groß (100)."
+        "label": "Kartendichte",
+        "help": "Weitläufig verteilt die Karten, Standard hält die Balance, Kompakt packt sie eng."
       },
       "show_status_text": {
         "label": "Statustext auf den Karten",
@@ -389,7 +381,8 @@
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",
-    "comfortable": "Komfortabel",
+    "loose": "Weitläufig",
+    "standard": "Standard",
     "compact": "Kompakt",
     "http": "HTTP",
     "https": "HTTPS"

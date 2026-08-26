@@ -8,7 +8,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
   tooling that keeps every locale in lockstep (placeholder parity and unused-key tests,
   plus `scripts/locale-scaffold.py` for adding copy).
 - Appearance: build your own palettes in a new advanced theme editor — start from the current palette, tweak the 15 core colors, save named custom palettes server-side (`<data-dir>/themes.json`), import/export as JSON. Selection rides the existing `theme_palette` setting as `@custom:<id>`; deleting a selected theme resets to built-in.
-- Display: the comfortable/compact toggle becomes two continuous sliders (card size, text size) with a sample-card preview that mirrors the status-text and badge toggles; legacy `GRID_DENSITY=compact` seeds the initial slider position. New settings: `card_scale`, `text_scale` (0–100, default 50).
+- Display: the two display sliders are replaced by one card-density choice with three
+  visual presets — Loose / Standard / Compact (`GRID_DENSITY`, default `standard`; legacy
+  `comfortable` behaves as `standard`). Text size is fixed again; the unreleased
+  `card_scale`/`text_scale` settings are gone. The sample-card preview stays.
 - Settings API: `GET/POST/PUT/DELETE /api/custom-themes`; `GET /api/settings` responses gain `custom_themes`. Writes refuse when settings are readonly.
 
 ## 0.7.2 — 2026-08-25

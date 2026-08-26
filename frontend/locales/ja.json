@@ -255,16 +255,8 @@
         "help": "重ねるカラーファミリー。利用できないものはグレーアウトします。"
       },
       "grid_density": {
-        "label": "グリッド密度",
-        "help": "コンパクトはカードをより多く表示します。"
-      },
-      "card_scale": {
-        "label": "カードサイズ",
-        "help": "0 が最もゆったり、100 が最も詰め込み。"
-      },
-      "text_scale": {
-        "label": "文字サイズ",
-        "help": "グリッドの文字サイズを小さく（0）～大きく（100）。"
+        "label": "カードの密度",
+        "help": "ゆとり・標準・コンパクトの 3 段階から選べます。"
       },
       "show_status_text": {
         "label": "カードの状態テキスト",
@@ -389,7 +381,8 @@
     "everforest": "Everforest",
     "rose-pine": "Rosé Pine",
     "kanagawa": "Kanagawa",
-    "comfortable": "標準",
+    "loose": "ゆとり",
+    "standard": "標準",
     "compact": "コンパクト",
     "http": "HTTP",
     "https": "HTTPS"
