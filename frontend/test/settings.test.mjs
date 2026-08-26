@@ -193,7 +193,7 @@ test('palette preview resolves variant per current mode', () => {
   assert.match(renderPalettePicker(choices, '', 'dark', ''), /data-theme-preview="gruvbox"(?!-)/);
 });
 
-test('appearance panel renders theme/layout/language sections in order', () => {
+test('appearance panel renders theme/language/layout sections in order', () => {
   const { renderSettingsForm } = mod;
   const host = document.createElement('div');
   host.id = 'settings-fields';
@@ -218,7 +218,13 @@ test('appearance panel renders theme/layout/language sections in order', () => {
   });
   const panels = host.querySelectorAll('[data-settings-panel="appearance"] .settings-card > header h2');
   const titles = Array.from(panels).map((el) => el.getAttribute('data-i18n'));
-  assert.deepEqual(titles, ['settings.sections.theme.title', 'settings.cards.title', 'settings.sections.language.title']);
+  assert.deepEqual(titles, ['settings.sections.theme.title', 'settings.sections.language.title', 'settings.cards.title']);
+  const preview = host.querySelector('[data-settings-panel="appearance"] [data-display-preview]');
+  assert.ok(preview, 'layout card should carry the live display preview');
+  assert.equal(preview.querySelectorAll('.port-cell').length, 3);
+  assert.ok(preview.querySelector('.port-cell.used'), 'used sample');
+  assert.ok(preview.querySelector('.port-cell.configured'), 'configured sample');
+  assert.ok(preview.querySelector('.port-cell.free'), 'free sample');
   host.remove(); lead.remove(); status.remove(); save.remove();
 });
 

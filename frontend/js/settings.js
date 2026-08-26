@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=69';
-import { t, tx, escapeHtml, errorText } from './text.js?v=69';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=69';
-import { moveChipFocus } from './a11y.js?v=69';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=69';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=69';
-import { render, syncHiddenButton } from './grid.js?v=69';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=71';
+import { t, tx, escapeHtml, errorText } from './text.js?v=71';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=71';
+import { moveChipFocus } from './a11y.js?v=71';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=71';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=71';
+import { render, syncHiddenButton } from './grid.js?v=71';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -784,6 +784,19 @@ import { render, syncHiddenButton } from './grid.js?v=69';
     });
   }
 
+  export function displayPreviewHtml() {
+    const cell = function (cls, port, labelKey) {
+      return '<div class="port-cell ' + cls + '"><div class="port-num">' + port + '</div>' +
+        '<div class="port-label">' + escapeHtml(t(labelKey)) + '</div></div>';
+    };
+    return '<div class="display-preview" data-display-preview aria-hidden="true">' +
+      '<div class="host-grid">' +
+      cell('used', 8080, 'status.used') +
+      cell('configured', 3000, 'status.configured') +
+      cell('free', 5432, 'status.free') +
+      '</div></div>';
+  }
+
   export function renderSettingsForm(doc) {
     const values = Object.assign({}, doc.values || {});
     if (S.rangeFromView) {
@@ -831,9 +844,9 @@ import { render, syncHiddenButton } from './grid.js?v=69';
       settingsPanelHtml('appearance',
         settingsCard('settings.sections.theme.title', 'settings.sections.theme.blurb',
           '<div data-appearance-section="theme">' + rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
-        settingsCard('settings.cards.title', 'settings.cards.blurb', rowsFor(cardFields)) +
         settingsCard('settings.sections.language.title', 'settings.sections.language.blurb',
-          rowsFor(languageFields))) +
+          rowsFor(languageFields)) +
+        settingsCard('settings.cards.title', 'settings.cards.blurb', displayPreviewHtml() + rowsFor(cardFields))) +
       settingsPanelHtml('occupancy',
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +

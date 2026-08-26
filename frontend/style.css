@@ -640,6 +640,49 @@ a:focus-visible,
 .range-input { width: 68px; font-variant-numeric: tabular-nums; }
 .range-sep { color: var(--text-dim); }
 
+/* Display sliders (card size / text size) */
+.slider-wrap { display: flex; align-items: center; gap: 10px; }
+.slider-wrap input[type="range"] {
+  width: 220px; height: 22px; margin: 0;
+  appearance: none; -webkit-appearance: none;
+  background: transparent; cursor: pointer;
+}
+.slider-wrap input[type="range"]:focus { outline: none; }
+.slider-wrap input[type="range"]:focus-visible {
+  outline: none; box-shadow: var(--focus); border-radius: 999px;
+}
+.slider-wrap input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 999px; background: var(--border);
+}
+.slider-wrap input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--card);
+  margin-top: -5px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.slider-wrap input[type="range"]::-moz-range-track {
+  height: 6px; border-radius: 999px; background: var(--border);
+}
+.slider-wrap input[type="range"]::-moz-range-thumb {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--card);
+}
+.slider-out {
+  min-width: 3ch; text-align: right;
+  font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--text-dim);
+}
+@media (max-width: 900px) {
+  .slider-wrap { width: 100%; }
+  .slider-wrap input[type="range"] { flex: 1; width: auto; min-width: 0; }
+}
+
+/* Live display preview inside the Layout card: reuses .port-cell so the global
+   --cell-* / --port-font / palette variables render it with zero JS. */
+.display-preview { margin: 2px 0 10px; }
+.display-preview .host-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 430px; }
+.display-preview .port-cell { cursor: default; }
+.display-preview .port-cell:hover { background: var(--card); border-color: var(--border); }
+
 /* ── Grid cards ──── */
 
 #grid {
@@ -849,7 +892,7 @@ a:focus-visible,
 
 .settings-card {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-  margin-bottom: 14px; overflow: hidden;
+  margin-bottom: 14px;
 }
 .settings-card-head { padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
 .settings-card-head h2 { font-size: 0.95rem; font-weight: 650; }
@@ -988,6 +1031,7 @@ a:focus-visible,
   padding: 4px 0;
   background: var(--elevated); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: var(--shadow);
+  max-height: 320px; overflow-y: auto;
 }
 .locale-dropdown.is-open .locale-menu { display: block; }
 .locale-row {
