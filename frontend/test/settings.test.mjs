@@ -14,7 +14,7 @@ const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
 const { automationCardsHtml, renderField, renderModePicker, renderPalettePicker, renderSettingsForm, themeEditorHtml } = await import('../js/settings.js?' + V);
-const { SETTINGS_PANELS, S, applyDisplayScale } = await import('../js/state.js?' + V);
+const { SETTINGS_PANELS, S, applyAppearance, applyDensity, DENSITY_PRESETS } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
 const mod = { renderSettingsForm, themeEditorHtml, renderField };
@@ -269,20 +269,32 @@ test('scale fields render as range inputs', () => {
   assert.match(text, /type="range"/);
 });
 
-test('applyDisplayScale maps anchors exactly at 0/50/100', () => {
+test('applyDensity applies presets exactly and falls back to standard', () => {
   const html = document.documentElement;
-  applyDisplayScale(0, 50);
+  applyDensity('loose');
   assert.equal(html.style.getPropertyValue('--cell-min-w'), '164px');
-  applyDisplayScale(50, 50);
+  assert.equal(html.style.getPropertyValue('--cell-gap'), '10px');
+  applyDensity('standard');
   assert.equal(html.style.getPropertyValue('--cell-min-w'), '138px');
   assert.equal(html.style.getPropertyValue('--cell-min-h'), '64px');
   assert.equal(html.style.getPropertyValue('--cell-pad-t'), '10px');
   assert.equal(html.style.getPropertyValue('--cell-pad-b'), '12px');
-  applyDisplayScale(100, 50);
+  applyDensity('compact');
   assert.equal(html.style.getPropertyValue('--cell-min-w'), '112px');
   assert.equal(html.style.getPropertyValue('--cell-gap'), '6px');
   assert.equal(html.style.getPropertyValue('--cell-pad-t'), '8px');
   assert.equal(html.style.getPropertyValue('--cell-pad-b'), '8px');
+  applyDensity('nonsense');
+  assert.equal(html.style.getPropertyValue('--cell-min-w'), '138px');
+});
+
+test('applyAppearance mirrors density without scale keys', () => {
+  S.settings.grid_density = 'compact';
+  applyAppearance();
+  const stored = JSON.parse(localStorage.getItem('port-light-settings'));
+  assert.equal(stored.grid_density, 'compact');
+  assert.ok(!('card_scale' in stored));
+  assert.ok(!('text_scale' in stored));
 });
 
 test('palette picker lists custom themes with badge and delete hook', () => {

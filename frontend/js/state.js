@@ -69,7 +69,7 @@ export const S = {
     locale: 'auto',
     theme_mode: 'system',
     theme_palette: '',
-    grid_density: 'comfortable',
+    grid_density: 'standard',
     show_status_text: false,
     show_access_badge: true,
     show_protocol_badge: true,
@@ -145,39 +145,33 @@ export function applyTheme() {
   }
 }
 
-const CARD_ANCHORS = { minW: [164, 112], gap: [10, 6], padX: [14, 10], padT: [12, 8], padB: [16, 8], minH: [76, 52] };
+export const DENSITY_PRESETS = {
+  loose: { minW: 164, gap: 10, padX: 14, padT: 12, padB: 16, minH: 76 },
+  standard: { minW: 138, gap: 8, padX: 12, padT: 10, padB: 12, minH: 64 },
+  compact: { minW: 112, gap: 6, padX: 10, padT: 8, padB: 8, minH: 52 },
+};
 
-export function applyDisplayScale(cardScale, textScale) {
+const CELL_VAR_NAMES = {
+  minW: '--cell-min-w', gap: '--cell-gap', padX: '--cell-pad-x',
+  padT: '--cell-pad-t', padB: '--cell-pad-b', minH: '--cell-min-h',
+};
+
+export function applyDensity(name) {
+  const preset = DENSITY_PRESETS[name] || DENSITY_PRESETS.standard;
   const html = document.documentElement;
-  const cRaw = Number(cardScale);
-  const tRaw = Number(textScale);
-  const c = Math.max(0, Math.min(100, Number.isFinite(cRaw) ? cRaw : 50));
-  const t = Math.max(0, Math.min(100, Number.isFinite(tRaw) ? tRaw : 50));
-  const k = c / 100;
-  Object.keys(CARD_ANCHORS).forEach(function (key) {
-    const pair = CARD_ANCHORS[key];
-    const value = Math.round(pair[0] + (pair[1] - pair[0]) * k);
-    const cssName = '--cell-' + key.toLowerCase().replace('minw', 'min-w').replace('padx', 'pad-x').replace('padt', 'pad-t').replace('padb', 'pad-b').replace('minh', 'min-h');
-    html.style.setProperty(key === 'gap' ? '--cell-gap' : cssName, value + 'px');
+  Object.keys(CELL_VAR_NAMES).forEach(function (key) {
+    html.style.setProperty(CELL_VAR_NAMES[key], preset[key] + 'px');
   });
-  let basePx = 16;
-  try {
-    basePx = parseFloat(getComputedStyle(html).fontSize) || 16;
-  } catch (e) {}
-  const fontPx = Math.max(12, Math.min(18, Math.round(basePx + (t - 50) * 0.08)));
-  html.style.setProperty('--port-font', fontPx + 'px');
 }
 
 export function applyAppearance() {
   applyTheme();
-  applyDisplayScale(S.settings.card_scale, S.settings.text_scale);
+  applyDensity(S.settings.grid_density);
   try {
     localStorage.setItem('port-light-settings', JSON.stringify({
       theme_mode: S.settings.theme_mode,
       theme_palette: S.settings.theme_palette || '',
       grid_density: S.settings.grid_density,
-      card_scale: S.settings.card_scale,
-      text_scale: S.settings.text_scale,
       locale: S.settings.locale || 'auto',
     }));
   } catch (e) {}
