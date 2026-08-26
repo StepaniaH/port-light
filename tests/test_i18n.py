@@ -85,7 +85,10 @@ def test_settings_fields_have_locale_copy():
 def test_markup_i18n_keys_exist_in_english():
     english = json.loads((LOCALES_DIR / "en.json").read_text(encoding="utf-8"))
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-    js = (ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    js = ""
+    for pattern in ("js/*.js", "i18n.js"):
+        for path in sorted((ROOT / "frontend").glob(pattern)):
+            js += path.read_text(encoding="utf-8")
     keys = set(re.findall(r'data-i18n(?:-placeholder|-title|-aria)?="([a-zA-Z0-9_.]+)"', html + js))
     keys |= set(re.findall(r"""\bt\(\s*['"]([a-zA-Z0-9_.]+)['"]""", js))
     keys = {key for key in keys if key and not key.endswith('.')}
