@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .s { stroke: #1f2328; }
+    @media (prefers-color-scheme: dark) { .s { stroke: #e6edf3; } }
+  </style>
+  <g class="s" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5.2 6.2l3 1.9M4 10.6h4.2M26.8 6.2l-3 1.9M28 10.6h-4.2"/>
+    <path d="M9.2 5.6a9.4 9.4 0 0113.6 0"/>
+    <path d="M13.2 8.4a2.8 2.8 0 015.6 0"/>
+    <path d="M13.2 8.4v3.8M18.8 8.4v3.8M12.2 12.2h7.6"/>
+    <path d="M13 12.2l-1.5 11.6M19 12.2l1.5 11.6"/>
+    <path d="M12.55 16.4h6.9M12.1 20.4h7.8"/>
+    <path d="M14.9 23.8v-2.4a1.1 1.1 0 012.2 0v2.4"/>
+    <path d="M9.6 23.8h12.8M8.6 26.6h14.8"/>
+  </g>
+</svg>

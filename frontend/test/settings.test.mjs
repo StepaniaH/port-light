@@ -232,6 +232,9 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   assert.ok(preview.querySelector('.port-cell.used'), 'used sample');
   assert.ok(preview.querySelector('.port-cell.configured'), 'configured sample');
   assert.ok(preview.querySelector('.port-cell.free'), 'free sample');
+  assert.ok(preview.querySelector('.access-badge'), 'access badge follows show_access_badge default on');
+  assert.ok(preview.querySelector('.proto-badge'), 'proto badge follows show_protocol_badge default on');
+  assert.ok(!preview.querySelector('.status-text'), 'no status text while show_status_text is off');
   const panelHtml = host.innerHTML;
   const iScale = panelHtml.indexOf('name="card_scale"');
   const iText = panelHtml.indexOf('name="text_scale"');

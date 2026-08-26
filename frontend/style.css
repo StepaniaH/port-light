@@ -424,8 +424,8 @@ a:focus-visible,
 }
 .brand:focus-visible { border-radius: var(--radius-sm); }
 .brand-icon {
-  width: 32px; height: 32px; border-radius: 7px;
-  background: #fff;
+  width: 32px; height: 32px;
+  color: var(--text);
 }
 .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
 .brand-name { font-size: 0.95rem; font-weight: 650; letter-spacing: -0.02em; }
@@ -959,8 +959,16 @@ a:focus-visible,
   font-size: 0.72rem; font-weight: 550; text-align: center; line-height: 1.25;
   color: var(--text);
 }
-.theme-swatch.is-custom > label { cursor: pointer; }
-.theme-swatch.is-custom .btn-delete { height: 22px; padding: 0 8px; font-size: 0.68rem; margin-left: 6px; }
+.theme-swatch.is-custom { min-width: 0; }
+.theme-swatch.is-custom > label {
+  display: flex; flex-direction: column; gap: 6px;
+  min-width: 0; cursor: pointer;
+}
+.theme-swatch.is-custom .theme-swatch-name { min-width: 0; }
+.custom-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-swatch.is-custom .btn-delete {
+  margin: 0; width: 100%; height: 24px; padding: 0 8px; font-size: .68rem;
+}
 .theme-badge { font-style: normal; font-size: 0.62rem; opacity: 0.75; margin-left: 4px; }
 .theme-swatch[data-theme-preview="dark"] {
   --preview-bg: #0c1016; --preview-used: #58a6ff; --preview-cfg: #d4a017; --preview-free: #3fb950;
@@ -1137,6 +1145,12 @@ a:focus-visible,
 .snippet pre {
   background: var(--elevated); border: 1px solid var(--border);
   padding: .5rem; overflow-x: auto; font-size: .8em; margin: 0 0 .25rem;
+}
+.snippet-body { position: relative; }
+.snippet-body .btn-secondary {
+  position: absolute; top: 8px; right: 8px;
+  height: 26px; padding: 0 12px; font-size: .75rem;
+  box-shadow: var(--shadow);
 }
 .auto-summary { font-weight: 600; }
 .lease-row {

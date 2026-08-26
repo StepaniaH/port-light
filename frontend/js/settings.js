@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=72';
-import { t, tx, escapeHtml, errorText } from './text.js?v=72';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=72';
-import { moveChipFocus } from './a11y.js?v=72';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=72';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=72';
-import { render, syncHiddenButton } from './grid.js?v=72';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=73';
+import { t, tx, escapeHtml, errorText } from './text.js?v=73';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=73';
+import { moveChipFocus } from './a11y.js?v=73';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=73';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=73';
+import { render, syncHiddenButton } from './grid.js?v=73';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -280,8 +280,8 @@ import { render, syncHiddenButton } from './grid.js?v=72';
         '<label><input type="radio" name="theme_palette" value="' + escapeHtml(sel) + '"' +
         (on ? ' checked' : '') + dis + '>' +
         '<span class="theme-swatch-preview" aria-hidden="true">' + dots + '</span>' +
-        '<span class="theme-swatch-name">' + escapeHtml(theme.name) +
-        '<em class="theme-badge">' + escapeHtml(t('settings.theme.customBadge')) + '</em></span></label>' +
+        '<span class="theme-swatch-name"><span class="custom-name">' + escapeHtml(theme.name) +
+        '</span><em class="theme-badge">' + escapeHtml(t('settings.theme.customBadge')) + '</em></span></label>' +
         '<button type="button" class="btn-delete" data-delete-theme="' + escapeHtml(theme.id) + '"' +
         disabled + '>' + escapeHtml(t('hosts.remove')) + '</button></span>';
     }
@@ -591,10 +591,10 @@ import { render, syncHiddenButton } from './grid.js?v=72';
 
   function snippetBlock(captionKey, id, code) {
     return '<div class="snippet"><p class="snippet-cap">' + escapeHtml(t(captionKey)) + '</p>' +
-      '<pre id="' + id + '">' + escapeHtml(code) + '</pre>' +
+      '<div class="snippet-body"><pre id="' + id + '">' + escapeHtml(code) + '</pre>' +
       '<button type="button" class="btn-secondary" data-copy="' + id + '" data-label="' +
       escapeHtml(t('settings.auto.connect.copy')) + '">' +
-      escapeHtml(t('settings.auto.connect.copy')) + '</button></div>';
+      escapeHtml(t('settings.auto.connect.copy')) + '</button></div></div>';
   }
 
   export function automationCardsHtml(a) {
@@ -755,6 +755,11 @@ import { render, syncHiddenButton } from './grid.js?v=72';
        these two are wired as document-level delegates rather than bound to
        today's elements. */
     document.addEventListener('change', function (e) {
+      if (e.target && e.target.closest &&
+          e.target.closest('input[name="show_status_text"],input[name="show_access_badge"],input[name="show_protocol_badge"]')) {
+        updateDisplayPreview();
+        return;
+      }
       if (e.target && e.target.id === 'editor-file') importEditorThemeFile(e.target);
     });
     document.addEventListener('input', function (e) {
@@ -784,15 +789,41 @@ import { render, syncHiddenButton } from './grid.js?v=72';
     });
   }
 
+  function previewFlags() {
+    const form = document.getElementById('settings-form');
+    const read = function (key, fallback) {
+      const el = form && form.elements ? form.elements[key] : null;
+      return el && typeof el.checked === 'boolean' ? el.checked : fallback;
+    };
+    return {
+      status_text: read('show_status_text', !!S.settings.show_status_text),
+      access_badge: read('show_access_badge', S.settings.show_access_badge !== false),
+      proto_badge: read('show_protocol_badge', S.settings.show_protocol_badge !== false),
+    };
+  }
+
+  export function updateDisplayPreview() {
+    const host = document.querySelector('[data-display-preview]');
+    if (host) host.outerHTML = displayPreviewHtml();
+  }
+
   export function displayPreviewHtml() {
-    const cell = function (cls, port, labelKey) {
+    const f = previewFlags();
+    const cell = function (cls, port, labelKey, extra) {
       return '<div class="port-cell ' + cls + '"><div class="port-num">' + port + '</div>' +
-        '<div class="port-label">' + escapeHtml(t(labelKey)) + '</div></div>';
+        '<div class="port-label">' + escapeHtml(t(labelKey)) + '</div>' + (extra || '') + '</div>';
+    };
+    const statusText = function (key) {
+      return f.status_text ? '<span class="status-text">' + escapeHtml(t(key)) + '</span>' : '';
+    };
+    const badges = function (access, proto) {
+      return (f.access_badge && access ? '<span class="access-badge">' + escapeHtml(t('grid.web')) + '</span>' : '') +
+        (f.proto_badge && proto ? '<span class="proto-badge">udp</span>' : '');
     };
     return '<div class="display-preview" data-display-preview aria-hidden="true">' +
       '<div class="host-grid">' +
-      cell('used', 8080, 'status.used') +
-      cell('configured', 3000, 'status.configured') +
+      cell('used', 8080, 'status.used', statusText('status.used') + badges(true, true)) +
+      cell('configured', 3000, 'status.configured', statusText('status.configured')) +
       cell('free', 5432, 'status.free') +
       '</div></div>';
   }
