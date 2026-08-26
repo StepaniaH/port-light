@@ -438,8 +438,7 @@
     "find": "空き区間を検索",
     "none": "この範囲に空き区間がありません。",
     "run": "{start}–{end}（{size} 連続）",
-    "reserve": "予約",
-    "reserved": "{count} ポートを予約しました。"
+    "reserve": "予約"
   },
   "history": {
     "title": "直近の変更（24時間）"

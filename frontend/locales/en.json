@@ -438,8 +438,7 @@
     "find": "Find runs",
     "none": "No free runs in this range.",
     "run": "{start}–{end} ({size} free)",
-    "reserve": "Reserve",
-    "reserved": "Reserved {count} ports."
+    "reserve": "Reserve"
   },
   "history": {
     "title": "Recent changes (24h)"

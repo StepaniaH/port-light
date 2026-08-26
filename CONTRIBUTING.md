@@ -30,6 +30,14 @@ Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/in
 
 Settings that belong on both Compose and the UI live in `backend/settings.py`. Secrets and filesystem paths stay env-only.
 
+## Adding UI copy
+
+Edit `frontend/locales/en.json`, run `.venv/bin/python scripts/locale-scaffold.py`
+to copy the new keys into the other locale files, translate the copied values, done —
+`tests/test_i18n.py` enforces key parity, non-empty values, placeholder tokens, and
+rejects orphaned keys nobody references. `--untranslated` lists suspicious
+still-equal-to-English values per locale.
+
 ## Locales
 
 UI copy lives in `frontend/locales/{en,zh-CN,zh-TW,ja}.json`. English is the source tree; the other three files must use the same keys (`tests/test_i18n.py` checks this). `frontend/i18n.js` resolves `auto` from `navigator.languages`, sets `html lang`, and interpolates `{name}` placeholders. Do not concatenate translated fragments. Language names in `choice.*` stay in their own script in every file.

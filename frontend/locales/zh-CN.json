@@ -438,8 +438,7 @@
     "find": "查找连续空闲段",
     "none": "此范围内没有连续空闲段。",
     "run": "{start}–{end}（连续 {size} 个）",
-    "reserve": "预留",
-    "reserved": "已预留 {count} 个端口。"
+    "reserve": "预留"
   },
   "history": {
     "title": "最近变动（24 小时）"

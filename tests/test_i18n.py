@@ -97,6 +97,81 @@ def test_markup_i18n_keys_exist_in_english():
         assert isinstance(english.get(prefix), dict), prefix
 
 
+_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+# Leaf-key prefixes whose keys are assembled dynamically in frontend/backend code
+# (choice.<value>, settings.fields.<FieldSpec.key>, …) and therefore never appear
+# as literals in sources.
+_DYNAMIC_PREFIXES = (
+    "choice.",
+    "settings.fields.",
+    "settings.groups.",
+    "localeName.",
+    "localeNative.",
+    "settings.editor.vars.",
+    "settings.source.",
+)
+
+
+def _flatten(obj, prefix=""):
+    out = {}
+    assert isinstance(obj, dict)
+    for key, value in obj.items():
+        path = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(value, dict):
+            out.update(_flatten(value, path))
+        else:
+            out[path] = value
+    return out
+
+
+def _referenced_keys():
+    roots = []
+    frontend = ROOT / "frontend"
+    for pattern in ("*.html", "js/*.js", "i18n.js", "test/*.mjs"):
+        roots.extend(frontend.glob(pattern))
+    blob = ""
+    for path in roots:
+        blob += path.read_text(encoding="utf-8")
+    refs = set(re.findall(r'data-i18n(?:-placeholder|-title|-aria)?="([a-zA-Z0-9_.]+)"', blob))
+    refs |= set(re.findall(r"""\bt\(\s*['"]([a-zA-Z0-9_.]+)['"]""", blob))
+    tx_prefixes = set(re.findall(r"""\btx\(\s*['"]([a-zA-Z0-9_.]+)['"]""", blob))
+    # Keys also reach t()/tx() via ternaries and key-helper arguments
+    # (kvRow('settings.auto.agentToken', …), const key = c ? 'grid.empty' : …).
+    # Any quoted dotted literal is an exact reference; a quoted literal ending in
+    # a dot is a dynamic prefix ('status.' + p.status) like the tx( prefixes.
+    refs |= set(re.findall(r"""['"]([a-z][a-zA-Z0-9_.]+)['"]""", blob))
+    tx_prefixes |= set(re.findall(r"""['"]([a-z][a-zA-Z0-9_.]+\.)['"]""", blob))
+    return refs, tx_prefixes
+
+
+def test_locale_values_keep_english_placeholders():
+    trees = {code: json.loads((LOCALES_DIR / f"{code}.json").read_text(encoding="utf-8"))
+             for code in CODES}
+    english = _flatten(trees["en"])
+    expected = {key: set(_PLACEHOLDER_RE.findall(str(value))) for key, value in english.items()}
+    for code in CODES[1:]:
+        flat = _flatten(trees[code])
+        for key, want in expected.items():
+            got = set(_PLACEHOLDER_RE.findall(str(flat[key])))
+            assert got == want, f"{code}:{key} placeholders {sorted(got)} != en {sorted(want)}"
+
+
+def test_no_orphan_locale_keys():
+    english = json.loads((LOCALES_DIR / "en.json").read_text(encoding="utf-8"))
+    refs, tx_prefixes = _referenced_keys()
+
+    def covered(key):
+        if any(key.startswith(p) for p in _DYNAMIC_PREFIXES):
+            return True
+        if key in refs:
+            return True
+        return any(key.startswith(p) for p in tx_prefixes)
+
+    orphans = sorted(key for key in _flatten(english) if not covered(key))
+    assert orphans == [], orphans
+
+
 def test_cache_bust_matches_index():
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     js = (ROOT / "frontend" / "i18n.js").read_text(encoding="utf-8")
