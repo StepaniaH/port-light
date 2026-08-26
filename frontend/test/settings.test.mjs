@@ -217,8 +217,7 @@ test('appearance panel renders theme/language/layout sections in order', () => {
     env_only: {}, origins: {},
     fields: [
       { key: 'theme_mode', type: 'choice', group: 'appearance', choices: ['system', 'dark', 'light'], origin: 'default' },
-      { key: 'card_scale', type: 'int', group: 'appearance', origin: 'default' },
-      { key: 'text_scale', type: 'int', group: 'appearance', origin: 'default' },
+      { key: 'grid_density', type: 'choice', group: 'appearance', choices: ['loose', 'standard', 'compact'], origin: 'default' },
       { key: 'locale', type: 'choice', group: 'appearance', choices: ['auto', 'en'], origin: 'default' },
       { key: 'show_status_text', type: 'bool', group: 'appearance', origin: 'default' },
     ],
@@ -236,12 +235,10 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   assert.ok(preview.querySelector('.proto-badge'), 'proto badge follows show_protocol_badge default on');
   assert.ok(!preview.querySelector('.status-text'), 'no status text while show_status_text is off');
   const panelHtml = host.innerHTML;
-  const iScale = panelHtml.indexOf('name="card_scale"');
-  const iText = panelHtml.indexOf('name="text_scale"');
+  const iDensity = panelHtml.indexOf('name="grid_density"');
   const iPrev = panelHtml.indexOf('data-display-preview');
   const iStatus = panelHtml.indexOf('name="show_status_text"');
-  assert.ok(iScale > -1 && iScale < iText, 'sliders render in the layout card');
-  assert.ok(iText < iPrev, 'preview sits right after the sliders');
+  assert.ok(iDensity > -1 && iDensity < iPrev, 'density segmented control renders ahead of the preview');
   assert.ok(iPrev < iStatus, 'preview precedes the card toggles');
   host.remove(); lead.remove(); status.remove(); save.remove();
 });
@@ -260,13 +257,14 @@ test('theme editor renders 15 color rows and controls', () => {
   assert.match(locked, /disabled/);
 });
 
-test('scale fields render as range inputs', () => {
+test('density renders as a segmented radiogroup', () => {
   const { renderField } = mod;
-  const card = renderField({ key: 'card_scale', type: 'int', min: 0, max: 100, group: 'appearance', origin: 'file' }, 72, false);
-  assert.match(card, /type="range"/);
-  assert.match(card, /value="72"/);
-  const text = renderField({ key: 'text_scale', type: 'int', min: 0, max: 100, group: 'appearance', origin: 'default' }, 50, false);
-  assert.match(text, /type="range"/);
+  const html = renderField({ key: 'grid_density', type: 'choice', group: 'appearance', choices: ['loose', 'standard', 'compact'], origin: 'default' }, 'standard', false);
+  assert.match(html, /class="segmented"/);
+  assert.match(html, /name="grid_density"/);
+  assert.match(html, /value="loose"/);
+  assert.match(html, /value="standard" checked/);
+  assert.match(html, /value="compact"/);
 });
 
 test('applyDensity applies presets exactly and falls back to standard', () => {

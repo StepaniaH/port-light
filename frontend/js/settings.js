@@ -1,6 +1,6 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=74';
+  import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=74';
 import { t, tx, escapeHtml, errorText } from './text.js?v=74';
 import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=74';
 import { moveChipFocus } from './a11y.js?v=74';
@@ -491,11 +491,6 @@ import { render, syncHiddenButton } from './grid.js?v=74';
             escapeHtml(c) + '"' + (c === value ? ' checked' : '') + disabled +
             '><span data-i18n="choice.' + c + '">' + escapeHtml(choiceLabel(c)) + '</span></label>';
         }).join('') + '</div>';
-    } else if (f.type === 'int' && (f.key === 'card_scale' || f.key === 'text_scale')) {
-      const n = Number(value);
-      control = '<span class="slider-wrap"><input type="range" name="' + f.key + '"' +
-        ' min="0" max="100" step="1" value="' + (Number.isFinite(n) ? n : 50) + '"' + disabled + '>' +
-        '<output class="slider-out" data-slider-out="' + f.key + '">' + (Number.isFinite(n) ? n : 50) + '</output></span>';
     } else if (f.type === 'int') {
       const min = f.min != null ? ' min="' + f.min + '"' : '';
       const max = f.max != null ? ' max="' + f.max + '"' : '';
@@ -763,15 +758,6 @@ import { render, syncHiddenButton } from './grid.js?v=74';
       if (e.target && e.target.id === 'editor-file') importEditorThemeFile(e.target);
     });
     document.addEventListener('input', function (e) {
-      const range = e.target && e.target.closest ? e.target.closest('input[type="range"][name="card_scale"],input[type="range"][name="text_scale"]') : null;
-      if (range) {
-        const out = document.querySelector('[data-slider-out="' + range.name + '"]');
-        if (out) out.textContent = range.value;
-        applyDisplayScale(
-          Number((document.querySelector('input[name="card_scale"]') || {}).value || 50),
-          Number((document.querySelector('input[name="text_scale"]') || {}).value || 50));
-        return;
-      }
       const colorRow = e.target && e.target.closest ? e.target.closest('[data-editor-color]') : null;
       if (colorRow) {
         const key = colorRow.getAttribute('data-editor-color');
@@ -861,13 +847,11 @@ import { render, syncHiddenButton } from './grid.js?v=74';
     }
 
     const appearanceFields = byGroup.appearance || [];
-    const SLIDER_KEYS = { card_scale: true, text_scale: true };
     const themeFields = appearanceFields.filter(function (f) {
-      return !CARD_FIELD_KEYS[f.key] && !SLIDER_KEYS[f.key] &&
-        f.key !== 'locale' && f.key !== 'grid_density';
+      return !CARD_FIELD_KEYS[f.key] && f.key !== 'locale' && f.key !== 'grid_density';
     });
-    const sliderFields = appearanceFields.filter(function (f) { return SLIDER_KEYS[f.key]; });
     const languageFields = appearanceFields.filter(function (f) { return f.key === 'locale'; });
+    const densityFields = appearanceFields.filter(function (f) { return f.key === 'grid_density'; });
     const cardFields = appearanceFields.filter(function (f) { return CARD_FIELD_KEYS[f.key]; });
     const knownGroups = { appearance: true, grid: true, scanning: true, links: true };
     const extraAdvanced = groupOrder.filter(function (g) { return !knownGroups[g]; }).map(function (g) {
@@ -881,7 +865,7 @@ import { render, syncHiddenButton } from './grid.js?v=74';
         settingsCard('settings.sections.language.title', 'settings.sections.language.blurb',
           rowsFor(languageFields)) +
         settingsCard('settings.cards.title', 'settings.cards.blurb',
-          rowsFor(sliderFields) + displayPreviewHtml() + rowsFor(cardFields))) +
+          rowsFor(densityFields) + displayPreviewHtml() + rowsFor(cardFields))) +
       settingsPanelHtml('occupancy',
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +
