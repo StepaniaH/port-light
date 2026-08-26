@@ -2,6 +2,12 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## Unreleased
+
+### Changed
+
+- Internal: `app.js` no longer carries duplicate copies of the dom/modal helpers left behind by the module split; its imports now match what it uses (no behavior change).
+
 ## 0.7.3 — 2026-08-26
 
 - Localization: three new interface languages — Français, Deutsch, Español — alongside

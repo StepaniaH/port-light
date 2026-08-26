@@ -1,41 +1,27 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, applyTheme, applyAppearance, saveView } from './state.js?v=75';
-import { collate, errorText, escapeHtml, safeHref, t, tx } from './text.js?v=75';
-import { KIND_MATCHERS } from './kinds.js?v=75';
+import { S, SETTINGS_PANELS, applyTheme, applyAppearance, saveView } from './state.js?v=75';
+import { errorText, escapeHtml, t } from './text.js?v=75';
 import { moveChipFocus, trapTab } from './a11y.js?v=75';
 import {
-  appEl, grid, hostBoards, hostSwitcher, summary,
-  detailPanel, detailBackdrop, detailContent,
+  grid, hostBoards, hostSwitcher, summary,
+  detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
-  sortSelect, unhideBtn, settingsBtn,
-  syncHeaderHeight, markRefreshed, setSyncError,
+  sortSelect, unhideBtn,
+  syncHeaderHeight,
 } from './dom.js?v=75';
 import { openModal, closeModals, modalOpen } from './modal.js?v=75';
 import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=75';
+import { render, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=75';
 import {
-  render, renderSummary, renderHostSwitcher, renderHostBoards, portFromList,
-  freeStub, pendingStub, prefetchKnown, getCellLabel, hiddenOccupancy,
-  probeLockedHit, buildSearchContext, getKnownForFree, matchesFilter, sortPorts,
-  renderGrid, showCopyToast, snapshotGridFocus, syncAddButton, syncFilterUI,
-  syncHiddenButton, applyPendingGridFocus, gridRootFrom, moveGridFocus,
-} from './grid.js?v=75';
-import {
-  hasPeers, listedHosts, hostById, hostName,
-  occupancyUrl, portApiUrl, gridHash, portHash, dataForHost,
-  api, fetchMeta, fetchHealth, fetchHostHealth, fetchHosts,
-  fetchPorts, retryHost, setupRefresh, loadPorts, renderScanners, tick,
+  hasPeers, api, fetchMeta, fetchHosts, retryHost, setupRefresh, tick,
   startEventStream,
 } from './api.js?v=75';
+import { closeDetail, showDetailError, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=75';
 import {
-  closeDetail, showPortDetail, showDetailError, syncDetailModal, unlockHidden,
-  addManualPort,
-} from './detail.js?v=75';
-import {
-  loadSettingsPage, showSettingsPanel, goSettingsPanel, saveSettingsPage,
-  applyServerSettings, revertUnsavedSettings, markDirty, syncDependentSettings,
-  fetchSettings, syncLocaleTrigger, closeLocaleMenu, moveLocaleHighlight,
-  renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
+  goSettingsPanel, saveSettingsPage, applyServerSettings, markDirty,
+  syncDependentSettings, fetchSettings, syncLocaleTrigger, closeLocaleMenu,
+  moveLocaleHighlight, renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
 } from './settings.js?v=75';
 
 (function () {
@@ -73,30 +59,6 @@ import {
     }
   } catch (e) {}
 
-
-
-
-
-
-
-
-
-
-
-  function syncHeaderHeight() {
-    const header = document.getElementById('app-header');
-    if (!header) return;
-    document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
-  }
-
-
-
-
-
-
-
-
-
   function occupancyFocusTarget() {
     if (S.route.name === 'settings') return document.getElementById('settings-form');
     if (hasPeers()) {
@@ -106,16 +68,6 @@ import {
     }
     return grid;
   }
-
-
-
-
-
-
-
-
-
-
 
   try {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
@@ -133,12 +85,6 @@ import {
     window.matchMedia('(max-width: 900px)').addEventListener('change', syncDetailModal);
   } catch (e) {}
 
-
-
-
-
-
-
   document.addEventListener('click', function (e) {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = e.target.closest && e.target.closest('a[href^="#"]');
@@ -147,8 +93,6 @@ import {
     if (next.name === 'settings') return;
     if (!leaveSettingsOrStay()) e.preventDefault();
   }, true);
-
-
 
   window.addEventListener('hashchange', applyRoute);
 
@@ -283,40 +227,6 @@ import {
 
   document.getElementById('btn-refresh').addEventListener('click', function () { tick(); });
 
-  function openModal(id) {
-    S.focusBack = document.activeElement;
-    document.getElementById(id).classList.remove('hidden');
-    document.documentElement.classList.add('modal-open');
-    const err = document.getElementById('add-error');
-    if (id === 'add-modal' && err) {
-      err.hidden = true;
-      err.classList.add('hidden');
-      err.textContent = '';
-    }
-    const unlockErr = document.getElementById('unhide-error');
-    if (id === 'unhide-modal' && unlockErr) {
-      unlockErr.hidden = true;
-      unlockErr.classList.add('hidden');
-      unlockErr.textContent = '';
-    }
-    const unlockInput = document.getElementById('unhide-password');
-    if (id === 'unhide-modal' && unlockInput) {
-      unlockInput.removeAttribute('aria-invalid');
-    }
-    const input = document.getElementById(id).querySelector('input');
-    if (input) input.focus();
-  }
-  function closeModals() {
-    document.querySelectorAll('.modal').forEach(function (m) { m.classList.add('hidden'); });
-    document.documentElement.classList.remove('modal-open');
-    S.pendingAfterUnlock = null;
-    if (S.focusBack && typeof S.focusBack.focus === 'function') S.focusBack.focus();
-    S.focusBack = null;
-  }
-  function modalOpen() {
-    return !!document.querySelector('.modal:not(.hidden)');
-  }
-
   document.getElementById('btn-add').addEventListener('click', function () {
     if (hasPeers() && S.focusHostId !== 'local') return;
     openModal('add-modal');
@@ -359,7 +269,7 @@ import {
       }).join('');
     } catch (err) {
       errEl.hidden = false; errEl.classList.remove('hidden');
-      errEl.textContent = errorText({}, 0) ;
+      errEl.textContent = errorText({}, 0);
       console.error('free-runs error:', err);
     }
   });
@@ -494,14 +404,6 @@ import {
     m.addEventListener('click', function (e) { if (e.target === m) closeModals(); });
   });
   detailBackdrop.addEventListener('click', function () { closeDetail(); });
-
-
-
-
-
-
-
-
 
   document.getElementById('view-grid').addEventListener('keydown', function (e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' &&
@@ -653,67 +555,6 @@ import {
     }
   });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function markRefreshed() {
-    const el = document.getElementById('sync-age');
-    if (!el) return;
-    const loc = window.PortLightI18n ? PortLightI18n.locale() : undefined;
-    const time = new Date().toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    el.hidden = false;
-    el.dateTime = new Date().toISOString();
-    el.textContent = t('grid.updated', { time: time });
-    syncHeaderHeight();
-  }
-
-  function setSyncError(on) {
-    const el = document.getElementById('sync-error');
-    if (!el) return;
-    el.hidden = !on;
-    el.classList.toggle('hidden', !on);
-    if (on) el.textContent = t('grid.refreshFailed');
-    syncHeaderHeight();
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
@@ -721,38 +562,6 @@ import {
     }
     if (S.settings.auto_refresh) setupRefresh();
   });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   document.getElementById('settings-fields').addEventListener('click', function (e) {
     const trigger = e.target.closest('.locale-trigger');
@@ -793,72 +602,6 @@ import {
     if (!e.target.closest('.locale-dropdown')) closeLocaleMenu();
   });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   async function mutateDetail(url, opts, afterOk) {
     try {
       const res = await api(url, opts);
@@ -868,9 +611,6 @@ import {
       showDetailError(t('detail.actionFailed'));
     }
   }
-
-
-
 
   function startApp() {
     sortSelect.value = S.sortMode;
@@ -903,7 +643,6 @@ import {
         syncHeaderHeight();
       });
   }
-
 
   if (window.PortLightI18n) PortLightI18n.load().then(startApp);
   else {
