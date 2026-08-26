@@ -406,9 +406,9 @@
   "localeName": {
     "auto": "跟随浏览器",
     "en": "英语",
-    "fr": "French",
-    "de": "German",
-    "es": "Spanish",
+    "fr": "法语",
+    "de": "德语",
+    "es": "西班牙语",
     "zh-CN": "简体中文",
     "zh-TW": "繁体中文",
     "ja": "日语"

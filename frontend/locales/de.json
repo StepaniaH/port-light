@@ -406,9 +406,9 @@
   "localeName": {
     "auto": "Folgt dem Browser",
     "en": "Englisch",
-    "fr": "French",
-    "de": "German",
-    "es": "Spanish",
+    "fr": "Französisch",
+    "de": "Deutsch",
+    "es": "Spanisch",
     "zh-CN": "Vereinfachtes Chinesisch",
     "zh-TW": "Traditionelles Chinesisch",
     "ja": "Japanisch"

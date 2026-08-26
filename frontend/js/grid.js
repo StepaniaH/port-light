@@ -1,12 +1,12 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S, CARD_FIELD_KEYS } from './state.js?v=68';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=68';
-import { KIND_MATCHERS } from './kinds.js?v=68';
-import { isLease } from './leases.js?v=68';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=68';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl, portHash, api, fetchPorts, renderScanners } from './api.js?v=68';
-import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=68';
+import { S, CARD_FIELD_KEYS } from './state.js?v=69';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=69';
+import { KIND_MATCHERS } from './kinds.js?v=69';
+import { isLease } from './leases.js?v=69';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=69';
+import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl, portHash, api, fetchPorts, renderScanners } from './api.js?v=69';
+import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=69';
 
 
   export function syncFilterUI() {

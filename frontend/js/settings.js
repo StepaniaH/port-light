@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=68';
-import { t, tx, escapeHtml, errorText } from './text.js?v=68';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=68';
-import { moveChipFocus } from './a11y.js?v=68';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=68';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=68';
-import { render, syncHiddenButton } from './grid.js?v=68';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=69';
+import { t, tx, escapeHtml, errorText } from './text.js?v=69';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=69';
+import { moveChipFocus } from './a11y.js?v=69';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=69';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=69';
+import { render, syncHiddenButton } from './grid.js?v=69';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
