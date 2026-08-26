@@ -61,19 +61,9 @@ FIELDS: tuple[FieldSpec, ...] = (
         ),
     ),
     FieldSpec(
-        "grid_density", "choice", "GRID_DENSITY", "comfortable", "appearance", "Grid density",
-        "Compact packs more port cards on screen.",
-        choices=("comfortable", "compact"),
-    ),
-    FieldSpec(
-        "card_scale", "int", "CARD_SCALE", 50, "appearance", "Card size",
-        "0 is roomiest, 100 packs cards tightest. Replaces grid density.",
-        min=0, max=100,
-    ),
-    FieldSpec(
-        "text_scale", "int", "TEXT_SCALE", 50, "appearance", "Text size",
-        "Grid text size from small (0) to large (100).",
-        min=0, max=100,
+        "grid_density", "choice", "GRID_DENSITY", "standard", "appearance", "Card density",
+        "Three visual presets: Loose spreads cards out, Compact packs them tight.",
+        choices=("loose", "standard", "compact"),
     ),
     FieldSpec(
         "show_status_text", "bool", "SHOW_STATUS_TEXT", False, "appearance",
@@ -217,6 +207,8 @@ def _coerce(spec: FieldSpec, raw: Any) -> Any:
         if custom:
             return text
     if spec.kind == "choice":
+        if spec.key == "grid_density" and text == "comfortable":
+            return "standard"
         if text not in spec.choices:
             raise ValueError(f"{spec.key} must be one of {', '.join(spec.choices)}")
         return text
@@ -282,8 +274,6 @@ def resolve() -> tuple[dict[str, Any], dict[str, Origin]]:
                 values[spec.key], origins[spec.key] = env_val, "env"
             else:
                 values[spec.key], origins[spec.key] = spec.default, "default"
-    if origins["card_scale"] == "default" and values["grid_density"] == "compact":
-        values["card_scale"] = 100
     start, end = values["port_range_start"], values["port_range_end"]
     if end < start:
         values["port_range_end"] = start

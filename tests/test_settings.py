@@ -121,24 +121,32 @@ def test_collect_urls_uses_url_host():
     assert off == []
 
 
-def test_display_scales_default_50(monkeypatch, tmp_path):
+def test_density_defaults_to_standard(monkeypatch, tmp_path):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     values, _ = app_settings.resolve()
-    assert values["card_scale"] == 50
-    assert values["text_scale"] == 50
+    assert values["grid_density"] == "standard"
+    assert "card_scale" not in values
+    assert "text_scale" not in values
 
 
-def test_compact_density_seeds_card_scale(monkeypatch, tmp_path):
+def test_density_maps_legacy_comfortable(monkeypatch, tmp_path):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("GRID_DENSITY", "compact")
+    monkeypatch.setenv("GRID_DENSITY", "comfortable")
     values, _ = app_settings.resolve()
-    assert values["card_scale"] == 100
-    assert values["grid_density"] == "compact"
+    assert values["grid_density"] == "standard"
+    client = TestClient(app)
+    ok = client.put("/api/settings", json={"grid_density": "comfortable"})
+    assert ok.status_code == 200
+    assert ok.json()["values"]["grid_density"] == "standard"
 
 
-def test_saved_card_scale_beats_density_seed(monkeypatch, tmp_path):
+def test_density_rejects_unknown_and_snapshot_has_no_scales(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("GRID_DENSITY", "compact")
-    app_settings.apply_patch({"card_scale": 30})
-    values, _ = app_settings.resolve()
-    assert values["card_scale"] == 30
+    client = TestClient(app)
+    res = client.put("/api/settings", json={"grid_density": "cozy"})
+    assert res.status_code == 400
+    snap = client.get("/api/settings").json()
+    keys = [f["key"] for f in snap["fields"]]
+    assert "card_scale" not in keys
+    assert "text_scale" not in keys
+    assert snap["values"]["grid_density"] == "standard"
