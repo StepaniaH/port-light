@@ -295,6 +295,16 @@ test('applyAppearance mirrors density without scale keys', () => {
   assert.ok(!('text_scale' in stored));
 });
 
+test('inline bootstrap table matches DENSITY_PRESETS', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  for (const name of Object.keys(DENSITY_PRESETS)) {
+    for (const [k, v] of Object.entries(DENSITY_PRESETS[name])) {
+      assert.ok(src.includes(k + ':' + v), name + ' ' + k + ':' + v + ' present in bootstrap');
+    }
+  }
+});
+
 test('palette picker lists custom themes with badge and delete hook', () => {
   S.customThemes = [{
     id: 'abcd1234', name: 'Smoke Amber', basedOn: 'gruvbox', mode: 'dark',

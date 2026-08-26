@@ -18,30 +18,15 @@
       if (typeof s.theme_palette === 'string' && s.theme_palette && PAL[s.theme_palette] && PAL[s.theme_palette].indexOf(m) >= 0) {
         document.documentElement.setAttribute('data-palette', s.theme_palette);
       }
-      var cs = Number(s.card_scale);
-      var ts = Number(s.text_scale);
-      var hasCs = Number.isFinite(cs);
-      var hasTs = Number.isFinite(ts);
-      if (hasCs || hasTs) {
-        if (!hasCs) cs = 50;
-        if (!hasTs) ts = 50;
-        cs = Math.max(0, Math.min(100, cs));
-        ts = Math.max(0, Math.min(100, ts));
-        var A = { minW: [164, 112], gap: [10, 6], padX: [14, 10], padT: [12, 8], padB: [16, 8], minH: [76, 52] };
-        var k = cs / 100;
-        for (var key in A) {
-          var pair = A[key];
-          var v = Math.round(pair[0] + (pair[1] - pair[0]) * k);
-          var name = '--cell-' + key.toLowerCase().replace('minw', 'min-w').replace('padx', 'pad-x').replace('padt', 'pad-t').replace('padb', 'pad-b').replace('minh', 'min-h');
-          document.documentElement.style.setProperty(name, v + 'px');
-        }
-        var basePx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-        var fontPx = Math.max(12, Math.min(18, Math.round(basePx + (ts - 50) * 0.08)));
-        document.documentElement.style.setProperty('--port-font', fontPx + 'px');
+      var DENSITY = {loose:{minW:164,gap:10,padX:14,padT:12,padB:16,minH:76},standard:{minW:138,gap:8,padX:12,padT:10,padB:12,minH:64},compact:{minW:112,gap:6,padX:10,padT:8,padB:8,minH:52}};
+      var d = DENSITY[s.grid_density] || DENSITY.standard;
+      for (var key in d) {
+        var name = '--cell-' + key.toLowerCase().replace('minw','min-w').replace('padx','pad-x').replace('padt','pad-t').replace('padb','pad-b').replace('minh','min-h');
+        document.documentElement.style.setProperty(name, d[key] + 'px');
       }
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=74">
+  <link rel="stylesheet" href="/static/style.css?v=75">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -298,7 +283,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=74"></script>
-  <script type="module" src="/static/js/app.js?v=74"></script>
+  <script src="/static/i18n.js?v=75"></script>
+  <script type="module" src="/static/js/app.js?v=75"></script>
 </body>
 </html>
