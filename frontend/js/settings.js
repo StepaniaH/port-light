@@ -1,6 +1,6 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-  import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=75';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, saveView } from './state.js?v=75';
 import { t, tx, escapeHtml, errorText } from './text.js?v=75';
 import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=75';
 import { moveChipFocus } from './a11y.js?v=75';

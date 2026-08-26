@@ -2,6 +2,13 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.7.3
+
+- Custom themes: build a palette in the advanced theme editor (15 core colors), stored server-side, import/export as JSON, selected as `@custom:<id>`
+- Localization: Français, Deutsch, Español join the UI, with locale-parity tooling
+- Display: one card-density choice — Loose / Standard / Compact — with a live sample-card preview (replaces the never-released size sliders)
+- UX polish: settings sections regrouped, live display preview, theme-aware icon traced from the original artwork, macOS listen sources via `lsof`
+
 ## Shipped in 0.7.2
 
 - No hardcoded ports in agent-facing copy: MCP snippets derive their URL from the instance (`/api/meta` → `listen_port`, env `PORT_LIGHT_PORT`) or fall back to placeholders; the agent skill points at your dashboard URL instead of a literal localhost port

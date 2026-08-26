@@ -54,7 +54,7 @@
 - 点击复制端口号
 - 一个界面可以拉取其他 Port-Light 实例的占用图（局域网 / Tailscale）。每台机器仍自己扫描。
 - 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
-- 随心定制：在内置色板上分叉出自定义色板（15 个核心颜色，服务端存储，支持 JSON 导入导出），用连续滑杆微调卡片与文字大小，旁边即是实时示例卡预览。
+- 随心定制：在内置色板上分叉出自定义色板（15 个核心颜色，服务端存储，支持 JSON 导入导出），并选择卡片密度——宽松 / 标准 / 紧凑，旁边即是实时示例卡预览。
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
 - 查找空闲端口：工具栏按钮（或 `GET /api/free-runs?count=N`）返回范围内最大的连续空闲段，可一键预留
@@ -82,7 +82,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.2
+    image: stepaniah/port-light:v0.7.3
     container_name: port-light
     restart: unless-stopped
     ports:

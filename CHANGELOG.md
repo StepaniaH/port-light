@@ -2,7 +2,7 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
-## Unreleased
+## 0.7.3 — 2026-08-26
 
 - Localization: three new interface languages — Français, Deutsch, Español — alongside
   tooling that keeps every locale in lockstep (placeholder parity and unused-key tests,
