@@ -50,7 +50,7 @@ def test_settings_rejects_bad_values(tmp_path, monkeypatch):
     palette = client.put("/api/settings", json={"theme_palette": "gruvbox"})
     assert palette.status_code == 200
     assert palette.json()["values"]["theme_palette"] == "gruvbox"
-    assert client.put("/api/settings", json={"locale": "fr"}).status_code == 400
+    assert client.put("/api/settings", json={"locale": "xx-YY"}).status_code == 400
     ok = client.put("/api/settings", json={"locale": "ja"})
     assert ok.status_code == 200
     assert ok.json()["values"]["locale"] == "ja"
@@ -59,6 +59,19 @@ def test_settings_rejects_bad_values(tmp_path, monkeypatch):
     v6 = client.put("/api/settings", json={"url_host": "[2001:db8::10]"})
     assert v6.status_code == 200
     assert v6.json()["values"]["url_host"] == "2001:db8::10"
+
+
+def test_locale_choice_accepts_new_languages(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("PORT_LIGHT_SETTINGS_SOURCE", raising=False)
+    monkeypatch.setenv("LOCALE", "fr")
+    values, _ = app_settings.resolve()
+    assert values["locale"] == "fr"
+    client = TestClient(app)
+    ok = client.put("/api/settings", json={"locale": "fr"})
+    assert ok.status_code == 200
+    assert ok.json()["values"]["locale"] == "fr"
+    assert client.put("/api/settings", json={"locale": "xx-YY"}).status_code == 400
 
 
 def test_manual_list_patch_and_known(tmp_path, monkeypatch):

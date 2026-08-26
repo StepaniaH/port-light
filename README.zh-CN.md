@@ -53,7 +53,7 @@
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
 - 一个界面可以拉取其他 Port-Light 实例的占用图（局域网 / Tailscale）。每台机器仍自己扫描。
-- 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；界面语言（English / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
+- 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
 - 随心定制：在内置色板上分叉出自定义色板（15 个核心颜色，服务端存储，支持 JSON 导入导出），并用连续滑杆微调卡片与文字大小。
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`

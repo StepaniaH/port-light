@@ -44,7 +44,7 @@ FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         "locale", "choice", "LOCALE", "auto", "appearance", "Language",
         "Auto follows the browser.",
-        choices=("auto", "en", "zh-CN", "zh-TW", "ja"),
+        choices=("auto", "en", "fr", "de", "es", "zh-CN", "zh-TW", "ja"),
     ),
     FieldSpec(
         "theme_mode", "choice", "THEME_MODE", "system", "appearance", "Theme",

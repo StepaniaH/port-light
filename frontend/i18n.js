@@ -1,9 +1,9 @@
-/* Port-Light locales: frontend/locales/{en,zh-CN,zh-TW,ja}.json */
+/* Port-Light locales: frontend/locales/{en,fr,de,es,zh-CN,zh-TW,ja}.json */
 
 (function (global) {
   'use strict';
 
-  var SUPPORTED = ['en', 'zh-CN', 'zh-TW', 'ja'];
+  var SUPPORTED = ['en', 'fr', 'de', 'es', 'zh-CN', 'zh-TW', 'ja'];
   var CACHE_BUST = '68';
   var cache = {};
   var dict = {};
@@ -41,6 +41,9 @@
     if (lower === 'zh') return 'zh-CN';
     if (lower === 'ja' || lower.indexOf('ja-') === 0) return 'ja';
     if (lower === 'en' || lower.indexOf('en-') === 0) return 'en';
+    if (lower === 'fr' || lower.indexOf('fr-') === 0) return 'fr';
+    if (lower === 'de' || lower.indexOf('de-') === 0) return 'de';
+    if (lower === 'es' || lower.indexOf('es-') === 0) return 'es';
     for (var i = 0; i < SUPPORTED.length; i++) {
       if (SUPPORTED[i].toLowerCase() === lower) return SUPPORTED[i];
     }
@@ -78,8 +81,7 @@
   }
 
   function applyLang() {
-    var htmlLang = locale === 'zh-CN' ? 'zh-CN' : locale === 'zh-TW' ? 'zh-TW' : locale === 'ja' ? 'ja' : 'en';
-    document.documentElement.lang = htmlLang;
+    document.documentElement.lang = locale;
     document.documentElement.setAttribute('data-locale', locale);
   }
 
