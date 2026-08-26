@@ -394,6 +394,7 @@
   "localeNative": {
     "en": "English",
     "fr": "Français",
+    "de": "Deutsch",
     "zh-CN": "简体中文",
     "zh-TW": "繁體中文",
     "ja": "日本語"
@@ -402,6 +403,7 @@
     "auto": "ブラウザに合わせる",
     "en": "英語",
     "fr": "French",
+    "de": "German",
     "zh-CN": "簡体字中国語",
     "zh-TW": "繁体字中国語",
     "ja": "日本語"

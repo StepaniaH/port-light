@@ -1,0 +1,450 @@
+{
+  "search": {
+    "placeholder": "Port, Name oder Host suchen",
+    "aria": "Suchen"
+  },
+  "action": {
+    "refresh": "Aktualisieren",
+    "add": "Port hinzufügen",
+    "showHidden": "Verborgene Ports anzeigen",
+    "hiddenVisible": "Verborgene Ports sichtbar",
+    "settings": "Einstellungen",
+    "findFree": "Freie Ports finden"
+  },
+  "legend": {
+    "inUse": "belegt",
+    "configured": "deklariert",
+    "free": "frei",
+    "hidden": "verborgen",
+    "locked": "gesperrt",
+    "occupancy": "Belegung"
+  },
+  "filter": {
+    "running": "Laufend",
+    "system": "System",
+    "docker": "Docker",
+    "access": "Web",
+    "udp": "UDP",
+    "localhost": "localhost",
+    "public": "Öffentlich",
+    "hidden": "Verborgen",
+    "kinds": "Art",
+    "sort": "Sortierung",
+    "range": "Bereich",
+    "rangeStart": "Bereichsbeginn",
+    "rangeEnd": "Bereichsende",
+    "portAsc": "Port ↑",
+    "portDesc": "Port ↓",
+    "nameAsc": "Name A–Z",
+    "nameDesc": "Name Z–A",
+    "byStatus": "Status"
+  },
+  "scanner": {
+    "label": "Scanner",
+    "host": "Host",
+    "docker": "Docker",
+    "compose": "Compose",
+    "available": "{name} verfügbar",
+    "unavailable": "{name} nicht verfügbar",
+    "truncated": "{name} hat das Dateilimit erreicht — einige deklarierte Ports könnten fehlen",
+    "incomplete": "{name} hat einen Stack übersprungen, den Compose ablehnen würde (erforderliche Umgebungsvariable oder include)",
+    "via": {
+      "host_proc": "{name} über /host/proc",
+      "ss": "{name} über ss",
+      "proc": "{name} über /proc"
+    }
+  },
+  "status": {
+    "used": "belegt",
+    "configured": "deklariert",
+    "free": "frei",
+    "running": "laufend",
+    "paused": "pausiert",
+    "restarting": "startet neu",
+    "exited": "beendet",
+    "created": "erstellt",
+    "dead": "tot",
+    "removing": "wird entfernt"
+  },
+  "detail": {
+    "panel": "Portdetails",
+    "close": "Schließen",
+    "status": "Status",
+    "source": "Quelle",
+    "protocol": "Protokoll",
+    "bind": "Bindadresse",
+    "process": "Prozess",
+    "pid": "PID",
+    "open": "Öffnen",
+    "url": "URL",
+    "containers": "Container",
+    "image": "Image",
+    "project": "Projekt",
+    "service": "Service",
+    "network": "Netzwerk",
+    "compose": "Compose",
+    "file": "Datei",
+    "containerPort": "Container-Port",
+    "manual": "Manuell",
+    "accessPort": "Zugriffsport",
+    "internalPort": "Interner Port",
+    "accessHint": "Wird typischerweise im Browser oder einem Client geöffnet.",
+    "internalHint": "Wird normalerweise nicht direkt angesprochen.",
+    "conflict": "Compose-Konflikt",
+    "conflictHint": "Deklariert von {n} Compose-Projekten, die dieselbe Adresse binden.",
+    "hide": "Aus dem Raster ausblenden",
+    "unhide": "Einblenden",
+    "delete": "Löschen",
+    "deleteConfirm": "Den manuellen Eintrag für Port {port} entfernen?",
+    "actionFailed": "Dieser Port konnte nicht aktualisiert werden.",
+    "notFound": "Dieser Port ist nicht auf der Belegungskarte.",
+    "hiddenLocked": "Dieser Port ist verborgen. Entsperren Sie verborgene Ports, um ihn zu sehen.",
+    "loading": "Belegung wird gelesen…",
+    "label": "Bezeichnung",
+    "saveLabel": "Bezeichnung speichern",
+    "copyPort": "Portnummer kopieren",
+    "publicBind": "Alle Schnittstellen",
+    "publicBindHint": "Dieser Port akzeptiert Verbindungen von jeder Adresse des Hosts.",
+    "remoteReadOnly": "Schreibgeschützt — diese Karte stammt von {name}. Ausblenden, Bezeichnungen und Hinzufügen bleiben auf diesem Rechner.",
+    "expiresIn": "Läuft ab in {time}"
+  },
+  "hosts": {
+    "title": "Andere Rechner",
+    "blurb": "Auf jedem Rechner läuft weiterhin Port-Light. Diese Oberfläche ruft deren Belegungskarten ab. Halten Sie diese URLs im LAN oder bei Tailscale — stellen Sie Port 2100 nicht ins öffentliche Internet.",
+    "add": "Rechner hinzufügen",
+    "remove": "Entfernen",
+    "name": "Name",
+    "url": "URL",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "passwordKeep": "Leer lassen, um das gespeicherte Passwort zu behalten",
+    "thisMachine": "dieser Rechner",
+    "unreachable": "Dieser Rechner konnte nicht erreicht werden.",
+    "authFailed": "Dieser Rechner hat die gespeicherte Anmeldung abgelehnt.",
+    "counts": "{used} belegt · {configured} deklariert",
+    "switcher": "Rechner",
+    "loading": "Belegung wird gelesen…",
+    "urlPlaceholder": "http://100.x.x.x:2100",
+    "namePlaceholder": "NAS",
+    "max": "Maximal 6 weitere Rechner.",
+    "localOnly": "Ausblenden, Bezeichnungen und Hinzufügen gelten nur für diesen Rechner.",
+    "clearAuth": "Gespeicherte Anmeldung löschen",
+    "legendHost": "Kennzahlen für {name}",
+    "retry": "Erneut versuchen",
+    "dockerHint": "Diese Instanz ruft diese URLs ab. Aus einem Docker-Bridge-Container ist Tailscale 100.x oft nicht erreichbar — verwenden Sie eine LAN-IP oder den Host-Netzwerkmodus auf dem Hub."
+  },
+  "modal": {
+    "addTitle": "Port hinzufügen",
+    "portNumber": "Portnummer",
+    "label": "Bezeichnung",
+    "optional": "Optional",
+    "cancel": "Abbrechen",
+    "add": "Hinzufügen",
+    "unhideTitle": "Verborgene Ports anzeigen",
+    "unhideHint": "Geben Sie das Entsperr-Passwort ein, falls der Host ein solches verlangt. Andernfalls nimmt die Augenschaltfläche verborgene Ports nur zusätzlich ins Raster auf.",
+    "unlockPassword": "Entsperr-Passwort",
+    "unlock": "Entsperren",
+    "wrongPassword": "Falsches Passwort",
+    "unlockFailed": "Verborgene Ports konnten nicht entsperrt werden.",
+    "invalidPort": "Geben Sie einen Port zwischen 1 und 65535 ein.",
+    "addFailed": "Dieser Port konnte nicht hinzugefügt werden."
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "lead": "Das Speichern schreibt in das Daten-Volume und setzt die entsprechende Umgebungsvariable außer Kraft.",
+    "leadReadonly": "Durch die Host-Umgebung gesperrt. Ändern Sie die Werte in Compose und erstellen Sie den Container neu.",
+    "save": "Speichern",
+    "saving": "Speichern…",
+    "saved": "Gespeichert",
+    "unsaved": "Ungespeicherte Änderungen",
+    "discard": "Ungespeicherte Einstellungen verwerfen?",
+    "mustBeNumber": "{label} muss eine Zahl sein",
+    "nav": {
+      "label": "Einstellungsabschnitte",
+      "appearance": "Erscheinungsbild",
+      "occupancy": "Belegung",
+      "automation": "Automatisierung",
+      "advanced": "Erweitert"
+    },
+    "theme": {
+      "palettes": "Paletten",
+      "builtin": "Eingebaute",
+      "customBadge": "Eigene"
+    },
+    "editor": {
+      "summary": "Erweitert: eigene Palette erstellen",
+      "hint": "Beginnen Sie mit der aktuellen Palette, passen Sie die Farben an und speichern Sie. Eigene Paletten erscheinen in der Auswahl.",
+      "preset": "Aus aktueller Palette übernehmen",
+      "new": "Neue eigene Palette",
+      "save": "Speichern",
+      "export": "Exportieren",
+      "import": "Importieren",
+      "invalid": "Korrigieren Sie die markierten Farbwerte und geben Sie der Palette einen Namen.",
+      "vars": {
+        "bg": "Hintergrund", "elevated": "Erhabene Flächen", "card": "Karten",
+        "cardHover": "Karten-Hover", "border": "Rahmen", "text": "Text",
+        "textDim": "Sekundärer Text", "used": "Belegte Ports", "configured": "Deklarierte Ports",
+        "free": "Freie Ports", "accent": "Akzent", "conflict": "Konflikte",
+        "access": "Zugriffs-Badge", "hidden": "Verborgen", "danger": "Gefahr"
+      }
+    },
+    "sections": {
+      "theme": {
+        "title": "Design",
+        "blurb": "Helligkeit, Palette und Ihre eigenen Paletten."
+      },
+      "language": {
+        "title": "Sprache",
+        "blurb": "Sprache der Oberfläche."
+      }
+    },
+    "cards": {
+      "title": "Karten",
+      "blurb": "Statustext und Badges auf jeder Belegungszelle."
+    },
+    "groups": {
+      "appearance": {
+        "title": "Erscheinungsbild",
+        "blurb": "Sprache, Farben und wie eng die Belegungskarten sitzen."
+      },
+      "grid": {
+        "title": "Belegung",
+        "blurb": "Aktualisierungsintervall und der Bereich, der für die Zählung der freien Ports verwendet wird."
+      },
+      "scanning": {
+        "title": "Compose-Scan",
+        "blurb": "Wie tief bei jeder Aktualisierung nach compose.yml-Dateien gesucht wird."
+      },
+      "links": {
+        "title": "Zugriffs-URLs",
+        "blurb": "Host, der beim Erraten von http-Links im Detailbereich verwendet wird."
+      }
+    },
+    "host": {
+      "title": "Host",
+      "blurb": "Pfade und Passwörter bleiben in der Container-Umgebung. Diese Seite kann sie nicht ändern.",
+      "composeScanDir": "Compose-Scan-Verzeichnis",
+      "customPortsFile": "Datei für eigene Ports",
+      "dataDir": "Datenverzeichnis",
+      "basicAuth": "Basic Auth",
+      "hiddenUnlock": "Entsperrung für verborgene Ports",
+      "settingsSource": "Einstellungsquelle"
+    },
+    "origin": {
+      "saved": "Gespeichert",
+      "env": "Umgebung"
+    },
+    "source": {
+      "auto": "Auto",
+      "env": "Umgebung",
+      "file": "Gespeicherte Datei"
+    },
+    "on": "ein",
+    "off": "aus",
+    "fields": {
+      "locale": {
+        "label": "Sprache",
+        "help": "Auto folgt dem Browser."
+      },
+      "theme_mode": {
+        "label": "Design",
+        "help": "System folgt dem Betriebssystem. Paletten färben sich innerhalb der gewählten Helligkeit um."
+      },
+      "theme_palette": {
+        "label": "Palette",
+        "help": "Farbfamilie, die obendrauf gelegt wird. Nicht verfügbare werden ausgegraut."
+      },
+      "grid_density": {
+        "label": "Rasterdichte",
+        "help": "Kompakt packt mehr Portkarten auf den Bildschirm."
+      },
+      "card_scale": {
+        "label": "Kartengröße",
+        "help": "0 ist am geräumigsten, 100 packt die Karten am engsten zusammen."
+      },
+      "text_scale": {
+        "label": "Textgröße",
+        "help": "Textgröße im Raster von klein (0) bis groß (100)."
+      },
+      "show_status_text": {
+        "label": "Statustext auf den Karten",
+        "help": "Kurze Belegt-/Deklariert-Beschriftung auf jeder Karte."
+      },
+      "show_access_badge": {
+        "label": "Zugriffsport-Badge",
+        "help": "Markiert Ports, die man üblicherweise im Browser öffnet."
+      },
+      "show_protocol_badge": {
+        "label": "Protokoll-Badge",
+        "help": "Zeigt udp / tcp,udp auf Karten, die nicht rein TCP sind."
+      },
+      "copy_on_click": {
+        "label": "Port beim Klick kopieren",
+        "help": "Kopiert die Portnummer in die Zwischenablage."
+      },
+      "auto_refresh": {
+        "label": "Automatische Aktualisierung",
+        "help": "Fragt die Belegungskarte in einem Intervall ab."
+      },
+      "refresh_ms": {
+        "label": "Aktualisierungsintervall (ms)",
+        "help": "Wird bei eingeschalteter automatischer Aktualisierung verwendet. 1000–300000."
+      },
+      "port_range_start": {
+        "label": "Bereichsbeginn",
+        "help": "Untergrenze für die Zählung freier Ports und den Standardbereich in der Kopfzeile."
+      },
+      "port_range_end": {
+        "label": "Bereichsende",
+        "help": "Obergrenze. Malt nicht jeden ungenutzten Port grün."
+      },
+      "compose_scan_depth": {
+        "label": "Compose-Scantiefe",
+        "help": "Wie viele Verzeichnisebenen unter COMPOSE_SCAN_DIR durchsucht werden."
+      },
+      "compose_scan_max_files": {
+        "label": "Compose-Dateilimit",
+        "help": "Stoppt nach dieser Anzahl an Compose-Dateien pro Aktualisierung."
+      },
+      "guess_urls": {
+        "label": "Zugriffs-URLs erraten",
+        "help": "Ergänzt http(s)://host:port für bekannte Zugriffsports."
+      },
+      "url_host": {
+        "label": "URL-Hostname",
+        "help": "Wird in erratenen Links statt localhost verwendet. Bei leerem Wert wird die LAN-Bindadresse genutzt, oder localhost, wenn der Port öffentlich ist."
+      },
+      "url_scheme": {
+        "label": "URL-Schema",
+        "help": "Auto verwendet https für 443/8443/9443 und Namen mit HTTPS."
+      }
+    },
+    "auto": {
+      "agentToken": "Agent-Token",
+      "suggest": "API für Portvorschläge",
+      "suggestValue": "offen — /api/ports/suggest",
+      "metrics": "Metrik-Endpunkt",
+      "webhook": "Webhook",
+      "history": "Aufbewahrung des Verlaufs (Tage)",
+      "events": "Änderungsstream (SSE)",
+      "connect": {
+        "title": "Verbinden Sie Ihre Agenten",
+        "blurb": "Copy-paste-Registrierung für Coding-Agenten. Der MCP-Server kapselt den Ablauf suggest/check/release.",
+        "mcpDocker": "MCP-Registrierung — Compose-/Image-Deployment",
+        "dockerHint": "PORT_LIGHT_URL zeigt auf den Port innerhalb des Containers (Umgebungsvariable PORT_LIGHT_PORT, Standard 2100). Passen Sie sie an, wenn Sie den internen Port geändert haben, auf dem der Server lauscht.",
+        "mcpSource": "MCP-Registrierung — Ausführung aus dem Quellcode",
+        "skill": "Agent-Skill (Claude Code und Kompatible)",
+        "skillHint": "Kopieren Sie SKILL.md in das Skills-Verzeichnis Ihres Agenten.",
+        "curl": "HTTP-Beispiel",
+        "curlToken": "Diese Instanz verlangt X-Agent-Token — ersetzen Sie <your-token>.",
+        "copy": "Kopieren",
+        "copied": "Kopiert!"
+      },
+      "status": {
+        "title": "Exponierte Schnittstellen",
+        "blurb": "Was Skripte und Agenten derzeit erreichen können."
+      },
+      "activity": {
+        "title": "Aktivität der Vorschlags-API",
+        "blurb": "Lokales Aufrufprotokoll für GET /api/ports/suggest. Nur Zähler und Bezeichnungen — niemals Tokens oder Adressen.",
+        "disabled": "Der Verlauf ist deaktiviert (HISTORY_RETENTION_DAYS=0), daher wird die Nutzung nicht aufgezeichnet.",
+        "total": "Aufrufe",
+        "activeLeases": "Aktive Reservierungen",
+        "lastUsed": "Zuletzt verwendet: {time}",
+        "never": "nie",
+        "thTime": "Wann",
+        "thCount": "Ports",
+        "thScope": "Bereich",
+        "thLabel": "Bezeichnung",
+        "thLeased": "Reservierung"
+      },
+      "leases": {
+        "title": "Aktive Reservierungen",
+        "blurb": "Durch Agenten über die Vorschlags-API reserviert, wird automatisch bei Ablauf freigegeben.",
+        "none": "Keine aktiven Reservierungen.",
+        "release": "Freigeben",
+        "remaining": "Noch {time}"
+      }
+    }
+  },
+  "choice": {
+    "auto": "Auto",
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語",
+    "system": "System",
+    "dark": "Dunkel",
+    "light": "Hell",
+    "gruvbox": "Gruvbox",
+    "catppuccin": "Catppuccin",
+    "nord": "Nord",
+    "dracula": "Dracula",
+    "tokyo-night": "Tokyo Night",
+    "one-dark": "One Dark",
+    "solarized": "Solarized",
+    "everforest": "Everforest",
+    "rose-pine": "Rosé Pine",
+    "kanagawa": "Kanagawa",
+    "comfortable": "Komfortabel",
+    "compact": "Kompakt",
+    "http": "HTTP",
+    "https": "HTTPS"
+  },
+  "localeNative": {
+    "en": "English",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  },
+  "localeName": {
+    "auto": "Folgt dem Browser",
+    "en": "Englisch",
+    "fr": "French",
+    "de": "German",
+    "zh-CN": "Vereinfachtes Chinesisch",
+    "zh-TW": "Traditionelles Chinesisch",
+    "ja": "Japanisch"
+  },
+  "grid": {
+    "empty": "Keine Ports entsprechen diesen Filtern.",
+    "emptyNone": "Keine belegten oder deklarierten Ports in diesem Bereich.",
+    "refreshFailed": "Die Karte konnte nicht aktualisiert werden.",
+    "skip": "Zu den Ports springen",
+    "copied": "Kopiert",
+    "web": "web",
+    "aria": "Raster der Portbelegung",
+    "updated": "Aktualisiert {time}",
+    "leaseBadge": "Agenten-Reservierung"
+  },
+  "error": {
+    "httpStatus": "Anfrage fehlgeschlagen (HTTP {status})."
+  },
+  "sourceType": {
+    "docker": "Docker",
+    "system": "System",
+    "host": "Host",
+    "manual": "Manuell",
+    "unknown": "Unbekannt"
+  },
+  "scope": {
+    "public": "öffentlich",
+    "lan": "LAN",
+    "link": "link-local",
+    "localhost": "localhost"
+  },
+  "planner": {
+    "title": "Freie Ports finden",
+    "count": "Wie viele Ports benötigen Sie?",
+    "label": "Bezeichnung für die Reservierung",
+    "find": "Blöcke finden",
+    "none": "Keine freien Blöcke in diesem Bereich.",
+    "run": "{start}–{end} ({size} frei)",
+    "reserve": "Reservieren"
+  },
+  "history": {
+    "title": "Letzte Änderungen (24 h)"
+  }
+}
