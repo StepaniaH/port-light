@@ -647,9 +647,13 @@ a:focus-visible,
   appearance: none; -webkit-appearance: none;
   background: transparent; cursor: pointer;
 }
-.slider-wrap input[type="range"]:focus { outline: none; }
-.slider-wrap input[type="range"]:focus-visible {
-  outline: none; box-shadow: var(--focus); border-radius: 999px;
+.slider-wrap input[type="range"]:focus,
+.slider-wrap input[type="range"]:focus-visible { outline: none; box-shadow: none; }
+.slider-wrap input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--accent);
+}
+.slider-wrap input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--accent);
 }
 .slider-wrap input[type="range"]::-webkit-slider-runnable-track {
   height: 6px; border-radius: 999px; background: var(--border);

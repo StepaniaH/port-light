@@ -54,7 +54,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Copy the port number on click
 - One UI can pull occupancy maps from other Port-Light instances (LAN / Tailscale). Each host still scans itself.
 - Appearance on Settings: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. UI language (English, Français, Deutsch, Español, 简体中文, 繁體中文, 日本語). Also via Compose env.
-- Make it yours: fork any palette in the advanced theme editor (15 core colors, server-stored, import/export as JSON) and tune card and text size with continuous sliders.
+- Make it yours: fork any palette in the advanced theme editor (15 core colors, server-stored, import/export as JSON) and tune card and text size with continuous sliders and a live sample-card preview.
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with one-click reservation

@@ -213,8 +213,15 @@ test('appearance panel renders theme/language/layout sections in order', () => {
     applyDom() {},
   };
   renderSettingsForm({
-    values: {}, fields: [], readonly: false, source: 'auto',
+    values: {}, readonly: false, source: 'auto',
     env_only: {}, origins: {},
+    fields: [
+      { key: 'theme_mode', type: 'choice', group: 'appearance', choices: ['system', 'dark', 'light'], origin: 'default' },
+      { key: 'card_scale', type: 'int', group: 'appearance', origin: 'default' },
+      { key: 'text_scale', type: 'int', group: 'appearance', origin: 'default' },
+      { key: 'locale', type: 'choice', group: 'appearance', choices: ['auto', 'en'], origin: 'default' },
+      { key: 'show_status_text', type: 'bool', group: 'appearance', origin: 'default' },
+    ],
   });
   const panels = host.querySelectorAll('[data-settings-panel="appearance"] .settings-card > header h2');
   const titles = Array.from(panels).map((el) => el.getAttribute('data-i18n'));
@@ -225,6 +232,14 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   assert.ok(preview.querySelector('.port-cell.used'), 'used sample');
   assert.ok(preview.querySelector('.port-cell.configured'), 'configured sample');
   assert.ok(preview.querySelector('.port-cell.free'), 'free sample');
+  const panelHtml = host.innerHTML;
+  const iScale = panelHtml.indexOf('name="card_scale"');
+  const iText = panelHtml.indexOf('name="text_scale"');
+  const iPrev = panelHtml.indexOf('data-display-preview');
+  const iStatus = panelHtml.indexOf('name="show_status_text"');
+  assert.ok(iScale > -1 && iScale < iText, 'sliders render in the layout card');
+  assert.ok(iText < iPrev, 'preview sits right after the sliders');
+  assert.ok(iPrev < iStatus, 'preview precedes the card toggles');
   host.remove(); lead.remove(); status.remove(); save.remove();
 });
 

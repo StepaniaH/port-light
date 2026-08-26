@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=71';
-import { t, tx, escapeHtml, errorText } from './text.js?v=71';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=71';
-import { moveChipFocus } from './a11y.js?v=71';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=71';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=71';
-import { render, syncHiddenButton } from './grid.js?v=71';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, applyDisplayScale, saveView } from './state.js?v=72';
+import { t, tx, escapeHtml, errorText } from './text.js?v=72';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=72';
+import { moveChipFocus } from './a11y.js?v=72';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=72';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=72';
+import { render, syncHiddenButton } from './grid.js?v=72';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -830,9 +830,12 @@ import { render, syncHiddenButton } from './grid.js?v=71';
     }
 
     const appearanceFields = byGroup.appearance || [];
+    const SLIDER_KEYS = { card_scale: true, text_scale: true };
     const themeFields = appearanceFields.filter(function (f) {
-      return !CARD_FIELD_KEYS[f.key] && f.key !== 'locale' && f.key !== 'grid_density';
+      return !CARD_FIELD_KEYS[f.key] && !SLIDER_KEYS[f.key] &&
+        f.key !== 'locale' && f.key !== 'grid_density';
     });
+    const sliderFields = appearanceFields.filter(function (f) { return SLIDER_KEYS[f.key]; });
     const languageFields = appearanceFields.filter(function (f) { return f.key === 'locale'; });
     const cardFields = appearanceFields.filter(function (f) { return CARD_FIELD_KEYS[f.key]; });
     const knownGroups = { appearance: true, grid: true, scanning: true, links: true };
@@ -846,7 +849,8 @@ import { render, syncHiddenButton } from './grid.js?v=71';
           '<div data-appearance-section="theme">' + rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
         settingsCard('settings.sections.language.title', 'settings.sections.language.blurb',
           rowsFor(languageFields)) +
-        settingsCard('settings.cards.title', 'settings.cards.blurb', displayPreviewHtml() + rowsFor(cardFields))) +
+        settingsCard('settings.cards.title', 'settings.cards.blurb',
+          rowsFor(sliderFields) + displayPreviewHtml() + rowsFor(cardFields))) +
       settingsPanelHtml('occupancy',
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +
