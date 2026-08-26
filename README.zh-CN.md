@@ -121,7 +121,7 @@ docker compose up -d
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称（只能用环境变量） |
 | `THEME_MODE` | `system` | `system` / `dark` / `light`，解析后的明暗；配色跟随明暗 |
 | `THEME_PALETTE` | 内置 | 叠在明暗之上的配色族：`gruvbox`、`catppuccin`、`solarized`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`everforest`、`rose-pine`、`kanagawa`。留空使用内置颜色。 |
-| `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
+| `LOCALE` | `auto` | `auto` / `en` / `fr` / `de` / `es` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
 | `GRID_DENSITY` | `standard` | 卡片密度预设：`loose`(宽松)、`standard`(标准)、`compact`(紧凑)。旧值 `comfortable` 视同 `standard`。 |
 | `REFRESH_MS` | `5000` | 自动刷新间隔 |
 | `URL_HOST` | 空 | 猜测链接里用的主机名 |

@@ -121,7 +121,7 @@ Open `http://localhost:2100`.
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | Extra / overriding port names (env only) |
 | `THEME_MODE` | `system` | `system` / `dark` / `light` — the resolved brightness; palettes follow it |
 | `THEME_PALETTE` | built-in | Color family layered on top: `gruvbox`, `catppuccin`, `solarized`, `nord`, `dracula`, `tokyo-night`, `one-dark`, `everforest`, `rose-pine`, `kanagawa`. Empty uses the built-in colors. |
-| `LOCALE` | `auto` | `auto` / `en` / `zh-CN` / `zh-TW` / `ja`. Auto follows the browser. |
+| `LOCALE` | `auto` | `auto` / `en` / `fr` / `de` / `es` / `zh-CN` / `zh-TW` / `ja`. Auto follows the browser. |
 | `GRID_DENSITY` | `standard` | Card-density preset: `loose`, `standard`, or `compact`. A stored legacy `comfortable` behaves as `standard`. |
 | `REFRESH_MS` | `5000` | Auto-refresh interval |
 | `URL_HOST` | empty | Hostname used in guessed `http(s)://` links |
