@@ -36,7 +36,9 @@ from backend.port_scanner import (
     descendant_pids,
     host_proc_available,
     is_host_netns_mode,
+    listen_scan_source,
     normalize_ip,
+    parse_lsof_line,
     parse_proc_net_line,
     parse_ss_line,
 )
@@ -1740,3 +1742,54 @@ def test_scan_with_ss_retries_past_help_flavored_variants(monkeypatch):
     assert [p.port for p in ports] == [6379]
     assert calls, "no ss variants were tried"
     assert all("-h" not in args[1:] for args in calls), "help flag still in the ladder"
+
+
+def test_parse_lsof_line_variants():
+    header = "COMMAND   PID  USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME"
+    assert parse_lsof_line(header) is None
+    assert parse_lsof_line("") is None
+
+    v4 = parse_lsof_line(
+        "rapportd  912 stepaniah   10u  IPv4 0xabc      0t0  TCP *:49152 (LISTEN)"
+    )
+    assert v4 == ListeningPort(port=49152, protocol="tcp", ip="0.0.0.0",
+                               process_name="rapportd", pid=912)
+
+    loop = parse_lsof_line(
+        "Python  40905 stepaniah   12u  IPv4 0xdef      0t0  TCP 127.0.0.1:2100 (LISTEN)"
+    )
+    assert loop and loop.ip == "127.0.0.1" and loop.port == 2100
+
+    v6 = parse_lsof_line(
+        "caddy  777 root    6u  IPv6 0x111      0t0  TCP [fe80::1]:443 (LISTEN)"
+    )
+    assert v6 and v6.protocol == "tcp6" and v6.ip == "fe80::1" and v6.port == 443
+
+    udp = parse_lsof_line(
+        "mDNSRespo  401 stepaniah   20u  IPv4 0x222      0t0  UDP *:5353"
+    )
+    assert udp and udp.protocol == "udp" and udp.port == 5353
+
+    assert parse_lsof_line("garbage line without columns") is None
+    bad_port = parse_lsof_line(
+        "x  1 u 4u IPv4 0x0 0t0 TCP *:99999"
+    )
+    assert bad_port is None
+
+    # command paths keep the basename only
+    sub = parse_lsof_line(
+        "/usr/sbin/caddy  777 root    6u  IPv4 0x333      0t0  TCP *:443 (LISTEN)"
+    )
+    assert sub and sub.process_name == "caddy"
+
+
+def test_listen_scan_source_lsof_on_macos(monkeypatch):
+    import sys
+
+    from backend import port_scanner as ps
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(ps.shutil, "which", lambda name: "/usr/sbin/lsof" if name == "lsof" else None)
+    monkeypatch.setattr(ps.os.path, "exists", lambda path: False)
+    assert listen_scan_source() == "lsof"
+    assert ps.host_listen_trusted() is True

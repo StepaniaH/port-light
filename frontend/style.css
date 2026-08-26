@@ -1043,7 +1043,7 @@ a:focus-visible,
   padding: 4px 0;
   background: var(--elevated); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: var(--shadow);
-  max-height: 320px; overflow-y: auto;
+    max-height: min(480px, 65vh); overflow-y: auto;
 }
 .locale-dropdown.is-open .locale-menu { display: block; }
 .locale-row {

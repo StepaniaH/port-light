@@ -18,6 +18,7 @@ import shutil
 import socket
 import struct
 import subprocess
+import sys
 import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -59,6 +60,8 @@ def listen_scan_source() -> str:
         return "host_proc"
     if os.path.exists("/host/proc"):
         return "none"
+    if sys.platform == "darwin" and shutil.which("lsof"):
+        return "lsof"
     if shutil.which("ss"):
         return "ss"
     if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
@@ -114,6 +117,12 @@ def scan_listening_ports(
         return _scan_with_ss()
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         degradations.report("listen", "ss", "scan failed")
+
+    if sys.platform == "darwin" and shutil.which("lsof"):
+        try:
+            return _scan_with_lsof()
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            degradations.report("listen", "lsof", "scan failed")
 
     try:
         return _scan_with_proc(prefer_pids=prefer_pids)
@@ -210,6 +219,72 @@ def _read_children(pid: int, proc_root: str) -> list[int]:
                     continue
         break
     return children
+
+
+_LSOF_RE = re.compile(
+    r"^(?P<command>\S+)\s+(?P<pid>\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+"
+    r"(?P<node>\S+)\s+(?P<name>\S+)(?:\s+\([^)]*\))?\s*$"
+)
+
+
+def parse_lsof_line(line: str) -> ListeningPort | None:
+    """Parse one ``lsof -nP -i`` row (header and blanks skipped). Exported for tests."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("COMMAND"):
+        return None
+    m = _LSOF_RE.match(stripped)
+    if not m:
+        return None
+    node = m.group("node").lower()
+    if node not in ("tcp", "udp"):
+        return None
+    protocol = node
+    try:
+        pid = int(m.group("pid"))
+    except ValueError:
+        return None
+    name = m.group("name")
+    host, sep, port_s = name.rpartition(":")
+    if not sep:
+        return None
+    try:
+        port = int(port_s)
+    except ValueError:
+        return None
+    if not 0 < port <= 65535:
+        return None
+    host = m.group("name")[: m.group("name").rfind(":")]
+    if host.startswith("[") and host.endswith("]"):
+        protocol += "6"
+        host = host[1:-1]
+    elif host != "*" and ":" in host:
+        protocol += "6"
+    if host in ("*", ""):
+        ip = "0.0.0.0"
+    else:
+        ip = host
+    return ListeningPort(port=port, protocol=protocol, ip=ip,
+                         process_name=m.group("command").rsplit("/", 1)[-1],
+                         pid=pid)
+
+
+def _scan_with_lsof() -> list[ListeningPort]:
+    ports: list[ListeningPort] = []
+    seen: set[tuple[int, str, str]] = set()
+    for args in (["lsof", "-nP", "-iTCP", "-sTCP:LISTEN"], ["lsof", "-nP", "-iUDP"]):
+        result = subprocess.run(args, capture_output=True, text=True, timeout=5)
+        # lsof exits 1 on "nothing matched" — an empty table, not a failure.
+        if result.returncode != 0 and result.stdout.strip():
+            raise subprocess.CalledProcessError(result.returncode, args)
+        for line in result.stdout.splitlines():
+            parsed = parse_lsof_line(line)
+            if not parsed:
+                continue
+            key = (parsed.port, parsed.protocol, parsed.ip)
+            if key not in seen:
+                seen.add(key)
+                ports.append(parsed)
+    return ports
 
 
 def _scan_with_ss() -> list[ListeningPort]:
