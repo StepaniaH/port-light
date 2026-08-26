@@ -9,7 +9,7 @@ from backend.settings import FIELDS
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCALES_DIR = ROOT / "frontend" / "locales"
-CODES = ("en", "fr", "de", "zh-CN", "zh-TW", "ja")
+CODES = ("en", "fr", "de", "es", "zh-CN", "zh-TW", "ja")
 
 
 def _keys(obj: object, prefix: str = "") -> set[str]:

@@ -1,0 +1,452 @@
+{
+  "search": {
+    "placeholder": "Buscar puerto, nombre o equipo",
+    "aria": "Buscar"
+  },
+  "action": {
+    "refresh": "Actualizar",
+    "add": "Añadir puerto",
+    "showHidden": "Mostrar puertos ocultos",
+    "hiddenVisible": "Puertos ocultos visibles",
+    "settings": "Ajustes",
+    "findFree": "Buscar puertos libres"
+  },
+  "legend": {
+    "inUse": "en uso",
+    "configured": "configurado",
+    "free": "libre",
+    "hidden": "oculto",
+    "locked": "bloqueado",
+    "occupancy": "Ocupación"
+  },
+  "filter": {
+    "running": "En ejecución",
+    "system": "Sistema",
+    "docker": "Docker",
+    "access": "Web",
+    "udp": "UDP",
+    "localhost": "localhost",
+    "public": "Público",
+    "hidden": "Ocultos",
+    "kinds": "Tipo",
+    "sort": "Orden",
+    "range": "Rango",
+    "rangeStart": "Inicio del rango",
+    "rangeEnd": "Fin del rango",
+    "portAsc": "Puerto ↑",
+    "portDesc": "Puerto ↓",
+    "nameAsc": "Nombre A–Z",
+    "nameDesc": "Nombre Z–A",
+    "byStatus": "Estado"
+  },
+  "scanner": {
+    "label": "Escáneres",
+    "host": "Equipo",
+    "docker": "Docker",
+    "compose": "Compose",
+    "available": "{name} disponible",
+    "unavailable": "{name} no disponible",
+    "truncated": "{name} alcanzó el límite de archivos — pueden faltar algunos puertos declarados",
+    "incomplete": "{name} omitió una pila que Compose rechazaría (variable de entorno o include requeridos)",
+    "via": {
+      "host_proc": "{name} vía /host/proc",
+      "ss": "{name} vía ss",
+      "proc": "{name} vía /proc"
+    }
+  },
+  "status": {
+    "used": "en uso",
+    "configured": "configurado",
+    "free": "libre",
+    "running": "en ejecución",
+    "paused": "en pausa",
+    "restarting": "reiniciando",
+    "exited": "finalizado",
+    "created": "creado",
+    "dead": "muerto",
+    "removing": "eliminando"
+  },
+  "detail": {
+    "panel": "Detalle del puerto",
+    "close": "Cerrar",
+    "status": "Estado",
+    "source": "Fuente",
+    "protocol": "Protocolo",
+    "bind": "Dirección de escucha",
+    "process": "Proceso",
+    "pid": "PID",
+    "open": "Abrir",
+    "url": "URL",
+    "containers": "Contenedores",
+    "image": "Imagen",
+    "project": "Proyecto",
+    "service": "Servicio",
+    "network": "Red",
+    "compose": "Compose",
+    "file": "Archivo",
+    "containerPort": "Puerto del contenedor",
+    "manual": "Manual",
+    "accessPort": "Puerto de acceso",
+    "internalPort": "Puerto interno",
+    "accessHint": "Normalmente se abre en un navegador o un cliente.",
+    "internalHint": "Normalmente no se accede directamente.",
+    "conflict": "Conflicto de Compose",
+    "conflictHint": "Declarado por {n} proyectos de Compose que vinculan la misma dirección.",
+    "hide": "Ocultar de la cuadrícula",
+    "unhide": "Mostrar",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar la entrada manual del puerto {port}?",
+    "actionFailed": "No se pudo actualizar ese puerto.",
+    "notFound": "Este puerto no está en el mapa de ocupación.",
+    "hiddenLocked": "Este puerto está oculto. Desbloquee los puertos ocultos para verlo.",
+    "loading": "Leyendo la ocupación…",
+    "label": "Etiqueta",
+    "saveLabel": "Guardar etiqueta",
+    "copyPort": "Copiar el número de puerto",
+    "publicBind": "Todas las interfaces",
+    "publicBindHint": "Este puerto acepta conexiones desde cualquier dirección del equipo.",
+    "remoteReadOnly": "Solo lectura — este mapa procede de {name}. Ocultar, las etiquetas y añadir permanecen en este equipo.",
+    "expiresIn": "Caduca en {time}"
+  },
+  "hosts": {
+    "title": "Otros equipos",
+    "blurb": "Cada equipo sigue ejecutando Port-Light. Esta interfaz obtiene sus mapas de ocupación. Mantenga esas URL en la LAN o en Tailscale — no exponga el puerto 2100 a Internet público.",
+    "add": "Añadir equipo",
+    "remove": "Quitar",
+    "name": "Nombre",
+    "url": "URL",
+    "username": "Nombre de usuario",
+    "password": "Contraseña",
+    "passwordKeep": "Déjelo en blanco para conservar la contraseña guardada",
+    "thisMachine": "este equipo",
+    "unreachable": "No se pudo conectar con este equipo.",
+    "authFailed": "Este equipo rechazó las credenciales guardadas.",
+    "counts": "{used} en uso · {configured} configurados",
+    "switcher": "Equipos",
+    "loading": "Leyendo la ocupación…",
+    "urlPlaceholder": "http://100.x.x.x:2100",
+    "namePlaceholder": "NAS",
+    "max": "Como máximo 6 equipos más.",
+    "localOnly": "Ocultar, las etiquetas y añadir se aplican solo a este equipo.",
+    "clearAuth": "Borrar las credenciales guardadas",
+    "legendHost": "Recuentos de {name}",
+    "retry": "Reintentar",
+    "dockerHint": "Esta instancia obtiene esas URL. Desde un contenedor Docker en modo bridge, Tailscale 100.x suele ser inalcanzable — utilice una IP de LAN o el modo de red host en el hub."
+  },
+  "modal": {
+    "addTitle": "Añadir puerto",
+    "portNumber": "Número de puerto",
+    "label": "Etiqueta",
+    "optional": "Opcional",
+    "cancel": "Cancelar",
+    "add": "Añadir",
+    "unhideTitle": "Mostrar puertos ocultos",
+    "unhideHint": "Introduzca la contraseña de desbloqueo si el equipo exige una. Si no, el botón del ojo simplemente incluye los puertos ocultos en la cuadrícula.",
+    "unlockPassword": "Contraseña de desbloqueo",
+    "unlock": "Desbloquear",
+    "wrongPassword": "Contraseña incorrecta",
+    "unlockFailed": "No se pudieron desbloquear los puertos ocultos.",
+    "invalidPort": "Introduzca un puerto entre 1 y 65535.",
+    "addFailed": "No se pudo añadir ese puerto."
+  },
+  "settings": {
+    "title": "Ajustes",
+    "lead": "Al guardar se escribe en el volumen de datos y tiene prioridad sobre la variable de entorno correspondiente.",
+    "leadReadonly": "Bloqueado por el entorno del equipo. Modifique los valores en Compose y recree el contenedor.",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "unsaved": "Cambios sin guardar",
+    "discard": "¿Descartar los ajustes sin guardar?",
+    "mustBeNumber": "{label} debe ser un número",
+    "nav": {
+      "label": "Secciones de ajustes",
+      "appearance": "Apariencia",
+      "occupancy": "Ocupación",
+      "automation": "Automatización",
+      "advanced": "Avanzado"
+    },
+    "theme": {
+      "palettes": "Paletas",
+      "builtin": "Integradas",
+      "customBadge": "Personalizada"
+    },
+    "editor": {
+      "summary": "Avanzado: crear una paleta personalizada",
+      "hint": "Parta de la paleta actual, ajuste los colores y guarde. Las paletas personalizadas aparecen en el selector.",
+      "preset": "Rellenar desde la paleta actual",
+      "new": "Nueva paleta personalizada",
+      "save": "Guardar",
+      "export": "Exportar",
+      "import": "Importar",
+      "invalid": "Corrija los valores de color resaltados y ponga un nombre a la paleta.",
+      "vars": {
+        "bg": "Fondo", "elevated": "Superficies elevadas", "card": "Tarjetas",
+        "cardHover": "Tarjeta al pasar el cursor", "border": "Bordes", "text": "Texto",
+        "textDim": "Texto secundario", "used": "Puertos en uso", "configured": "Puertos configurados",
+        "free": "Puertos libres", "accent": "Acento", "conflict": "Conflictos",
+        "access": "Distintivo de acceso", "hidden": "Oculto", "danger": "Peligro"
+      }
+    },
+    "sections": {
+      "theme": {
+        "title": "Tema",
+        "blurb": "Brillo, paleta y sus propias paletas personalizadas."
+      },
+      "language": {
+        "title": "Idioma",
+        "blurb": "Idioma de la interfaz."
+      }
+    },
+    "cards": {
+      "title": "Tarjetas",
+      "blurb": "Texto de estado y distintivos en cada celda de ocupación."
+    },
+    "groups": {
+      "appearance": {
+        "title": "Apariencia",
+        "blurb": "Idioma, colores y lo compactas que quedan las tarjetas de ocupación."
+      },
+      "grid": {
+        "title": "Ocupación",
+        "blurb": "Intervalo de actualización y rango utilizado para el recuento de puertos libres."
+      },
+      "scanning": {
+        "title": "Escaneo de Compose",
+        "blurb": "Hasta qué profundidad buscar archivos compose.yml en cada actualización."
+      },
+      "links": {
+        "title": "URL de acceso",
+        "blurb": "Equipo utilizado al deducir los enlaces http en el panel de detalles."
+      }
+    },
+    "host": {
+      "title": "Equipo",
+      "blurb": "Las rutas y las contraseñas permanecen en el entorno del contenedor. Esta página no puede cambiarlas.",
+      "composeScanDir": "Directorio de escaneo de Compose",
+      "customPortsFile": "Archivo de puertos personalizado",
+      "dataDir": "Directorio de datos",
+      "basicAuth": "Basic Auth",
+      "hiddenUnlock": "Desbloqueo de puertos ocultos",
+      "settingsSource": "Origen de los ajustes"
+    },
+    "origin": {
+      "saved": "Guardado",
+      "env": "Entorno"
+    },
+    "source": {
+      "auto": "Auto",
+      "env": "Entorno",
+      "file": "Archivo guardado"
+    },
+    "on": "activado",
+    "off": "desactivado",
+    "fields": {
+      "locale": {
+        "label": "Idioma",
+        "help": "Auto sigue el navegador."
+      },
+      "theme_mode": {
+        "label": "Tema",
+        "help": "Sistema sigue el sistema operativo. Las paletas se recolorean dentro del brillo elegido."
+      },
+      "theme_palette": {
+        "label": "Paleta",
+        "help": "Familia de colores superpuesta. Las no disponibles aparecen en gris."
+      },
+      "grid_density": {
+        "label": "Densidad de la cuadrícula",
+        "help": "Compacto muestra más tarjetas de puertos en pantalla."
+      },
+      "card_scale": {
+        "label": "Tamaño de las tarjetas",
+        "help": "0 es el más espacioso, 100 aprieta las tarjetas al máximo."
+      },
+      "text_scale": {
+        "label": "Tamaño del texto",
+        "help": "Tamaño del texto de la cuadrícula, de pequeño (0) a grande (100)."
+      },
+      "show_status_text": {
+        "label": "Texto de estado en las tarjetas",
+        "help": "Etiqueta corta (en uso / configurado) en cada tarjeta."
+      },
+      "show_access_badge": {
+        "label": "Distintivo de puerto de acceso",
+        "help": "Marca los puertos que normalmente se abren en un navegador."
+      },
+      "show_protocol_badge": {
+        "label": "Distintivo de protocolo",
+        "help": "Muestra udp / tcp,udp en las tarjetas que no son exclusivamente TCP."
+      },
+      "copy_on_click": {
+        "label": "Copiar el puerto al hacer clic",
+        "help": "Copia el número de puerto al portapapeles."
+      },
+      "auto_refresh": {
+        "label": "Actualización automática",
+        "help": "Consulta el mapa de ocupación a intervalos."
+      },
+      "refresh_ms": {
+        "label": "Intervalo de actualización (ms)",
+        "help": "Se usa cuando la actualización automática está activada. 1000–300000."
+      },
+      "port_range_start": {
+        "label": "Inicio del rango",
+        "help": "Límite inferior para el recuento de libres y el rango predeterminado de la cabecera."
+      },
+      "port_range_end": {
+        "label": "Fin del rango",
+        "help": "Límite superior. No pinta de verde cada puerto sin usar."
+      },
+      "compose_scan_depth": {
+        "label": "Profundidad de escaneo de Compose",
+        "help": "Cuántos niveles de directorios recorrer bajo COMPOSE_SCAN_DIR."
+      },
+      "compose_scan_max_files": {
+        "label": "Límite de archivos de Compose",
+        "help": "Se detiene tras este número de archivos compose por actualización."
+      },
+      "guess_urls": {
+        "label": "Deducir las URL de acceso",
+        "help": "Añade http(s)://host:port para los puertos de acceso conocidos."
+      },
+      "url_host": {
+        "label": "Nombre de host de las URL",
+        "help": "Se usa en los enlaces deducidos en lugar de localhost. Si está vacío, usa la dirección de escucha de la LAN, o localhost cuando el puerto es público."
+      },
+      "url_scheme": {
+        "label": "Esquema de las URL",
+        "help": "Auto usa https para 443/8443/9443 y nombres que contienen HTTPS."
+      }
+    },
+    "auto": {
+      "agentToken": "Token de agente",
+      "suggest": "API de sugerencias de puertos",
+      "suggestValue": "abierta — /api/ports/suggest",
+      "metrics": "Endpoint de métricas",
+      "webhook": "Webhook",
+      "history": "Retención del historial (días)",
+      "events": "Flujo de cambios (SSE)",
+      "connect": {
+        "title": "Conecte sus agentes",
+        "blurb": "Registro por copiar y pegar para agentes de programación. El servidor MCP encapsula el flujo suggest/check/release.",
+        "mcpDocker": "Registro MCP — despliegue con Compose / imagen",
+        "dockerHint": "PORT_LIGHT_URL apunta al puerto dentro del contenedor (variable de entorno PORT_LIGHT_PORT, por defecto 2100). Ajústela si cambió el puerto de escucha interno.",
+        "mcpSource": "Registro MCP — ejecución desde el código fuente",
+        "skill": "Skill de agente (Claude Code y compatibles)",
+        "skillHint": "Copie SKILL.md en el directorio de skills de su agente.",
+        "curl": "Ejemplo HTTP",
+        "curlToken": "Esta instancia requiere X-Agent-Token — sustituya <your-token>.",
+        "copy": "Copiar",
+        "copied": "¡Copiado!"
+      },
+      "status": {
+        "title": "Superficies expuestas",
+        "blurb": "Lo que los scripts y agentes pueden alcanzar ahora mismo."
+      },
+      "activity": {
+        "title": "Actividad de la API de sugerencias",
+        "blurb": "Registro local de llamadas a GET /api/ports/suggest. Solo recuentos y etiquetas — nunca tokens ni direcciones.",
+        "disabled": "El historial está desactivado (HISTORY_RETENTION_DAYS=0), así que el uso no se registra.",
+        "total": "Llamadas",
+        "activeLeases": "Reservas activas",
+        "lastUsed": "Último uso: {time}",
+        "never": "nunca",
+        "thTime": "Cuándo",
+        "thCount": "Puertos",
+        "thScope": "Ámbito",
+        "thLabel": "Etiqueta",
+        "thLeased": "Reserva"
+      },
+      "leases": {
+        "title": "Reservas activas",
+        "blurb": "Reservadas por agentes mediante la API de sugerencias, se liberan automáticamente al caducar.",
+        "none": "No hay reservas activas.",
+        "release": "Liberar",
+        "remaining": "Quedan {time}"
+      }
+    }
+  },
+  "choice": {
+    "auto": "Auto",
+    "en": "English",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語",
+    "system": "Sistema",
+    "dark": "Oscuro",
+    "light": "Claro",
+    "gruvbox": "Gruvbox",
+    "catppuccin": "Catppuccin",
+    "nord": "Nord",
+    "dracula": "Dracula",
+    "tokyo-night": "Tokyo Night",
+    "one-dark": "One Dark",
+    "solarized": "Solarized",
+    "everforest": "Everforest",
+    "rose-pine": "Rosé Pine",
+    "kanagawa": "Kanagawa",
+    "comfortable": "Cómodo",
+    "compact": "Compacto",
+    "http": "HTTP",
+    "https": "HTTPS"
+  },
+  "localeNative": {
+    "en": "English",
+    "fr": "Français",
+    "de": "Deutsch",
+    "es": "Español",
+    "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  },
+  "localeName": {
+    "auto": "Según el navegador",
+    "en": "Inglés",
+    "fr": "French",
+    "de": "German",
+    "es": "Spanish",
+    "zh-CN": "Chino simplificado",
+    "zh-TW": "Chino tradicional",
+    "ja": "Japonés"
+  },
+  "grid": {
+    "empty": "Ningún puerto coincide con estos filtros.",
+    "emptyNone": "No hay puertos ocupados ni declarados en este rango.",
+    "refreshFailed": "No se pudo actualizar el mapa.",
+    "skip": "Ir a los puertos",
+    "copied": "Copiado",
+    "web": "web",
+    "aria": "Cuadrícula de ocupación de puertos",
+    "updated": "Actualizado {time}",
+    "leaseBadge": "Reserva de agente"
+  },
+  "error": {
+    "httpStatus": "La solicitud falló (HTTP {status})."
+  },
+  "sourceType": {
+    "docker": "Docker",
+    "system": "Sistema",
+    "host": "Equipo",
+    "manual": "Manual",
+    "unknown": "Desconocido"
+  },
+  "scope": {
+    "public": "público",
+    "lan": "LAN",
+    "link": "enlace local",
+    "localhost": "localhost"
+  },
+  "planner": {
+    "title": "Buscar puertos libres",
+    "count": "¿Cuántos puertos necesita?",
+    "label": "Etiqueta para la reserva",
+    "find": "Buscar bloques",
+    "none": "No hay bloques libres en este rango.",
+    "run": "{start}–{end} ({size} libres)",
+    "reserve": "Reservar"
+  },
+  "history": {
+    "title": "Cambios recientes (24 h)"
+  }
+}
