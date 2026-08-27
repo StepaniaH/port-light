@@ -224,7 +224,7 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   });
   const panels = host.querySelectorAll('[data-settings-panel="appearance"] .settings-card > header h2');
   const titles = Array.from(panels).map((el) => el.getAttribute('data-i18n'));
-  assert.deepEqual(titles, ['settings.sections.theme.title', 'settings.sections.language.title', 'settings.cards.title']);
+  assert.deepEqual(titles, ['settings.sections.language.title', 'settings.sections.theme.title', 'settings.cards.title']);
   const preview = host.querySelector('[data-settings-panel="appearance"] [data-display-preview]');
   assert.ok(preview, 'layout card should carry the live display preview');
   assert.equal(preview.querySelectorAll('.port-cell').length, 3);

@@ -861,10 +861,10 @@ import { render, syncHiddenButton } from './grid.js?v=75';
 
     host.innerHTML =
       settingsPanelHtml('appearance',
-        settingsCard('settings.sections.theme.title', 'settings.sections.theme.blurb',
-          '<div data-appearance-section="theme">' + rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
         settingsCard('settings.sections.language.title', 'settings.sections.language.blurb',
           rowsFor(languageFields)) +
+        settingsCard('settings.sections.theme.title', 'settings.sections.theme.blurb',
+          '<div data-appearance-section="theme">' + rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
         settingsCard('settings.cards.title', 'settings.cards.blurb',
           rowsFor(densityFields) + displayPreviewHtml() + rowsFor(cardFields))) +
       settingsPanelHtml('occupancy',
