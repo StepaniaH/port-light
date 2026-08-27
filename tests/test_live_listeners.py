@@ -23,8 +23,7 @@ PROBE_RANGE_END = 3999
 def client(monkeypatch):
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
-    monkeypatch.setattr(main_module, "_occ_snap", None)
-    monkeypatch.setattr(main_module, "_occ_building", False)
+    main_module._occ.reset()
     return TestClient(main_module.app)
 
 
@@ -57,8 +56,7 @@ def _occupancy(client: TestClient) -> dict:
 
 
 def _reset_snapshot_cache() -> None:
-    main_module._occ_snap = None
-    main_module._occ_building = False
+    main_module._occ.reset()
 
 
 @pytest.mark.skipif(not host_listen_trusted(), reason="no trusted listen table on this host")
