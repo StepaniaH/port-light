@@ -10,6 +10,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Internal: `safe_http_url` lives in `backend/netaddr.py`; importing `classification` no longer pulls the Docker scanner.
 - Internal: the unused `machines` writer API is gone from the store — older data files carrying a `machines` array still load. `/api/meta` no longer echoes `theme_mode` / `theme_palette` / `grid_density` / `refresh_ms` (nothing consumed them; appearance lives on `GET /api/settings`).
 - Internal: the occupancy snapshot cache (in-flight dedupe, TTL reuse, serve-stale) lives in `backend/occupancy_cache.py`; API behavior unchanged.
+- Internal: repeated store reads reuse a stat-keyed memo, so the SSE change-detector no longer re-parses the data file every half second; hand edits still apply immediately.
 
 ## 0.7.3 — 2026-08-26
 

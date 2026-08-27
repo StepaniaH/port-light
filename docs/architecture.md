@@ -89,7 +89,7 @@ Guessed access URLs: loopback binds use `127.0.0.1`; a LAN-only bind uses that a
 
 ## Persistence
 
-One file: `$PORT_LIGHT_DATA_DIR/port_light.json`. When `HISTORY_RETENTION_DAYS` is non-zero (default 7), `backend/history.py` also maintains `history.db` (SQLite) beside it: one row per port status transition, pruned past retention, queryable at `GET /api/ports/{n}/history?hours=`. A process-wide `threading.Lock` wraps read-modify-write. Occupancy loads manuals and hidden ports from one snapshot. Fine for one replica. Do not run two containers on the same file.
+One file: `$PORT_LIGHT_DATA_DIR/port_light.json`. Store reads go through an mtime-keyed memo (`backend/port_store.py`), so the SSE change-detector's half-second ticks stat the data file instead of re-parsing it; hand edits still apply immediately. When `HISTORY_RETENTION_DAYS` is non-zero (default 7), `backend/history.py` also maintains `history.db` (SQLite) beside it: one row per port status transition, pruned past retention, queryable at `GET /api/ports/{n}/history?hours=`. A process-wide `threading.Lock` wraps read-modify-write. Occupancy loads manuals and hidden ports from one snapshot. Fine for one replica. Do not run two containers on the same file.
 
 The `machines` array may still exist in older `port_light.json` files. It is not scanned and is not shown in the UI. Other Port-Light instances are stored under `peers` (id, display name, origin URL, optional Basic Auth). `GET /api/hosts` returns the username so Settings can refill the field; it never returns the password.
 

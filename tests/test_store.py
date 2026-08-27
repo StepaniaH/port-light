@@ -30,6 +30,17 @@ def test_manual_and_hidden_roundtrip(tmp_path, monkeypatch):
     assert "theme" not in port_store.get_stored_settings()
 
 
+def test_load_picks_up_external_file_changes(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    assert port_store.get_stored_settings() == {}
+    (tmp_path / "port_light.json").write_text(json.dumps({
+        "settings": {"locale": "de"},
+        "manual_ports": [{"port": 5, "label": "ext"}],
+    }), encoding="utf-8")
+    assert port_store.get_stored_settings()["locale"] == "de"
+    assert port_store.get_manual_ports()[0]["port"] == 5
+
+
 def test_corrupt_json_is_quarantined(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     bad = tmp_path / "port_light.json"

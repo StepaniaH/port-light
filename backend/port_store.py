@@ -54,13 +54,27 @@ def _data_file() -> Path:
     return _data_dir() / "port_light.json"
 
 
+_FILE_MEMO: dict[str, tuple[tuple[int, int], dict]] = {}
+
+
 def _load() -> dict:
-    """Load the full data structure from disk."""
+    """Load the full data structure from disk, memoized by mtime + size.
+
+    Any change to the file — from this process or a hand edit — alters the
+    stat token, so the memo never serves an outdated document.
+    """
+    empty = {"manual_ports": [], "hidden_ports": [], "peers": []}
     f = _data_file()
-    if not f.exists():
-        return {"manual_ports": [], "hidden_ports": [], "peers": []}
     try:
-        return json.loads(f.read_text())
+        st = f.stat()
+    except OSError:
+        return empty
+    token = (st.st_mtime_ns, st.st_size)
+    memo = _FILE_MEMO.get(str(f))
+    if memo is not None and memo[0] == token:
+        return memo[1]
+    try:
+        data = json.loads(f.read_text())
     except json.JSONDecodeError:
         corrupt = f.parent / (f.name + ".corrupt")
         try:
@@ -68,9 +82,11 @@ def _load() -> dict:
         except OSError:
             pass
         degradations.report("store", f.name, "corrupt file quarantined")
-        return {"manual_ports": [], "hidden_ports": [], "peers": []}
+        return empty
     except OSError:
-        return {"manual_ports": [], "hidden_ports": [], "peers": []}
+        return empty
+    _FILE_MEMO[str(f)] = (token, data)
+    return data
 
 
 def _save(data: dict) -> None:
