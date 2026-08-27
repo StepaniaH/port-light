@@ -58,7 +58,7 @@ def _load() -> dict:
     """Load the full data structure from disk."""
     f = _data_file()
     if not f.exists():
-        return {"manual_ports": [], "hidden_ports": [], "machines": [], "peers": []}
+        return {"manual_ports": [], "hidden_ports": [], "peers": []}
     try:
         return json.loads(f.read_text())
     except json.JSONDecodeError:
@@ -68,9 +68,9 @@ def _load() -> dict:
         except OSError:
             pass
         degradations.report("store", f.name, "corrupt file quarantined")
-        return {"manual_ports": [], "hidden_ports": [], "machines": [], "peers": []}
+        return {"manual_ports": [], "hidden_ports": [], "peers": []}
     except OSError:
-        return {"manual_ports": [], "hidden_ports": [], "machines": [], "peers": []}
+        return {"manual_ports": [], "hidden_ports": [], "peers": []}
 
 
 def _save(data: dict) -> None:
@@ -334,38 +334,7 @@ def update_stored_settings(patch: dict) -> dict:
         return current
 
 
-# ── Machines ──────────────────────────────────────────────────
-
-def get_machines() -> list[dict]:
-    data = _load()
-    machines = [m for m in data.get("machines", []) if isinstance(m, dict) and m.get("name")]
-    if not any(m.get("name") == "localhost" for m in machines):
-        machines.insert(0, {"name": "localhost", "host": "127.0.0.1", "note": "This machine"})
-    return machines
-
-
-def add_machine(name: str, host: str, note: str = "") -> dict:
-    with _LOCK:
-        data = _load()
-        machines = data.setdefault("machines", [])
-        machines[:] = [m for m in machines if isinstance(m, dict) and m.get("name") != name]
-        entry = {"name": name, "host": host, "note": note}
-        machines.append(entry)
-        _save(data)
-        return entry
-
-
-def remove_machine(name: str) -> bool:
-    with _LOCK:
-        data = _load()
-        machines = data.get("machines", [])
-        before = len(machines)
-        machines[:] = [m for m in machines if isinstance(m, dict) and m.get("name") != name]
-        if len(machines) < before:
-            _save(data)
-            return True
-        return False
-
+# ── Peers ─────────────────────────────────────────────────────
 
 def peers_stored() -> bool:
     """True when the file has a ``peers`` key, including an empty list."""

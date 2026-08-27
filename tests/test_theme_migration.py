@@ -58,12 +58,3 @@ def test_put_rejects_legacy_key(tmp_path, monkeypatch):
     res = client.put("/api/settings", json={"theme": "dark"})
     assert res.status_code == 400
 
-
-def test_meta_echoes_mode_and_palette(client_factory=None):
-    from fastapi.testclient import TestClient
-    from backend.main import app
-    client = TestClient(app)
-    body = client.get("/api/meta").json()
-    assert "theme" not in body
-    assert body["theme_mode"] in ("system", "dark", "light")
-    assert isinstance(body["theme_palette"], str)

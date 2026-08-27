@@ -135,7 +135,6 @@ def _listen_port() -> int | None:
 
 @app.get("/api/meta")
 def meta() -> dict:
-    values, _ = app_settings.resolve()
     automation = {
         "agent_token": bool(os.environ.get("AGENT_TOKEN", "").strip()),
         "metrics": os.environ.get("METRICS_ENABLED", "").strip().lower()
@@ -159,10 +158,6 @@ def meta() -> dict:
         "hidden_unlock_required": hidden_unlock_configured(),
         "hidden_ports_withheld": hidden_ports_withheld(),
         "settings_readonly": app_settings.settings_readonly(),
-        "refresh_ms": values["refresh_ms"],
-        "theme_mode": values["theme_mode"],
-        "theme_palette": values["theme_palette"],
-        "grid_density": values["grid_density"],
         "automation": automation,
     }
 

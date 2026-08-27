@@ -50,9 +50,6 @@ def test_junk_store_rows_do_not_break_writes(tmp_path, monkeypatch):
     }), encoding="utf-8")
     assert port_store.get_manual_ports()[0]["port"] == 9
     assert port_store.get_hidden_ports() == [22]
-    names = {m["name"] for m in port_store.get_machines()}
-    assert "localhost" in names
-    assert "nas" in names
     port_store.add_manual_port(11, "lab")
     assert {e["port"] for e in port_store.get_manual_ports()} == {9, 11}
     assert port_store.add_hidden_port(22) is False

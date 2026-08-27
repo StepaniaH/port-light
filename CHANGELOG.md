@@ -8,6 +8,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 - Internal: `app.js` no longer carries duplicate copies of the dom/modal helpers left behind by the module split; its imports now match what it uses (no behavior change).
 - Internal: `safe_http_url` lives in `backend/netaddr.py`; importing `classification` no longer pulls the Docker scanner.
+- Internal: the unused `machines` writer API is gone from the store — older data files carrying a `machines` array still load. `/api/meta` no longer echoes `theme_mode` / `theme_palette` / `grid_density` / `refresh_ms` (nothing consumed them; appearance lives on `GET /api/settings`).
 
 ## 0.7.3 — 2026-08-26
 
