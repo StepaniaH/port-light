@@ -22,6 +22,8 @@ export const PALETTE_VARIANTS = {
 
 export const CUSTOM_PREFIX = '@custom:';
 
+export const LIVE_APPLY_KEYS = ['theme_mode', 'theme_palette', 'grid_density', 'locale'];
+
 const CUSTOM_VAR_NAMES = {
   bg: '--bg', elevated: '--elevated', card: '--card', cardHover: '--card-hover',
   border: '--border', text: '--text', textDim: '--text-dim', used: '--used',
@@ -164,9 +166,24 @@ export function applyDensity(name) {
   });
 }
 
+export function hydrateCachedAppearance() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
+    if (cached.theme_mode) S.settings.theme_mode = cached.theme_mode;
+    if (typeof cached.theme_palette === 'string') S.settings.theme_palette = cached.theme_palette;
+    if (cached.grid_density) S.settings.grid_density = cached.grid_density;
+    if (cached.locale) S.settings.locale = cached.locale;
+  } catch (e) {}
+}
+
 export function applyAppearance() {
   applyTheme();
   applyDensity(S.settings.grid_density);
+}
+
+/* Sole writer of the `port-light-settings` key: called on boot (once the
+   server document lands), on save, and on revert — never for previews. */
+export function persistAppearance() {
   try {
     localStorage.setItem('port-light-settings', JSON.stringify({
       theme_mode: S.settings.theme_mode,

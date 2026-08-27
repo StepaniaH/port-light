@@ -4,6 +4,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Fixed
+
+- Unsaved appearance previews no longer leak into the next page load: the `localStorage` copy is written only when settings are saved, reverted, or first loaded from the server (`state.js` is now its single writer), so a discarded theme or locale no longer flashes on reload and deleting a selected custom theme clears the stale reference everywhere.
+
 ### Changed
 
 - Internal: `app.js` no longer carries duplicate copies of the dom/modal helpers left behind by the module split; its imports now match what it uses (no behavior change).

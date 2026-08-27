@@ -14,7 +14,7 @@ const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
 const { automationCardsHtml, renderField, renderModePicker, renderPalettePicker, renderSettingsForm, themeEditorHtml } = await import('../js/settings.js?' + V);
-const { SETTINGS_PANELS, S, applyAppearance, applyDensity, DENSITY_PRESETS } = await import('../js/state.js?' + V);
+const { SETTINGS_PANELS, S, applyAppearance, applyDensity, persistAppearance, DENSITY_PRESETS } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
 const mod = { renderSettingsForm, themeEditorHtml, renderField };
@@ -286,9 +286,12 @@ test('applyDensity applies presets exactly and falls back to standard', () => {
   assert.equal(html.style.getPropertyValue('--cell-min-w'), '138px');
 });
 
-test('applyAppearance mirrors density without scale keys', () => {
+test('applyAppearance previews without persisting; persistAppearance mirrors density', () => {
+  localStorage.removeItem('port-light-settings');
   S.settings.grid_density = 'compact';
   applyAppearance();
+  assert.equal(localStorage.getItem('port-light-settings'), null);
+  persistAppearance();
   const stored = JSON.parse(localStorage.getItem('port-light-settings'));
   assert.equal(stored.grid_density, 'compact');
   assert.ok(!('card_scale' in stored));

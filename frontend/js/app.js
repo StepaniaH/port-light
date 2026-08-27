@@ -1,6 +1,6 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, applyTheme, applyAppearance, saveView } from './state.js?v=75';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=75';
 import { errorText, escapeHtml, t } from './text.js?v=75';
 import { moveChipFocus, trapTab } from './a11y.js?v=75';
 import {
@@ -27,13 +27,7 @@ import {
 (function () {
   'use strict';
 
-  try {
-    const cached = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
-    if (cached.theme_mode) S.settings.theme_mode = cached.theme_mode;
-    if (typeof cached.theme_palette === 'string') S.settings.theme_palette = cached.theme_palette;
-    if (cached.grid_density) S.settings.grid_density = cached.grid_density;
-    if (cached.locale) S.settings.locale = cached.locale;
-  } catch (e) {}
+  hydrateCachedAppearance();
   try {
     const view = JSON.parse(localStorage.getItem('port-light-view') || '{}');
     if (view.sort) S.sortMode = view.sort;
@@ -488,11 +482,8 @@ import {
   });
   document.getElementById('settings-fields').addEventListener('change', function (e) {
     const field = e.target && e.target.name;
-    if (field === 'theme_mode' || field === 'theme_palette' || field === 'grid_density' || field === 'locale') {
-      if (field === 'theme_mode') S.settings.theme_mode = e.target.value;
-      if (field === 'theme_palette') S.settings.theme_palette = e.target.value;
-      if (field === 'grid_density') S.settings.grid_density = e.target.value;
-      if (field === 'locale') S.settings.locale = e.target.value;
+    if (LIVE_APPLY_KEYS.indexOf(field) >= 0) {
+      S.settings[field] = e.target.value;
       applyAppearance();
       if (field === 'theme_mode') syncPaletteAvailability();
       if (field === 'locale' && window.PortLightI18n) {
