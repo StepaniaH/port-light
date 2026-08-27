@@ -2,6 +2,13 @@
 
 Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and Compose declarations. It is not a container manager.
 
+## Shipped in 0.7.4
+
+- Appearance persistence has one owner: unsaved previews no longer leak into the next page load; deleting a selected custom theme clears the stale reference everywhere
+- Appearance panel order: language picker first, then theme, then cards
+- Internal quality pass: occupancy snapshot cache extracted (`backend/occupancy_cache.py`), store reads memoized by file mtime (the SSE change-detector stats instead of re-parsing), `safe_http_url` moved to `netaddr`, unused `machines` writer API and `/api/meta` appearance echo removed; `app.js` ghost copies and dead imports dropped (~270 lines)
+- Guardrails: the i18n missing-key test now covers every frontend JS module; README locale tables list all seven languages
+
 ## Shipped in 0.7.3
 
 - Custom themes: build a palette in the advanced theme editor (15 core colors), stored server-side, import/export as JSON, selected as `@custom:<id>`

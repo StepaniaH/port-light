@@ -2,7 +2,7 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
-## Unreleased
+## 0.7.4 — 2026-08-27
 
 ### Fixed
 
