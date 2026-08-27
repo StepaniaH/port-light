@@ -1,5 +1,7 @@
 # Theme Orthogonalization Implementation Plan
 
+> **Status: shipped (through v0.7.3). Historical record — do not execute.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make theme mode (system/light/dark) and color palette orthogonal — one mode control, one palette entry per family, variant follows mode.

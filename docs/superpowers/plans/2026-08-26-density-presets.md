@@ -1,5 +1,7 @@
 # Display Density Presets Implementation Plan
 
+> **Status: shipped (through v0.7.3). Historical record — do not execute.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the two display sliders (`card_scale`, `text_scale`) with one three-preset density choice — `loose` / `standard` / `compact` — reusing the retired `grid_density` setting; text size is no longer adjustable.

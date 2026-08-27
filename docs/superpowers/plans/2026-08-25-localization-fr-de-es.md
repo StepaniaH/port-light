@@ -1,5 +1,7 @@
 # Localization fr/de/es Implementation Plan
 
+> **Status: shipped (through v0.7.3). Historical record — do not execute.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship French, German, and Spanish locales at the existing quality bar, plus tooling that makes locale drift structurally visible (placeholder parity, orphan keys, scaffold script).

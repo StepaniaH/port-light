@@ -1,5 +1,7 @@
 # Agent Visibility Suite Implementation Plan
 
+> **Status: shipped (through v0.7.3). Historical record — do not execute.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Port-Light's agent integrations discoverable and observable: a Settings → Automation tab with copy-paste MCP/skill/curl guidance, a usage event stream from the suggest API, and lease visibility on the grid + drawer + settings list.
