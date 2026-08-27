@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import ipaddress
 
-from .docker_scanner import safe_http_url
 from .known_ports import get_known_port
 from .models import OccupancyRow
-from .netaddr import clean_bind_ip, proto_family_of
+from .netaddr import clean_bind_ip, proto_family_of, safe_http_url
 from .port_scanner import is_host_netns_mode
 
 

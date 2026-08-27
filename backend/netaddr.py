@@ -1,13 +1,15 @@
-"""Shared IP-address and protocol normalization primitives.
+"""Shared IP-address, protocol, and URL normalization primitives.
 
 Each scanner used to keep its own bracket/zone/wildcard stripper; the
 variants drifted, and bind-scope / protocol bugs followed. These helpers
 carry no caller policy — what an empty string means is up to the caller.
+``safe_http_url`` keeps label-derived links to plain http(s) URLs.
 """
 
 from __future__ import annotations
 
 import ipaddress
+from urllib.parse import urlparse
 
 
 def strip_brackets(text: str) -> str:
@@ -86,3 +88,44 @@ def proto_family_of(proto) -> str:
     if base.startswith("sctp"):
         return "sctp"
     return "tcp"
+
+
+_BAD_URL_SCHEMES = frozenset({"javascript", "data", "file", "vbscript", "blob", "about"})
+
+
+def safe_http_url(url: str | None) -> str | None:
+    """Keep http(s) links only. Traefik/Caddy hosts get https:// prepended."""
+    if not url or not isinstance(url, str):
+        return None
+    text = url.strip().rstrip("/")
+    if not text or any(ch.isspace() for ch in text) or "{" in text or "}" in text:
+        return None
+    _bad = _BAD_URL_SCHEMES
+    if "://" in text:
+        scheme, _, rest = text.partition("://")
+        if scheme.lower() not in ("http", "https") or not rest:
+            return None
+    else:
+        head = text.split(":", 1)[0].lower()
+        if head in _bad:
+            return None
+        if text.startswith("//"):
+            text = "https:" + text
+        elif text.startswith("/"):
+            return None
+        else:
+            text = "https://" + text
+    try:
+        parsed = urlparse(text)
+        port = parsed.port
+    except ValueError:
+        return None
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if not parsed.hostname or parsed.username is not None:
+        return None
+    if parsed.hostname.lower() in _bad:
+        return None
+    if port is not None and not (1 <= port <= 65535):
+        return None
+    return text

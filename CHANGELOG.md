@@ -7,6 +7,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Changed
 
 - Internal: `app.js` no longer carries duplicate copies of the dom/modal helpers left behind by the module split; its imports now match what it uses (no behavior change).
+- Internal: `safe_http_url` lives in `backend/netaddr.py`; importing `classification` no longer pulls the Docker scanner.
 
 ## 0.7.3 — 2026-08-26
 

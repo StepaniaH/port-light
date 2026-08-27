@@ -6,10 +6,9 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field, replace
-from urllib.parse import urlparse
 
 from .models import PortMapping
-from .netaddr import binding_ips, prefixless, strip_brackets
+from .netaddr import binding_ips, prefixless, safe_http_url, strip_brackets
 from .port_scanner import descendant_pids, is_host_netns_mode, socket_inodes_for_tree
 from . import degradations
 
@@ -30,7 +29,6 @@ _CADDY_DIRECTIVES = frozenset({
     "rewrite", "uri", "try_files", "templates", "metrics",
 })
 _LOCK = threading.Lock()
-_BAD_URL_SCHEMES = frozenset({"javascript", "data", "file", "vbscript", "blob", "about"})
 _CLIENT = None
 _AVAIL = False
 _AVAIL_AT = 0.0
@@ -788,44 +786,6 @@ def expand_unraid_webui(val: str, ports: list[PortMapping] | None = None) -> str
     text = text.replace("[IP]", "localhost").replace("[HOSTNAME]", "localhost")
     if re.search(r"\[PORT\]", text, re.IGNORECASE):
         return ""
-    return text
-
-
-def safe_http_url(url: str | None) -> str | None:
-    """Keep http(s) links only. Traefik/Caddy hosts get https:// prepended."""
-    if not url or not isinstance(url, str):
-        return None
-    text = url.strip().rstrip("/")
-    if not text or any(ch.isspace() for ch in text) or "{" in text or "}" in text:
-        return None
-    _bad = _BAD_URL_SCHEMES
-    if "://" in text:
-        scheme, _, rest = text.partition("://")
-        if scheme.lower() not in ("http", "https") or not rest:
-            return None
-    else:
-        head = text.split(":", 1)[0].lower()
-        if head in _bad:
-            return None
-        if text.startswith("//"):
-            text = "https:" + text
-        elif text.startswith("/"):
-            return None
-        else:
-            text = "https://" + text
-    try:
-        parsed = urlparse(text)
-        port = parsed.port
-    except ValueError:
-        return None
-    if parsed.scheme not in ("http", "https"):
-        return None
-    if not parsed.hostname or parsed.username is not None:
-        return None
-    if parsed.hostname.lower() in _bad:
-        return None
-    if port is not None and not (1 <= port <= 65535):
-        return None
     return text
 
 

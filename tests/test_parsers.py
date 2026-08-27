@@ -28,8 +28,8 @@ from backend.docker_scanner import (
     extract_label_urls,
     extract_nginx_vhosts,
     extract_ports,
-    safe_http_url,
 )
+from backend.netaddr import safe_http_url
 from backend.port_scanner import (
     ListeningPort,
     _fill_process_names,
