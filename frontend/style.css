@@ -481,6 +481,7 @@ a:focus-visible,
 .legend .stat:not(.is-static):hover { background: var(--card-hover); color: var(--text); }
 .legend .stat.active { background: var(--chip-active-bg); color: var(--accent); }
 .legend .stat.is-static { cursor: default; }
+.scan-warning { flex-basis: 100%; color: var(--configured); }
 .legend .num { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
 .legend .stat.active .num { color: var(--accent); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }

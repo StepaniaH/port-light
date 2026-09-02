@@ -25,7 +25,7 @@ def test_health_unauthenticated(monkeypatch):
     assert res.headers.get("cross-origin-opener-policy") == "same-origin"
     assert res.headers.get("cross-origin-resource-policy") == "same-origin"
     body = res.json()
-    assert body["status"] == "ok"
+    assert body["status"] in ("ok", "degraded")
     assert body["auth_required"] is True
     assert "listen_source" in body["scanners"]
 
@@ -136,7 +136,7 @@ def test_ports_etag_not_modified(monkeypatch, tmp_path):
     assert changed.json()["ports"]
 
 
-def test_manual_port_roundtrip_and_lookup(monkeypatch, tmp_path):
+def test_manual_port_roundtrip_and_lookup(monkeypatch, tmp_path, empty_scan):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
@@ -174,7 +174,7 @@ def test_hidden_port_lookup_is_not_free(monkeypatch, tmp_path):
     assert shown.json()["is_hidden"] is True
 
 
-def test_hidden_free_lookup_with_include(monkeypatch, tmp_path):
+def test_hidden_free_lookup_with_include(monkeypatch, tmp_path, empty_scan):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)

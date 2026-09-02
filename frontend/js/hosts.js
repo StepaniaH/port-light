@@ -1,7 +1,7 @@
 /* Host catalog, occupancy selectors, and route URLs. */
 
-import { S } from './state.js?v=77';
-import { t } from './text.js?v=77';
+import { S } from './state.js?v=78';
+import { t } from './text.js?v=78';
 
   export function hasPeers() {
     return !!(S.hostCatalog.peers && S.hostCatalog.peers.length);
@@ -47,23 +47,17 @@ import { t } from './text.js?v=77';
     }
     return S.hostMaps[hostId] && S.hostMaps[hostId].data;
   }
-  export function fpSummary(s) {
-    if (!s) return s;
-    const copy = Object.assign({}, s);
-    delete copy.stale;
-    return copy;
-  }
   export function occupancyFingerprint() {
     if (!hasPeers()) {
       if (!S.currentData) return '';
-      return JSON.stringify({ ports: S.currentData.ports, summary: fpSummary(S.currentData.summary) });
+      return JSON.stringify({ ports: S.currentData.ports, summary: S.currentData.summary });
     }
     return JSON.stringify(listedHosts().map(function (h) {
       const m = S.hostMaps[h.id] || {};
       return {
         id: h.id,
         ports: m.data && m.data.ports,
-        summary: m.data && fpSummary(m.data.summary),
+        summary: m.data && m.data.summary,
         error: m.error || '',
         scanners: m.scanners || null,
       };

@@ -12,7 +12,7 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { occupancyUrl, portApiUrl, portHash, fpSummary } = await import('../js/hosts.js?' + V);
+const { occupancyUrl, portApiUrl, portHash, occupancyFingerprint } = await import('../js/hosts.js?' + V);
 const { S } = await import('../js/state.js?' + V);
 
 function withState(patch, fn) {
@@ -83,11 +83,12 @@ test('api endpoints URL-encode peer host ids; hashes pass them through raw', () 
   );
 });
 
-test('fpSummary strips only the stale flag without mutating the input', () => {
-  const s = { compose_files: 3, ports_free: 10, stale: true };
-  const out = fpSummary(s);
-  assert.equal('stale' in out, false);
-  assert.equal(out.ports_free, 10);
-  assert.equal(s.stale, true);
-  assert.equal(fpSummary(null), null);
+test('freshness changes trigger a view refresh', () => {
+  const saved = S.currentData;
+  try {
+    S.currentData = { ports: [], summary: { free: 10, scan_complete: true } };
+    const fresh = occupancyFingerprint();
+    S.currentData.summary.stale = true;
+    assert.notEqual(occupancyFingerprint(), fresh);
+  } finally { S.currentData = saved; }
 });

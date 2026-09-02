@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 from .models import PortMapping
 from .netaddr import binding_ips, prefixless, safe_http_url, strip_brackets
 from .port_scanner import descendant_pids, is_host_netns_mode, socket_inodes_for_tree
+from .scan_status import ScanUnavailable
 from . import degradations
 
 try:
@@ -48,7 +49,7 @@ def _docker_client():
         if _CLIENT is not None:
             return _CLIENT
         try:
-            _CLIENT = docker.from_env()
+            _CLIENT = docker.from_env(timeout=3)
             return _CLIENT
         except Exception:
             _CLIENT = None
@@ -116,14 +117,14 @@ def scan_containers() -> list[ContainerInfo]:
     client = _docker_client()
     if client is None:
         _mark_available(False)
-        return []
+        raise ScanUnavailable("Docker unavailable")
 
     try:
         containers = client.containers.list(all=True)
     except Exception:
         _drop_client()
         degradations.report("docker", "daemon", "list failed")
-        return []
+        raise ScanUnavailable("Docker list failed")
     _mark_available(True)
 
     result: list[ContainerInfo] = []

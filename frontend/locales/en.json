@@ -52,7 +52,9 @@
       "host_proc": "{name} via /host/proc",
       "ss": "{name} via ss",
       "proc": "{name} via /proc"
-    }
+    },
+    "snapshotUnavailable": "Occupancy is incomplete or out of date. Free ports cannot be confirmed.",
+    "disabled": "{name} disabled"
   },
   "status": {
     "used": "in use",
@@ -64,7 +66,8 @@
     "exited": "exited",
     "created": "created",
     "dead": "dead",
-    "removing": "removing"
+    "removing": "removing",
+    "unknown": "Unknown"
   },
   "detail": {
     "panel": "Port detail",
@@ -442,7 +445,10 @@
     "find": "Find runs",
     "none": "No free runs in this range.",
     "run": "{start}–{end} ({size} free)",
-    "reserve": "Reserve"
+    "reserve": "Reserve",
+    "unavailable": "Occupancy is unavailable. Retry after scanning recovers.",
+    "changed": "The selected range is no longer free. Find another range.",
+    "failed": "Could not confirm the reservation. Refresh and check the map before retrying."
   },
   "history": {
     "title": "Recent changes (24h)"

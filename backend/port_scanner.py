@@ -23,6 +23,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 
+from .scan_status import ScanUnavailable
 from . import degradations
 from .netaddr import normalize_ip
 
@@ -106,22 +107,22 @@ def scan_listening_ports(
         result = _scan_with_host_proc(prefer_pids=prefer_pids)
         if result is not None:
             return result
-    except (FileNotFoundError, OSError):
-        pass
+    except OSError as exc:
+        raise ScanUnavailable("host listen table unreadable") from exc
 
     if not host_listen_trusted():
         degradations.report("listen", "host", "untrusted listen table")
-        return []
+        raise ScanUnavailable("host listen table unavailable")
 
     try:
         return _scan_with_ss()
-    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         degradations.report("listen", "ss", "scan failed")
 
     if sys.platform == "darwin" and shutil.which("lsof"):
         try:
             return _scan_with_lsof()
-        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             degradations.report("listen", "lsof", "scan failed")
 
     try:
@@ -129,7 +130,7 @@ def scan_listening_ports(
     except (FileNotFoundError, OSError):
         pass
 
-    return []
+    raise ScanUnavailable("all listen scanners failed")
 
 
 def socket_inodes_for_pid(pid: int, proc_root: str = "/host/proc") -> set[int]:
@@ -274,7 +275,9 @@ def _scan_with_lsof() -> list[ListeningPort]:
     for args in (["lsof", "-nP", "-iTCP", "-sTCP:LISTEN"], ["lsof", "-nP", "-iUDP"]):
         result = subprocess.run(args, capture_output=True, text=True, timeout=5)
         # lsof exits 1 on "nothing matched" — an empty table, not a failure.
-        if result.returncode != 0 and result.stdout.strip():
+        if result.returncode != 0 and not (
+            result.returncode == 1 and not result.stdout.strip() and not result.stderr.strip()
+        ):
             raise subprocess.CalledProcessError(result.returncode, args)
         for line in result.stdout.splitlines():
             parsed = parse_lsof_line(line)
@@ -411,7 +414,7 @@ def _scan_with_host_proc(
 ) -> list[ListeningPort] | None:
     if not os.path.exists("/host/proc/1/net/tcp"):
         if os.path.exists("/host/proc"):
-            return []
+            raise ScanUnavailable("mounted host listen table unavailable")
         return None
     ports: list[ListeningPort] = []
     for proto, path in [
@@ -439,18 +442,19 @@ def _scan_with_proc(prefer_pids: Iterable[int] | None = None) -> list[ListeningP
 
 
 def _read_proc_net_file(path: str, protocol: str) -> list[ListeningPort]:
-    if not os.path.exists(path):
-        return []
     ports: list[ListeningPort] = []
     try:
         with open(path) as f:
-            next(f, None)
+            header = next(f, "")
+            if "local_address" not in header:
+                raise ScanUnavailable("invalid listen table")
             for line in f:
                 parsed = parse_proc_net_line(line, protocol)
                 if parsed:
                     ports.append(parsed)
-    except OSError:
-        return []
+    except FileNotFoundError:
+        if not protocol.endswith("6"):
+            raise
     return ports
 
 

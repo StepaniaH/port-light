@@ -40,7 +40,7 @@ async function startHost(name, peers = []) {
     !/^(PORT_LIGHT_|AUTH_|HIDDEN_|AGENT_|WEBHOOK_|COMPOSE_|DOCKER_|URL_|PORT_RANGE_|HISTORY_)/.test(key)));
   const child = spawn(python, ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(port)], {
     cwd: root, env: { ...env, PORT_LIGHT_DATA_DIR: data, COMPOSE_SCAN_DIR: compose,
-      PORT_LIGHT_SETTINGS_SOURCE: 'file', PORT_LIGHT_HOST_NAME: name, PORT_LIGHT_PORT: String(port),
+      PORT_LIGHT_SCANNERS: 'listen,compose', PORT_LIGHT_SETTINGS_SOURCE: 'file', PORT_LIGHT_HOST_NAME: name, PORT_LIGHT_PORT: String(port),
       DOCKER_HOST: 'unix://' + join(data, 'no-docker.sock'), HISTORY_RETENTION_DAYS: '7' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -64,7 +64,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('console', message => {
+    const expectedConflict = message.location().url === hub + '/api/manual-ports/batch' && message.text().includes('409');
+    if (message.type() === 'error' && !expectedConflict) errors.push(message.text());
+  });
   await page.goto(hub);
   const localCell = page.locator('#host-grid-local .port-cell[data-port="42000"]');
   await expect(localCell).toContainText('Hub service');
@@ -77,6 +80,31 @@ try {
   await expect(localCell).toContainText('Updated service');
   const saved = await (await fetch(hub + '/api/ports/42000')).json();
   assert.equal(saved.manual_label, 'Updated service');
+  await page.keyboard.press('Escape');
+  await page.locator('#btn-free').click();
+  await page.locator('#free-count').fill('2');
+  await page.locator('#free-label').fill('Browser batch');
+  await page.locator('#free-form button[type="submit"]').click();
+  const reserve = page.locator('#free-results [data-reserve]').first();
+  await expect(reserve).toBeVisible();
+  // Claim the first planned port from another client before the browser submits.
+  const [planned] = (await reserve.getAttribute('data-reserve')).split(':').map(Number);
+  assert.equal((await fetch(hub + '/api/manual-ports', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ port: planned, label: 'Other writer' }),
+  })).status, 200);
+  await reserve.click();
+  await expect(page.locator('#free-error')).toContainText('no longer free');
+  await expect(page.locator('#free-modal')).toBeVisible();
+  let manual = await (await fetch(hub + '/api/manual-ports')).json();
+  assert.equal(manual.manual_ports.filter(p => p.label === 'Browser batch').length, 0);
+  await page.locator('#free-form button[type="submit"]').click();
+  await expect(page.locator('#free-error')).toBeHidden();
+  await reserve.click();
+  await expect(page.locator('#free-modal')).toBeHidden();
+  manual = await (await fetch(hub + '/api/manual-ports')).json();
+  assert.equal(manual.manual_ports.filter(p => p.label === 'Browser batch').length, 2);
+  assert.equal(manual.manual_ports.find(p => p.port === planned).label, 'Other writer');
   // Mobile host switching must close the local drawer and use the peer's row.
   await page.setViewportSize({ width: 800, height: 900 });
   await page.keyboard.press('Escape');
@@ -87,7 +115,7 @@ try {
   await expect(detail).toContainText('Peer service');
   await expect(detail.locator('[data-label-form]')).toHaveCount(0);
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: startup, detail, saved label, host switch.');
+  console.log('Browser smoke passed: startup, detail, saved label, batch conflict and retry, host switch.');
 } finally {
   if (browser) await browser.close();
   await Promise.all(processes.map(async child => {

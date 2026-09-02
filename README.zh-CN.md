@@ -99,10 +99,14 @@ docker compose up -d
 
 常规桥接网络**不需要** `NET_ADMIN`。它只对裸机上的 `ss` 回退路径有帮助。
 
+扫描来源默认全部启用。任一启用来源失败、Compose 扫描不完整或快照过期时，端口图会显示警告，无法确认的端口显示为未知，查找空闲端口和批量预留返回 `503`。不使用 Docker 的本机部署可设置 `PORT_LIGHT_SCANNERS=listen,compose`；仅扫描监听端口可设为 `listen`。禁用来源中的占用不会参与检查。
+
 ## 配置
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
+| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | 启用的扫描来源，逗号分隔；未列出的来源明确禁用。至少选择一项。只能用环境变量。 |
+| `PORT_LIGHT_SCAN_TIMEOUT_S` | `10` | 后台刷新超时秒数（1–60），超时后保留快照并标记过期。只能用环境变量。 |
 | `COMPOSE_SCAN_DIR` | `/compose` | 扫描 compose 文件的目录（只能用环境变量） |
 | `COMPOSE_SCAN_DEPTH` | `4` | 扫描子目录的最大深度 |
 | `COMPOSE_SCAN_MAX_FILES` | `400` | 每次刷新最多解析的 compose 文件数 |
@@ -130,11 +134,13 @@ docker compose up -d
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
 | `AGENT_TOKEN` | 未设置 | 设置后，`GET /api/ports/suggest` 需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
 
-上表里除路径和密钥外，也可以在 Web UI 的 **Settings** 里改，写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
+上表里除扫描来源、超时、路径和密钥外，也可以在 Web UI 的 **Settings** 里改，写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
 
 把 [custom_ports.example.json](custom_ports.example.json) 复制为 `custom_ports.json`（已 gitignore）。分类：`system`、`web`、`database`、`message`、`proxy`、`vpn`、`selfhosted`、`dev`、`infra`、`gaming`。
 
 如果在 Compose 里 bind-mount `custom_ports.json`，请先在宿主机上建好**文件**。路径不存在时 Docker 会建成目录，应用就读不了。
+
+已有的 `port_light.json` 如果不可读、JSON 损坏或记录结构无效，相关 API 会返回 `503` 并保留原文件，修复后可重试；只有文件不存在时才按空配置初始化。
 
 ## 隐私
 

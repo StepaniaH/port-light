@@ -101,3 +101,12 @@ test('owned reservations do not offer manual overwrite or deletion', () => {
   assert.equal(detail.querySelector('[data-delete-port]'), null);
   assert.match(detail.innerHTML, /detail.reservationHint/);
 });
+
+test('unavailable occupancy never renders a free port or mutation controls', async () => {
+  globalThis.fetch = async () => ({ ok: false, status: 503 });
+  showPortDetail(45000);
+  await flush();
+  assert.match(detail.innerHTML, /scanner.snapshotUnavailable/);
+  assert.doesNotMatch(detail.innerHTML, /status.free/);
+  assert.equal(detail.querySelector('[data-hide-port]'), null);
+});

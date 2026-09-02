@@ -13,7 +13,7 @@ services:
     ports:
       - "2100:2100"
     volumes:
-      # Directory of compose projects (one level of subfolders is scanned)
+      # Directory of Compose projects; traversal depth follows COMPOSE_SCAN_DEPTH
       - ${COMPOSE_SCAN_DIR:-~/your-compose-dir}:/compose:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Host PID 1 network namespace: /host/proc/1/net/tcp
@@ -33,6 +33,8 @@ services:
       # - AUTH_PASSWORD=change-me
       # - HIDDEN_UNLOCK_PASSWORD=change-me-too
       # - URL_HOST=nas.lan
+      - PORT_LIGHT_SCANNERS=${PORT_LIGHT_SCANNERS:-listen,docker,compose}
+      - PORT_LIGHT_SCAN_TIMEOUT_S=${PORT_LIGHT_SCAN_TIMEOUT_S:-10}
       # - PORT_LIGHT_SETTINGS_SOURCE=auto
       # - PORT_LIGHT_HOST_NAME=Studio
       # - PORT_LIGHT_PEERS=[{"name":"NAS","url":"http://10.0.0.2:2100"}]

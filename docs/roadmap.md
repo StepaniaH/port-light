@@ -4,10 +4,6 @@ Port-Light maps host listeners, Docker port mappings, and Compose declarations. 
 
 Release history belongs in [CHANGELOG.md](../CHANGELOG.md). This page lists planned work only.
 
-## Next
-
-- Improve first-run diagnostics when host, Docker, or Compose scanning is unavailable
-
 ## Candidates
 
 These items depend on user feedback and are not scheduled:

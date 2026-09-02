@@ -1,12 +1,12 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S, CARD_FIELD_KEYS } from './state.js?v=77';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=77';
-import { KIND_MATCHERS } from './kinds.js?v=77';
-import { isLease } from './leases.js?v=77';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=77';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=77';
-import { api } from './api.js?v=77';
+import { S, CARD_FIELD_KEYS } from './state.js?v=78';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=78';
+import { KIND_MATCHERS } from './kinds.js?v=78';
+import { isLease } from './leases.js?v=78';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=78';
+import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=78';
+import { api } from './api.js?v=78';
 
 
   export function syncFilterUI() {
@@ -111,6 +111,10 @@ import { api } from './api.js?v=77';
       }
     }
     if (next && next !== current) next.focus();
+  }
+
+  function scanUnavailable(s) {
+    return !s || s.scan_complete !== true || !!s.stale;
   }
 
   export function freeStub(port) {
@@ -228,6 +232,10 @@ import { api } from './api.js?v=77';
 
     function synthetic(port, hidden) {
       prefetchKnown(port);
+      if (scanUnavailable(dataCtx && dataCtx.summary)) {
+        return { port: port, status: 'unknown', _synthetic: true, _unavailable: true,
+          is_hidden: !!hidden, known_service: getKnownForFree(port) };
+      }
       if (!hidden) {
         return { port: port, status: 'free', _synthetic: true, known_service: getKnownForFree(port) };
       }
@@ -356,10 +364,13 @@ import { api } from './api.js?v=77';
     }
     html += toggle(S.statusFilter === 'used', 'data-status="used"', 'used', s.used, t('legend.inUse')) +
       toggle(S.statusFilter === 'configured', 'data-status="configured"', 'configured', s.configured, t('legend.configured')) +
-      '<span class="stat is-static"><span class="dot free"></span><span class="num">' + s.free + '</span> ' + t('legend.free') + '</span>';
+      '<span class="stat is-static"><span class="dot free"></span><span class="num">' + (!scanUnavailable(s) ? s.free : '—') + '</span> ' + t('legend.free') + '</span>';
     if (s.hidden > 0) {
       html += toggle(S.kindFilters.has('hidden'), 'data-kind="hidden"', 'hidden', s.hidden,
         t('legend.hidden') + (s.hidden_locked ? ' (' + t('legend.locked') + ')' : ''));
+    }
+    if (scanUnavailable(s)) {
+      html += '<span class="scan-warning" role="status">' + escapeHtml(t('scanner.snapshotUnavailable')) + '</span>';
     }
     summary.innerHTML = html;
   }
@@ -400,11 +411,12 @@ import { api } from './api.js?v=77';
       const err = hostBoards.querySelector('[data-host-error="' + h.id + '"]');
       const counts = hostBoards.querySelector('[data-host-counts="' + h.id + '"]');
       const pills = hostBoards.querySelector('[data-host-pills="' + h.id + '"]');
-      if (map.error && err) {
+      if ((map.error || (map.data && scanUnavailable(map.data.summary))) && err) {
         err.hidden = false;
         err.classList.remove('hidden');
         const text = err.querySelector('span');
-        if (text) text.textContent = t(map.error === 'auth' ? 'hosts.authFailed' : 'hosts.unreachable');
+        if (text) text.textContent = t(!map.error ? 'scanner.snapshotUnavailable'
+          : map.error === 'auth' ? 'hosts.authFailed' : 'hosts.unreachable');
         const retry = err.querySelector('[data-host-retry]');
         if (retry) retry.disabled = !!S.hostRetrying[h.id];
       }
@@ -558,7 +570,7 @@ import { api } from './api.js?v=77';
 
     rootEl.innerHTML = displayPorts.map(function (p) {
       const lockedHit = !!(p._locked && p._synthetic);
-      let cls = lockedHit ? 'locked'
+      let cls = p._unavailable || p.status === 'unknown' || lockedHit ? 'locked'
         : p.status === 'used' ? 'used' : p.status === 'configured' ? 'configured' : 'free';
       if (p.is_hidden) cls += ' hidden';
       const conflict = p.conflict ? ' conflict' : '';
@@ -568,8 +580,9 @@ import { api } from './api.js?v=77';
       const searchNear = S.searchPortNum !== null && !isSearchHit ? ' search-near' : '';
       const label = getCellLabel(p);
       const labelText = label ? '<div class="port-label">' + escapeHtml(label) + '</div>' : '';
-      const statusLabel = lockedHit ? t('legend.locked') : t('status.' + p.status);
-      const statusText = S.settings.show_status_text && !lockedHit && p.status !== 'free'
+      const statusLabel = p._unavailable || p.status === 'unknown' ? t('status.unknown')
+        : lockedHit ? t('legend.locked') : t('status.' + p.status);
+      const statusText = S.settings.show_status_text && !lockedHit && !p._unavailable && p.status !== 'free'
         ? '<span class="status-text">' + escapeHtml(t('status.' + p.status)) + '</span>' : '';
       const accessBadge = S.settings.show_access_badge && p.known_service && p.known_service.is_access_port
         ? '<span class="access-badge">' + escapeHtml(t('grid.web')) + '</span>' : '';
@@ -610,7 +623,9 @@ import { api } from './api.js?v=77';
     const incomplete = !!(data && data.summary && data.summary.compose_incomplete);
     host.innerHTML = items.map(function (pair) {
       const name = t('scanner.' + pair[1]);
-      const ok = !!scanners[pair[0]];
+      const sourceState = data && data.summary && data.summary.sources &&
+        data.summary.sources[pair[0] === 'proc' ? 'listen' : pair[0]];
+      const ok = sourceState ? sourceState === 'ok' && !data.summary.stale : !!scanners[pair[0]];
       const source = scanners.listen_source;
       let title = t(ok ? 'scanner.available' : 'scanner.unavailable', { name: name });
       if (pair[0] === 'proc' && ok && source && source !== 'none') {
@@ -622,6 +637,7 @@ import { api } from './api.js?v=77';
       } else if (pair[0] === 'compose' && incomplete) {
         title = t('scanner.incomplete', { name: name });
       }
+      if (sourceState === 'disabled') title = t('scanner.disabled', { name: name });
       const warn = pair[0] === 'compose' && (truncated || incomplete);
       return '<span class="pill' + (ok ? ' ok' : ' bad') + (warn ? ' warn' : '') + '" role="img" title="' +
         escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"></span>';

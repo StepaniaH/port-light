@@ -1,13 +1,13 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=77';
-import { t, tx, escapeHtml, errorText } from './text.js?v=77';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=77';
-import { moveChipFocus } from './a11y.js?v=77';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=77';
-import { api, fetchHosts, fetchSettings } from './api.js?v=77';
-import { hasPeers, hostById, hostName } from './hosts.js?v=77';
-import { render, syncHiddenButton } from './grid.js?v=77';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=78';
+import { t, tx, escapeHtml, errorText } from './text.js?v=78';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=78';
+import { moveChipFocus } from './a11y.js?v=78';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=78';
+import { api, fetchHosts, fetchSettings } from './api.js?v=78';
+import { hasPeers, hostById, hostName } from './hosts.js?v=78';
+import { render, syncHiddenButton } from './grid.js?v=78';
 
   export function loadSettingsPage() {
     Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {

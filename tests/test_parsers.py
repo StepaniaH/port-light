@@ -975,7 +975,8 @@ def test_missing_host_pid1_tcp_does_not_fall_through(monkeypatch):
         ps, "_scan_with_proc",
         lambda: [ListeningPort(port=443, protocol="tcp", ip="0.0.0.0")],
     )
-    assert ps.scan_listening_ports() == []
+    with pytest.raises(ps.ScanUnavailable):
+        ps.scan_listening_ports()
 
 
 def test_dual_stack_empty_hostport_copies_sibling():
@@ -1130,7 +1131,8 @@ def test_untrusted_listen_skips_ss_and_proc(monkeypatch):
         ps, "_scan_with_proc",
         lambda prefer_pids=None: [ListeningPort(port=443, protocol="tcp", ip="0.0.0.0")],
     )
-    assert ps.scan_listening_ports() == []
+    with pytest.raises(ps.ScanUnavailable):
+        ps.scan_listening_ports()
 
 
 def test_scan_containers_marks_client_missing(monkeypatch):
@@ -1138,7 +1140,8 @@ def test_scan_containers_marks_client_missing(monkeypatch):
     monkeypatch.setattr(ds, "_docker_client", lambda: None)
     marked = []
     monkeypatch.setattr(ds, "_mark_available", lambda ok: marked.append(ok))
-    assert ds.scan_containers() == []
+    with pytest.raises(ds.ScanUnavailable):
+        ds.scan_containers()
     assert marked == [False]
 
 

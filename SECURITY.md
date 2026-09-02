@@ -38,6 +38,10 @@ Every request resolves the peer hostname and checks all returned IPv4/IPv6 addre
 
 The HTTP client resolves again when connecting. Validation does not pin the destination IP, so a DNS change between validation and connection can bypass the preflight check. Use literal private IPs or DNS you control. System DNS resolution is not covered by the 4-second HTTP socket timeout.
 
+## Data file failures
+
+Unreadable or invalid `port_light.json` files block dependent reads and writes with `503`; they are preserved for repair. Error responses do not include file contents or peer credentials. Failed scans retain earlier observations and cannot certify free ports or allocate through `/api/ports/suggest` and `/api/manual-ports/batch`. Disabled scanners are outside that coverage.
+
 ## Hidden ports
 
 Hide-from-grid only reduces what shows up in the UI (and, when secrets are set, in the API). It is not a confidentiality boundary for `docker.sock` or Compose `.env` files.

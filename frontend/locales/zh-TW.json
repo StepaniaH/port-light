@@ -52,7 +52,9 @@
       "host_proc": "{name} · /host/proc",
       "ss": "{name} · ss",
       "proc": "{name} · /proc"
-    }
+    },
+    "snapshotUnavailable": "占用資訊不完整或已過期，無法確認空閒連接埠。",
+    "disabled": "{name} 已停用"
   },
   "status": {
     "used": "使用中",
@@ -64,7 +66,8 @@
     "exited": "已結束",
     "created": "已建立",
     "dead": "已死亡",
-    "removing": "正在移除"
+    "removing": "正在移除",
+    "unknown": "未知"
   },
   "detail": {
     "panel": "連接埠詳情",
@@ -442,7 +445,10 @@
     "find": "尋找連續空閒段",
     "none": "此範圍內沒有連續空閒段。",
     "run": "{start}–{end}（連續 {size} 個）",
-    "reserve": "預留"
+    "reserve": "預留",
+    "unavailable": "占用資訊暫時無法使用，請在掃描恢復後重試。",
+    "changed": "所選連接埠範圍已被占用，請重新查找。",
+    "failed": "無法確認預留結果，請重新整理並檢查連接埠圖後重試。"
   },
   "history": {
     "title": "最近變動（24 小時）"

@@ -35,6 +35,10 @@ from pathlib import Path
 from . import degradations
 
 
+class StoreReadError(Exception):
+    """The existing data file could not be read safely."""
+
+
 class StoreWriteError(Exception):
     """Raised when the data file cannot be written."""
 
@@ -55,9 +59,11 @@ def store_generation() -> int:
 def store_revision() -> tuple:
     try:
         st = _data_file().stat()
-        return (_generation, st.st_mtime_ns, st.st_size)
-    except OSError:
+        return (_generation, st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+    except FileNotFoundError:
         return (_generation, None, None)
+    except OSError as exc:
+        raise _read_error() from exc
 
 
 def _data_dir() -> Path:
@@ -68,37 +74,46 @@ def _data_file() -> Path:
     return _data_dir() / "port_light.json"
 
 
-_FILE_MEMO: dict[str, tuple[tuple[int, int], dict]] = {}
+_FILE_MEMO: dict[str, tuple[tuple, dict]] = {}
+
+
+def _read_error() -> StoreReadError:
+    degradations.report("store", "port_light.json", "data file unreadable or invalid")
+    return StoreReadError("data file unreadable or invalid; repair it before retrying")
 
 
 def _load() -> dict:
-    """Load the full data structure from disk, memoized by mtime + size.
-
-    Any change to the file — from this process or a hand edit — alters the
-    stat token, so the memo never serves an outdated document.
-    """
+    """Load user data; only a missing file represents an empty store."""
     empty = {"manual_ports": [], "hidden_ports": [], "peers": []}
     f = _data_file()
     try:
         st = f.stat()
-    except OSError:
+    except FileNotFoundError:
         return empty
-    token = (st.st_mtime_ns, st.st_size)
+    except OSError as exc:
+        raise _read_error() from exc
+    token = (st.st_mtime_ns, st.st_ctime_ns, st.st_size)
     memo = _FILE_MEMO.get(str(f))
     if memo is not None and memo[0] == token:
         return copy.deepcopy(memo[1])
     try:
-        data = json.loads(f.read_text())
-    except json.JSONDecodeError:
-        corrupt = f.parent / (f.name + ".corrupt")
-        try:
-            os.replace(f, corrupt)
-        except OSError:
-            pass
-        degradations.report("store", f.name, "corrupt file quarantined")
-        return empty
-    except OSError:
-        return empty
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        raise _read_error() from exc
+    if not isinstance(data, dict) or any(
+        key in data and not isinstance(data[key], expected)
+        for key, expected in (("manual_ports", list), ("hidden_ports", list),
+                              ("peers", list), ("machines", list), ("settings", dict))
+    ):
+        raise _read_error()
+    if any(_entry_port(entry) is None for entry in data.get("manual_ports", [])):
+        raise _read_error()
+    if any(_hidden_port(port) is None for port in data.get("hidden_ports", [])):
+        raise _read_error()
+    if any(not isinstance(peer, dict) or any(
+        not isinstance(peer.get(key), str) or not peer[key].strip()
+        for key in ("id", "name", "url")) for peer in data.get("peers", [])):
+        raise _read_error()
     _FILE_MEMO[str(f)] = (token, data)
     return copy.deepcopy(data)
 
@@ -252,8 +267,7 @@ def allocate_ports(taken: set[int], start: int, end: int, count: int,
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
-        occupied = taken | set(_hidden_from(data))
-        occupied.update(entry["port"] for entry in _manuals_from(data))
+        occupied = _occupied(data, taken)
         picks = []
         for port in range(start, end + 1):
             if port not in occupied:
@@ -274,6 +288,24 @@ def allocate_ports(taken: set[int], start: int, end: int, count: int,
                 reservations.append({"port": port, "token": token, "expires_at": expires_at})
             _save(data)
         return picks, reservations
+
+
+def _occupied(data: dict, taken: set[int]) -> set[int]:
+    return taken | set(_hidden_from(data)) | {entry["port"] for entry in _manuals_from(data)}
+
+
+def reserve_manual_range(taken: set[int], start: int, end: int, label: str) -> list[int]:
+    """Claim every selected port in one store transaction, or change nothing."""
+    with _LOCK:
+        data = _load()
+        _drop_expired_locked(data)
+        picks = list(range(start, end + 1))
+        if _occupied(data, taken).intersection(picks):
+            raise ReservationConflict("selected range is no longer free; find another range")
+        data.setdefault("manual_ports", []).extend(
+            {"port": port, "label": label, "machine": "localhost"} for port in picks)
+        _save(data)
+        return picks
 
 
 def release_reservation(port: int, token: str) -> bool:

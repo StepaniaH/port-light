@@ -52,7 +52,9 @@
       "host_proc": "{name} · /host/proc",
       "ss": "{name} · ss",
       "proc": "{name} · /proc"
-    }
+    },
+    "snapshotUnavailable": "使用状況が不完全、または古いため、空きポートを確認できません。",
+    "disabled": "{name} は無効です"
   },
   "status": {
     "used": "使用中",
@@ -64,7 +66,8 @@
     "exited": "終了",
     "created": "作成済み",
     "dead": "デッド",
-    "removing": "削除中"
+    "removing": "削除中",
+    "unknown": "不明"
   },
   "detail": {
     "panel": "ポート詳細",
@@ -442,7 +445,10 @@
     "find": "空き区間を検索",
     "none": "この範囲に空き区間がありません。",
     "run": "{start}–{end}（{size} 連続）",
-    "reserve": "予約"
+    "reserve": "予約",
+    "unavailable": "使用状況を取得できません。スキャンの復旧後に再試行してください。",
+    "changed": "選択した範囲は使用中です。別の範囲を検索してください。",
+    "failed": "予約結果を確認できません。マップを更新して確認してから再試行してください。"
   },
   "history": {
     "title": "直近の変更（24時間）"

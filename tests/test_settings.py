@@ -91,7 +91,7 @@ def test_manual_list_patch_and_known(tmp_path, monkeypatch):
     assert client.get("/api/known-ports/1").status_code == 404
 
 
-def test_get_single_port_free(tmp_path, monkeypatch):
+def test_get_single_port_free(tmp_path, monkeypatch, empty_scan):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     client = TestClient(app)
     row = client.get("/api/ports/2100")

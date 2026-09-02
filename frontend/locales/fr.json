@@ -52,7 +52,9 @@
       "host_proc": "{name} via /host/proc",
       "ss": "{name} via ss",
       "proc": "{name} via /proc"
-    }
+    },
+    "snapshotUnavailable": "Les données sont incomplètes ou périmées. Les ports libres ne peuvent pas être confirmés.",
+    "disabled": "{name} désactivé"
   },
   "status": {
     "used": "occupé",
@@ -64,7 +66,8 @@
     "exited": "terminé",
     "created": "créé",
     "dead": "mort",
-    "removing": "suppression"
+    "removing": "suppression",
+    "unknown": "Inconnu"
   },
   "detail": {
     "panel": "Détail du port",
@@ -442,7 +445,10 @@
     "find": "Trouver des séries",
     "none": "Aucune série libre dans cette plage.",
     "run": "{start}–{end} ({size} libres)",
-    "reserve": "Réserver"
+    "reserve": "Réserver",
+    "unavailable": "Données indisponibles. Réessayez après le rétablissement du scan.",
+    "changed": "La plage sélectionnée est occupée. Cherchez une autre plage.",
+    "failed": "Réservation non confirmée. Actualisez et vérifiez la carte avant de réessayer."
   },
   "history": {
     "title": "Changements récents (24\u00A0h)"

@@ -52,7 +52,9 @@
       "host_proc": "{name} über /host/proc",
       "ss": "{name} über ss",
       "proc": "{name} über /proc"
-    }
+    },
+    "snapshotUnavailable": "Die Belegung ist unvollständig oder veraltet. Freie Ports lassen sich nicht bestätigen.",
+    "disabled": "{name} deaktiviert"
   },
   "status": {
     "used": "belegt",
@@ -64,7 +66,8 @@
     "exited": "beendet",
     "created": "erstellt",
     "dead": "tot",
-    "removing": "wird entfernt"
+    "removing": "wird entfernt",
+    "unknown": "Unbekannt"
   },
   "detail": {
     "panel": "Portdetails",
@@ -442,7 +445,10 @@
     "find": "Blöcke finden",
     "none": "Keine freien Blöcke in diesem Bereich.",
     "run": "{start}–{end} ({size} frei)",
-    "reserve": "Reservieren"
+    "reserve": "Reservieren",
+    "unavailable": "Belegung nicht verfügbar. Nach Wiederherstellung des Scans erneut versuchen.",
+    "changed": "Der gewählte Bereich ist nicht mehr frei. Suchen Sie einen anderen Bereich.",
+    "failed": "Reservierung nicht bestätigt. Aktualisieren und prüfen Sie die Karte vor einem erneuten Versuch."
   },
   "history": {
     "title": "Letzte Änderungen (24 h)"

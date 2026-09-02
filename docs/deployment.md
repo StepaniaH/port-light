@@ -170,7 +170,14 @@ If a Quadlet or rootless snippet works on your machine, open an issue or PR with
 
 ## Health
 
-`GET /api/health` returns process liveness plus `{ proc, docker, compose, listen_source }` . It does not require Basic Auth and does not include port data. `proc: false` / `docker: false` means the UI can be up while the grid is empty. `listen_source` is `host_proc`, `ss`, `proc`, or `none` when the Host pill is trusted green.
+`GET /api/health` always responds to liveness probes without Basic Auth or port data. `status` is `ok` or `degraded`; `occupancy` includes `initialized`, `ready`, `scan_age_seconds`, and per-source states (`ok`, `failed`, `disabled`). The existing `scanners` flags reflect completed observations, so health does not contact Docker. Container healthchecks test HTTP availability; consumers that require usable occupancy must also check `occupancy.ready`.
+
+All three sources are enabled by default. If this deployment intentionally has no Docker or Compose source, select only those in use, for example `PORT_LIGHT_SCANNERS=listen` on a native host. Unavailable enabled sources are failures, never empty successful scans. Free-port planning, suggestions, and batch reservations return `503` until enabled sources recover. Disabling a source means its occupancy is not checked.
+
+`PORT_LIGHT_SCAN_TIMEOUT_S` bounds waiting for a background refresh (default 10 seconds, range 1–60). Timed-out scans retain old data and cannot publish a late result. A stuck filesystem call cannot be forcibly interrupted; its worker slot remains occupied until it exits, keeping thread usage bounded. Restore the mount/daemon or restart the service if it stays blocked.
+
+If `port_light.json` becomes unreadable or invalid, fix its permissions or restore a valid backup. Port-Light preserves the original file and returns `503` for affected operations. It does not rename it and initialize an empty replacement.
+
 
 ## Settings (Compose and Web UI)
 

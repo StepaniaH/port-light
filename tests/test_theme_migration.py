@@ -31,9 +31,9 @@ def test_migrate_known_values(raw, mode, pal):
 
 
 def test_migrate_unknown_resets_and_reports():
-    before = len(degradations.recent(20))
+    degradations.reset()
     assert app_settings.migrate_theme("neon-dream") == ("system", "")
-    assert len(degradations.recent(20)) > before
+    assert degradations.recent()[-1]["reason"] == "unknown value reset"
 
 
 def test_migrate_none_defaults():

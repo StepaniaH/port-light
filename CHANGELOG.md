@@ -12,13 +12,17 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Fixed
 
+- Enabled scanner failures retain previous observations, suppress history/webhook transitions, and block allocation. Unknown occupancy is shown explicitly; health exposes readiness and scanner state.
+- Unreadable or invalid port data is preserved and returns `503`, preventing later writes from replacing existing entries.
+- The free-port planner reserves a whole range atomically and reports conflicts and storage failures without closing the dialog.
+- Slow background scans no longer hold the publication lock or ASGI event loop. Refresh deadlines bound startup and shutdown; timed-out workers cannot accumulate or publish late results.
 - History database failures appear in health degradations; failed history reads return `503`.
 - Truncated Compose scans cannot produce reservations or advance the history baseline.
 - Detail lookups outside a previously cached grid range use the requested port's snapshot data.
 
 ### Development
 
-- Added a Chromium smoke flow with two temporary instances covering startup, details, a saved label, and host switching; frontend CI runs it after module tests.
+- Added a Chromium smoke flow with two temporary instances covering startup, details, a saved label, batch reservation conflicts and retries, and host switching; frontend CI runs it after module tests.
 
 ## 0.7.5 — 2026-09-02
 

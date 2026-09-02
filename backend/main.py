@@ -27,12 +27,12 @@ from .auth import (
     valid_basic_header,
 )
 from .classification import classify, free_port_payload
-from .compose_scanner import scan_compose_tree
-from .docker_scanner import docker_available, scan_containers
+from .compose_scanner import ComposeScan, scan_compose_tree
+from .docker_scanner import scan_containers
 from .known_ports import get_known_port
-from .occupancy_monitor import OccupancyMonitor
+from .occupancy_monitor import OccupancyMonitor, SnapshotUnavailable, complete
+from .scan_status import ScanUnavailable, enabled_scanners
 from .port_scanner import (
-    host_listen_trusted,
     listen_scan_source,
     scan_listening_ports,
 )
@@ -58,6 +58,13 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Port-Light", version=VERSION, lifespan=_lifespan)
+
+
+@app.exception_handler(port_store.StoreReadError)
+@app.exception_handler(SnapshotUnavailable)
+@app.exception_handler(ScanUnavailable)
+def _unavailable(_request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 @app.exception_handler(port_store.StoreWriteError)
@@ -107,6 +114,12 @@ class ManualPortCreate(BaseModel):
     label: str = ""
     machine: str = "localhost"
     ttl: int | None = Field(default=None, ge=60, le=604800)
+
+
+class ManualPortBatch(BaseModel):
+    start: int = Field(ge=1, le=65535)
+    end: int = Field(ge=1, le=65535)
+    label: str = ""
 
 
 class ManualPortUpdate(BaseModel):
@@ -179,9 +192,8 @@ def meta(request: Request) -> dict:
 
 @app.get("/api/health")
 def health(request: Request) -> dict:
-    compose_dir = _compose_dir()
-    source = listen_scan_source()
-    trusted = host_listen_trusted()
+    monitor = _monitor.status()
+    sources = monitor["sources"]
     recent = degradations.recent(5)
     if auth_configured() and not valid_basic_header(request.headers.get("authorization") or ""):
         recent = [
@@ -189,14 +201,15 @@ def health(request: Request) -> dict:
             for event in recent
         ]
     return {
-        "status": "ok",
+        "status": "ok" if monitor["ready"] else "degraded",
         "version": VERSION,
         "auth_required": auth_configured(),
+        "occupancy": monitor,
         "scanners": {
-            "proc": trusted,
-            "listen_source": source if trusted else "none",
-            "docker": docker_available(),
-            "compose": os.path.isdir(compose_dir),
+            "proc": sources.get("listen") == "ok",
+            "listen_source": listen_scan_source() if sources.get("listen") == "ok" else "none",
+            "docker": sources.get("docker") == "ok",
+            "compose": sources.get("compose") == "ok",
         },
         "degradations": recent,
     }
@@ -224,10 +237,12 @@ def metrics() -> Response:
     lines = [
         "# TYPE port_light_up gauge",
         "port_light_up 1",
+        "# TYPE port_light_ready gauge",
+        f"port_light_ready {int(complete(snap))}",
         "# TYPE port_light_ports gauge",
         f'port_light_ports{{status="used"}} {summary["used"]}',
         f'port_light_ports{{status="configured"}} {summary["configured"]}',
-        f'port_light_ports{{status="free"}} {summary["free"]}',
+        f'port_light_ports{{status="free"}} {summary["free"] if complete(snap) else "NaN"}',
         "# TYPE port_light_hidden gauge",
         f"port_light_hidden {summary['hidden']}",
         "# TYPE port_light_degradations gauge",
@@ -247,6 +262,7 @@ def _scan_key(values: dict) -> tuple:
     return (
         os.environ.get("PORT_LIGHT_DATA_DIR", "/data"),
         _compose_dir(),
+        tuple(sorted(enabled_scanners())),
         values["compose_scan_depth"],
         values["compose_scan_max_files"],
         values["guess_urls"],
@@ -256,26 +272,50 @@ def _scan_key(values: dict) -> tuple:
 
 
 def _build_snapshot(values: dict) -> dict:
-    containers = scan_containers()
+    enabled = enabled_scanners()
+    snap = {"containers": [], "listening": [], "compose_scan": ComposeScan(), "sources": {}}
     prefer: list[int] = []
-    for c in containers:
-        prefer.extend(c.pids or [])
-    snap = {
-        "containers": containers,
-        "listening": scan_listening_ports(prefer_pids=prefer),
-        "compose_scan": scan_compose_tree(
-            _compose_dir(),
-            max_depth=values["compose_scan_depth"],
-            max_files=values["compose_scan_max_files"],
-        ),
-    }
+    for source, field, scan in (
+        ("docker", "containers", scan_containers),
+        ("listen", "listening", lambda: scan_listening_ports(prefer_pids=prefer)),
+        ("compose", "compose_scan", lambda: scan_compose_tree(
+            _compose_dir(), max_depth=values["compose_scan_depth"],
+            max_files=values["compose_scan_max_files"])),
+    ):
+        if source not in enabled:
+            snap["sources"][source] = "disabled"
+            continue
+        try:
+            snap[field] = scan()
+            if source == "compose" and (snap[field].incomplete or snap[field].truncated):
+                raise ValueError("incomplete Compose scan")
+            snap["sources"][source] = "ok"
+            if source == "docker":
+                for container in snap[field]:
+                    prefer.extend(container.pids or [])
+        except Exception:
+            snap["sources"][source] = "failed"
+            degradations.report(source, "scan", "occupancy source unavailable or incomplete")
     return snap
+
+
+def _allocation_snapshot(values: dict) -> dict:
+    snap = _monitor.latest(values)
+    if not complete(snap):
+        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
+    return snap
+
+
+def _scanned_ports(snap: dict, values: dict, lo: int, hi: int) -> set[int]:
+    # Stored claims and hidden ports are re-read under the store's write lock.
+    result = _classify_snapshot({**snap, "user_state": ([], [])}, values, lo, hi)
+    return {row["port"] for row in result["ports"]}
 
 
 def _classify_snapshot(snap: dict, values: dict, start: int, end: int,
                        show_hidden: bool = True, hidden_locked: bool = False) -> dict:
     manuals, hidden = snap["user_state"]
-    return classify(
+    result = classify(
         snap["listening"],
         snap["containers"],
         snap["compose_scan"].ports,
@@ -287,6 +327,13 @@ def _classify_snapshot(snap: dict, values: dict, start: int, end: int,
         hidden_locked=hidden_locked,
         options=values,
     )
+
+    if not complete(snap):
+        result["summary"]["free"] = None
+        for row in result["ports"] + result["summary"].get("hidden_occupancy", []):
+            if row["status"] == "free":
+                row["status"] = "unknown"
+    return result
 
 
 _monitor = OccupancyMonitor(
@@ -518,12 +565,8 @@ async def suggest_ports(
     hi = end if end is not None else values["port_range_end"]
     if hi < lo:
         lo, hi = hi, lo
-    snap = _monitor.latest(values)
-    if snap.get("stale") or snap["compose_scan"].incomplete or snap["compose_scan"].truncated:
-        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
-    # Re-read manual/hidden state inside the store transaction below.
-    result = _classify_snapshot({**snap, "user_state": ([], [])}, values, lo, hi)
-    taken = {row["port"] for row in result["ports"]}
+    snap = _allocation_snapshot(values)
+    taken = _scanned_ports(snap, values, lo, hi)
     scope_label = "self"
     if scope == "all":
         public_peers = hosts.list_public_peers()
@@ -546,6 +589,7 @@ async def suggest_ports(
             rows = data.get("ports") if isinstance(data, dict) else None
             complete = (
                 status == 200 and isinstance(rows, list) and isinstance(summary, dict)
+                and summary.get("scan_complete") is True
                 and all(type(summary.get(key)) is bool for key in (
                     "hidden_locked", "compose_incomplete", "compose_truncated"))
                 and not any(summary.get(key) for key in (
@@ -562,6 +606,9 @@ async def suggest_ports(
                     "peer occupancy unavailable or incomplete")
                 raise HTTPException(status_code=503, detail="peer occupancy unavailable or incomplete")
         scope_label = f"all:{reachable}/{len(peers)}"
+    # Peer I/O may outlast the local snapshot. Revalidate it before claiming.
+    values = _values()
+    taken.update(_scanned_ports(_allocation_snapshot(values), values, lo, hi))
     picks, reservations = await asyncio.to_thread(
         port_store.allocate_ports, taken, lo, hi, count, label, ttl, reserve or ttl is not None)
     if reservations:
@@ -619,6 +666,8 @@ def get_port(
     payload, _body, _etag = _packed_occupancy(request, port, port, include_hidden)
     for row in payload["ports"]:
         if row["port"] == port:
+            if row["status"] == "unknown":
+                raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
             return row
     hidden: set[int] = set()
     for raw in snap["user_state"][1]:
@@ -635,7 +684,11 @@ def get_port(
         for row in result["ports"]:
             if row["port"] == port:
                 return row
+        if not complete(snap):
+            raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
         return free_port_payload(port, hidden=True)
+    if not complete(snap):
+        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
     return free_port_payload(port, hidden=False)
 
 
@@ -696,6 +749,18 @@ def add_manual_port(body: ManualPortCreate, request: Request) -> dict:
     entry = port_store.add_manual_port(body.port, body.label, body.machine, body.ttl)
     _monitor.state_changed()
     return {"status": "ok", "entry": entry}
+
+
+@app.post("/api/manual-ports/batch")
+def reserve_manual_range(body: ManualPortBatch) -> dict:
+    if body.end < body.start or body.end - body.start >= 64:
+        raise HTTPException(status_code=422, detail="select between 1 and 64 contiguous ports")
+    values = _values()
+    snap = _allocation_snapshot(values)
+    picks = port_store.reserve_manual_range(
+        _scanned_ports(snap, values, body.start, body.end), body.start, body.end, body.label)
+    _monitor.state_changed()
+    return {"status": "ok", "ports": picks}
 
 
 @app.patch("/api/manual-ports/{port}")
@@ -798,15 +863,15 @@ def free_runs(
 ) -> dict:
     """Largest contiguous free-port runs inside a window.
 
-    Read-only planning aid: nothing is reserved here — use the manual-ports
-    API to claim a run once chosen.
+    Read-only planning aid. POST /api/manual-ports/batch claims a selected run
+    atomically after checking the latest occupancy and stored reservations.
     """
     values = _values()
     lo = start if start is not None else values["port_range_start"]
     hi = end if end is not None else values["port_range_end"]
     if hi < lo:
         lo, hi = hi, lo
-    snap = _monitor.latest(values)
+    snap = _allocation_snapshot(values)
     _manuals, hidden = snap["user_state"]
     result = _classify_snapshot(snap, values, lo, hi)
     taken = {row["port"] for row in result["ports"]}
@@ -820,6 +885,7 @@ def free_runs(
         run_start = cursor
         while cursor <= hi and cursor not in taken:
             cursor += 1
-        runs.append({"start": run_start, "end": cursor - 1, "size": cursor - run_start})
+        if cursor - run_start >= count:
+            runs.append({"start": run_start, "end": cursor - 1, "size": cursor - run_start})
     runs.sort(key=lambda r: (-r["size"], r["start"]))
     return {"count": count, "start": lo, "end": hi, "runs": runs[:10]}

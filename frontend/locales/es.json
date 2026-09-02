@@ -52,7 +52,9 @@
       "host_proc": "{name} vía /host/proc",
       "ss": "{name} vía ss",
       "proc": "{name} vía /proc"
-    }
+    },
+    "snapshotUnavailable": "Los datos están incompletos o desactualizados. No se pueden confirmar los puertos libres.",
+    "disabled": "{name} desactivado"
   },
   "status": {
     "used": "en uso",
@@ -64,7 +66,8 @@
     "exited": "finalizado",
     "created": "creado",
     "dead": "muerto",
-    "removing": "eliminando"
+    "removing": "eliminando",
+    "unknown": "Desconocido"
   },
   "detail": {
     "panel": "Detalle del puerto",
@@ -442,7 +445,10 @@
     "find": "Buscar bloques",
     "none": "No hay bloques libres en este rango.",
     "run": "{start}–{end} ({size} libres)",
-    "reserve": "Reservar"
+    "reserve": "Reservar",
+    "unavailable": "Datos no disponibles. Reinténtalo cuando se recupere el escaneo.",
+    "changed": "El rango seleccionado ya está ocupado. Busca otro rango.",
+    "failed": "No se pudo confirmar la reserva. Actualiza y comprueba el mapa antes de reintentarlo."
   },
   "history": {
     "title": "Cambios recientes (24 h)"

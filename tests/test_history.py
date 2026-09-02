@@ -115,6 +115,7 @@ def test_history_uses_complete_snapshots(monkeypatch):
         port_store.add_manual_port(45000, "hidden service")
         main._monitor.state_changed()
         client.get("/api/ports")
+        main._monitor._observe_pending()
         assert [event["state"] for event in history.query(45000)] == ["free", "configured"]
 
 

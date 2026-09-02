@@ -49,7 +49,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Custom palettes, import/export, and Loose / Standard / Compact card-density presets
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
-- Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with one-click reservation
+- Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with atomic batch reservation
 - Automation API: `GET /api/ports/suggest` returns ports available in the latest scan, with optional reservations or expiring leases. An MCP stdio server and an agent integration are included.
 - Local history: port state transitions land in `history.db` inside your data volume (default 7 days; `HISTORY_RETENTION_DAYS=0` disables) — the detail drawer shows recent changes and `GET /api/ports/{n}/history` exposes them
 - Optional webhooks: `WEBHOOK_URL` + `WEBHOOK_EVENTS=new_listener,conflict` POST JSON when a port starts being used or two stacks collide
@@ -99,10 +99,14 @@ Open `http://localhost:2100`.
 
 `NET_ADMIN` is **not required** in the usual bridge setup. It only helps the `ss` fallback on bare metal.
 
+All three scanners are enabled by default. If an enabled source fails, Compose scanning is incomplete, or a snapshot expires, the map shows a warning and unconfirmed ports remain unknown. Free-port planning and batch reservations return `503`. For a native installation without Docker, set `PORT_LIGHT_SCANNERS=listen,compose`; use `listen` to scan only host listeners. Occupancy in disabled sources is outside the checks.
+
 ## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | Enabled sources, comma-separated; omitted sources are explicitly disabled. Select at least one. Env only. |
+| `PORT_LIGHT_SCAN_TIMEOUT_S` | `10` | Background refresh deadline in seconds (1–60). A timeout retains the snapshot and marks it stale. Env only. |
 | `COMPOSE_SCAN_DIR` | `/compose` | Directory to scan for `compose.y*ml` / `docker-compose.y*ml` (env only) |
 | `COMPOSE_SCAN_DEPTH` | `4` | Max subdirectory depth under the scan dir |
 | `COMPOSE_SCAN_MAX_FILES` | `400` | Cap on compose files parsed per refresh |
@@ -130,11 +134,13 @@ Open `http://localhost:2100`.
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
 | `AGENT_TOKEN` | unset | When set, `GET /api/ports/suggest` requires a matching `X-Agent-Token` header. Env-only. |
 
-Most of the table (except paths and secrets) can also be changed on **Settings** in the UI. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
+Most options (except scanner selection, timeout, paths, and secrets) can also be changed on **Settings** in the UI. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
 
 Copy [custom_ports.example.json](custom_ports.example.json) to `custom_ports.json` (gitignored). Categories: `system`, `web`, `database`, `message`, `proxy`, `vpn`, `selfhosted`, `dev`, `infra`, `gaming`.
 
 If you bind-mount `custom_ports.json` in Compose, create the **file** on the host first. Mounting a missing path makes Docker create a directory and the app will fail to read it.
+
+If an existing `port_light.json` is unreadable, malformed, or contains invalid records, affected APIs return `503` and leave it intact for repair. Only a missing file initializes an empty store.
 
 ## Privacy
 

@@ -318,12 +318,17 @@ def scan_compose_tree(
     max_files: int | None = None,
 ) -> ComposeScan:
     if not os.path.isdir(scan_dir):
-        return ComposeScan()
+        degradations.report("compose", "scan root", "directory unavailable")
+        return ComposeScan(incomplete=True)
 
     depth = max_depth if max_depth is not None else _env_int("COMPOSE_SCAN_DEPTH", 4)
     files_cap = max_files if max_files is not None else _env_int("COMPOSE_SCAN_MAX_FILES", 400)
 
-    files, truncated = _find_compose_files(scan_dir, depth, files_cap)
+    try:
+        files, truncated = _find_compose_files(scan_dir, depth, files_cap)
+    except OSError:
+        degradations.report("compose", "scan root", "directory unreadable")
+        return ComposeScan(incomplete=True)
     included: set[str] = set()
     incomplete = False
     cache: dict = {}
@@ -377,7 +382,10 @@ def _degradation_scope(scan_dir: str, exc: ComposeWouldFail) -> str:
 def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> tuple[list[str], bool]:
     found: list[str] = []
     scan_dir = os.path.abspath(scan_dir)
-    for root, dirs, files in os.walk(scan_dir):
+    def on_error(exc):
+        raise exc
+
+    for root, dirs, files in os.walk(scan_dir, onerror=on_error):
         rel = os.path.relpath(root, scan_dir)
         depth = 0 if rel == "." else rel.count(os.sep) + 1
         if depth > max_depth:

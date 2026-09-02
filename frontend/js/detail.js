@@ -1,18 +1,18 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=77';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=77';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=77';
-import { trapTab } from './a11y.js?v=77';
-import { api } from './api.js?v=77';
-import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=77';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=77';
+import { S, saveView } from './state.js?v=78';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=78';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=78';
+import { trapTab } from './a11y.js?v=78';
+import { api } from './api.js?v=78';
+import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=78';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=78';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=77';
-import { closeModals, modalOpen, openModal } from './modal.js?v=77';
+} from './grid.js?v=78';
+import { closeModals, modalOpen, openModal } from './modal.js?v=78';
 
 let tick;
 let loadPorts;
@@ -90,7 +90,8 @@ export function configureDetail(actions) {
       }
       if (!res.ok) {
         S.detailShownPort = null;
-        showDetailError(t('detail.actionFailed'));
+        if (res.status === 503) renderDetail({ ...pendingStub(port), _pending: false, _unavailable: true });
+        else showDetailError(t('detail.actionFailed'));
         return null;
       }
       return res.json();
@@ -114,8 +115,8 @@ export function configureDetail(actions) {
       '</div><button type="button" class="close-btn" data-close-detail aria-label="' +
       escapeHtml(t('detail.close')) + '">×</button></div>';
 
-    if (p._pending) {
-      html += '<p class="modal-hint">' + escapeHtml(t('detail.loading')) + '</p>';
+    if (p._pending || p._unavailable || p.status === 'unknown') {
+      html += '<p class="modal-hint">' + escapeHtml(t(p._unavailable || p.status === 'unknown' ? 'scanner.snapshotUnavailable' : 'detail.loading')) + '</p>';
     } else {
     const remote = S.selectedHostId && S.selectedHostId !== 'local';
     if (remote) {
@@ -275,9 +276,9 @@ export function configureDetail(actions) {
       else if (active.hasAttribute('data-label-input')) keep = 'label';
     }
 
-    if (!p._pending && !p._missing) html += '<section id="detail-history" hidden></section>';
+    if (!p._pending && !p._unavailable && p.status !== 'unknown' && !p._missing) html += '<section id="detail-history" hidden></section>';
     detailContent.innerHTML = html;
-    if (!p._pending && !p._missing) {
+    if (!p._pending && !p._unavailable && p.status !== 'unknown' && !p._missing) {
       loadPortHistory(p.port, S.selectedHostId || 'local', detailContent.querySelector('#detail-history'));
     }
     const closeBtn = detailContent.querySelector('[data-close-detail]');

@@ -41,6 +41,8 @@ curl -s "http://127.0.0.1:2100/api/ports/suggest?count=2&reserve=true&label=prev
   request returns `503` and reserves nothing. A successful response reports
   `"scope": "all:<reachable>/<total>"`.
 - `count` is capped at 64.
+- A local failed, incomplete, or stale scan returns `503`. Peer summaries must explicitly report `scan_complete: true`; older peers need an upgrade before `scope=all` can allocate ports.
+- Allocation coordinates this Port-Light process only. It does not bind OS sockets; another process can still claim a port after a scan.
 
 ### Agent token
 
@@ -54,8 +56,15 @@ every other endpoint is unaffected.
 curl -s "http://127.0.0.1:2100/api/free-runs?count=8&start=3000&end=4000"
 ```
 
-Returns up to ten `{start, end, size}` runs, largest first. Read-only —
-reserving is done through manual ports.
+Returns up to ten `{start, end, size}` runs with at least `count` ports, largest first. The same completeness and freshness checks as suggestions apply. Claim an exact selection in one transaction:
+
+```bash
+curl -s -X POST http://127.0.0.1:2100/api/manual-ports/batch \
+  -H 'Content-Type: application/json' \
+  -d '{"start":3000,"end":3007,"label":"Preview services"}'
+```
+
+A successful response contains `{"status":"ok","ports":[3000,3001,3002,3003,3004,3005,3006,3007]}`. Ranges must contain 1–64 ports. If any selected port is occupied, reserved, or hidden at the recheck, the response is `409` and no selected port is added. Storage failures return `500` for writes or `503` for unreadable/invalid data. These entries use ordinary manual-port editing and deletion; the agent-token gate continues to apply only to `/api/ports/suggest`.
 
 ### Check one port
 
@@ -64,7 +73,7 @@ curl -s "http://127.0.0.1:2100/api/ports/5432"
 ```
 
 Returns the full row (status, source type, containers, Compose configs,
-guessed URLs). Hidden rows are withheld unless the request carries
+guessed URLs). If occupancy cannot be confirmed and no occupied/configured row is known, the response is `503`. Hidden rows are withheld unless the request carries
 `X-Hidden-Unlock` and the instance has `HIDDEN_UNLOCK_PASSWORD` or Basic Auth.
 
 ### Poll efficiently
@@ -72,7 +81,7 @@ guessed URLs). Hidden rows are withheld unless the request carries
 `GET /api/ports` answers with a strong ETag; repeat polls send
 `If-None-Match` and receive `304` while nothing changed. Requests read the last completed background snapshot without waiting for a scan.
 Snapshots older than two scan intervals (at least 4 seconds) carry
-`summary.stale: true`.
+`summary.stale: true`. `summary.sources` reports `ok`, `failed`, or `disabled` for each scanner. Check `summary.scan_complete === true` before interpreting a missing row as free. Otherwise `summary.free` is null, and unconfirmed visible rows have `status: "unknown"`. A disabled source is excluded from this guarantee.
 
 ## Server-sent events
 
@@ -106,7 +115,8 @@ scrape_configs:
 
 Series: `port_light_ports{status="used|configured|free"}`,
 `port_light_hidden`, `port_light_degradations`,
-`port_light_compose_files`, `port_light_compose_incomplete`.
+`port_light_compose_files`, `port_light_compose_incomplete`, `port_light_up`, and `port_light_ready`.
+`port_light_ready` is 1 only for a complete, current snapshot. The free-count metric is `NaN` otherwise; occupied counts may contain retained observations. Before any snapshot exists the metrics endpoint returns `503`.
 Aggregates only — no ports or service names are exposed.
 
 ## Webhooks

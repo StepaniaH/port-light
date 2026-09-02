@@ -181,7 +181,7 @@ def test_put_rejects_too_many_and_bad_urls(tmp_path, monkeypatch):
     assert client.put("/api/hosts", json={"peers": "nas"}).status_code == 400
 
 
-def test_local_host_ports_alias(tmp_path, monkeypatch):
+def test_local_host_ports_alias(tmp_path, monkeypatch, empty_scan):
     client = _client(tmp_path, monkeypatch)
     a = client.get("/api/ports")
     b = client.get("/api/hosts/local/ports")

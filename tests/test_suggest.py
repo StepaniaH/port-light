@@ -92,7 +92,7 @@ def test_scope_all_fetches_peers_concurrently_and_unions_occupancy(monkeypatch):
         return 200, {"ports": [
             {"port": peer["port"]},
         ], "summary": {"hidden_locked": False, "compose_incomplete": False,
-                        "compose_truncated": False}}, None
+                        "compose_truncated": False, "scan_complete": True}}, None
 
     monkeypatch.setattr(main.hosts, "fetch_peer_json", fake_fetch)
 
@@ -118,7 +118,7 @@ def test_scope_all_uses_stored_peer_credentials(monkeypatch):
         assert peer["password"] == "secret"
         return 200, {"ports": [], "summary": {
             "hidden_locked": False, "compose_incomplete": False,
-            "compose_truncated": False,
+            "compose_truncated": False, "scan_complete": True,
         }}, None
 
     monkeypatch.setattr(main.hosts, "fetch_peer_json", fetch)

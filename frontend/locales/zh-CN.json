@@ -52,7 +52,9 @@
       "host_proc": "{name} · /host/proc",
       "ss": "{name} · ss",
       "proc": "{name} · /proc"
-    }
+    },
+    "snapshotUnavailable": "占用信息不完整或已过期，无法确认空闲端口。",
+    "disabled": "{name} 已禁用"
   },
   "status": {
     "used": "占用中",
@@ -64,7 +66,8 @@
     "exited": "已退出",
     "created": "已创建",
     "dead": "已死亡",
-    "removing": "正在删除"
+    "removing": "正在删除",
+    "unknown": "未知"
   },
   "detail": {
     "panel": "端口详情",
@@ -442,7 +445,10 @@
     "find": "查找连续空闲段",
     "none": "此范围内没有连续空闲段。",
     "run": "{start}–{end}（连续 {size} 个）",
-    "reserve": "预留"
+    "reserve": "预留",
+    "unavailable": "占用信息暂不可用，请在扫描恢复后重试。",
+    "changed": "所选端口段已被占用，请重新查找。",
+    "failed": "无法确认预留结果，请刷新并检查端口图后重试。"
   },
   "history": {
     "title": "最近变动（24 小时）"
