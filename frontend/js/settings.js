@@ -9,6 +9,8 @@ import { api, fetchHosts, fetchSettings } from './api.js?v=79';
 import { hasPeers, hostById, hostName } from './hosts.js?v=79';
 import { bindAddressView, render, syncHiddenButton } from './grid.js?v=79';
 
+const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
+
   export function loadSettingsPage() {
     Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
       const doc = pair[0];
@@ -76,7 +78,7 @@ import { bindAddressView, render, syncHiddenButton } from './grid.js?v=79';
     if ((location.hash || '') !== next) location.hash = next;
   }
 
-  export function syncDependentSettings(changedKey) {
+  export function syncDependentSettings() {
     const form = document.getElementById('settings-form');
     if (!form) return;
     const auto = form.elements.auto_refresh;
@@ -84,18 +86,8 @@ import { bindAddressView, render, syncHiddenButton } from './grid.js?v=79';
     if (auto && row) row.classList.toggle('is-inactive', !auto.checked);
 
     const parent = form.elements.show_bind_addresses;
-    const ipv4 = form.elements.show_bind_ipv4;
-    const ipv6 = form.elements.show_bind_ipv6;
     const familyGroup = document.getElementById('bind-address-family-options');
-    if (!parent || !ipv4 || !ipv6 || !familyGroup) return;
-    if (changedKey === 'show_bind_addresses' && parent.checked && !ipv4.checked && !ipv6.checked) {
-      ipv4.checked = true;
-      ipv6.checked = true;
-    } else if ((changedKey === 'show_bind_ipv4' || changedKey === 'show_bind_ipv6') &&
-               parent.checked && !ipv4.checked && !ipv6.checked) {
-      parent.checked = false;
-    }
-    familyGroup.hidden = !parent.checked;
+    if (!parent || !familyGroup) return;
     if (parent.checked) familyGroup.removeAttribute('hidden');
     else familyGroup.setAttribute('hidden', '');
     parent.setAttribute('aria-expanded', parent.checked ? 'true' : 'false');
@@ -516,10 +508,9 @@ import { bindAddressView, render, syncHiddenButton } from './grid.js?v=79';
         '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + disabled + '>';
     }
     const wide = f.key === 'theme_mode' || f.key === 'theme_palette' ? ' is-wide' : '';
-    const dependent = f.key === 'show_bind_ipv4' || f.key === 'show_bind_ipv6' ? ' is-dependent' : '';
-    const sourceHint = f.key === 'show_bind_addresses' || f.key === 'show_bind_ipv4' || f.key === 'show_bind_ipv6'
+    const sourceHint = f.key === 'show_bind_addresses' || BIND_FAMILY_KEYS.includes(f.key)
       ? '' : originHint(f);
-    return '<' + tag + ' class="setting-row' + wide + dependent + '" data-setting="' + escapeHtml(f.key) + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
+    return '<' + tag + ' class="setting-row' + wide + '" data-setting="' + escapeHtml(f.key) + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
       '</span></span><span class="setting-control">' + control + sourceHint +
       '</span></' + tag + '>';
@@ -896,10 +887,10 @@ import { bindAddressView, render, syncHiddenButton } from './grid.js?v=79';
     const densityFields = appearanceFields.filter(function (f) { return f.key === 'grid_density'; });
     const cardFields = appearanceFields.filter(function (f) { return CARD_FIELD_KEYS[f.key]; });
     const bindChildren = cardFields.filter(function (f) {
-      return f.key === 'show_bind_ipv4' || f.key === 'show_bind_ipv6';
+      return BIND_FAMILY_KEYS.includes(f.key);
     });
     const primaryCardFields = cardFields.filter(function (f) {
-      return f.key !== 'show_bind_ipv4' && f.key !== 'show_bind_ipv6';
+      return !BIND_FAMILY_KEYS.includes(f.key);
     });
     const bindFamilyOptions = bindChildren.length
       ? '<fieldset class="setting-children" id="bind-address-family-options"' +

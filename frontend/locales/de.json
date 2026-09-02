@@ -434,7 +434,9 @@
     "aria": "Raster der Portbelegung",
     "updated": "Aktualisiert {time}",
     "leaseBadge": "Agenten-Reservierung",
-    "anyAddress": "alle"
+    "anyAddress": "alle",
+    "bindAddress": "{family}: {address}",
+    "bindAddressMore": "{family}: {address} (+{count})"
   },
   "error": {
     "httpStatus": "Anfrage fehlgeschlagen (HTTP {status})."

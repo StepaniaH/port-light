@@ -434,7 +434,9 @@
     "aria": "Grille d'occupation des ports",
     "updated": "Mis à jour à {time}",
     "leaseBadge": "Réservation d'agent",
-    "anyAddress": "toutes"
+    "anyAddress": "toutes",
+    "bindAddress": "{family} : {address}",
+    "bindAddressMore": "{family} : {address} (+{count})"
   },
   "error": {
     "httpStatus": "Échec de la requête (HTTP {status})."

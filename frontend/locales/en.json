@@ -434,7 +434,9 @@
     "aria": "Port occupancy grid",
     "updated": "Updated {time}",
     "leaseBadge": "Agent lease",
-    "anyAddress": "any"
+    "anyAddress": "any",
+    "bindAddress": "{family}: {address}",
+    "bindAddressMore": "{family}: {address} (+{count})"
   },
   "error": {
     "httpStatus": "Request failed (HTTP {status})."

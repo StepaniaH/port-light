@@ -434,7 +434,9 @@
     "aria": "端口占用网格",
     "updated": "更新于 {time}",
     "leaseBadge": "Agent 租约",
-    "anyAddress": "全部接口"
+    "anyAddress": "全部接口",
+    "bindAddress": "{family}：{address}",
+    "bindAddressMore": "{family}：{address}（+{count}）"
   },
   "error": {
     "httpStatus": "请求失败（HTTP {status}）。"

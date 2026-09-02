@@ -61,3 +61,24 @@ test('grid cards render selected bind families and expose exact values in title'
     root.remove();
   }
 });
+
+test('bind address accessibility labels use complete locale templates', () => {
+  const previous = window.PortLightI18n;
+  try {
+    for (const locale of ['en', 'zh-CN']) {
+      const messages = JSON.parse(readFileSync(new URL('../locales/' + locale + '.json', import.meta.url), 'utf8'));
+      window.PortLightI18n = {
+        t(key, vars = {}) {
+          return key.split('.').reduce((value, part) => value[part], messages)
+            .replace(/\{(\w+)\}/g, (_, name) => vars[name]);
+        },
+      };
+      const view = bindAddressView(['0.0.0.0', '192.0.2.1', '2001:db8::1'], { enabled: true });
+      assert.deepEqual(view.ariaParts, locale === 'en'
+        ? ['IPv4: any (+1)', 'IPv6: 2001:db8::1']
+        : ['IPv4：全部接口（+1）', 'IPv6：2001:db8::1']);
+    }
+  } finally {
+    window.PortLightI18n = previous;
+  }
+});

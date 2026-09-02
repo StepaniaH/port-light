@@ -694,7 +694,7 @@ import {
       }
     }
     markDirty();
-    syncDependentSettings(field);
+    syncDependentSettings();
   });
   document.getElementById('settings-fields').addEventListener('input', markDirty);
   document.getElementById('settings-fields').addEventListener('click', function (e) {

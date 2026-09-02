@@ -4,7 +4,7 @@ import { S } from './state.js?v=79';
 import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=79';
 import { KIND_MATCHERS } from './kinds.js?v=79';
 import { isLease } from './leases.js?v=79';
-import { summarizeBindAddresses } from './bind-addresses.js?v=79';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=79';
 import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=79';
 import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=79';
 import { api } from './api.js?v=79';
@@ -374,8 +374,8 @@ import { api } from './api.js?v=79';
       html,
       summaries,
       ariaParts: summaries.map(function (row) {
-        return row.label + ' ' + (row.wildcard ? any : row.primary) +
-          (row.additional ? ' +' + row.additional : '');
+        const vars = { family: row.label, address: row.wildcard ? any : row.primary, count: row.additional };
+        return row.additional ? t('grid.bindAddressMore', vars) : t('grid.bindAddress', vars);
       }),
       titleParts: summaries.map(function (row) {
         return row.label + ' ' + row.addresses.join(', ');
@@ -625,7 +625,7 @@ import { api } from './api.js?v=79';
         : '';
 
       const bindView = bindAddressView(
-        (p.ips && p.ips.length) ? p.ips : (p.ip ? [p.ip] : []),
+        cardBindAddresses(p),
         {
           enabled: !!S.settings.show_bind_addresses,
           showV4: S.settings.show_bind_ipv4 !== false,

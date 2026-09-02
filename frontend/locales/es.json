@@ -434,7 +434,9 @@
     "aria": "Cuadrícula de ocupación de puertos",
     "updated": "Actualizado {time}",
     "leaseBadge": "Reserva de agente",
-    "anyAddress": "todas"
+    "anyAddress": "todas",
+    "bindAddress": "{family}: {address}",
+    "bindAddressMore": "{family}: {address} (+{count})"
   },
   "error": {
     "httpStatus": "La solicitud falló (HTTP {status})."

@@ -19,6 +19,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Fixed
 
 - Bind-address switches no longer repeat the environment or saved-setting source below each control.
+- Card bind summaries exclude manual reservations without bind information, include implicit Compose wildcard bindings, and normalize IPv4-mapped IPv6 consistently. IPv6 elision preserves leading and trailing `::`.
 - Enabled scanner failures retain previous observations, suppress history/webhook transitions, and block allocation. Unknown occupancy is shown explicitly; health exposes readiness and scanner state.
 - Unreadable or invalid port data is preserved and returns `503`, preventing later writes from replacing existing entries.
 - The free-port planner reserves a whole range atomically and reports conflicts and storage failures without closing the dialog.
@@ -29,7 +30,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Development
 
-- Added a Chromium smoke flow with two temporary instances covering startup, details, a saved label, batch reservation conflicts and retries, and host switching; frontend CI runs it after module tests.
+- Added a Chromium smoke flow with two temporary instances covering startup, details, a saved label, bind-address settings, batch reservation conflicts and retries, and host switching; frontend CI runs it after module tests.
 - The background-observation test waits for history completion independently of SSE publication, avoiding a race on slower systems.
 
 ## 0.7.5 — 2026-09-02

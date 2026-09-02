@@ -434,7 +434,9 @@
     "aria": "ポート占用グリッド",
     "updated": "{time} に更新",
     "leaseBadge": "Agentリース",
-    "anyAddress": "すべて"
+    "anyAddress": "すべて",
+    "bindAddress": "{family}：{address}",
+    "bindAddressMore": "{family}：{address}（+{count}）"
   },
   "error": {
     "httpStatus": "リクエストに失敗しました（HTTP {status}）。"

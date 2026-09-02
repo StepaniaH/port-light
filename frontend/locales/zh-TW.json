@@ -434,7 +434,9 @@
     "aria": "連接埠佔用一覽",
     "updated": "更新於 {time}",
     "leaseBadge": "Agent 租約",
-    "anyAddress": "所有介面"
+    "anyAddress": "所有介面",
+    "bindAddress": "{family}：{address}",
+    "bindAddressMore": "{family}：{address}（+{count}）"
   },
   "error": {
     "httpStatus": "請求失敗（HTTP {status}）。"

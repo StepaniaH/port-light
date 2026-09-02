@@ -6,82 +6,95 @@ function stripBrackets(raw) {
   return text;
 }
 
-function compressIpv6(raw) {
-  const text = stripBrackets(raw).toLowerCase();
+function splitZone(text) {
   const zoneAt = text.indexOf('%');
-  const base = zoneAt >= 0 ? text.slice(0, zoneAt) : text;
-  const zone = zoneAt >= 0 ? text.slice(zoneAt) : '';
-  if (!base || base.indexOf(':') < 0) return text;
+  return {
+    base: zoneAt >= 0 ? text.slice(0, zoneAt) : text,
+    zone: zoneAt >= 0 ? text.slice(zoneAt) : '',
+  };
+}
 
-  const halves = base.split('::');
-  if (halves.length > 2) return text;
-  const left = halves[0] ? halves[0].split(':') : [];
-  const right = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
-  if (left.concat(right).some(function (part) { return !/^[0-9a-f]{1,4}$/.test(part); })) {
-    return text;
+function compressIpv6(raw) {
+  const { base, zone } = splitZone(stripBrackets(raw));
+  if (!/^[0-9a-f:.]+$/i.test(base)) return null;
+  try {
+    // URL parsing validates and canonicalizes IPv6 without making a request.
+    return new URL('http://[' + base + ']/').hostname.slice(1, -1) + zone;
+  } catch {
+    return null;
   }
-  const missing = halves.length === 2 ? 8 - left.length - right.length : 0;
-  const parts = halves.length === 2
-    ? left.concat(Array(Math.max(0, missing)).fill('0'), right)
-    : left;
-  if (parts.length !== 8) return text;
-  const normalized = parts.map(function (part) {
-    return parseInt(part, 16).toString(16);
-  });
-
-  let bestStart = -1;
-  let bestLength = 0;
-  for (let i = 0; i < normalized.length;) {
-    if (normalized[i] !== '0') { i++; continue; }
-    let j = i;
-    while (j < normalized.length && normalized[j] === '0') j++;
-    if (j - i > bestLength && j - i >= 2) {
-      bestStart = i;
-      bestLength = j - i;
-    }
-    i = j;
-  }
-  if (bestStart < 0) return normalized.join(':') + zone;
-  const before = normalized.slice(0, bestStart).join(':');
-  const after = normalized.slice(bestStart + bestLength).join(':');
-  return before + '::' + after + zone;
 }
 
 function normalizedAddress(raw) {
-  let text = stripBrackets(raw);
-  const mapped = text.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
-  if (mapped) return { family: 'v4', value: mapped[1] };
-  if (text.indexOf(':') >= 0) return { family: 'v6', value: compressIpv6(text) };
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(text)) return { family: 'v4', value: text };
+  const text = stripBrackets(raw);
+  if (text.indexOf(':') >= 0) {
+    const value = compressIpv6(text);
+    if (!value) return null;
+    const mapped = value.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (mapped) {
+      const octets = mapped.slice(1).flatMap(function (part) {
+        const n = parseInt(part, 16);
+        return [n >> 8, n & 255];
+      });
+      return { family: 'v4', value: octets.join('.') };
+    }
+    return { family: 'v6', value };
+  }
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(text)) {
+    const octets = text.split('.').map(Number);
+    if (octets.every(function (n) { return n <= 255; })) return { family: 'v4', value: octets.join('.') };
+  }
   return null;
 }
 
-function isWildcard(family, value) {
+function isWildcard({ family, value }) {
   return family === 'v4' ? value === '0.0.0.0' : value === '::';
 }
 
-function isLoopback(family, value) {
+function isLoopback({ family, value }) {
   return family === 'v4' ? value.startsWith('127.') : value === '::1';
 }
 
 function addressRank(row) {
-  if (isWildcard(row.family, row.value)) return 0;
-  if (!isLoopback(row.family, row.value)) return 1;
+  if (isWildcard(row)) return 0;
+  if (!isLoopback(row)) return 1;
   return 2;
 }
 
+const IPV6_DENSITIES = {
+  loose: { max: 24, prefixCount: 3 },
+  standard: { max: 19, prefixCount: 2 },
+  compact: { max: 14, prefixCount: 1 },
+};
+
 export function compactIpv6(raw, density) {
-  const value = compressIpv6(raw);
-  const max = density === 'loose' ? 24 : density === 'compact' ? 14 : 19;
+  const value = compressIpv6(raw) || stripBrackets(raw);
+  const { max, prefixCount } = IPV6_DENSITIES[density] || IPV6_DENSITIES.standard;
   if (value.length <= max || value === '::' || value === '::1') return value;
-  const zoneAt = value.indexOf('%');
-  const base = zoneAt >= 0 ? value.slice(0, zoneAt) : value;
-  const zone = zoneAt >= 0 ? value.slice(zoneAt) : '';
+  const { base, zone } = splitZone(value);
   const parts = base.split(':').filter(Boolean);
   if (parts.length < 2) return value;
-  const prefixCount = density === 'loose' ? 3 : density === 'compact' ? 1 : 2;
-  const prefix = parts.slice(0, Math.min(prefixCount, parts.length - 1)).join(':');
-  return prefix + ':…:' + parts[parts.length - 1] + zone;
+  const prefix = (base.startsWith('::') ? '::' : '') +
+    parts.slice(0, Math.min(prefixCount, parts.length - 1)).join(':');
+  const suffix = base.endsWith('::') ? '::' : ':' + parts[parts.length - 1];
+  return prefix + ':…' + suffix + zone;
+}
+
+export function cardBindAddresses(row) {
+  if (row.source_type === 'manual' || row.status === 'free' || row.status === 'unknown') return [];
+  // Configured rows may carry a synthetic 0.0.0.0 fallback in older APIs.
+  // Only used rows provide observations; configured rows need declarations.
+  const addresses = row.status === 'used' ? (row.ips || (row.ip ? [row.ip] : [])).slice() : [];
+  (row.containers || []).forEach(function (container) {
+    addresses.push(...(container.bind_ips || []));
+  });
+  (row.compose_configs || []).forEach(function (compose) {
+    if (compose.host_ip) addresses.push(compose.host_ip);
+    else if (compose.network_mode !== 'host' && !(compose.network_mode || '').startsWith('ns:')) {
+      addresses.push('0.0.0.0');
+    }
+  });
+  return addresses;
 }
 
 export function summarizeBindAddresses(ips, options) {
@@ -108,7 +121,7 @@ export function summarizeBindAddresses(ips, options) {
       label: family === 'v4' ? 'IPv4' : 'IPv6',
       primary: primary.value,
       display: family === 'v6' ? compactIpv6(primary.value, options.density) : primary.value,
-      wildcard: isWildcard(family, primary.value),
+      wildcard: isWildcard(primary),
       additional: rows.length - 1,
       addresses: rows.map(function (row) { return row.value; }),
     }];

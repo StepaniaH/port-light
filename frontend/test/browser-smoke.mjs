@@ -33,8 +33,16 @@ async function startHost(name, peers = []) {
   await writeFile(join(data, 'port_light.json'), JSON.stringify({
     manual_ports: [{ port: 42000, label: name + ' service', machine: 'localhost' }],
     hidden_ports: [], peers,
-    settings: { port_range_start: 42000, port_range_end: 42010, locale: 'en', copy_on_click: false },
+    settings: { port_range_start: 42000, port_range_end: 42010, locale: 'en', copy_on_click: false,
+      show_bind_addresses: false, show_bind_ipv4: true, show_bind_ipv6: true },
   }));
+  await writeFile(join(compose, 'compose.yaml'), `services:
+  sample:
+    image: example.invalid/service
+    ports:
+      - "192.0.2.8:42008:80"
+      - "[2001:db8:1234:5678::]:42008:80"
+`);
   const port = await unusedPort();
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
     !/^(PORT_LIGHT_|AUTH_|HIDDEN_|AGENT_|WEBHOOK_|COMPOSE_|DOCKER_|URL_|PORT_RANGE_|HISTORY_)/.test(key)));
@@ -81,6 +89,45 @@ try {
   const saved = await (await fetch(hub + '/api/ports/42000')).json();
   assert.equal(saved.manual_label, 'Updated service');
   await page.keyboard.press('Escape');
+
+  await page.goto(hub + '/#/settings/appearance');
+  const showBinds = page.locator('input[name="show_bind_addresses"]');
+  const showV4 = page.locator('input[name="show_bind_ipv4"]');
+  const showV6 = page.locator('input[name="show_bind_ipv6"]');
+  const families = page.locator('#bind-address-family-options');
+  await expect(showBinds).not.toBeChecked();
+  await expect(families).toBeHidden();
+  await showBinds.check();
+  await expect(families).toBeVisible();
+  await expect(showV4).toBeChecked();
+  await expect(showV6).toBeChecked();
+  await expect(page.locator('[data-setting^="show_bind_"] .origin-hint')).toHaveCount(0);
+  await page.locator('#settings-save').click();
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  await page.goto(hub);
+  const boundCell = page.locator('#host-grid-local .port-cell[data-port="42008"]');
+  await expect(boundCell.locator('.bind-address-row')).toHaveCount(2);
+  await expect(boundCell).toContainText('2001:db8:…::');
+  await expect(boundCell).toHaveAttribute('title', /2001:db8:1234:5678::/);
+  await expect(localCell.locator('.bind-address-row')).toHaveCount(0);
+
+  await page.goto(hub + '/#/settings/appearance');
+  await expect(page.locator('[data-setting^="show_bind_"] .origin-hint')).toHaveCount(0);
+  await showV4.uncheck();
+  await showV6.uncheck();
+  await expect(showBinds).toBeChecked();
+  await showBinds.uncheck();
+  await showBinds.check();
+  await expect(showV4).not.toBeChecked();
+  await expect(showV6).not.toBeChecked();
+  await showV4.check();
+  await page.locator('#settings-save').click();
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  await page.goto(hub);
+  await expect(boundCell.locator('.bind-address-row')).toHaveCount(1);
+  await expect(boundCell).toContainText('192.0.2.8');
+  await expect(boundCell).not.toHaveAttribute('title', /IPv6/);
+
   await page.locator('#btn-free').click();
   await page.locator('#free-count').fill('2');
   await page.locator('#free-label').fill('Browser batch');
@@ -115,7 +162,7 @@ try {
   await expect(detail).toContainText('Peer service');
   await expect(detail.locator('[data-label-form]')).toHaveCount(0);
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: startup, detail, saved label, batch conflict and retry, host switch.');
+  console.log('Browser smoke passed: startup, detail, saved label, bind settings, batch conflict and retry, host switch.');
 } finally {
   if (browser) await browser.close();
   await Promise.all(processes.map(async child => {

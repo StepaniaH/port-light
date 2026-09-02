@@ -30,7 +30,7 @@ npm run smoke:browser
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants `PORT_LIGHT_DATA_DIR=./data`. Set `PORT_LIGHT_SCANNERS=listen,compose` when Docker is intentionally absent, and point `COMPOSE_SCAN_DIR` to a readable directory. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
 
-`npm run smoke:browser` starts two temporary local instances and checks startup, detail, a saved label, atomic batch reservation with a conflicting writer and retry, and host switching in Chromium. It removes its data and stops both servers on exit. Set `PYTHON` to override the Python executable.
+`npm run smoke:browser` starts two temporary local instances and checks startup, detail, a saved label, bind-address settings and rendering, atomic batch reservation with a conflicting writer and retry, and host switching in Chromium. It removes its data and stops both servers on exit. Set `PYTHON` to override the Python executable.
 
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 
