@@ -204,7 +204,7 @@
     },
     "cards": {
       "title": "卡片",
-      "blurb": "每张占用卡片上的状态文字和标记。"
+      "blurb": "卡片密度、状态、标记和可选的绑定地址摘要。"
     },
     "groups": {
       "appearance": {
@@ -245,6 +245,7 @@
     },
     "on": "开",
     "off": "关",
+    "bindFamilies": "地址类型",
     "fields": {
       "locale": {
         "label": "语言",
@@ -273,6 +274,18 @@
       "show_protocol_badge": {
         "label": "协议标记",
         "help": "在非纯 TCP 的卡片上显示 udp / tcp,udp。"
+      },
+      "show_bind_addresses": {
+        "label": "在卡片上显示绑定地址",
+        "help": "在服务名下方显示紧凑摘要，完整地址仍可在端口详情中查看。"
+      },
+      "show_bind_ipv4": {
+        "label": "IPv4 地址",
+        "help": "在卡片摘要中包含 IPv4 绑定地址。"
+      },
+      "show_bind_ipv6": {
+        "label": "IPv6 地址",
+        "help": "在卡片摘要中包含 IPv6 绑定地址。"
       },
       "copy_on_click": {
         "label": "点击复制端口号",
@@ -420,7 +433,8 @@
     "web": "网页",
     "aria": "端口占用网格",
     "updated": "更新于 {time}",
-    "leaseBadge": "Agent 租约"
+    "leaseBadge": "Agent 租约",
+    "anyAddress": "全部接口"
   },
   "error": {
     "httpStatus": "请求失败（HTTP {status}）。"

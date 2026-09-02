@@ -1,13 +1,13 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=78';
-import { t, tx, escapeHtml, errorText } from './text.js?v=78';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=78';
-import { moveChipFocus } from './a11y.js?v=78';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=78';
-import { api, fetchHosts, fetchSettings } from './api.js?v=78';
-import { hasPeers, hostById, hostName } from './hosts.js?v=78';
-import { render, syncHiddenButton } from './grid.js?v=78';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=79';
+import { t, tx, escapeHtml, errorText } from './text.js?v=79';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=79';
+import { moveChipFocus } from './a11y.js?v=79';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=79';
+import { api, fetchHosts, fetchSettings } from './api.js?v=79';
+import { hasPeers, hostById, hostName } from './hosts.js?v=79';
+import { bindAddressView, render, syncHiddenButton } from './grid.js?v=79';
 
   export function loadSettingsPage() {
     Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
@@ -76,13 +76,29 @@ import { render, syncHiddenButton } from './grid.js?v=78';
     if ((location.hash || '') !== next) location.hash = next;
   }
 
-  export function syncDependentSettings() {
+  export function syncDependentSettings(changedKey) {
     const form = document.getElementById('settings-form');
     if (!form) return;
     const auto = form.elements.auto_refresh;
     const row = form.querySelector('[data-setting="refresh_ms"]');
-    if (!auto || !row) return;
-    row.classList.toggle('is-inactive', !auto.checked);
+    if (auto && row) row.classList.toggle('is-inactive', !auto.checked);
+
+    const parent = form.elements.show_bind_addresses;
+    const ipv4 = form.elements.show_bind_ipv4;
+    const ipv6 = form.elements.show_bind_ipv6;
+    const familyGroup = document.getElementById('bind-address-family-options');
+    if (!parent || !ipv4 || !ipv6 || !familyGroup) return;
+    if (changedKey === 'show_bind_addresses' && parent.checked && !ipv4.checked && !ipv6.checked) {
+      ipv4.checked = true;
+      ipv6.checked = true;
+    } else if ((changedKey === 'show_bind_ipv4' || changedKey === 'show_bind_ipv6') &&
+               parent.checked && !ipv4.checked && !ipv6.checked) {
+      parent.checked = false;
+    }
+    familyGroup.hidden = !parent.checked;
+    if (parent.checked) familyGroup.removeAttribute('hidden');
+    else familyGroup.setAttribute('hidden', '');
+    parent.setAttribute('aria-expanded', parent.checked ? 'true' : 'false');
   }
 
   export function markDirty() {
@@ -471,8 +487,11 @@ import { render, syncHiddenButton } from './grid.js?v=78';
     let tag = 'div';
     if (f.type === 'bool') {
       tag = 'label';
+      const dependency = f.key === 'show_bind_addresses'
+        ? ' aria-controls="bind-address-family-options" aria-expanded="' + (value ? 'true' : 'false') + '"'
+        : '';
       control = '<span class="switch"><input type="checkbox" name="' + f.key + '"' +
-        (value ? ' checked' : '') + disabled + '><span class="track"></span></span>';
+        (value ? ' checked' : '') + dependency + disabled + '><span class="track"></span></span>';
     } else if (f.key === 'locale') {
       control = renderLocaleList(f.choices || [], value, disabled);
     } else if (f.key === 'theme_mode') {
@@ -497,9 +516,12 @@ import { render, syncHiddenButton } from './grid.js?v=78';
         '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + disabled + '>';
     }
     const wide = f.key === 'theme_mode' || f.key === 'theme_palette' ? ' is-wide' : '';
-    return '<' + tag + ' class="setting-row' + wide + '" data-setting="' + escapeHtml(f.key) + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
+    const dependent = f.key === 'show_bind_ipv4' || f.key === 'show_bind_ipv6' ? ' is-dependent' : '';
+    const sourceHint = f.key === 'show_bind_addresses' || f.key === 'show_bind_ipv4' || f.key === 'show_bind_ipv6'
+      ? '' : originHint(f);
+    return '<' + tag + ' class="setting-row' + wide + dependent + '" data-setting="' + escapeHtml(f.key) + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
-      '</span></span><span class="setting-control">' + control + originHint(f) +
+      '</span></span><span class="setting-control">' + control + sourceHint +
       '</span></' + tag + '>';
   }
 
@@ -759,8 +781,7 @@ import { render, syncHiddenButton } from './grid.js?v=78';
        these two are wired as document-level delegates rather than bound to
        today's elements. */
     document.addEventListener('change', function (e) {
-      if (e.target && e.target.closest &&
-          e.target.closest('input[name="show_status_text"],input[name="show_access_badge"],input[name="show_protocol_badge"]')) {
+      if (e.target && e.target.name && CARD_FIELD_KEYS[e.target.name]) {
         updateDisplayPreview();
         return;
       }
@@ -794,6 +815,9 @@ import { render, syncHiddenButton } from './grid.js?v=78';
       status_text: read('show_status_text', !!S.settings.show_status_text),
       access_badge: read('show_access_badge', S.settings.show_access_badge !== false),
       proto_badge: read('show_protocol_badge', S.settings.show_protocol_badge !== false),
+      bind_addresses: read('show_bind_addresses', !!S.settings.show_bind_addresses),
+      bind_ipv4: read('show_bind_ipv4', S.settings.show_bind_ipv4 !== false),
+      bind_ipv6: read('show_bind_ipv6', S.settings.show_bind_ipv6 !== false),
     };
   }
 
@@ -804,9 +828,18 @@ import { render, syncHiddenButton } from './grid.js?v=78';
 
   export function displayPreviewHtml() {
     const f = previewFlags();
-    const cell = function (cls, port, labelKey, extra) {
+    const bind = bindAddressView([
+      '192.168.1.24', '10.0.0.24', 'fd12:3456:789a:1::19', '2001:db8:85a3::8a2e:370:7334',
+    ], {
+      enabled: f.bind_addresses,
+      showV4: f.bind_ipv4,
+      showV6: f.bind_ipv6,
+      density: S.settings.grid_density || 'standard',
+    });
+    const cell = function (cls, port, labelKey, bindHtml, extra) {
       return '<div class="port-cell ' + cls + '"><div class="port-num">' + port + '</div>' +
-        '<div class="port-label">' + escapeHtml(t(labelKey)) + '</div>' + (extra || '') + '</div>';
+        '<div class="port-label">' + escapeHtml(t(labelKey)) + '</div>' + (bindHtml || '') +
+        '<div class="cell-meta"><span class="indicator"></span>' + (extra || '') + '</div></div>';
     };
     const statusText = function (key) {
       return f.status_text ? '<span class="status-text">' + escapeHtml(t(key)) + '</span>' : '';
@@ -817,9 +850,9 @@ import { render, syncHiddenButton } from './grid.js?v=78';
     };
     return '<div class="display-preview" data-display-preview aria-hidden="true">' +
       '<div class="host-grid">' +
-      cell('used', 8080, 'status.used', statusText('status.used') + badges(true, true)) +
-      cell('configured', 3000, 'status.configured', statusText('status.configured')) +
-      cell('free', 5432, 'status.free') +
+      cell('used', 8080, 'status.used', bind.html, statusText('status.used') + badges(true, true)) +
+      cell('configured', 3000, 'status.configured', '', statusText('status.configured')) +
+      cell('free', 5432, 'status.free', '', '') +
       '</div></div>';
   }
 
@@ -862,6 +895,17 @@ import { render, syncHiddenButton } from './grid.js?v=78';
     const languageFields = appearanceFields.filter(function (f) { return f.key === 'locale'; });
     const densityFields = appearanceFields.filter(function (f) { return f.key === 'grid_density'; });
     const cardFields = appearanceFields.filter(function (f) { return CARD_FIELD_KEYS[f.key]; });
+    const bindChildren = cardFields.filter(function (f) {
+      return f.key === 'show_bind_ipv4' || f.key === 'show_bind_ipv6';
+    });
+    const primaryCardFields = cardFields.filter(function (f) {
+      return f.key !== 'show_bind_ipv4' && f.key !== 'show_bind_ipv6';
+    });
+    const bindFamilyOptions = bindChildren.length
+      ? '<fieldset class="setting-children" id="bind-address-family-options"' +
+        (values.show_bind_addresses ? '' : ' hidden') + '><legend data-i18n="settings.bindFamilies">' +
+        escapeHtml(t('settings.bindFamilies')) + '</legend>' + rowsFor(bindChildren) + '</fieldset>'
+      : '';
     const knownGroups = { appearance: true, grid: true, scanning: true, links: true };
     const extraAdvanced = groupOrder.filter(function (g) { return !knownGroups[g]; }).map(function (g) {
       return settingsCard('settings.groups.' + g + '.title', 'settings.groups.' + g + '.blurb', rowsFor(byGroup[g]));
@@ -874,7 +918,7 @@ import { render, syncHiddenButton } from './grid.js?v=78';
         settingsCard('settings.sections.theme.title', 'settings.sections.theme.blurb',
           '<div data-appearance-section="theme">' + rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
         settingsCard('settings.cards.title', 'settings.cards.blurb',
-          rowsFor(densityFields) + displayPreviewHtml() + rowsFor(cardFields))) +
+          rowsFor(densityFields) + displayPreviewHtml() + rowsFor(primaryCardFields) + bindFamilyOptions)) +
       settingsPanelHtml('occupancy',
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +

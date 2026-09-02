@@ -78,6 +78,18 @@ FIELDS: tuple[FieldSpec, ...] = (
         "Protocol badge", "Show udp / tcp,udp on cards that are not TCP-only.",
     ),
     FieldSpec(
+        "show_bind_addresses", "bool", "SHOW_BIND_ADDRESSES", False, "appearance",
+        "Bind addresses on cards", "Show a compact bind-address summary on occupied cards.",
+    ),
+    FieldSpec(
+        "show_bind_ipv4", "bool", "SHOW_BIND_IPV4", True, "appearance",
+        "IPv4 addresses", "Include IPv4 bind addresses in card summaries.",
+    ),
+    FieldSpec(
+        "show_bind_ipv6", "bool", "SHOW_BIND_IPV6", True, "appearance",
+        "IPv6 addresses", "Include IPv6 bind addresses in card summaries.",
+    ),
+    FieldSpec(
         "copy_on_click", "bool", "COPY_ON_CLICK", True, "grid",
         "Copy port on click", "Copies the port number to the clipboard.",
     ),

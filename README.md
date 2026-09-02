@@ -44,6 +44,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Built-in names for common homelab ports (SSH, Jellyfin, Postgres, …), plus a local override file
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
+- Optional card bind-address summaries, with separate IPv4/IPv6 controls and compact IPv6 rendering
 - One UI can pull occupancy maps from other Port-Light instances (LAN / Tailscale). Each host still scans itself.
 - Appearance on Settings: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. UI language (English, Français, Deutsch, Español, 简体中文, 繁體中文, 日本語). Also via Compose env.
 - Custom palettes, import/export, and Loose / Standard / Compact card-density presets
@@ -74,7 +75,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.5
+    image: stepaniah/port-light:v0.7.6
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -119,6 +120,9 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 | `THEME_PALETTE` | built-in | Color family layered on top: `gruvbox`, `catppuccin`, `solarized`, `nord`, `dracula`, `tokyo-night`, `one-dark`, `everforest`, `rose-pine`, `kanagawa`. Empty uses the built-in colors. |
 | `LOCALE` | `auto` | `auto` / `en` / `fr` / `de` / `es` / `zh-CN` / `zh-TW` / `ja`. Auto follows the browser. |
 | `GRID_DENSITY` | `standard` | Card-density preset: `loose`, `standard`, or `compact`. A stored legacy `comfortable` behaves as `standard`. |
+| `SHOW_BIND_ADDRESSES` | `false` | Show compact bind-address summaries on occupied cards. |
+| `SHOW_BIND_IPV4` | `true` | Include IPv4 addresses when card bind summaries are enabled. |
+| `SHOW_BIND_IPV6` | `true` | Include IPv6 addresses when card bind summaries are enabled. |
 | `REFRESH_MS` | `5000` | Auto-refresh interval |
 | `URL_HOST` | empty | Hostname used in guessed `http(s)://` links |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
@@ -146,7 +150,8 @@ If an existing `port_light.json` is unreadable, malformed, or contains invalid r
 
 - No telemetry or analytics.
 - The app makes no outbound HTTP requests unless you configure peer occupancy pulls or a webhook (`WEBHOOK_URL`, `{event, port}` JSON only).
-- All scan data stays on the machine that runs that instance (listen tables, Docker API, Compose files, `/data` JSON).
+- Scan data stays on the machine that runs the instance unless you configure peers; a hub receives those peers' occupancy responses.
+- Bind addresses are already present in the API and port details. Enabling card summaries makes them more visible in screenshots; review screenshots before sharing them.
 - Sibling `.env` files next to Compose stacks are read locally for `${VAR}` substitution and are never uploaded.
 - Manual labels, port history, agent-call labels, and peer settings stay in the data volume. Saved peer passwords are stored in `port_light.json`; protect the data volume as you would any other credentials file.
 

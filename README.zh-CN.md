@@ -44,6 +44,7 @@
 - 常见 homelab 端口内置名称（SSH、Jellyfin、Postgres 等），可用本地文件覆盖
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
+- 可选的卡片绑定地址摘要，可分别控制 IPv4/IPv6，并紧凑显示 IPv6
 - 一个界面可以拉取其他 Port-Light 实例的占用图（局域网 / Tailscale）。每台机器仍自己扫描。
 - 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
 - 自定义色板、JSON 导入导出，以及宽松 / 标准 / 紧凑三种卡片密度
@@ -74,7 +75,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.5
+    image: stepaniah/port-light:v0.7.6
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -119,6 +120,9 @@ docker compose up -d
 | `THEME_PALETTE` | 内置 | 叠在明暗之上的配色族：`gruvbox`、`catppuccin`、`solarized`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`everforest`、`rose-pine`、`kanagawa`。留空使用内置颜色。 |
 | `LOCALE` | `auto` | `auto` / `en` / `fr` / `de` / `es` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
 | `GRID_DENSITY` | `standard` | 卡片密度预设：`loose`(宽松)、`standard`(标准)、`compact`(紧凑)。旧值 `comfortable` 视同 `standard`。 |
+| `SHOW_BIND_ADDRESSES` | `false` | 在已占用卡片上显示紧凑的绑定地址摘要。 |
+| `SHOW_BIND_IPV4` | `true` | 开启卡片绑定地址摘要时包含 IPv4 地址。 |
+| `SHOW_BIND_IPV6` | `true` | 开启卡片绑定地址摘要时包含 IPv6 地址。 |
 | `REFRESH_MS` | `5000` | 自动刷新间隔 |
 | `URL_HOST` | 空 | 猜测链接里用的主机名 |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
@@ -146,7 +150,8 @@ docker compose up -d
 
 - 无遥测、无统计。
 - 除非配置了其他 Port-Light 实例或 webhook，否则应用不会发送出站 HTTP 请求。Webhook 只发送 `{event, port}`。
-- 扫描数据留在跑那份实例的机器上（监听表、Docker API、Compose 文件、`/data` 里的 JSON）。
+- 除非配置了其他实例，否则扫描数据留在运行该实例的机器上；Hub 会接收已配置实例返回的占用数据。
+- API 和端口详情原本就包含绑定地址；开启卡片摘要后，截图会更容易包含这些地址，分享前请检查截图内容。
 - Compose 旁边的 `.env` 只用于本地 `${VAR}` 替换，不会上传。
 - 手动标签、端口历史、自动化调用标签和 peer 设置都保存在数据卷中。peer 密码保存在 `port_light.json`；应像保护其他凭据文件一样保护该数据卷。
 

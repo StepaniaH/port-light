@@ -4,6 +4,12 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.7.6 — 2026-09-03
+
+### Added
+
+- Cards can optionally show compact bind-address summaries, with independent IPv4 and IPv6 controls. Wildcard listeners are labeled as all interfaces, multiple addresses collapse to `+N`, and full values remain in the port details and card tooltip.
+
 ### Changed
 
 - A background occupancy monitor now owns scanning, snapshot/ETag caching, history, webhooks, and SSE notifications. HTTP routes read completed snapshots; manual and hidden-port writes update stored state without rescanning host sources.
@@ -12,6 +18,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Fixed
 
+- Bind-address switches no longer repeat the environment or saved-setting source below each control.
 - Enabled scanner failures retain previous observations, suppress history/webhook transitions, and block allocation. Unknown occupancy is shown explicitly; health exposes readiness and scanner state.
 - Unreadable or invalid port data is preserved and returns `503`, preventing later writes from replacing existing entries.
 - The free-port planner reserves a whole range atomically and reports conflicts and storage failures without closing the dialog.

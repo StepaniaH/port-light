@@ -313,6 +313,18 @@
       "url_scheme": {
         "label": "URL-Schema",
         "help": "Auto verwendet https für 443/8443/9443 und Namen mit HTTPS."
+      },
+      "show_bind_addresses": {
+        "label": "Bind-Adressen auf Karten",
+        "help": "Eine kompakte Zusammenfassung unter dem Dienstnamen anzeigen. Vollständige Adressen bleiben in den Portdetails."
+      },
+      "show_bind_ipv4": {
+        "label": "IPv4-Adressen",
+        "help": "IPv4-Bind-Adressen in Kartenzusammenfassungen aufnehmen."
+      },
+      "show_bind_ipv6": {
+        "label": "IPv6-Adressen",
+        "help": "IPv6-Bind-Adressen in Kartenzusammenfassungen aufnehmen."
       }
     },
     "auto": {
@@ -362,7 +374,8 @@
         "remaining": "Noch {time}",
         "tokenPrompt": "Reservierungstoken einfügen"
       }
-    }
+    },
+    "bindFamilies": "Adressfamilien"
   },
   "choice": {
     "auto": "Auto",
@@ -420,7 +433,8 @@
     "web": "web",
     "aria": "Raster der Portbelegung",
     "updated": "Aktualisiert {time}",
-    "leaseBadge": "Agenten-Reservierung"
+    "leaseBadge": "Agenten-Reservierung",
+    "anyAddress": "alle"
   },
   "error": {
     "httpStatus": "Anfrage fehlgeschlagen (HTTP {status})."

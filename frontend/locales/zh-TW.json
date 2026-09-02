@@ -313,6 +313,18 @@
       "url_scheme": {
         "label": "URL 通訊協定",
         "help": "自動會在 443/8443/9443 以及名稱含 HTTPS 時使用 https。"
+      },
+      "show_bind_addresses": {
+        "label": "在卡片上顯示綁定位址",
+        "help": "在服務名稱下方顯示精簡摘要；完整位址仍可在連接埠詳細資料中查看。"
+      },
+      "show_bind_ipv4": {
+        "label": "IPv4 位址",
+        "help": "在卡片摘要中包含 IPv4 綁定位址。"
+      },
+      "show_bind_ipv6": {
+        "label": "IPv6 位址",
+        "help": "在卡片摘要中包含 IPv6 綁定位址。"
       }
     },
     "auto": {
@@ -362,7 +374,8 @@
         "remaining": "剩餘 {time}",
         "tokenPrompt": "貼上預約憑證"
       }
-    }
+    },
+    "bindFamilies": "位址類型"
   },
   "choice": {
     "auto": "自動",
@@ -420,7 +433,8 @@
     "web": "網頁",
     "aria": "連接埠佔用一覽",
     "updated": "更新於 {time}",
-    "leaseBadge": "Agent 租約"
+    "leaseBadge": "Agent 租約",
+    "anyAddress": "所有介面"
   },
   "error": {
     "httpStatus": "請求失敗（HTTP {status}）。"

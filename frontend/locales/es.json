@@ -313,6 +313,18 @@
       "url_scheme": {
         "label": "Esquema de las URL",
         "help": "Auto usa https para 443/8443/9443 y nombres que contienen HTTPS."
+      },
+      "show_bind_addresses": {
+        "label": "Direcciones vinculadas en tarjetas",
+        "help": "Mostrar un resumen compacto bajo el nombre del servicio. Las direcciones completas siguen en los detalles del puerto."
+      },
+      "show_bind_ipv4": {
+        "label": "Direcciones IPv4",
+        "help": "Incluir direcciones IPv4 vinculadas en los resúmenes."
+      },
+      "show_bind_ipv6": {
+        "label": "Direcciones IPv6",
+        "help": "Incluir direcciones IPv6 vinculadas en los resúmenes."
       }
     },
     "auto": {
@@ -362,7 +374,8 @@
         "remaining": "Quedan {time}",
         "tokenPrompt": "Pega el token de reserva"
       }
-    }
+    },
+    "bindFamilies": "Familias de direcciones"
   },
   "choice": {
     "auto": "Auto",
@@ -420,7 +433,8 @@
     "web": "web",
     "aria": "Cuadrícula de ocupación de puertos",
     "updated": "Actualizado {time}",
-    "leaseBadge": "Reserva de agente"
+    "leaseBadge": "Reserva de agente",
+    "anyAddress": "todas"
   },
   "error": {
     "httpStatus": "La solicitud falló (HTTP {status})."

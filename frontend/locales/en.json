@@ -204,7 +204,7 @@
     },
     "cards": {
       "title": "Cards",
-      "blurb": "Status text and badges on each occupancy cell."
+      "blurb": "Density, status, badges, and optional bind-address summaries."
     },
     "groups": {
       "appearance": {
@@ -245,6 +245,7 @@
     },
     "on": "on",
     "off": "off",
+    "bindFamilies": "Address families",
     "fields": {
       "locale": {
         "label": "Language",
@@ -273,6 +274,18 @@
       "show_protocol_badge": {
         "label": "Protocol badge",
         "help": "Show udp / tcp,udp on cards that are not TCP-only."
+      },
+      "show_bind_addresses": {
+        "label": "Bind addresses on cards",
+        "help": "Show a compact summary below the service name. Full addresses remain in port details."
+      },
+      "show_bind_ipv4": {
+        "label": "IPv4 addresses",
+        "help": "Include IPv4 bind addresses in card summaries."
+      },
+      "show_bind_ipv6": {
+        "label": "IPv6 addresses",
+        "help": "Include IPv6 bind addresses in card summaries."
       },
       "copy_on_click": {
         "label": "Copy port on click",
@@ -420,7 +433,8 @@
     "web": "web",
     "aria": "Port occupancy grid",
     "updated": "Updated {time}",
-    "leaseBadge": "Agent lease"
+    "leaseBadge": "Agent lease",
+    "anyAddress": "any"
   },
   "error": {
     "httpStatus": "Request failed (HTTP {status})."

@@ -129,6 +129,25 @@ def test_density_defaults_to_standard(monkeypatch, tmp_path):
     assert "text_scale" not in values
 
 
+def test_bind_address_card_settings_default_off_with_both_families_ready(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    values, _ = app_settings.resolve()
+    assert values["show_bind_addresses"] is False
+    assert values["show_bind_ipv4"] is True
+    assert values["show_bind_ipv6"] is True
+
+    client = TestClient(app)
+    saved = client.put("/api/settings", json={
+        "show_bind_addresses": True,
+        "show_bind_ipv4": False,
+        "show_bind_ipv6": True,
+    })
+    assert saved.status_code == 200
+    assert saved.json()["values"]["show_bind_addresses"] is True
+    assert saved.json()["values"]["show_bind_ipv4"] is False
+    assert saved.json()["values"]["show_bind_ipv6"] is True
+
+
 def test_density_maps_legacy_comfortable(monkeypatch, tmp_path):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("GRID_DENSITY", "comfortable")

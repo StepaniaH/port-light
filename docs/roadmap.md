@@ -11,7 +11,6 @@ These items depend on user feedback and are not scheduled:
 - A command-line client for checking, reserving, and releasing ports
 - Declarative port ranges and policy checks
 - Additional read-only collectors such as Podman or TrueNAS
-- A multi-host comparison view
 - Community Applications packaging for Unraid
 
 ## Out of scope

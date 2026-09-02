@@ -674,6 +674,26 @@ a:focus-visible,
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   line-clamp: 2; overflow: hidden; line-height: 1.25; word-break: break-word;
 }
+.port-cell .bind-addresses {
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0; margin-top: 1px;
+}
+.port-cell .bind-address-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center; gap: 4px; min-width: 0;
+  color: var(--text-dim); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.66rem; line-height: 1.25;
+}
+.port-cell .bind-family {
+  padding: 0 3px; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); background: var(--card);
+  font-family: inherit; font-size: 0.56rem; font-weight: 650;
+  letter-spacing: 0.02em; line-height: 1.35;
+}
+.port-cell .bind-value {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.port-cell .bind-more { color: var(--text); font-weight: 650; }
 .port-cell .cell-meta {
   margin-top: auto; display: flex; align-items: center; gap: 6px; min-height: 14px;
 }
@@ -871,6 +891,16 @@ a:focus-visible,
 .setting-row:first-child { border-top: 0; }
 .setting-row.is-wide { flex-direction: column; align-items: stretch; gap: 10px; }
 .setting-row.is-wide .setting-control { align-items: stretch; }
+.setting-children {
+  margin: 0 0 4px 18px; padding: 0 0 0 14px;
+  border: 0; border-left: 2px solid var(--border);
+}
+.setting-children[hidden] { display: none; }
+.setting-children legend {
+  padding: 9px 0 2px; color: var(--text-dim); font-size: 0.7rem;
+  font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.setting-children .setting-row { padding: 9px 0; }
 
 .theme-picker { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .theme-picker-core {

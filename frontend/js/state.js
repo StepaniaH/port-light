@@ -7,6 +7,9 @@ export const CARD_FIELD_KEYS = {
   show_status_text: true,
   show_access_badge: true,
   show_protocol_badge: true,
+  show_bind_addresses: true,
+  show_bind_ipv4: true,
+  show_bind_ipv6: true,
 };
 
 export const CORE_THEMES = ['system', 'dark', 'light'];
@@ -73,6 +76,9 @@ export const S = {
     show_status_text: false,
     show_access_badge: true,
     show_protocol_badge: true,
+    show_bind_addresses: false,
+    show_bind_ipv4: true,
+    show_bind_ipv6: true,
     copy_on_click: true,
     auto_refresh: true,
     refresh_ms: 5000,

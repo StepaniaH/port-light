@@ -1,26 +1,26 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=78';
-import { errorText, escapeHtml, t } from './text.js?v=78';
-import { moveChipFocus, trapTab } from './a11y.js?v=78';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=79';
+import { errorText, escapeHtml, t } from './text.js?v=79';
+import { moveChipFocus, trapTab } from './a11y.js?v=79';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=78';
-import { openModal, closeModals, modalOpen } from './modal.js?v=78';
-import { applyRoute as updateRoute, parseHash, leaveSettingsOrStay } from './router.js?v=78';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=78';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=78';
-import { hasPeers, listedHosts, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=78';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=78';
+} from './dom.js?v=79';
+import { openModal, closeModals, modalOpen } from './modal.js?v=79';
+import { applyRoute as updateRoute, parseHash, leaveSettingsOrStay } from './router.js?v=79';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=79';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=79';
+import { hasPeers, listedHosts, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=79';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=79';
 import {
   goSettingsPanel, saveSettingsPage, applyServerSettings, markDirty,
   syncDependentSettings, syncLocaleTrigger, closeLocaleMenu,
   moveLocaleHighlight, renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
-} from './settings.js?v=78';
+} from './settings.js?v=79';
 
 (function () {
   'use strict';
@@ -694,7 +694,7 @@ import {
       }
     }
     markDirty();
-    syncDependentSettings();
+    syncDependentSettings(field);
   });
   document.getElementById('settings-fields').addEventListener('input', markDirty);
   document.getElementById('settings-fields').addEventListener('click', function (e) {

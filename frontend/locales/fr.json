@@ -313,6 +313,18 @@
       "url_scheme": {
         "label": "Schéma des URL",
         "help": "Auto utilise https pour 443/8443/9443 et les noms contenant HTTPS."
+      },
+      "show_bind_addresses": {
+        "label": "Adresses d’écoute sur les cartes",
+        "help": "Afficher un résumé compact sous le nom du service. Les adresses complètes restent dans les détails du port."
+      },
+      "show_bind_ipv4": {
+        "label": "Adresses IPv4",
+        "help": "Inclure les adresses d’écoute IPv4 dans les résumés."
+      },
+      "show_bind_ipv6": {
+        "label": "Adresses IPv6",
+        "help": "Inclure les adresses d’écoute IPv6 dans les résumés."
       }
     },
     "auto": {
@@ -362,7 +374,8 @@
         "remaining": "Il reste {time}",
         "tokenPrompt": "Collez le jeton de réservation"
       }
-    }
+    },
+    "bindFamilies": "Familles d’adresses"
   },
   "choice": {
     "auto": "Auto",
@@ -420,7 +433,8 @@
     "web": "web",
     "aria": "Grille d'occupation des ports",
     "updated": "Mis à jour à {time}",
-    "leaseBadge": "Réservation d'agent"
+    "leaseBadge": "Réservation d'agent",
+    "anyAddress": "toutes"
   },
   "error": {
     "httpStatus": "Échec de la requête (HTTP {status})."

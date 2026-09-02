@@ -1,12 +1,13 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S, CARD_FIELD_KEYS } from './state.js?v=78';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=78';
-import { KIND_MATCHERS } from './kinds.js?v=78';
-import { isLease } from './leases.js?v=78';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=78';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=78';
-import { api } from './api.js?v=78';
+import { S } from './state.js?v=79';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=79';
+import { KIND_MATCHERS } from './kinds.js?v=79';
+import { isLease } from './leases.js?v=79';
+import { summarizeBindAddresses } from './bind-addresses.js?v=79';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=79';
+import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=79';
+import { api } from './api.js?v=79';
 
 
   export function syncFilterUI() {
@@ -352,6 +353,36 @@ import { api } from './api.js?v=78';
     return data.ports.find(function (p) { return p.port === port; }) || null;
   }
 
+  export function bindAddressView(ips, options) {
+    options = options || {};
+    if (!options.enabled) return { html: '', ariaParts: [], titleParts: [], summaries: [] };
+    const summaries = summarizeBindAddresses(ips, {
+      showV4: options.showV4,
+      showV6: options.showV6,
+      density: options.density,
+    });
+    const any = t('grid.anyAddress');
+    const html = summaries.length ? '<div class="bind-addresses" aria-hidden="true">' +
+      summaries.map(function (row) {
+        const visible = row.wildcard ? any : row.display;
+        return '<div class="bind-address-row"><span class="bind-family">' + row.family +
+          '</span><span class="bind-value">' + escapeHtml(visible) + '</span>' +
+          (row.additional ? '<span class="bind-more">+' + row.additional + '</span>' : '') +
+          '</div>';
+      }).join('') + '</div>' : '';
+    return {
+      html,
+      summaries,
+      ariaParts: summaries.map(function (row) {
+        return row.label + ' ' + (row.wildcard ? any : row.primary) +
+          (row.additional ? ' +' + row.additional : '');
+      }),
+      titleParts: summaries.map(function (row) {
+        return row.label + ' ' + row.addresses.join(', ');
+      }),
+    };
+  }
+
   export function renderSummary(s) {
     function toggle(active, attrs, dot, n, label) {
       return '<button type="button" class="stat' + (active ? ' active' : '') + '" ' + attrs +
@@ -593,14 +624,25 @@ import { api } from './api.js?v=78';
           '" title="' + escapeHtml(t('grid.leaseBadge')) + '"></span>'
         : '';
 
-      const ariaParts = [String(p.port), statusLabel, label, p.protocol].filter(Boolean);
+      const bindView = bindAddressView(
+        (p.ips && p.ips.length) ? p.ips : (p.ip ? [p.ip] : []),
+        {
+          enabled: !!S.settings.show_bind_addresses,
+          showV4: S.settings.show_bind_ipv4 !== false,
+          showV6: S.settings.show_bind_ipv6 !== false,
+          density: S.settings.grid_density || 'standard',
+        });
+
+      const ariaParts = [String(p.port), statusLabel, label, p.protocol].filter(Boolean).concat(bindView.ariaParts);
+      const titleParts = [p.port, p.protocol, p.bind_scope, label].filter(Boolean).concat(bindView.titleParts);
       return '<button type="button" class="port-cell ' + cls + conflict + selected + searchHit + searchNear + '"' +
         ' data-port="' + p.port + '" data-host="' + escapeHtml(hostId) + '"' +
         ' aria-label="' + escapeHtml(ariaParts.join(', ')) + '"' +
         ' aria-selected="' + (cellSelected(p) ? 'true' : 'false') + '"' +
-        ' title="' + escapeHtml([p.port, p.protocol, p.bind_scope, label].filter(Boolean).join(' · ')) + '">' +
+        ' title="' + escapeHtml(titleParts.join(' · ')) + '">' +
         '<div class="port-num">' + p.port + '</div>' +
         labelText +
+        bindView.html +
         '<div class="cell-meta"><span class="indicator"></span>' + protoBadge + accessBadge + leaseBadge + statusText + '</div>' +
         '</button>';
     }).join('');

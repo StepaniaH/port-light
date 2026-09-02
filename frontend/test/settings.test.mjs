@@ -13,7 +13,7 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { automationCardsHtml, renderField, renderModePicker, renderPalettePicker, renderSettingsForm, themeEditorHtml } = await import('../js/settings.js?' + V);
+const { automationCardsHtml, renderField, renderModePicker, renderPalettePicker, renderSettingsForm, syncDependentSettings, themeEditorHtml } = await import('../js/settings.js?' + V);
 const { SETTINGS_PANELS, S, applyAppearance, applyDensity, persistAppearance, DENSITY_PRESETS } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
@@ -193,6 +193,21 @@ test('palette preview resolves variant per current mode', () => {
   assert.match(renderPalettePicker(choices, '', 'dark', ''), /data-theme-preview="gruvbox"(?!-)/);
 });
 
+test('bind address switches omit repeated environment source hints', () => {
+  for (const key of ['show_bind_addresses', 'show_bind_ipv4', 'show_bind_ipv6']) {
+    const html = renderField({
+      key, type: 'bool', group: 'appearance', origin: 'env', env: key.toUpperCase(),
+      label: key, help: key,
+    }, true, false);
+    assert.doesNotMatch(html, /origin-hint/);
+  }
+  const ordinary = renderField({
+    key: 'show_status_text', type: 'bool', group: 'appearance', origin: 'env',
+    env: 'SHOW_STATUS_TEXT', label: 'Status', help: 'Status text',
+  }, true, false);
+  assert.match(ordinary, /origin-hint/);
+});
+
 test('appearance panel renders theme/language/layout sections in order', () => {
   const { renderSettingsForm } = mod;
   const host = document.createElement('div');
@@ -213,13 +228,16 @@ test('appearance panel renders theme/language/layout sections in order', () => {
     applyDom() {},
   };
   renderSettingsForm({
-    values: {}, readonly: false, source: 'auto',
+    values: { show_bind_addresses: false, show_bind_ipv4: true, show_bind_ipv6: true }, readonly: false, source: 'auto',
     env_only: {}, origins: {},
     fields: [
       { key: 'theme_mode', type: 'choice', group: 'appearance', choices: ['system', 'dark', 'light'], origin: 'default' },
       { key: 'grid_density', type: 'choice', group: 'appearance', choices: ['loose', 'standard', 'compact'], origin: 'default' },
       { key: 'locale', type: 'choice', group: 'appearance', choices: ['auto', 'en'], origin: 'default' },
       { key: 'show_status_text', type: 'bool', group: 'appearance', origin: 'default' },
+      { key: 'show_bind_addresses', type: 'bool', group: 'appearance', origin: 'default' },
+      { key: 'show_bind_ipv4', type: 'bool', group: 'appearance', origin: 'default' },
+      { key: 'show_bind_ipv6', type: 'bool', group: 'appearance', origin: 'default' },
     ],
   });
   const panels = host.querySelectorAll('[data-settings-panel="appearance"] .settings-card > header h2');
@@ -234,6 +252,29 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   assert.ok(preview.querySelector('.access-badge'), 'access badge follows show_access_badge default on');
   assert.ok(preview.querySelector('.proto-badge'), 'proto badge follows show_protocol_badge default on');
   assert.ok(!preview.querySelector('.status-text'), 'no status text while show_status_text is off');
+  const bindParent = host.querySelector('input[name="show_bind_addresses"]');
+  const bindFamilies = host.querySelector('#bind-address-family-options');
+  const bindIpv4 = host.querySelector('input[name="show_bind_ipv4"]');
+  const bindIpv6 = host.querySelector('input[name="show_bind_ipv6"]');
+  assert.equal(bindParent.hasAttribute('checked'), false);
+  assert.equal(bindIpv4.hasAttribute('checked'), true);
+  assert.equal(bindIpv6.hasAttribute('checked'), true);
+  assert.equal(bindFamilies.hasAttribute('hidden'), true);
+  bindParent.checked = true;
+  // The minimal DOM parser records boolean attributes but does not reflect
+  // them to matching element properties or populate form.elements like a
+  // browser does.
+  bindIpv4.checked = true;
+  bindIpv6.checked = true;
+  const settingsForm = document.getElementById('settings-form');
+  settingsForm.elements.show_bind_addresses = bindParent;
+  settingsForm.elements.show_bind_ipv4 = bindIpv4;
+  settingsForm.elements.show_bind_ipv6 = bindIpv6;
+  syncDependentSettings('show_bind_addresses');
+  assert.equal(bindFamilies.hasAttribute('hidden'), false);
+  assert.equal(bindParent.getAttribute('aria-expanded'), 'true');
+  assert.equal(bindIpv4.checked, true);
+  assert.equal(bindIpv6.checked, true);
   const panelHtml = host.innerHTML;
   const iDensity = panelHtml.indexOf('name="grid_density"');
   const iPrev = panelHtml.indexOf('data-display-preview');

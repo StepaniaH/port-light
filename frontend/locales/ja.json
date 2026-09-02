@@ -313,6 +313,18 @@
       "url_scheme": {
         "label": "URL のスキーム",
         "help": "自動は 443/8443/9443 と HTTPS を含む名前で https を使います。"
+      },
+      "show_bind_addresses": {
+        "label": "カードにバインドアドレスを表示",
+        "help": "サービス名の下に短い要約を表示します。完全なアドレスはポート詳細で確認できます。"
+      },
+      "show_bind_ipv4": {
+        "label": "IPv4 アドレス",
+        "help": "カードの要約に IPv4 バインドアドレスを含めます。"
+      },
+      "show_bind_ipv6": {
+        "label": "IPv6 アドレス",
+        "help": "カードの要約に IPv6 バインドアドレスを含めます。"
       }
     },
     "auto": {
@@ -362,7 +374,8 @@
         "remaining": "残り{time}",
         "tokenPrompt": "予約トークンを貼り付けてください"
       }
-    }
+    },
+    "bindFamilies": "アドレスファミリー"
   },
   "choice": {
     "auto": "自動",
@@ -420,7 +433,8 @@
     "web": "Web",
     "aria": "ポート占用グリッド",
     "updated": "{time} に更新",
-    "leaseBadge": "Agentリース"
+    "leaseBadge": "Agentリース",
+    "anyAddress": "すべて"
   },
   "error": {
     "httpStatus": "リクエストに失敗しました（HTTP {status}）。"
