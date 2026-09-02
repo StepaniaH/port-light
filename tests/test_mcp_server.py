@@ -4,6 +4,9 @@ import importlib.util
 import json
 import pathlib
 import sys
+import urllib.error
+
+import pytest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -116,3 +119,50 @@ def test_tools_list_includes_new_tool():
     reply = mcp.handle_request({"jsonrpc": "2.0", "id": 9, "method": "tools/list"})
     names = {t["name"] for t in reply["result"]["tools"]}
     assert "list_degradations" in names
+
+
+def test_http_requests_send_both_auth_headers_and_release_token(monkeypatch):
+    seen = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def read(self, size):
+            return b'{}'
+
+    def open_request(req, timeout):
+        seen.append(req)
+        return Response()
+
+    monkeypatch.setattr(mcp, "BASIC_AUTH", "user:pass")
+    monkeypatch.setattr(mcp, "AGENT_TOKEN", "agent-token")
+    monkeypatch.setattr(mcp.urllib.request, "urlopen", open_request)
+    mcp.api_get("/api/ports/suggest")
+    mcp.run_tool("release_port", {"port": 45000, "token": "my-reservation"})
+    assert all(req.get_header("X-agent-token") == "agent-token" for req in seen)
+    assert all(req.get_header("Authorization") == "Basic dXNlcjpwYXNz" for req in seen)
+    assert seen[1].method == "DELETE"
+    assert seen[1].full_url.endswith("/api/reservations/45000")
+    assert seen[1].get_header("X-reservation-token") == "my-reservation"
+
+
+def test_release_requires_token_before_making_request(monkeypatch):
+    def unexpected(*args):
+        pytest.fail("release without a token must not call the API")
+
+    monkeypatch.setattr(mcp, "api_delete", unexpected)
+    with pytest.raises(mcp.ApiError, match="reservation token"):
+        mcp.run_tool("release_port", {"port": 45000})
+
+
+def test_release_http_errors_use_same_api_error_handling(monkeypatch):
+    def denied(*args, **kwargs):
+        raise urllib.error.HTTPError("http://localhost", 409, "conflict", {}, None)
+
+    monkeypatch.setattr(mcp.urllib.request, "urlopen", denied)
+    with pytest.raises(mcp.ApiError, match="409"):
+        mcp.api_delete("/api/reservations/45000", "old-token")

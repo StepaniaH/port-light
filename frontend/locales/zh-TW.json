@@ -26,7 +26,7 @@
     "access": "網頁",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "公網",
+    "public": "全部介面",
     "hidden": "隱藏",
     "kinds": "類型",
     "sort": "排序",
@@ -106,7 +106,8 @@
     "publicBind": "全部介面",
     "publicBindHint": "此連接埠接受主機上任意位址的連線。",
     "remoteReadOnly": "唯讀 — 這張佔用圖來自 {name}。隱藏、標籤與新增仍只作用於此機器。",
-    "expiresIn": "{time} 後到期"
+    "expiresIn": "{time} 後到期",
+    "reservationHint": "此預約只能使用建立時傳回的憑證修改或釋放。"
   },
   "hosts": {
     "title": "其他機器",
@@ -355,7 +356,8 @@
         "blurb": "由 agent 透過 suggest API 保留，到期自動釋放。",
         "none": "目前沒有活躍租約。",
         "release": "釋放",
-        "remaining": "剩餘 {time}"
+        "remaining": "剩餘 {time}",
+        "tokenPrompt": "貼上預約憑證"
       }
     }
   },
@@ -428,7 +430,7 @@
     "unknown": "未知"
   },
   "scope": {
-    "public": "公開",
+    "public": "全部介面",
     "lan": "區域網路",
     "link": "連結本機",
     "localhost": "localhost"

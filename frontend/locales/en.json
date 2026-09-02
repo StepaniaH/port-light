@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "Public",
+    "public": "All interfaces",
     "hidden": "Hidden",
     "kinds": "Kind",
     "sort": "Sort",
@@ -106,7 +106,8 @@
     "publicBind": "All interfaces",
     "publicBindHint": "This port accepts connections from any address on the host.",
     "remoteReadOnly": "Read-only — this map is from {name}. Hide, labels, and add stay on this machine.",
-    "expiresIn": "Expires in {time}"
+    "expiresIn": "Expires in {time}",
+    "reservationHint": "This reservation can only be changed or released with the token returned when it was created."
   },
   "hosts": {
     "title": "Other machines",
@@ -355,7 +356,8 @@
         "blurb": "Reserved by agents through the suggest API, freed automatically at expiry.",
         "none": "No active leases.",
         "release": "Release",
-        "remaining": "{time} left"
+        "remaining": "{time} left",
+        "tokenPrompt": "Paste the reservation token"
       }
     }
   },
@@ -428,7 +430,7 @@
     "unknown": "Unknown"
   },
   "scope": {
-    "public": "public",
+    "public": "all interfaces",
     "lan": "LAN",
     "link": "link-local",
     "localhost": "localhost"

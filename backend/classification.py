@@ -178,6 +178,7 @@ def classify(
         manual_map[port] = {
             "label": mp.get("label", "") or "",
             "machine": mp.get("machine", "localhost") or "localhost",
+            "is_reservation": bool(mp.get("is_reservation")),
             "expires_at": int(mp["expires_at"])
             if isinstance(mp.get("expires_at"), (int, float)) else None,
         }
@@ -294,6 +295,7 @@ def classify(
             "manual_label": manual["label"] if manual else None,
             "machine": manual["machine"] if manual else "localhost",
             "expires_at": manual["expires_at"] if manual else None,
+            "is_reservation": manual["is_reservation"] if manual else False,
             "known_service": known,
             "is_hidden": port in hidden_ports,
             "conflict": compose_conflict(composes),

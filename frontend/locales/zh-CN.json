@@ -26,7 +26,7 @@
     "access": "网页",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "公网",
+    "public": "全部接口",
     "hidden": "隐藏",
     "kinds": "类型",
     "sort": "排序",
@@ -106,7 +106,8 @@
     "publicBind": "全部接口",
     "publicBindHint": "该端口接受主机上任意地址的连接。",
     "remoteReadOnly": "只读 — 这张占用图来自 {name}。隐藏、标签和添加仍只作用于本机。",
-    "expiresIn": "{time} 后到期"
+    "expiresIn": "{time} 后到期",
+    "reservationHint": "此预约只能使用创建时返回的凭证修改或释放。"
   },
   "hosts": {
     "title": "其他机器",
@@ -355,7 +356,8 @@
         "blurb": "由 agent 通过 suggest API 预留，到期自动释放。",
         "none": "当前没有活跃租约。",
         "release": "释放",
-        "remaining": "剩余 {time}"
+        "remaining": "剩余 {time}",
+        "tokenPrompt": "粘贴预约凭证"
       }
     }
   },
@@ -428,7 +430,7 @@
     "unknown": "未知"
   },
   "scope": {
-    "public": "公网",
+    "public": "全部接口",
     "lan": "局域网",
     "link": "链路本地",
     "localhost": "localhost"

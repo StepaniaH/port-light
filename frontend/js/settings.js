@@ -1,12 +1,12 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=75';
-import { t, tx, escapeHtml, errorText } from './text.js?v=75';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=75';
-import { moveChipFocus } from './a11y.js?v=75';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=75';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=75';
-import { render, syncHiddenButton } from './grid.js?v=75';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=76';
+import { t, tx, escapeHtml, errorText } from './text.js?v=76';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=76';
+import { moveChipFocus } from './a11y.js?v=76';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=76';
+import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=76';
+import { render, syncHiddenButton } from './grid.js?v=76';
 
   export async function fetchSettings() {
     const res = await api('/api/settings');
@@ -596,12 +596,18 @@ import { render, syncHiddenButton } from './grid.js?v=75';
   export function automationCardsHtml(a) {
     const origin = location.origin;
     const port = Number(a.listen_port) > 0 ? String(a.listen_port) : '<port>';
+    const dockerEnv = { PORT_LIGHT_URL: 'http://127.0.0.1:' + port };
+    const sourceEnv = { PORT_LIGHT_URL: origin };
+    if (a.agent_token) {
+      dockerEnv.PORT_LIGHT_AGENT_TOKEN = '<your-token>';
+      sourceEnv.PORT_LIGHT_AGENT_TOKEN = '<your-token>';
+    }
     const mcpDocker = JSON.stringify({
       mcpServers: {
         'port-light': {
           command: 'docker',
           args: ['exec', '-i', 'port-light', 'python', 'mcp/server.py'],
-          env: { PORT_LIGHT_URL: 'http://127.0.0.1:' + port },
+          env: dockerEnv,
         },
       },
     }, null, 2);
@@ -610,7 +616,7 @@ import { render, syncHiddenButton } from './grid.js?v=75';
         'port-light': {
           command: 'python',
           args: ['/path/to/port-light/mcp/server.py'],
-          env: { PORT_LIGHT_URL: origin },
+          env: sourceEnv,
         },
       },
     }, null, 2);
@@ -665,7 +671,8 @@ import { render, syncHiddenButton } from './grid.js?v=75';
         '<span class="lease-label">' + escapeHtml(l.label || '—') + '</span>' +
         '<span class="lease-left">' + escapeHtml(t('settings.auto.leases.remaining',
           { time: fmtRemaining(remainingSeconds(l.expires_at)) })) + '</span>' +
-        '<button type="button" class="btn-delete" data-release-port="' + l.port + '">' +
+        '<button type="button" class="btn-delete" data-release-port="' + l.port +
+        '" data-reservation="' + !!l.is_reservation + '">' +
         escapeHtml(t('settings.auto.leases.release')) + '</button></div>').join('')
       : '<p class="muted">' + escapeHtml(t('settings.auto.leases.none')) + '</p>';
 
@@ -676,9 +683,14 @@ import { render, syncHiddenButton } from './grid.js?v=75';
   }
 
   export async function releaseLease(port, btn) {
+    const reservation = btn.getAttribute && btn.getAttribute('data-reservation') === 'true';
+    const token = reservation ? window.prompt(t('settings.auto.leases.tokenPrompt')) : '';
+    if (reservation && !token) return;
     btn.disabled = true;
     try {
-      const res = await api('/api/manual-ports/' + port, { method: 'DELETE' });
+      const res = await api((reservation ? '/api/reservations/' : '/api/manual-ports/') + port, {
+        method: 'DELETE', headers: reservation ? { 'X-Reservation-Token': token } : {},
+      });
       if (!res.ok) {
         btn.disabled = false;
         return;

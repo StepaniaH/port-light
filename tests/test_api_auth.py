@@ -222,13 +222,14 @@ def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
     client = TestClient(app)
     first = client.get("/api/ports")
     assert first.status_code == 200
+    first_classifications = n["k"]
     etag = first.headers.get("etag")
     again = client.get("/api/ports", headers={"If-None-Match": etag})
     assert again.status_code == 304
-    assert n["k"] == 1
+    assert n["k"] == first_classifications
     row = client.get("/api/ports/2100")
     assert row.status_code == 200
-    assert n["k"] == 1
+    assert n["k"] == first_classifications
 
 
 def test_slow_rebuild_serves_previous_snapshot(monkeypatch, tmp_path):
@@ -347,5 +348,4 @@ def test_concurrent_polls_share_one_scan(monkeypatch, tmp_path):
     t2.join(timeout=5)
     assert results == [200, 200]
     assert n["c"] == 1
-
 

@@ -1,28 +1,28 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=75';
-import { errorText, escapeHtml, t } from './text.js?v=75';
-import { moveChipFocus, trapTab } from './a11y.js?v=75';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=76';
+import { errorText, escapeHtml, t } from './text.js?v=76';
+import { moveChipFocus, trapTab } from './a11y.js?v=76';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight,
-} from './dom.js?v=75';
-import { openModal, closeModals, modalOpen } from './modal.js?v=75';
-import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=75';
-import { render, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=75';
+} from './dom.js?v=76';
+import { openModal, closeModals, modalOpen } from './modal.js?v=76';
+import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=76';
+import { render, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=76';
 import {
-  hasPeers, api, fetchMeta, fetchHosts, retryHost, setupRefresh, tick,
+  hasPeers, api, fetchMeta, fetchHosts, retryHost, setupRefresh, tick, gridHash,
   startEventStream,
-} from './api.js?v=75';
-import { closeDetail, showDetailError, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=75';
+} from './api.js?v=76';
+import { closeDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=76';
 import {
   goSettingsPanel, saveSettingsPage, applyServerSettings, markDirty,
   syncDependentSettings, fetchSettings, syncLocaleTrigger, closeLocaleMenu,
   moveLocaleHighlight, renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
-} from './settings.js?v=75';
+} from './settings.js?v=76';
 
 (function () {
   'use strict';
@@ -592,16 +592,6 @@ import {
   document.addEventListener('click', function (e) {
     if (!e.target.closest('.locale-dropdown')) closeLocaleMenu();
   });
-
-  async function mutateDetail(url, opts, afterOk) {
-    try {
-      const res = await api(url, opts);
-      if (!res.ok) { showDetailError(t('detail.actionFailed')); return; }
-      afterOk();
-    } catch (err) {
-      showDetailError(t('detail.actionFailed'));
-    }
-  }
 
   function startApp() {
     sortSelect.value = S.sortMode;

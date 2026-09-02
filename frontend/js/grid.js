@@ -1,12 +1,12 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S, CARD_FIELD_KEYS } from './state.js?v=75';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=75';
-import { KIND_MATCHERS } from './kinds.js?v=75';
-import { isLease } from './leases.js?v=75';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=75';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl, portHash, api, fetchPorts, renderScanners } from './api.js?v=75';
-import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=75';
+import { S, CARD_FIELD_KEYS } from './state.js?v=76';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=76';
+import { KIND_MATCHERS } from './kinds.js?v=76';
+import { isLease } from './leases.js?v=76';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=76';
+import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl, portHash, api, fetchPorts, renderScanners } from './api.js?v=76';
+import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=76';
 
 
   export function syncFilterUI() {
@@ -339,7 +339,7 @@ import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=75';
   }
 
   export function portFromList(port, hostId) {
-    const data = dataForHost(hostId || S.selectedHostId || 'local') || S.currentData;
+    const data = dataForHost(hostId || S.selectedHostId || 'local');
     if (!data || !data.ports) return null;
     return data.ports.find(function (p) { return p.port === port; }) || null;
   }

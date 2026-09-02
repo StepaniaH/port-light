@@ -101,6 +101,24 @@ test('releaseLease sends DELETE to the manual port endpoint', async () => {
   assert.deepEqual(calls[0], { url: '/api/manual-ports/8081', method: 'DELETE' });
 });
 
+test('agent reservation release sends its returned ownership token', async () => {
+  S.meta = leasedMeta();
+  const btn = { disabled: false, getAttribute: key => key === 'data-reservation' ? 'true' : null };
+  const savedPrompt = window.prompt;
+  window.prompt = () => 'reservation-token';
+  try {
+    const calls = await withFetch([
+      { url: '/api/reservations/8081', method: 'DELETE', body: {} },
+      { url: '/api/meta', body: metaPayload(2, 0, []) },
+    ], async function () {
+      await releaseLease(8081, btn);
+    });
+    assert.deepEqual(calls[0], { url: '/api/reservations/8081', method: 'DELETE' });
+  } finally {
+    window.prompt = savedPrompt;
+  }
+});
+
 test('successful release refreshes meta and re-renders activity and lease cards together', async () => {
   const restoreI18n = useI18n();
   try {

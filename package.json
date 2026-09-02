@@ -1,0 +1,13 @@
+{
+  "name": "port-light-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint frontend/js frontend/i18n.js",
+    "test": "node --test \"frontend/test/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "eslint": "10.9.1",
+    "globals": "17.12.0"
+  }
+}

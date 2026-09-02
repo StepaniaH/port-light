@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "Öffentlich",
+    "public": "Alle Schnittstellen",
     "hidden": "Verborgen",
     "kinds": "Art",
     "sort": "Sortierung",
@@ -106,7 +106,8 @@
     "publicBind": "Alle Schnittstellen",
     "publicBindHint": "Dieser Port akzeptiert Verbindungen von jeder Adresse des Hosts.",
     "remoteReadOnly": "Schreibgeschützt — diese Karte stammt von {name}. Ausblenden, Bezeichnungen und Hinzufügen bleiben auf diesem Rechner.",
-    "expiresIn": "Läuft ab in {time}"
+    "expiresIn": "Läuft ab in {time}",
+    "reservationHint": "Diese Reservierung kann nur mit dem bei der Erstellung zurückgegebenen Token geändert oder freigegeben werden."
   },
   "hosts": {
     "title": "Andere Rechner",
@@ -355,7 +356,8 @@
         "blurb": "Durch Agenten über die Vorschlags-API reserviert, wird automatisch bei Ablauf freigegeben.",
         "none": "Keine aktiven Reservierungen.",
         "release": "Freigeben",
-        "remaining": "Noch {time}"
+        "remaining": "Noch {time}",
+        "tokenPrompt": "Reservierungstoken einfügen"
       }
     }
   },
@@ -428,7 +430,7 @@
     "unknown": "Unbekannt"
   },
   "scope": {
-    "public": "öffentlich",
+    "public": "alle Schnittstellen",
     "lan": "LAN",
     "link": "link-local",
     "localhost": "localhost"

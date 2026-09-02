@@ -86,7 +86,8 @@ def test_scope_all_unions_peer_occupancy(monkeypatch):
         assert path == "/api/ports"
         return 200, {"ports": [
             {"port": 6000}, {"port": 6001}, {"port": 6002},
-        ]}, None
+        ], "summary": {"hidden_locked": False, "compose_incomplete": False,
+                        "compose_truncated": False}}, None
 
     monkeypatch.setattr(main.hosts, "fetch_peer_json", fake_fetch)
 
@@ -99,7 +100,29 @@ def test_scope_all_unions_peer_occupancy(monkeypatch):
     assert body["ports"] == [6003, 6004, 6005]
 
 
-def test_scope_all_survives_dead_peer(monkeypatch):
+def test_scope_all_uses_stored_peer_credentials(monkeypatch):
+    import backend.main as main
+
+    public = {"id": "abcdef123456", "name": "nas", "has_auth": True}
+    private = {**public, "url": "http://10.0.0.2:2100",
+               "username": "admin", "password": "secret"}
+    monkeypatch.setattr(main.hosts, "list_public_peers", lambda: [public])
+    monkeypatch.setattr(main.hosts, "get_peer", lambda host_id: private)
+
+    def fetch(peer, path, query, if_none_match=None):
+        assert peer["password"] == "secret"
+        return 200, {"ports": [], "summary": {
+            "hidden_locked": False, "compose_incomplete": False,
+            "compose_truncated": False,
+        }}, None
+
+    monkeypatch.setattr(main.hosts, "fetch_peer_json", fetch)
+    response = TestClient(app).get("/api/ports/suggest", params={"scope": "all"})
+    assert response.status_code == 200
+    assert response.json()["scope"] == "all:1/1"
+
+
+def test_scope_all_refuses_dead_peer(monkeypatch):
     import backend.main as main
     from backend.compose_scanner import ComposeScan
 
@@ -116,9 +139,7 @@ def test_scope_all_survives_dead_peer(monkeypatch):
     res = client.get("/api/ports/suggest",
                      params={"count": 2, "start": 6100, "end": 6110,
                              "scope": "all"})
-    body = res.json()
-    assert body["scope"] == "all:0/1"
-    assert body["ports"] == [6100, 6101]
+    assert res.status_code == 503
 
 
 def test_agent_token_gate(monkeypatch):
@@ -130,10 +151,10 @@ def test_agent_token_gate(monkeypatch):
     assert wrong.status_code == 403
     ok = client.get("/api/ports/suggest", headers={"X-Agent-Token": "tok-123"})
     assert ok.status_code == 200
-    # Basic Auth credentials also satisfy the gate
+    # Basic Auth is independent; it never substitutes for the agent token.
     via_basic = client.get("/api/ports/suggest",
                            auth=("admin", ""))
-    assert via_basic.status_code != 403 or True  # no auth configured → header still required
+    assert via_basic.status_code == 403
 
 
 def test_suggest_records_event(monkeypatch):

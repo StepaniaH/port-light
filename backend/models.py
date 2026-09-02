@@ -42,6 +42,7 @@ class OccupancyRow(TypedDict, total=False):
     manual_label: str | None
     machine: str
     expires_at: int | None
+    is_reservation: bool
     known_service: dict | None
     is_hidden: bool
     conflict: bool

@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "Público",
+    "public": "Todas las interfaces",
     "hidden": "Ocultos",
     "kinds": "Tipo",
     "sort": "Orden",
@@ -106,7 +106,8 @@
     "publicBind": "Todas las interfaces",
     "publicBindHint": "Este puerto acepta conexiones desde cualquier dirección del equipo.",
     "remoteReadOnly": "Solo lectura — este mapa procede de {name}. Ocultar, las etiquetas y añadir permanecen en este equipo.",
-    "expiresIn": "Caduca en {time}"
+    "expiresIn": "Caduca en {time}",
+    "reservationHint": "Esta reserva solo se puede cambiar o liberar con el token devuelto al crearla."
   },
   "hosts": {
     "title": "Otros equipos",
@@ -355,7 +356,8 @@
         "blurb": "Reservadas por agentes mediante la API de sugerencias, se liberan automáticamente al caducar.",
         "none": "No hay reservas activas.",
         "release": "Liberar",
-        "remaining": "Quedan {time}"
+        "remaining": "Quedan {time}",
+        "tokenPrompt": "Pega el token de reserva"
       }
     }
   },
@@ -428,7 +430,7 @@
     "unknown": "Desconocido"
   },
   "scope": {
-    "public": "público",
+    "public": "todas las interfaces",
     "lan": "LAN",
     "link": "enlace local",
     "localhost": "localhost"

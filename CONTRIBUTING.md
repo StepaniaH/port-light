@@ -21,7 +21,9 @@ cp .env.example .env
 uvicorn backend.main:app --reload --port 2100
 ruff check backend tests mcp
 pytest
-node --test "frontend/test/**/*.test.mjs"
+npm ci
+npm run lint
+npm test
 ```
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants something like `PORT_LIGHT_DATA_DIR=./data`. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.

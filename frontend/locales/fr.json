@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "Public",
+    "public": "Toutes les interfaces",
     "hidden": "Masqués",
     "kinds": "Type",
     "sort": "Tri",
@@ -106,7 +106,8 @@
     "publicBind": "Toutes les interfaces",
     "publicBindHint": "Ce port accepte les connexions depuis n'importe quelle adresse de l'hôte.",
     "remoteReadOnly": "Lecture seule — cette carte provient de {name}. Masquage, libellés et ajouts restent sur cette machine.",
-    "expiresIn": "Expire dans {time}"
+    "expiresIn": "Expire dans {time}",
+    "reservationHint": "Cette réservation ne peut être modifiée ou libérée qu’avec le jeton renvoyé lors de sa création."
   },
   "hosts": {
     "title": "Autres machines",
@@ -355,7 +356,8 @@
         "blurb": "Réservés par les agents via l'API de suggestion, libérés automatiquement à l'expiration.",
         "none": "Aucune réservation active.",
         "release": "Libérer",
-        "remaining": "Il reste {time}"
+        "remaining": "Il reste {time}",
+        "tokenPrompt": "Collez le jeton de réservation"
       }
     }
   },
@@ -428,7 +430,7 @@
     "unknown": "Inconnu"
   },
   "scope": {
-    "public": "public",
+    "public": "toutes les interfaces",
     "lan": "LAN",
     "link": "lien local",
     "localhost": "localhost"

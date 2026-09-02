@@ -20,18 +20,25 @@ curl -s "http://127.0.0.1:2100/api/ports/suggest?count=2&reserve=true&label=prev
   "ports": [8081, 8082],
   "reserved": [8081, 8082],
   "failed": [],
+  "reservations": [
+    {"port": 8081, "token": "<save-this-token>", "expires_at": null},
+    {"port": 8082, "token": "<save-this-token>", "expires_at": null}
+  ],
   "range": {"start": 1, "end": 9999}
 }
 ```
 
 - Skips anything listening, published by Docker, declared in Compose,
   reserved manually, or hidden.
-- `reserve=true` records the returned ports as manual entries (configured /
-  amber on every map). Release with `DELETE /api/manual-ports/{port}`.
+- `reserve=true` atomically records the returned ports as reservations
+  (configured / amber on every map). Save each token: it is returned once and
+  stored only as a hash. Release its port with `DELETE /api/reservations/{port}`
+  and `X-Reservation-Token: <token>`. Manual entries use the manual-port API.
 - `ttl=<seconds>` (60–604800) turns reservations into leases: they disappear
   on their own once expired. The response carries `expires_at`.
-- `scope=all` also avoids ports occupied on configured peers. Unreachable
-  peers are skipped and logged as degradations; the response reports
+- `scope=all` also avoids ports occupied or hidden on configured peers. If any
+  peer response is unavailable, stale, locked, truncated, or incomplete, the
+  request returns `503` and reserves nothing. A successful response reports
   `"scope": "all:<reachable>/<total>"`.
 - `count` is capped at 64.
 
@@ -70,8 +77,9 @@ rebuild takes longer than ~4s, waiters get the last good snapshot with
 ## Server-sent events
 
 `GET /api/events` streams SSE frames. A `hello` event arrives on connect;
-`refresh` fires when the scan key or store generation changes. Treat it as a
-hint to re-pull `/api/ports` — the ETag still deduplicates work:
+`refresh` fires when settings or stored data changes. Treat it as a hint to
+re-pull `/api/ports` — interval polling still discovers OS, Docker, and Compose
+scanner changes, and the ETag deduplicates unchanged results:
 
 ```
 retry: 3000
@@ -167,4 +175,5 @@ Client registration (Claude Code and MCP-compatible clients):
 ```
 
 Point `PORT_LIGHT_URL` at a peer to query another machine; add
-`PORT_LIGHT_AUTH=user:password` when that instance uses Basic Auth.
+`PORT_LIGHT_AUTH=user:password` when that instance uses Basic Auth, and add
+`PORT_LIGHT_AGENT_TOKEN=<token>` when it sets `AGENT_TOKEN`.

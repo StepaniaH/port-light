@@ -173,6 +173,7 @@ function makeStyle() {
 }
 
 function makeElement(tag) {
+  const listeners = new Map();
   const node = {
     tagName: tag,
     childNodes: [],
@@ -185,13 +186,36 @@ function makeElement(tag) {
     setAttribute(k, v) {
       node.attrs[k] = String(v);
       if (k === 'class') node.className = String(v);
+      if (k === 'id') node.id = String(v);
     },
     getAttribute(k) {
       return Object.prototype.hasOwnProperty.call(node.attrs, k) ? node.attrs[k] : null;
     },
     removeAttribute(k) { delete node.attrs[k]; },
-    addEventListener() {},
-    focus() {},
+    hasAttribute(k) { return node.getAttribute(k) !== null; },
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(fn);
+    },
+    dispatchEvent(event) {
+      for (const fn of listeners.get(event.type) || []) fn(event);
+    },
+    focus() { document.activeElement = node; },
+    contains(other) {
+      while (other) {
+        if (other === node) return true;
+        other = other.parentNode;
+      }
+      return false;
+    },
+    closest(selector) {
+      let current = node;
+      while (current) {
+        if (matchCompound(current, selector)) return current;
+        current = current.parentNode;
+      }
+      return null;
+    },
     style: makeStyle(),
     hidden: false,
     value: '',
@@ -202,6 +226,11 @@ function makeElement(tag) {
     appendChild(child) {
       child.parentNode = node;
       node.childNodes.push(child);
+      return child;
+    },
+    insertBefore(child, before) {
+      child.parentNode = node;
+      node.childNodes.splice(node.childNodes.indexOf(before), 0, child);
       return child;
     },
     remove() {

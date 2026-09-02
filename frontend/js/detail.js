@@ -1,17 +1,17 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=75';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=75';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=75';
-import { trapTab } from './a11y.js?v=75';
-import { api, portApiUrl, hasPeers, hostName, gridHash, loadPorts, tick, fetchPorts } from './api.js?v=75';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=75';
+import { S, saveView } from './state.js?v=76';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=76';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=76';
+import { trapTab } from './a11y.js?v=76';
+import { api, portApiUrl, hasPeers, hostName, gridHash, loadPorts, tick, dataForHost } from './api.js?v=76';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=76';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=75';
-import { closeModals, modalOpen } from './modal.js?v=75';
+} from './grid.js?v=76';
+import { closeModals, modalOpen, openModal } from './modal.js?v=76';
 
   export function setDetailOpen(open) {
     appEl.classList.toggle('detail-open', open);
@@ -57,21 +57,20 @@ import { closeModals, modalOpen } from './modal.js?v=75';
 
   export function showPortDetail(port, fallback) {
     const hostId = S.selectedHostId || 'local';
+    const gen = ++S.portDetailGen;
     const local = portFromList(port, hostId);
     if (local) {
       S.detailShownPort = port;
       renderDetail(local);
       return;
     }
-    if (S.detailShownPort === port && S.route.hostId === hostId) return;
     renderDetail(fallback && fallback.port === port ? fallback : pendingStub(port));
-    const gen = ++S.portDetailGen;
     S.detailShownPort = port;
     const openedHost = hostId;
     api(portApiUrl(hostId, port) + '?include_hidden=true').then(function (res) {
       if (gen !== S.portDetailGen || S.selectedPort !== port || S.selectedHostId !== openedHost) return null;
       if (res.status === 404) {
-        const data = dataForHost(openedHost) || S.currentData;
+        const data = dataForHost(openedHost);
         const locked = !!(data && data.summary && data.summary.hidden_locked);
         renderDetail(Object.assign(freeStub(port), {
           _missing: true,
@@ -109,7 +108,7 @@ import { closeModals, modalOpen } from './modal.js?v=75';
     if (p._pending) {
       html += '<p class="modal-hint">' + escapeHtml(t('detail.loading')) + '</p>';
     } else {
-    const remote = hasPeers() && S.selectedHostId && S.selectedHostId !== 'local';
+    const remote = S.selectedHostId && S.selectedHostId !== 'local';
     if (remote) {
       html += '<p class="modal-hint">' + escapeHtml(t('detail.remoteReadOnly', { name: hostName(S.selectedHostId) })) + '</p>';
     }
@@ -222,7 +221,11 @@ import { closeModals, modalOpen } from './modal.js?v=75';
         escapeHtml(t('detail.expiresIn', { time: left })) + '</span></div>';
     }
 
-    if (!remote && (p.manual_label != null || p.source_type === 'manual')) {
+    if (p.is_reservation) {
+      html += '<p class="modal-hint">' + escapeHtml(t('detail.reservationHint')) + '</p>';
+    }
+
+    if (!remote && !p.is_reservation && (p.manual_label != null || p.source_type === 'manual')) {
       html += '<form class="detail-label-form" data-label-form="' + p.port + '"><label><span class="key">' +
         escapeHtml(t('detail.label')) + '</span><input type="text" maxlength="80" value="' +
         escapeHtml(p.manual_label || '') + '" data-label-input></label><button type="submit" class="btn-secondary">' +
@@ -236,7 +239,7 @@ import { closeModals, modalOpen } from './modal.js?v=75';
     } else {
       html += '<button type="button" class="btn-hide" data-hide-port="' + p.port + '">' + escapeHtml(t('detail.hide')) + '</button>';
     }
-    if (p.manual_label || p.source_type === 'manual') {
+    if (!p.is_reservation && (p.manual_label != null || p.source_type === 'manual')) {
       html += '<button type="button" class="btn-delete" data-delete-port="' + p.port + '">' + escapeHtml(t('detail.delete')) + '</button>';
     }
     html += '</div>';
@@ -263,8 +266,11 @@ import { closeModals, modalOpen } from './modal.js?v=75';
       else if (active.hasAttribute('data-label-input')) keep = 'label';
     }
 
+    if (!p._pending && !p._missing) html += '<section id="detail-history" hidden></section>';
     detailContent.innerHTML = html;
-    loadPortHistory(p.port);
+    if (!p._pending && !p._missing) {
+      loadPortHistory(p.port, S.selectedHostId || 'local', detailContent.querySelector('#detail-history'));
+    }
     const closeBtn = detailContent.querySelector('[data-close-detail]');
     if (closeBtn) closeBtn.addEventListener('click', function () { closeDetail(); });
     const hideBtn = detailContent.querySelector('[data-hide-port]');
@@ -370,25 +376,43 @@ import { closeModals, modalOpen } from './modal.js?v=75';
     if (focusEl) focusEl.focus({ preventScroll: true });
   }
 
+  async function mutateDetail(url, opts, afterOk) {
+    const port = S.selectedPort;
+    const hostId = S.selectedHostId;
+    try {
+      const res = await api(url, opts);
+      if (port !== S.selectedPort || hostId !== S.selectedHostId) return;
+      if (res.status === 403 && S.meta.hidden_unlock_required) {
+        S.pendingAfterUnlock = function () { mutateDetail(url, opts, afterOk); };
+        openModal('unhide-modal');
+        return;
+      }
+      if (!res.ok) { showDetailError(t('detail.actionFailed')); return; }
+      await afterOk();
+    } catch (err) {
+      if (port === S.selectedPort && hostId === S.selectedHostId) showDetailError(t('detail.actionFailed'));
+    }
+  }
+
   window._portLightHide = function (port) {
-    if (hasPeers() && S.selectedHostId !== 'local') return;
-    mutateDetail('/api/hidden/' + port, { method: 'POST' }, tick);
+    if (S.selectedHostId && S.selectedHostId !== 'local') return;
+    return mutateDetail('/api/hidden/' + port, { method: 'POST' }, tick);
   };
   window._portLightUnhide = function (port) {
-    if (hasPeers() && S.selectedHostId !== 'local') return;
-    mutateDetail('/api/hidden/' + port, { method: 'DELETE' }, tick);
+    if (S.selectedHostId && S.selectedHostId !== 'local') return;
+    return mutateDetail('/api/hidden/' + port, { method: 'DELETE' }, tick);
   };
   window._portLightDeleteManual = function (port) {
-    if (hasPeers() && S.selectedHostId !== 'local') return;
+    if (S.selectedHostId && S.selectedHostId !== 'local') return;
     if (!window.confirm(t('detail.deleteConfirm', { port: port }))) return;
-    mutateDetail('/api/manual-ports/' + port, { method: 'DELETE' }, function () {
+    return mutateDetail('/api/manual-ports/' + port, { method: 'DELETE' }, function () {
       closeDetail();
       tick();
     });
   };
   window._portLightSaveLabel = function (port, label) {
-    if (hasPeers() && S.selectedHostId !== 'local') return;
-    mutateDetail('/api/manual-ports/' + port, {
+    if (S.selectedHostId && S.selectedHostId !== 'local') return;
+    return mutateDetail('/api/manual-ports/' + port, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: String(label || '').trim().slice(0, 80) }),
@@ -435,13 +459,14 @@ import { closeModals, modalOpen } from './modal.js?v=75';
     free: 'summary.free',
   };
 
-  async function loadPortHistory(port) {
+  async function loadPortHistory(port, hostId, host) {
     try {
-      const res = await api('/api/ports/' + port + '/history?hours=24');
+      const res = await api(portApiUrl(hostId, port) + '/history?hours=24');
       if (!res.ok) return;
       const body = await res.json();
-      const host = document.getElementById('detail-history');
-      if (!host || !body.events || !body.events.length) return;
+      if (!host || S.selectedPort !== port || S.selectedHostId !== hostId
+          || detailContent.querySelector('#detail-history') !== host
+          || !body.events || !body.events.length) return;
       const loc = window.PortLightI18n ? PortLightI18n.locale() : undefined;
       const items = body.events.slice(-5).map(function (ev) {
         const time = new Date(ev.ts * 1000).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });

@@ -17,7 +17,6 @@ _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
 _primed = False
 _last_sig: dict[int, str] = {}
-_last_write = 0.0
 
 
 def retention_days() -> int:
@@ -81,7 +80,7 @@ def record(rows: list[dict]) -> int:
     if not enabled():
         return 0
     now_sig = {row["port"]: row["status"] for row in rows}
-    global _primed, _last_sig, _last_write
+    global _primed, _last_sig
     written = 0
     with _lock:
         conn = _connect()
@@ -92,40 +91,40 @@ def record(rows: list[dict]) -> int:
             _primed = True
             return 0
         changed = [
-            {"port": p, "status": s}
-            for p, s in now_sig.items()
-            if _last_sig.get(p) != s
+            {"port": p, "status": now_sig.get(p, "free")}
+            for p in sorted(now_sig.keys() | _last_sig.keys())
+            if _last_sig.get(p, "free") != now_sig.get(p, "free")
         ]
         if not changed:
             return 0
         ts = int(time.time())
         holders_by_port = {row["port"]: _holders(row) for row in rows}
-        for ch in changed:
-            port = ch["port"]
-            conn.execute(
-                "INSERT INTO events (ts, port, state, holders) VALUES (?,?,?,?)",
-                (ts, port, ch["status"], holders_by_port.get(port) or "[]"),
-            )
-            written += 1
-        cutoff = ts - retention_days() * 86400
-        conn.execute("DELETE FROM events WHERE ts < ?", (cutoff,))
-        conn.commit()
+        with conn:
+            for ch in changed:
+                port = ch["port"]
+                conn.execute(
+                    "INSERT INTO events (ts, port, state, holders) VALUES (?,?,?,?)",
+                    (ts, port, ch["status"], holders_by_port.get(port) or "[]"),
+                )
+                written += 1
+            cutoff = ts - retention_days() * 86400
+            conn.execute("DELETE FROM events WHERE ts < ?", (cutoff,))
         _last_sig = now_sig
-        _last_write = time.time()
     return written
 
 
 def query(port: int, hours: int = 24) -> list[dict]:
-    conn = _connect()
-    if conn is None:
-        return []
-    cutoff = int(time.time()) - min(max(hours, 1), 24 * 30) * 3600
-    cur = conn.execute(
-        "SELECT ts, state, holders FROM events WHERE port=? AND ts>=? ORDER BY ts",
-        (port, cutoff),
-    )
+    with _lock:
+        conn = _connect()
+        if conn is None:
+            return []
+        cutoff = int(time.time()) - min(max(hours, 1), retention_days() * 24, 24 * 30) * 3600
+        rows = conn.execute(
+            "SELECT ts, state, holders FROM events WHERE port=? AND ts>=? ORDER BY ts, rowid",
+            (port, cutoff),
+        ).fetchall()
     out = []
-    for ts, state, holders in cur:
+    for ts, state, holders in rows:
         try:
             names = json.loads(holders)
         except json.JSONDecodeError:

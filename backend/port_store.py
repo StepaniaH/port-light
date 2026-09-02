@@ -23,8 +23,11 @@ The ``machines`` array may still exist in older files. It is not scanned.
 from __future__ import annotations
 
 import errno
+import copy
+import hashlib
 import json
 import os
+import secrets
 import tempfile
 import threading
 import time
@@ -37,6 +40,10 @@ class StoreWriteError(Exception):
     """Raised when the data file cannot be written."""
 
 
+class ReservationConflict(Exception):
+    """A manual write or release does not own the current reservation."""
+
+
 _LOCK = threading.Lock()
 _generation = 0
 
@@ -44,6 +51,14 @@ _generation = 0
 def store_generation() -> int:
     """Bumps on every successful write. Occupancy uses this to drop a stale scan snapshot."""
     return _generation
+
+
+def store_revision() -> tuple:
+    try:
+        st = _data_file().stat()
+        return (_generation, st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (_generation, None, None)
 
 
 def _data_dir() -> Path:
@@ -72,7 +87,7 @@ def _load() -> dict:
     token = (st.st_mtime_ns, st.st_size)
     memo = _FILE_MEMO.get(str(f))
     if memo is not None and memo[0] == token:
-        return memo[1]
+        return copy.deepcopy(memo[1])
     try:
         data = json.loads(f.read_text())
     except json.JSONDecodeError:
@@ -86,7 +101,7 @@ def _load() -> dict:
     except OSError:
         return empty
     _FILE_MEMO[str(f)] = (token, data)
-    return data
+    return copy.deepcopy(data)
 
 
 def _save(data: dict) -> None:
@@ -116,7 +131,7 @@ def _save(data: dict) -> None:
                 f"cannot write {target} (permission denied). "
                 "The data directory must be writable by this process."
             ) from exc
-        raise
+        raise StoreWriteError(f"cannot write {target}: {exc.strerror}") from exc
     except Exception:
         if tmp_name:
             try:
@@ -170,6 +185,8 @@ def _manuals_from(data: dict) -> list[dict]:
         exp = entry.get("expires_at")
         if isinstance(exp, (int, float)):
             item["expires_at"] = int(exp)
+        if entry.get("reservation_hash"):
+            item["is_reservation"] = True
         out.append(item)
     return out
 
@@ -215,7 +232,7 @@ def get_manual_ports() -> list[dict]:
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
-    return _manuals_from(data)
+        return _manuals_from(data)
 
 
 def occupancy_user_state() -> tuple[list[dict], list[int]]:
@@ -223,7 +240,64 @@ def occupancy_user_state() -> tuple[list[dict], list[int]]:
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
-    return _manuals_from(data), _hidden_from(data)
+        return _manuals_from(data), _hidden_from(data)
+
+
+def allocate_ports(taken: set[int], start: int, end: int, count: int,
+                   label: str, ttl: int | None, reserve: bool) -> tuple[list[int], list[dict]]:
+    """Select and persist a batch under the same lock as all manual writes.
+
+    Scanner/peer observations are advisory; this transaction serializes claims
+    in one Port-Light process, not operating-system socket binds.
+    """
+    with _LOCK:
+        data = _load()
+        _drop_expired_locked(data)
+        occupied = taken | set(_hidden_from(data))
+        occupied.update(entry["port"] for entry in _manuals_from(data))
+        picks = []
+        for port in range(start, end + 1):
+            if port not in occupied:
+                picks.append(port)
+                if len(picks) == count:
+                    break
+        reservations = []
+        if reserve and picks:
+            expires_at = _now() + ttl if ttl is not None else None
+            entries = data.setdefault("manual_ports", [])
+            for port in picks:
+                token = secrets.token_urlsafe(32)
+                entry = {"port": port, "label": label, "machine": "localhost",
+                         "reservation_hash": hashlib.sha256(token.encode()).hexdigest()}
+                if expires_at is not None:
+                    entry["expires_at"] = expires_at
+                entries.append(entry)
+                reservations.append({"port": port, "token": token, "expires_at": expires_at})
+            _save(data)
+        return picks, reservations
+
+
+def release_reservation(port: int, token: str) -> bool:
+    with _LOCK:
+        data = _load()
+        _drop_expired_locked(data)
+        entries = data.get("manual_ports", [])
+        for entry in entries:
+            if _entry_port(entry) != port or _entry_machine(entry) != "localhost":
+                continue
+            expected = entry.get("reservation_hash")
+            supplied = hashlib.sha256(token.encode()).hexdigest()
+            if not expected or not secrets.compare_digest(supplied, expected):
+                raise ReservationConflict("reservation token does not match")
+            data["manual_ports"] = [item for item in entries if item is not entry]
+            _save(data)
+            return True
+        return False
+
+
+def _require_manual(entry: dict) -> None:
+    if entry.get("reservation_hash"):
+        raise ReservationConflict("release this reservation with its token first")
 
 
 def add_manual_port(
@@ -234,12 +308,14 @@ def add_manual_port(
 ) -> dict:
     with _LOCK:
         data = _load()
+        _drop_expired_locked(data)
         mp = data.setdefault("manual_ports", [])
         kept: list[dict] = []
         for entry in mp:
             if _entry_port(entry) is None:
                 continue
             if _entry_port(entry) == port and _entry_machine(entry) == machine:
+                _require_manual(entry)
                 continue
             kept.append(entry)
         entry = {"port": port, "label": label, "machine": machine}
@@ -254,11 +330,13 @@ def add_manual_port(
 def remove_manual_port(port: int, machine: str = "localhost") -> bool:
     with _LOCK:
         data = _load()
+        _drop_expired_locked(data)
         mp = data.get("manual_ports", [])
         kept: list[dict] = []
         removed = False
         for entry in mp:
             if _entry_port(entry) == port and _entry_machine(entry) == machine:
+                _require_manual(entry)
                 removed = True
                 continue
             if _entry_port(entry) is not None:
@@ -311,6 +389,7 @@ def remove_hidden_port(port: int) -> bool:
 def update_manual_port(port: int, label: str, machine: str = "localhost") -> dict | None:
     with _LOCK:
         data = _load()
+        _drop_expired_locked(data)
         mp = data.get("manual_ports", [])
         kept: list = []
         found = None
@@ -318,6 +397,7 @@ def update_manual_port(port: int, label: str, machine: str = "localhost") -> dic
             if _entry_port(entry) is None:
                 continue
             if _entry_port(entry) == port and _entry_machine(entry) == machine:
+                _require_manual(entry)
                 entry = dict(entry) if isinstance(entry, dict) else {"port": port, "machine": machine}
                 entry["label"] = label
                 found = entry

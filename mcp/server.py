@@ -14,6 +14,7 @@ Configuration (environment):
     PORT_LIGHT_URL    base URL of a Port-Light instance
                       (default http://127.0.0.1:2100)
     PORT_LIGHT_AUTH   optional "user:password" for Basic Auth
+    PORT_LIGHT_AGENT_TOKEN  optional token matching the server's AGENT_TOKEN
 
 Implements the subset of the MCP stdio transport needed for tools:
 initialize, notifications/initialized, ping, tools/list, tools/call.
@@ -33,6 +34,7 @@ SERVER_INFO = {"name": "port-light", "version": "0.1.0"}
 
 BASE_URL = os.environ.get("PORT_LIGHT_URL", "http://127.0.0.1:2100").rstrip("/")
 BASIC_AUTH = os.environ.get("PORT_LIGHT_AUTH", "")
+AGENT_TOKEN = os.environ.get("PORT_LIGHT_AGENT_TOKEN", "") or os.environ.get("AGENT_TOKEN", "")
 
 TOOLS = [
     {
@@ -41,7 +43,8 @@ TOOLS = [
             "Return free network ports on the host, skipping anything that is "
             "listening, published by Docker, declared in Compose, or reserved. "
             "With reserve=true the returned ports are claimed as configured so "
-            "later calls never hand out the same ports again."
+            "later calls skip them until released or expired. Save each returned "
+            "reservation token for release_port. This does not bind an OS socket."
         ),
         "inputSchema": {
             "type": "object",
@@ -106,11 +109,14 @@ TOOLS = [
     },
     {
         "name": "release_port",
-        "description": "Remove a previous reservation for a host port.",
+        "description": "Release your reservation using its returned token. Never deletes manual entries.",
         "inputSchema": {
             "type": "object",
-            "properties": {"port": {"type": "integer", "minimum": 1, "maximum": 65535}},
-            "required": ["port"],
+            "properties": {
+                "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+                "token": {"type": "string", "minLength": 1},
+            },
+            "required": ["port", "token"],
         },
     },
 ]
@@ -122,27 +128,29 @@ class ApiError(Exception):
         self.status = status
 
 
-def api_get(path: str) -> dict:
-    req = urllib.request.Request(BASE_URL + path)
+def api_request(path: str, method: str = "GET", headers: dict | None = None) -> dict:
+    req = urllib.request.Request(BASE_URL + path, method=method, headers=headers or {})
     if BASIC_AUTH:
         token = base64.b64encode(BASIC_AUTH.encode()).decode()
         req.add_header("Authorization", "Basic " + token)
+    if AGENT_TOKEN:
+        req.add_header("X-Agent-Token", AGENT_TOKEN)
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
-            return json.loads(resp.read(4 * 1024 * 1024))
+            body = resp.read(4 * 1024 * 1024)
+            return json.loads(body) if body else {}
     except urllib.error.HTTPError as exc:
         raise ApiError(exc.code, f"Port-Light returned HTTP {exc.code}") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ApiError(502, f"cannot reach Port-Light at {BASE_URL}") from exc
 
 
-def api_delete(path: str) -> None:
-    req = urllib.request.Request(BASE_URL + path, method="DELETE")
-    if BASIC_AUTH:
-        token = base64.b64encode(BASIC_AUTH.encode()).decode()
-        req.add_header("Authorization", "Basic " + token)
-    with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
-        resp.read(1024)
+def api_get(path: str) -> dict:
+    return api_request(path)
+
+
+def api_delete(path: str, token: str) -> None:
+    api_request(path, "DELETE", {"X-Reservation-Token": token})
 
 
 def trim_row(row: dict) -> dict:
@@ -197,7 +205,10 @@ def run_tool(name: str, args: dict) -> dict:
         return {"degradations": api_get("/api/health").get("degradations", [])}
 
     if name == "release_port":
-        api_delete(f"/api/manual-ports/{int(args['port'])}")
+        token = str(args.get("token") or "")
+        if not token:
+            raise ApiError(400, "release_port requires the reservation token returned by suggest_ports")
+        api_delete(f"/api/reservations/{int(args['port'])}", token)
         return {"released": int(args["port"])}
 
     raise KeyError(name)

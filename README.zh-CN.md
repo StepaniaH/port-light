@@ -61,7 +61,7 @@
 - 面向编码智能体：`GET /api/ports/suggest` 直接给出真实空闲端口（支持预留或到期自动释放的租约），并提供 MCP stdio 服务器与智能体 Skill
 - 本地历史：端口状态变化写入数据卷内的 `history.db`（默认保留 7 天，`HISTORY_RETENTION_DAYS=0` 关闭）；详情抽屉显示最近变动，也可用 `GET /api/ports/{n}/history`
 - 可选 Webhook：设置 `WEBHOOK_URL` 与 `WEBHOOK_EVENTS=new_listener,conflict` 后，端口开始被占用或两个栈冲突时 POST JSON 通知
-- 即时刷新：打开的界面通过 `GET /api/events`（SSE）订阅变更，占用一变就重新拉取，不必等下一个 5 秒轮询
+- 及时刷新：打开的界面通过 `GET /api/events`（SSE）接收配置和存储变更，监听器、Docker 与 Compose 变化仍由带 ETag 的定时轮询发现
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
 - 前端是原生 HTML/CSS/JS（native ES modules），没有 npm，没有构建步骤
 

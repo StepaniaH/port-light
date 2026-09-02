@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "公開",
+    "public": "全インターフェース",
     "hidden": "非表示",
     "kinds": "種類",
     "sort": "並び替え",
@@ -106,7 +106,8 @@
     "publicBind": "全インターフェース",
     "publicBindHint": "このポートはホスト上の任意のアドレスからの接続を受け付けます。",
     "remoteReadOnly": "読み取り専用 — このマップは {name} のものです。非表示・ラベル・追加はこのマシンにだけ効きます。",
-    "expiresIn": "{time}後に失効"
+    "expiresIn": "{time}後に失効",
+    "reservationHint": "この予約を変更または解放するには、作成時に返されたトークンが必要です。"
   },
   "hosts": {
     "title": "ほかのマシン",
@@ -355,7 +356,8 @@
         "blurb": "エージェントが suggest API で確保したもので、期限切れになると自動解放されます。",
         "none": "有効なリースはありません。",
         "release": "解放",
-        "remaining": "残り{time}"
+        "remaining": "残り{time}",
+        "tokenPrompt": "予約トークンを貼り付けてください"
       }
     }
   },
@@ -428,7 +430,7 @@
     "unknown": "不明"
   },
   "scope": {
-    "public": "公開",
+    "public": "全インターフェース",
     "lan": "LAN",
     "link": "リンクローカル",
     "localhost": "localhost"

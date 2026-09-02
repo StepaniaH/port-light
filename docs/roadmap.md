@@ -29,7 +29,7 @@ Port-Light is a **port occupancy map**: host listen tables, Docker mappings, and
 
 ## Shipped in 0.7.0
 
-- Live updates over SSE, local history timeline, optional webhooks and metrics
+- Store/configuration refresh hints over SSE, complete-snapshot local history timeline, optional webhooks and metrics
 - Free-run planner with one-click reservation, Docker label naming
 - Agent integrations: `GET /api/ports/suggest` (leases, peer-aware scope, token gate), MCP stdio server, agent skill
 

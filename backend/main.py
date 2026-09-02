@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import sqlite3
 import json
@@ -50,6 +51,11 @@ app = FastAPI(title="Port-Light", version=VERSION)
 @app.exception_handler(port_store.StoreWriteError)
 def _store_write_error(_request: Request, exc: port_store.StoreWriteError) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+
+@app.exception_handler(port_store.ReservationConflict)
+def _reservation_conflict(_request: Request, exc: port_store.ReservationConflict) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 _occ = OccupancyCache()
 
@@ -108,15 +114,20 @@ def _values() -> dict:
     return values
 
 
-def _active_leases() -> list[dict]:
+def _active_leases(request: Request) -> list[dict]:
     now = int(time.time())
     rows = []
+    hidden = set(port_store.get_hidden_ports()) if not request_may_see_hidden(request) else set()
     for entry in port_store.get_manual_ports():
+        if entry["port"] in hidden:
+            continue
         exp = entry.get("expires_at")
         if exp and int(exp) > now:
             rows.append({"port": int(entry["port"]),
                          "label": entry.get("label") or "",
                          "expires_at": int(exp)})
+            if entry.get("is_reservation"):
+                rows[-1]["is_reservation"] = True
     return rows[:64]
 
 
@@ -129,7 +140,7 @@ def _listen_port() -> int | None:
 
 
 @app.get("/api/meta")
-def meta() -> dict:
+def meta(request: Request) -> dict:
     automation = {
         "agent_token": bool(os.environ.get("AGENT_TOKEN", "").strip()),
         "metrics": os.environ.get("METRICS_ENABLED", "").strip().lower()
@@ -141,7 +152,7 @@ def meta() -> dict:
         "listen_port": _listen_port(),
     }
     if agent_events.enabled():
-        leases = _active_leases()
+        leases = _active_leases(request)
         automation["agent_events"] = {
             **agent_events.summary(),
             "active_leases": len(leases),
@@ -221,7 +232,7 @@ def _scan_key(values: dict) -> tuple:
     return (
         os.environ.get("PORT_LIGHT_DATA_DIR", "/data"),
         _compose_dir(),
-        port_store.store_generation(),
+        port_store.store_revision(),
         values["compose_scan_depth"],
         values["compose_scan_max_files"],
         values["guess_urls"],
@@ -246,7 +257,7 @@ def _build_snapshot(values: dict) -> dict:
     prefer: list[int] = []
     for c in containers:
         prefer.extend(c.pids or [])
-    return {
+    snap = {
         "containers": containers,
         "listening": scan_listening_ports(prefer_pids=prefer),
         "compose_scan": scan_compose_tree(
@@ -256,6 +267,16 @@ def _build_snapshot(values: dict) -> dict:
         ),
         "user_state": port_store.occupancy_user_state(),
     }
+    # Record one complete observation per scan, before any request-specific
+    # range or visibility filtering. The cache serializes snapshot builders.
+    rows = _classify_snapshot(snap, values, 1, 65535)["ports"]
+    webhooks.observe(rows)
+    if not snap["compose_scan"].incomplete:
+        try:
+            history.record(rows)
+        except sqlite3.Error:
+            pass
+    return snap
 
 
 def _classify_snapshot(snap: dict, values: dict, start: int, end: int,
@@ -303,12 +324,6 @@ def _packed_occupancy(
     result["summary"]["compose_truncated"] = snap["compose_scan"].truncated
     result["summary"]["compose_incomplete"] = snap["compose_scan"].incomplete
     result["summary"]["compose_files"] = snap["compose_scan"].files_scanned
-    if not stale:
-        webhooks.observe(result["ports"])
-        try:
-            history.record(result["ports"])
-        except sqlite3.Error:
-            pass
     if stale:
         result["summary"]["stale"] = True
         body, etag = _json_etag(result)
@@ -511,71 +526,89 @@ def suggest_ports(
     """Suggest free ports, optionally reserving them as manual entries.
 
     Reserved ports turn amber (configured) on every map and are excluded
-    from future suggestions. Release them with ``DELETE /api/manual-ports/{n}``.
+    from future suggestions. Each returned reservation carries the capability
+    token required by ``DELETE /api/reservations/{n}``.
     ``ttl`` seconds turns the reservation into a lease that expires on its own.
     """
-    expected_token = os.environ.get("AGENT_TOKEN", "").strip()
-    if expected_token:
-        supplied = request.headers.get("x-agent-token", "") if request else ""
-        if not secrets.compare_digest(supplied, expected_token):
-            raise HTTPException(
-                status_code=403, detail="valid X-Agent-Token header required")
+    _require_agent_token(request)
     values = _values()
     lo = start if start is not None else values["port_range_start"]
     hi = end if end is not None else values["port_range_end"]
     if hi < lo:
         lo, hi = hi, lo
     snap = _scan_snapshot(values)
-    _manuals, hidden = snap["user_state"]
-    result = _classify_snapshot(snap, values, lo, hi)
+    if snap.get("stale") or snap["compose_scan"].incomplete:
+        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
+    # Re-read manual/hidden state inside the store transaction below.
+    result = _classify_snapshot({**snap, "user_state": ([], [])}, values, lo, hi)
     taken = {row["port"] for row in result["ports"]}
-    taken.update(hidden)
     scope_label = "self"
     if scope == "all":
         peers = hosts.list_public_peers()
         reachable = 0
-        for peer in peers:
+        for public_peer in peers:
+            peer = hosts.get_peer(public_peer.get("id", "")) or public_peer
             status, data, _etag = hosts.fetch_peer_json(
                 peer, "/api/ports",
                 {"range_start": str(lo), "range_end": str(hi),
-                 "include_hidden": "false"},
+                 "include_hidden": "true"},
             )
-            if status == 200 and data:
+            summary = data.get("summary", {}) if isinstance(data, dict) else {}
+            rows = data.get("ports") if isinstance(data, dict) else None
+            complete = (
+                status == 200 and isinstance(rows, list) and isinstance(summary, dict)
+                and all(type(summary.get(key)) is bool for key in (
+                    "hidden_locked", "compose_incomplete", "compose_truncated"))
+                and not any(summary.get(key) for key in (
+                    "stale", "hidden_locked", "compose_incomplete", "compose_truncated"))
+                and all(isinstance(row, dict) and type(row.get("port")) is int
+                        and 1 <= row["port"] <= 65535 for row in rows)
+            )
+            if complete:
                 reachable += 1
-                taken.update(row["port"] for row in data.get("ports", []))
+                taken.update(row["port"] for row in rows)
             else:
                 degradations.report(
                     "suggest", peer.get("name") or peer.get("url", ""),
-                    "peer unreachable")
+                    "peer occupancy unavailable or incomplete")
+                raise HTTPException(status_code=503, detail="peer occupancy unavailable or incomplete")
         scope_label = f"all:{reachable}/{len(peers)}"
-    picks: list[int] = []
-    cursor = lo
-    while cursor <= hi and len(picks) < count:
-        if cursor not in taken:
-            picks.append(cursor)
-        cursor += 1
-    reserved: list[int] = []
-    failed: list[int] = []
-    expires_at = None
-    if ttl is not None:
-        reserve = True
-        expires_at = int(time.time()) + ttl
-    if reserve:
-        for port in picks:
-            try:
-                port_store.add_manual_port(port, label, "localhost", ttl)
-                reserved.append(port)
-            except port_store.StoreWriteError:
-                failed.append(port)
-    agent_events.record(len(picks), scope_label, label, bool(reserved))
+    picks, reservations = port_store.allocate_ports(
+        taken, lo, hi, count, label, ttl, reserve or ttl is not None)
+    reserved = [entry["port"] for entry in reservations]
+    try:
+        agent_events.record(len(picks), scope_label, label, bool(reserved))
+    except sqlite3.Error:
+        # The reservation is already durable: still return its release token.
+        degradations.report("history", "agent", "could not record allocation event")
     return {
         "ports": picks,
         "reserved": reserved,
-        "failed": failed,
-        "expires_at": expires_at,
+        "failed": [],
+        "reservations": reservations,
+        "expires_at": reservations[0]["expires_at"] if reservations else None,
         "scope": scope_label,
         "range": {"start": lo, "end": hi},
     }
+
+
+def _require_agent_token(request: Request) -> None:
+    expected = os.environ.get("AGENT_TOKEN", "").strip()
+    supplied = request.headers.get("x-agent-token", "")
+    if expected and not secrets.compare_digest(supplied.encode(), expected.encode()):
+        raise HTTPException(status_code=403, detail="valid X-Agent-Token header required")
+
+
+@app.delete("/api/reservations/{port}")
+def release_reservation(port: int, request: Request) -> dict:
+    if not 1 <= port <= 65535:
+        raise HTTPException(status_code=400, detail="port out of range")
+    token = request.headers.get("x-reservation-token", "")
+    if not token:
+        raise HTTPException(status_code=403, detail="X-Reservation-Token header required")
+    if not port_store.release_reservation(port, token):
+        raise HTTPException(status_code=404, detail="reservation not found")
+    return {"status": "ok"}
 
 
 
@@ -631,7 +664,25 @@ def port_history(
         raise HTTPException(status_code=400, detail="port out of range")
     if not history.enabled():
         raise HTTPException(status_code=404, detail="not found")
+    if port in port_store.get_hidden_ports() and not request_may_see_hidden(request):
+        raise HTTPException(status_code=404, detail="not found")
     return {"port": port, "events": history.query(port, hours)}
+
+
+@app.get("/api/hosts/{host_id}/ports/{port}/history")
+def host_port_history(host_id: str, port: int, request: Request,
+                      hours: int = Query(default=24, ge=1, le=720)) -> Response:
+    if not 1 <= port <= 65535:
+        raise HTTPException(status_code=400, detail="port out of range")
+    if host_id == "local":
+        return JSONResponse(port_history(port, hours, request))
+    return _proxy_peer(host_id, f"/api/ports/{port}/history", {"hours": str(hours)},
+                       not_found_ok=True)
+
+
+def _require_hidden_write(request: Request, port: int | None = None) -> None:
+    if (port is None or port in port_store.get_hidden_ports()) and not request_may_see_hidden(request):
+        raise HTTPException(status_code=403, detail="hidden ports require authorization")
 
 
 @app.get("/api/known-ports/{port}")
@@ -643,18 +694,22 @@ def known_port(port: int) -> dict:
 
 
 @app.get("/api/manual-ports")
-def list_manual_ports() -> dict:
-    return {"manual_ports": port_store.get_manual_ports()}
+def list_manual_ports(request: Request) -> dict:
+    hidden = set(port_store.get_hidden_ports()) if not request_may_see_hidden(request) else set()
+    return {"manual_ports": [entry for entry in port_store.get_manual_ports()
+                             if entry["port"] not in hidden]}
 
 
 @app.post("/api/manual-ports")
-def add_manual_port(body: ManualPortCreate) -> dict:
-    entry = port_store.add_manual_port(body.port, body.label, body.machine)
+def add_manual_port(body: ManualPortCreate, request: Request) -> dict:
+    _require_hidden_write(request, body.port)
+    entry = port_store.add_manual_port(body.port, body.label, body.machine, body.ttl)
     return {"status": "ok", "entry": entry}
 
 
 @app.patch("/api/manual-ports/{port}")
-def patch_manual_port(port: int, body: ManualPortUpdate) -> dict:
+def patch_manual_port(port: int, body: ManualPortUpdate, request: Request) -> dict:
+    _require_hidden_write(request, port)
     entry = port_store.update_manual_port(port, body.label, body.machine)
     if not entry:
         raise HTTPException(status_code=404, detail="not found")
@@ -662,7 +717,8 @@ def patch_manual_port(port: int, body: ManualPortUpdate) -> dict:
 
 
 @app.delete("/api/manual-ports/{port}")
-def del_manual_port(port: int, machine: str = Query(default="localhost")) -> dict:
+def del_manual_port(port: int, request: Request, machine: str = Query(default="localhost")) -> dict:
+    _require_hidden_write(request, port)
     removed = port_store.remove_manual_port(port, machine)
     if not removed:
         raise HTTPException(status_code=404, detail="not found")
@@ -677,7 +733,8 @@ def list_hidden(request: Request) -> dict:
 
 
 @app.post("/api/hidden/{port}")
-def hide_port(port: int) -> dict:
+def hide_port(port: int, request: Request) -> dict:
+    _require_hidden_write(request)
     if port < 1 or port > 65535:
         raise HTTPException(status_code=400, detail="port out of range")
     added = port_store.add_hidden_port(port)
@@ -685,7 +742,10 @@ def hide_port(port: int) -> dict:
 
 
 @app.delete("/api/hidden/{port}")
-def unhide_port(port: int) -> dict:
+def unhide_port(port: int, request: Request) -> dict:
+    _require_hidden_write(request)
+    if not 1 <= port <= 65535:
+        raise HTTPException(status_code=400, detail="port out of range")
     removed = port_store.remove_hidden_port(port)
     if not removed:
         raise HTTPException(status_code=404, detail="not found")
@@ -710,22 +770,29 @@ app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
 
 
 
-def _event_lines():
-    """SSE frames: hello on connect, then ``refresh`` when occupancy may have changed."""
-    last = _scan_key(_values())
+async def _event_lines():
+    """Configuration/store hints; live scanner changes still need polling."""
+    def signature():
+        return _scan_key(_values())
+
+    last = await asyncio.to_thread(signature)
+    heartbeat = time.monotonic()
     yield "retry: 3000\n\n"
     yield "event: hello\ndata: {}\n\n"
     while True:
-        time.sleep(0.5)
-        sig = _scan_key(_values())
+        await asyncio.sleep(0.5)
+        sig = await asyncio.to_thread(signature)
         if sig != last:
             last = sig
             yield "event: refresh\ndata: {}\n\n"
+        if time.monotonic() - heartbeat >= 15:
+            heartbeat = time.monotonic()
+            yield ": keepalive\n\n"
 
 
 @app.get("/api/events")
 def events() -> Response:
-    """Server-sent events: nudges open UIs the moment occupancy may have changed.
+    """Server-sent events: hints after configuration or store changes.
 
     Purely a hint — clients still pull ``GET /api/ports`` (its ETag does the
     real work).

@@ -2,6 +2,20 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## Unreleased
+
+### Fixed
+
+- Port suggestions now select and persist a reserved batch atomically. Concurrent agents receive different ports, partial write failures cannot report phantom claims, and `scope=all` refuses to allocate when any peer map is unavailable, stale, locked, or incomplete.
+- Agent reservations carry one-time-visible release tokens. The MCP client forwards `PORT_LIGHT_AGENT_TOKEN`, requires the matching reservation token for release, and can no longer delete arbitrary manual entries or a later owner's replacement reservation.
+- History is collected from complete host snapshots rather than request-filtered responses, so disappearance records `free`, reappearance records its new state, hidden rows remain private, and peer history loads in the correct detail drawer.
+- Detail actions and multi-host switching no longer fail on missing imports or reuse a local/previous-host row. Hidden mutations now pass through the same unlock gate as hidden reads.
+- SSE connections use cancellable asynchronous waits and describe their actual role as store/configuration hints; interval polling continues to discover scanner changes.
+
+### Changed
+
+- Frontend CI now runs ESLint's `no-undef` rule before the browser-module tests.
+
 ## 0.7.4 — 2026-08-27
 
 ### Fixed

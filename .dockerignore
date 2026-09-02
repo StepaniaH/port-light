@@ -1,4 +1,5 @@
 .git
+node_modules
 .github
 .venv
 venv
@@ -17,4 +18,3 @@ custom_ports.json
 custom_ports.example.json
 docker-compose.yml
 ruff.toml
-
