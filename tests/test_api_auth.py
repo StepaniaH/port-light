@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -43,6 +45,23 @@ def test_health_reports_recent_degradations(monkeypatch):
         assert len(events) == 1
         assert events[0]["source"] == "docker"
         assert events[0]["scope"] == "daemon"
+    finally:
+        degradations.reset()
+
+
+def test_health_redacts_degradation_scope_from_anonymous_callers(monkeypatch):
+    monkeypatch.setenv("AUTH_USER", "admin")
+    monkeypatch.setenv("AUTH_PASSWORD", "s3cret")
+    from backend import degradations
+
+    degradations.reset()
+    try:
+        degradations.report("compose", "private/project/compose.yml", "invalid compose file")
+        client = TestClient(app)
+        anonymous = client.get("/api/health")
+        assert "scope" not in anonymous.json()["degradations"][0]
+        authenticated = client.get("/api/health", auth=("admin", "s3cret"))
+        assert authenticated.json()["degradations"][0]["scope"] == "private/project/compose.yml"
     finally:
         degradations.reset()
 
@@ -349,3 +368,46 @@ def test_concurrent_polls_share_one_scan(monkeypatch, tmp_path):
     assert results == [200, 200]
     assert n["c"] == 1
 
+
+def test_hidden_manual_writes_and_lists_require_unlock(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("HIDDEN_UNLOCK_PASSWORD", "unlock")
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    from backend import agent_events, port_store
+
+    agent_events.reset()
+    port_store.add_manual_port(45000, "private", ttl=60)
+    port_store.add_hidden_port(45000)
+    try:
+        with TestClient(app) as client:
+            assert client.get("/api/manual-ports").json()["manual_ports"] == []
+            assert client.get("/api/meta").json()["automation"]["agent_events"]["lease_rows"] == []
+            assert client.patch("/api/manual-ports/45000", json={"label": "x"}).status_code == 403
+            assert client.delete("/api/manual-ports/45000").status_code == 403
+            assert client.post("/api/manual-ports", json={"port": 45000}).status_code == 403
+            assert client.post("/api/hidden/45001").status_code == 403
+            response = client.delete(
+                "/api/hidden/45000", headers={"X-Hidden-Unlock": "unlock"})
+            assert response.status_code == 200
+    finally:
+        agent_events.reset()
+
+
+def test_store_hand_edit_invalidates_scan(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AUTH_USER", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    from backend import main
+    from backend.compose_scanner import ComposeScan
+
+    monkeypatch.setattr(main, "scan_containers", lambda: [])
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_kw: ComposeScan())
+    main._occ.reset()
+    with TestClient(app) as client:
+        assert client.get("/api/ports/45000").json()["status"] == "free"
+        (tmp_path / "port_light.json").write_text(json.dumps({
+            "manual_ports": [{"port": 45000}],
+        }))
+        assert client.get("/api/ports/45000").json()["status"] == "configured"

@@ -17,7 +17,7 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Docker socket | Often mounted into the container. Read-only is not the same as safe. |
 | `/host/proc` | Read-only view of host network tables (and other `/proc` data for PID 1). |
 | Compose mount | Read-only view of the bind you set, including sibling `.env` files. |
-| Data volume | Local JSON under `/data`. Occupancy scans never leave that host. Optional hub pulls to peer URLs you add are the only outbound HTTP. |
+| Data volume | Local JSON and SQLite under `/data`. Saved peer passwords are stored in `port_light.json`; file writes use owner-only permissions. Occupancy scans never leave that host. |
 | Peer URLs | `PUT /api/hosts` stores origins + optional Basic Auth. The hub fetches only `/api/ports` and `/api/health` on those origins (no redirects, no public IPv4). |
 
 Without auth, anyone who can reach port 2100 can read the port map (names, images, Compose paths) and change manual/hidden entries.
@@ -30,6 +30,7 @@ Without auth, anyone who can reach port 2100 can read the port map (names, image
 4. Do not add `privileged`, extra capabilities, or `pid: host`. Bridge + `/host/proc` + socket (or proxy) is enough. `NET_ADMIN` is optional.
 5. Run as a non-root `user:` when the `/data` mount allows it.
 6. Do not point `COMPOSE_SCAN_DIR` at trees that contain secrets you would not put in a screenshot.
+7. Protect backups and mounts of `/data`; they can contain peer credentials, manual labels, and local history.
 
 ## Hidden ports
 

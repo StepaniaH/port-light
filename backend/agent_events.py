@@ -76,10 +76,11 @@ def record(count: int, scope: str, label: str, leased: bool) -> None:
 
 
 def _query(query: str, params: tuple = ()) -> list[tuple]:
-    conn = _connect()
-    if conn is None:
-        return []
-    return list(conn.execute(query, params))
+    with _lock:
+        conn = _connect()
+        if conn is None:
+            return []
+        return list(conn.execute(query, params))
 
 
 def recent(limit: int = 10) -> list[dict]:

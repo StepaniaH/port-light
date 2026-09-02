@@ -1,6 +1,6 @@
 ---
 name: port-light
-description: Resolve genuinely free network ports on hosts running Port-Light before starting servers, dev previews, or writing docker-compose publish blocks. Use whenever you need to pick a port, check whether a specific port is taken, or reserve a range so later work does not collide.
+description: Select ports that are available in Port-Light's latest scan before starting servers, development previews, or writing Docker Compose port mappings. Use when you need to pick a port, check a specific port, or reserve ports for other Port-Light clients.
 ---
 
 # Port-Light

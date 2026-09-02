@@ -4,7 +4,7 @@
 
 # Port-Light
 
-本机端口占用的红绿灯看板。给跑很多 Compose 栈、却总记不清端口的 homelab 用户。
+自托管的主机端口占用看板，将主机监听、Docker 映射和 Compose 声明合并为红绿灯网格。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docker Hub](https://img.shields.io/docker/v/stepaniah/port-light?label=docker%20hub&sort=semver)](https://hub.docker.com/r/stepaniah/port-light)
@@ -12,14 +12,6 @@
 [![GitHub release](https://img.shields.io/github/v/tag/StepaniaH/port-light?label=version)](https://github.com/StepaniaH/port-light/tags)
 
 [English](README.md) · [简体中文](README.zh-CN.md)
-
-<a href="https://www.producthunt.com/products/port-light?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-port-light" target="_blank" rel="noopener noreferrer"><img alt="Port Light - A web dashboard shows your port usage as a traffic-light. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1203037&theme=light&t=1784992647570"></a>
-
-![Port-Light 截图](https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/screenshot.png)
-
-局域网或 Tailscale 上的其他 Port-Light 实例：
-
-![两台占用图并排](https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/screenshot-multi-host.png)
 
 ## 它做什么
 
@@ -45,7 +37,7 @@
 
 - 卡片上直接显示容器 / 服务名
 - 按端口号搜索；已被占用时给出附近空闲端口
-- 占用数字可筛选占用 / 已配置；类型芯片：运行中、系统、Docker、网页、UDP、localhost、公网、隐藏
+- 占用数字可筛选占用 / 已配置；类型芯片：运行中、系统、Docker、网页、UDP、localhost、所有接口、隐藏
 - 按端口、名称、状态排序；可限制显示区间
 - 扫描不到的端口可以手动登记
 - 两个 Compose 项目在重叠的绑定地址上声明同一主机端口时标冲突
@@ -54,16 +46,16 @@
 - 点击复制端口号
 - 一个界面可以拉取其他 Port-Light 实例的占用图（局域网 / Tailscale）。每台机器仍自己扫描。
 - 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
-- 随心定制：在内置色板上分叉出自定义色板（15 个核心颜色，服务端存储，支持 JSON 导入导出），并选择卡片密度——宽松 / 标准 / 紧凑，旁边即是实时示例卡预览。
+- 自定义色板、JSON 导入导出，以及宽松 / 标准 / 紧凑三种卡片密度
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
 - 查找空闲端口：工具栏按钮（或 `GET /api/free-runs?count=N`）返回范围内最大的连续空闲段，可一键预留
-- 面向编码智能体：`GET /api/ports/suggest` 直接给出真实空闲端口（支持预留或到期自动释放的租约），并提供 MCP stdio 服务器与智能体 Skill
+- 自动化 API：`GET /api/ports/suggest` 返回最近一次扫描中可用的端口，支持预留或到期释放的租约；同时提供 MCP stdio 服务器和智能体集成
 - 本地历史：端口状态变化写入数据卷内的 `history.db`（默认保留 7 天，`HISTORY_RETENTION_DAYS=0` 关闭）；详情抽屉显示最近变动，也可用 `GET /api/ports/{n}/history`
 - 可选 Webhook：设置 `WEBHOOK_URL` 与 `WEBHOOK_EVENTS=new_listener,conflict` 后，端口开始被占用或两个栈冲突时 POST JSON 通知
 - 及时刷新：打开的界面通过 `GET /api/events`（SSE）接收配置和存储变更，监听器、Docker 与 Compose 变化仍由带 ETag 的定时轮询发现
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
-- 前端是原生 HTML/CSS/JS（native ES modules），没有 npm，没有构建步骤
+- 前端使用原生 HTML/CSS/JS（native ES modules），生产运行不需要构建步骤
 
 ### 已知限制（部署前请读）
 
@@ -73,7 +65,7 @@
 - 挂了 `/host/proc` 时（镜像默认如此），监听端口可以从 inode 对上进程名。没挂则只能看到 Docker 的容器名。`ss -tlnp` 的进程名仍需要 host network 或裸机。
 - `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
 
-后续计划与设计：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。自动化与编码智能体集成：[docs/integrations.md](docs/integrations.md)。
+后续计划与架构：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。API 与 MCP 集成：[docs/integrations.md](docs/integrations.md)。
 
 ## 快速开始
 
@@ -82,7 +74,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.4
+    image: stepaniah/port-light:v0.7.5
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -147,9 +139,10 @@ docker compose up -d
 ## 隐私
 
 - 无遥测、无统计。
-- 应用不会主动访问外网。可选的出站 HTTP 仅限两类：你在设置里添加的其他 Port-Light 实例（占用拉取），以及你配置的 webhook（只发送 `{event, port}`）。
+- 除非配置了其他 Port-Light 实例或 webhook，否则应用不会发送出站 HTTP 请求。Webhook 只发送 `{event, port}`。
 - 扫描数据留在跑那份实例的机器上（监听表、Docker API、Compose 文件、`/data` 里的 JSON）。
 - Compose 旁边的 `.env` 只用于本地 `${VAR}` 替换，不会上传。
+- 手动标签、端口历史、自动化调用标签和 peer 设置都保存在数据卷中。peer 密码保存在 `port_light.json`；应像保护其他凭据文件一样保护该数据卷。
 
 ## 技术栈
 

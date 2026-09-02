@@ -26,6 +26,7 @@ from .auth import (
     hidden_ports_withheld,
     hidden_unlock_configured,
     request_may_see_hidden,
+    valid_basic_header,
 )
 from .classification import classify, free_port_payload
 from .compose_scanner import scan_compose_tree
@@ -37,7 +38,7 @@ from .port_scanner import (
     scan_listening_ports,
 )
 
-VERSION = "0.7.4"
+VERSION = "0.7.5"
 
 _log_level = os.environ.get("PORT_LIGHT_LOG_LEVEL", "").strip().upper()
 if not logging.getLogger("port-light").handlers and not logging.getLogger().handlers:
@@ -169,10 +170,16 @@ def meta(request: Request) -> dict:
 
 
 @app.get("/api/health")
-def health() -> dict:
+def health(request: Request) -> dict:
     compose_dir = _compose_dir()
     source = listen_scan_source()
     trusted = host_listen_trusted()
+    recent = degradations.recent(5)
+    if auth_configured() and not valid_basic_header(request.headers.get("authorization") or ""):
+        recent = [
+            {key: value for key, value in event.items() if key != "scope"}
+            for event in recent
+        ]
     return {
         "status": "ok",
         "version": VERSION,
@@ -183,7 +190,7 @@ def health() -> dict:
             "docker": docker_available(),
             "compose": os.path.isdir(compose_dir),
         },
-        "degradations": degradations.recent(5),
+        "degradations": recent,
     }
 
 
@@ -430,9 +437,9 @@ def put_hosts(body: dict = Body(...)) -> dict:
 
 
 @app.get("/api/hosts/{host_id}/health")
-def get_host_health(host_id: str) -> Response:
+def get_host_health(host_id: str, request: Request) -> Response:
     if host_id == hosts.LOCAL_ID:
-        return JSONResponse(health())
+        return JSONResponse(health(request))
     return _proxy_peer(host_id, "/api/health", {})
 
 

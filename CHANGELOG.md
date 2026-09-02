@@ -2,15 +2,17 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
-## Unreleased
+## 0.7.5 — 2026-09-02
 
 ### Fixed
 
-- Port suggestions now select and persist a reserved batch atomically. Concurrent agents receive different ports, partial write failures cannot report phantom claims, and `scope=all` refuses to allocate when any peer map is unavailable, stale, locked, or incomplete.
-- Agent reservations carry one-time-visible release tokens. The MCP client forwards `PORT_LIGHT_AGENT_TOKEN`, requires the matching reservation token for release, and can no longer delete arbitrary manual entries or a later owner's replacement reservation.
-- History is collected from complete host snapshots rather than request-filtered responses, so disappearance records `free`, reappearance records its new state, hidden rows remain private, and peer history loads in the correct detail drawer.
-- Detail actions and multi-host switching no longer fail on missing imports or reuse a local/previous-host row. Hidden mutations now pass through the same unlock gate as hidden reads.
-- SSE connections use cancellable asynchronous waits and describe their actual role as store/configuration hints; interval polling continues to discover scanner changes.
+- Reserved batches are selected and saved atomically. Concurrent requests receive different ports, and a failed write does not return an unsaved reservation. `scope=all` now returns `503` if any peer map is unavailable or incomplete.
+- Each API reservation returns a release token. Only its hash is stored, and the matching token is required by `DELETE /api/reservations/{port}`. Manual entries use their existing endpoint.
+- History records complete host snapshots, including transitions to `free`, and peer history opens for the selected host. Hidden history and active leases follow the hidden-port access controls.
+- Detail actions and multi-host switching no longer fail because of missing module imports or reuse data from another host. Hidden-port changes now require the same authorization as hidden-port reads.
+- SSE connections use cancellable asynchronous waits. Listener, Docker, and Compose changes continue to use periodic ETag polling.
+- When Basic Auth is enabled, anonymous health responses omit degradation scopes that may contain local names or relative paths.
+- Agent event reads and writes now share the same SQLite lock.
 
 ### Changed
 
@@ -69,7 +71,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - `GET /api/metrics` (opt-in via `METRICS_ENABLED=1`): Prometheus text exposition of used / configured / free counts, hidden ports, degradation count, and Compose file stats. Aggregates only; Basic Auth applies.
 - Degraded scans are no longer silent: when Docker is unreachable, the listen table is untrusted, `ss` fails, or the data file is quarantined, one line goes to the log (`PORT_LIGHT_LOG_LEVEL`, default `warning`) and the newest events appear in `/api/health` under `degradations`.
 - When a background rebuild runs long (slow `ss`, big Compose tree), polls now get the last good occupancy snapshot with `summary.stale: true` instead of blocking; stale results are never cached.
-- Agent-facing port suggestions: `GET /api/ports/suggest` hands out genuinely free ports with optional reservation, label, expiring leases (`ttl`), and `scope=all` across configured peers. Setting `AGENT_TOKEN` requires a matching `X-Agent-Token` header.
+- Agent-facing port suggestions: `GET /api/ports/suggest` returns ports that are available in the latest scan, with optional reservation, label, expiring leases (`ttl`), and `scope=all` across configured peers. Setting `AGENT_TOKEN` requires a matching `X-Agent-Token` header.
 - Automation integrations: a dependency-free MCP stdio server (`mcp/server.py`, six tools), an agent skill under `skills/port-light/`, and reference docs in `docs/integrations.md`. Settings → Advanced shows what the instance currently exposes (`/api/meta.automation`).
 
 ### Changed

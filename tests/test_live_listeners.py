@@ -62,7 +62,8 @@ def _reset_snapshot_cache() -> None:
 @pytest.mark.skipif(not host_listen_trusted(), reason="no trusted listen table on this host")
 def test_real_listener_appears_in_occupancy(client):
     bound = _bind_in_probe_range()
-    assert bound is not None, "no free port in probe range"
+    if bound is None:
+        pytest.skip("no bindable port in probe range")
     sock, port = bound
     try:
         import shutil
@@ -91,7 +92,8 @@ def test_real_listener_appears_in_occupancy(client):
 @pytest.mark.skipif(not host_listen_trusted(), reason="no trusted listen table on this host")
 def test_listener_disappears_after_close(client):
     bound = _bind_in_probe_range()
-    assert bound is not None, "no free port in probe range"
+    if bound is None:
+        pytest.skip("no bindable port in probe range")
     sock, port = bound
     try:
         data = _occupancy(client)

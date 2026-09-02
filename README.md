@@ -4,7 +4,7 @@
 
 # Port-Light
 
-A local web dashboard that shows **which host ports are taken**, as a traffic-light grid. Built for homelabbers who run many Compose stacks and keep losing track of bindings.
+A self-hosted dashboard for host port occupancy. It combines host listeners, Docker mappings, and Compose declarations in a traffic-light grid.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docker Hub](https://img.shields.io/docker/v/stepaniah/port-light?label=docker%20hub&sort=semver)](https://hub.docker.com/r/stepaniah/port-light)
@@ -12,14 +12,6 @@ A local web dashboard that shows **which host ports are taken**, as a traffic-li
 [![GitHub release](https://img.shields.io/github/v/tag/StepaniaH/port-light?label=version)](https://github.com/StepaniaH/port-light/tags)
 
 [English](README.md) · [简体中文](README.zh-CN.md)
-
-<a href="https://www.producthunt.com/products/port-light?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-port-light" target="_blank" rel="noopener noreferrer"><img alt="Port Light - A web dashboard shows your port usage as a traffic-light. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1203037&theme=light&t=1784992647570"></a>
-
-![Port-Light screenshot](https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/screenshot.png)
-
-Other Port-Light instances on the LAN or Tailscale:
-
-![Two occupancy maps side by side](https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/screenshot-multi-host.png)
 
 ## What it does
 
@@ -45,7 +37,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 
 - Container / service names on the cards
 - Search by port number, with nearby free alternatives if it is taken
-- Occupancy counts filter in-use / configured; kind chips for running, system, Docker, web, UDP, localhost, public, hidden
+- Occupancy counts filter in-use / configured; kind chips for running, system, Docker, web, UDP, localhost, all interfaces, hidden
 - Sort by port, name, or status; clamp the visible range
 - Manual entries for things the scanners miss
 - Compose conflict warning when two projects publish the same host port on overlapping bind addresses
@@ -54,16 +46,16 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Copy the port number on click
 - One UI can pull occupancy maps from other Port-Light instances (LAN / Tailscale). Each host still scans itself.
 - Appearance on Settings: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. UI language (English, Français, Deutsch, Español, 简体中文, 繁體中文, 日本語). Also via Compose env.
-- Make it yours: fork any palette in the advanced theme editor (15 core colors, server-stored, import/export as JSON) and pick a card density — Loose / Standard / Compact — with a live sample-card preview.
+- Custom palettes, import/export, and Loose / Standard / Compact card-density presets
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with one-click reservation
-- Coding-agent ready: `GET /api/ports/suggest` hands out genuinely free ports (with optional reservation or expiring leases), plus an MCP stdio server and an agent skill under `skills/`
+- Automation API: `GET /api/ports/suggest` returns ports available in the latest scan, with optional reservations or expiring leases. An MCP stdio server and an agent integration are included.
 - Local history: port state transitions land in `history.db` inside your data volume (default 7 days; `HISTORY_RETENTION_DAYS=0` disables) — the detail drawer shows recent changes and `GET /api/ports/{n}/history` exposes them
 - Optional webhooks: `WEBHOOK_URL` + `WEBHOOK_EVENTS=new_listener,conflict` POST JSON when a port starts being used or two stacks collide
 - Responsive refresh: open UIs subscribe to `GET /api/events` (SSE) for saved configuration changes; periodic ETag polling discovers listener, Docker, and Compose changes
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
-- Vanilla HTML/CSS/JS frontend served as native ES modules — no npm, no build step
+- Vanilla HTML/CSS/JS frontend served as native ES modules, without a production build step
 
 ### Known limits (read before you deploy)
 
@@ -73,7 +65,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Process names come from `/host/proc` (inode → `comm`) when that mount is present — the usual image. Without it, the grid shows Docker container names. `ss -tlnp` names still need a host-network / bare-metal path.
 - Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
 
-Roadmap and design notes: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md). Automation and coding-agent integrations: [docs/integrations.md](docs/integrations.md).
+Roadmap and architecture: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md). API and MCP integrations: [docs/integrations.md](docs/integrations.md).
 
 ## Quick start
 
@@ -82,7 +74,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.4
+    image: stepaniah/port-light:v0.7.5
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -147,9 +139,10 @@ If you bind-mount `custom_ports.json` in Compose, create the **file** on the hos
 ## Privacy
 
 - No telemetry or analytics.
-- The app does not phone home. Optional outbound HTTP is limited to occupancy pulls from Port-Light peers you add, and webhooks you configure (`WEBHOOK_URL`, `{event, port}` JSON only).
+- The app makes no outbound HTTP requests unless you configure peer occupancy pulls or a webhook (`WEBHOOK_URL`, `{event, port}` JSON only).
 - All scan data stays on the machine that runs that instance (listen tables, Docker API, Compose files, `/data` JSON).
 - Sibling `.env` files next to Compose stacks are read locally for `${VAR}` substitution and are never uploaded.
+- Manual labels, port history, agent-call labels, and peer settings stay in the data volume. Saved peer passwords are stored in `port_light.json`; protect the data volume as you would any other credentials file.
 
 ## Tech stack
 

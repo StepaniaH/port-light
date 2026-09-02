@@ -65,4 +65,5 @@ The root `docker-compose.yml` **builds from source**. It bind-mounts `./custom_p
 
 1. Move Unreleased notes into a version section in `CHANGELOG.md`.
 2. Bump `VERSION` in `backend/main.py`.
-3. Tag `vX.Y.Z` and push the tag. [docker-publish.yml](.github/workflows/docker-publish.yml) builds amd64+arm64 for Docker Hub and GHCR. [github-release.yml](.github/workflows/github-release.yml) opens a GitHub Release from the changelog section.
+3. Update pinned image examples in both READMEs and `docs/deployment.md`.
+4. Tag `vX.Y.Z` and push the tag. [docker-publish.yml](.github/workflows/docker-publish.yml) builds amd64+arm64 for Docker Hub and GHCR. [github-release.yml](.github/workflows/github-release.yml) opens a GitHub Release from the changelog section.
