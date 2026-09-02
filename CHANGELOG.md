@@ -23,6 +23,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Development
 
 - Added a Chromium smoke flow with two temporary instances covering startup, details, a saved label, batch reservation conflicts and retries, and host switching; frontend CI runs it after module tests.
+- The background-observation test waits for history completion independently of SSE publication, avoiding a race on slower systems.
 
 ## 0.7.5 — 2026-09-02
 

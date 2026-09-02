@@ -44,6 +44,37 @@ curl -s "http://127.0.0.1:2100/api/ports/suggest?count=2&reserve=true&label=prev
 - A local failed, incomplete, or stale scan returns `503`. Peer summaries must explicitly report `scan_complete: true`; older peers need an upgrade before `scope=all` can allocate ports.
 - Allocation coordinates this Port-Light process only. It does not bind OS sockets; another process can still claim a port after a scan.
 
+`scope` controls which hosts are checked. Even with `scope=all`, reservations
+are saved only on the instance receiving the request; peer data is used as an
+observation. Independent hubs can therefore select the same port.
+
+### Scanner selection and peer compatibility
+
+`PORT_LIGHT_SCANNERS` defaults to `listen,docker,compose`. An enabled source
+must complete successfully before Port-Light can confirm free ports. A source
+that completes with no rows is `ok`; a source that cannot be read is `failed`.
+Omitting a source explicitly marks it `disabled` and excludes its occupancy
+from the checks. At least one source must remain enabled.
+
+For a native installation with listeners and Compose files but no Docker:
+
+```yaml
+environment:
+  PORT_LIGHT_SCANNERS: listen,compose
+```
+
+Use `listen` when only host listeners are in scope, or `listen,docker` when
+Compose declarations are intentionally excluded. Correct a temporary failure
+of a required source rather than removing it from the configured coverage.
+
+For `scope=all`, every configured peer must return `summary.scan_complete: true`
+and pass the freshness and visibility checks. A legacy peer without this field
+can still be viewed, but causes the allocation to return `503` without reserving
+anything. `scope=self` does not consult peers. Upgrade peers to code supporting
+this response field before enabling cross-host allocation; a displayed version
+number alone does not establish compatibility. Merging source does not update
+running instances or published images.
+
 ### Agent token
 
 Set `AGENT_TOKEN` to require an `X-Agent-Token` header on

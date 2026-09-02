@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 from backend import history, main, webhooks
 from backend.compose_scanner import ComposeScan
@@ -10,10 +11,24 @@ def test_background_scan_records_history_and_broadcasts_without_http(monkeypatch
     monkeypatch.setenv("HISTORY_RETENTION_DAYS", "7")
     listeners = []
     observed = []
+    allow_history = threading.Event()
+    history_done = threading.Event()
+    record = history.record
+
+    def delayed_record(rows):
+        changed = any(row["port"] == 42000 for row in rows)
+        if changed:
+            assert allow_history.wait(2)
+        result = record(rows)
+        if changed:
+            history_done.set()
+        return result
+
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **kw: list(listeners))
     monkeypatch.setattr(main, "scan_compose_tree", lambda *a, **kw: ComposeScan())
     monkeypatch.setattr(webhooks, "observe", lambda rows: observed.append(rows))
+    monkeypatch.setattr(history, "record", delayed_record)
     history.reset()
     main._monitor.reset()
 
@@ -27,9 +42,13 @@ def test_background_scan_records_history_and_broadcasts_without_http(monkeypatch
             results = await asyncio.gather(*waiters)
             assert all(changed and sequence > before for sequence, changed in results)
             assert main._monitor.latest()["listening"][0].port == 42000
+            assert not history_done.is_set()
+            allow_history.set()
+            assert await asyncio.to_thread(history_done.wait, 2)
             assert [event["state"] for event in history.query(42000)] == ["used"]
             assert observed[-1][0]["port"] == 42000
         finally:
+            allow_history.set()
             await main._monitor.stop()
 
     try:

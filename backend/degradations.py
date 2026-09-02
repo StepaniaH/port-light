@@ -1,10 +1,9 @@
 """Degraded-scan reporting.
 
-Scanners return empty results after failures such as an unreachable Docker
-daemon, untrusted listen table, unreadable Compose file, or corrupt data file.
-This module records those events so "no occupancy" stays distinguishable
-from "could not scan". Events are kept in process memory and mirrored to
-the ``port-light`` logger; nothing leaves the machine.
+Records scanner and storage failures in process memory and the ``port-light``
+logger. Recent events are also returned by the health API, including through
+peer health requests. Callers supply a short reason and a scope without secrets;
+the health route redacts scopes from anonymous responses when auth is configured.
 """
 
 from __future__ import annotations

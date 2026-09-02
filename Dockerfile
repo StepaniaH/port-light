@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 
 # iproute2 provides `ss` for port scanning (used when running on bare metal
-# or with host network mode). In bridge containers we read /host/proc/net/tcp
+# or with host network mode). In bridge containers we read /host/proc/1/net/tcp
 # directly, so ss is optional — but keeping it for the fallback path.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 \
