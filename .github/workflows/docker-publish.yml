@@ -41,7 +41,7 @@ jobs:
             echo "tags=stepaniah/port-light:dev,ghcr.io/${OWNER}/port-light:dev" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
