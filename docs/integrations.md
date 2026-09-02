@@ -70,16 +70,17 @@ guessed URLs). Hidden rows are withheld unless the request carries
 ### Poll efficiently
 
 `GET /api/ports` answers with a strong ETag; repeat polls send
-`If-None-Match` and receive `304` while nothing changed. When a background
-rebuild takes longer than ~4s, waiters get the last good snapshot with
+`If-None-Match` and receive `304` while nothing changed. Requests read the last completed background snapshot without waiting for a scan.
+Snapshots older than two scan intervals (at least 4 seconds) carry
 `summary.stale: true`.
 
 ## Server-sent events
 
 `GET /api/events` streams SSE frames. A `hello` event arrives on connect;
-`refresh` fires when settings or stored data changes. Treat it as a hint to
-re-pull `/api/ports` — interval polling still discovers OS, Docker, and Compose
-scanner changes, and the ETag deduplicates unchanged results:
+`refresh` fires when the monitor detects changed occupancy or stored state,
+including OS, Docker, and Compose changes. Treat it as a hint to fetch
+`/api/ports`. Periodic polling remains useful for reconnects and peer maps;
+ETags deduplicate unchanged results:
 
 ```
 retry: 3000

@@ -6,10 +6,6 @@ Release history belongs in [CHANGELOG.md](../CHANGELOG.md). This page lists plan
 
 ## Next
 
-- Run scanning, history, webhooks, and change notifications through one occupancy monitor
-- Fetch peer occupancy concurrently and validate DNS results against the peer address policy
-- Remove circular dependencies between the frontend data and view modules
-- Add a small browser smoke test for the main grid, detail actions, and host switching
 - Improve first-run diagnostics when host, Docker, or Compose scanning is unavailable
 
 ## Candidates

@@ -14,7 +14,7 @@ def _env(monkeypatch, tmp_path):
     import backend.main as main
     from backend.compose_scanner import ComposeScan
 
-    main._occ.reset()
+    main._monitor.reset()
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())

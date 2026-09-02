@@ -1,8 +1,7 @@
 """Port store — persistent user data: manual ports, hidden ports, peers.
 
-All data is stored in a single JSON file under the data directory
-(typically a Docker volume). No personal info is baked into the code;
-everything is user-created at runtime.
+Data is stored in a single JSON file under the configured data directory
+(typically a Docker volume).
 
 File format::
 
@@ -49,7 +48,7 @@ _generation = 0
 
 
 def store_generation() -> int:
-    """Bumps on every successful write. Occupancy uses this to drop a stale scan snapshot."""
+    """Bumps on every successful write so the monitor can detect stored-state changes."""
     return _generation
 
 

@@ -1,12 +1,12 @@
 /* Hash router: #/, #/settings/:panel, #/port/:n, #/h/:host(/port/:n). */
 
-import { S, SETTINGS_PANELS } from './state.js?v=76';
-import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=76';
-import { hostById, tick, hasPeers } from './api.js?v=76';
-import { t } from './text.js?v=76';
-import { render, applyPendingGridFocus } from './grid.js?v=76';
-import { closeDetail, showPortDetail } from './detail.js?v=76';
-import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './settings.js?v=76';
+import { S, SETTINGS_PANELS } from './state.js?v=77';
+import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=77';
+import { hostById, hasPeers } from './hosts.js?v=77';
+import { t } from './text.js?v=77';
+import { applyPendingGridFocus } from './grid.js?v=77';
+import { closeDetail, showPortDetail } from './detail.js?v=77';
+import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './settings.js?v=77';
 
 
   export function parseHash(hash) {
@@ -44,7 +44,7 @@ import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './se
     return true;
   }
 
-  export function applyRoute() {
+  export function applyRoute({ render, refresh }) {
     const next = parseRoute();
     if (S.settingsDirty && S.route.name === 'settings' && next.name !== 'settings') {
       if (!leaveSettingsOrStay()) {
@@ -75,7 +75,7 @@ import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './se
       loadSettingsPage();
       return;
     }
-    if (prev === 'settings') tick();
+    if (prev === 'settings') refresh();
     if (S.route.hostId && hostById(S.route.hostId)) S.focusHostId = S.route.hostId;
     else if (S.route.name !== 'settings') S.focusHostId = 'local';
     if (S.route.name === 'port') {

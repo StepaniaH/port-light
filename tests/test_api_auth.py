@@ -193,14 +193,14 @@ def test_hidden_free_lookup_with_include(monkeypatch, tmp_path):
     assert {"port": 42424, "status": "free"} in occ
 
 
-def test_occupancy_scan_snapshot_reused_until_store_write(monkeypatch, tmp_path):
+def test_store_write_reclassifies_latest_snapshot_without_rescan(monkeypatch, tmp_path):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
     import backend.main as main
     from backend.compose_scanner import ComposeScan
 
-    main._occ.reset()
+    main._monitor.reset()
     n = {"c": 0}
 
     def fake_containers():
@@ -215,8 +215,10 @@ def test_occupancy_scan_snapshot_reused_until_store_write(monkeypatch, tmp_path)
     assert client.get("/api/ports/2100").status_code == 200
     assert n["c"] == 1
     client.post("/api/manual-ports", json={"port": 4242, "label": "lab"})
-    assert client.get("/api/ports").status_code == 200
-    assert n["c"] == 2
+    updated = client.get("/api/ports")
+    assert updated.status_code == 200
+    assert any(row["port"] == 4242 for row in updated.json()["ports"])
+    assert n["c"] == 1
 
 
 def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
@@ -226,7 +228,7 @@ def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
     import backend.main as main
     from backend.compose_scanner import ComposeScan
 
-    main._occ.reset()
+    main._monitor.reset()
     n = {"k": 0}
     real = main.classify
 
@@ -248,10 +250,12 @@ def test_ports_etag_reuses_classified_payload(monkeypatch, tmp_path):
     assert n["k"] == first_classifications
     row = client.get("/api/ports/2100")
     assert row.status_code == 200
-    assert n["k"] == first_classifications
+    detail_classifications = n["k"]
+    assert client.get("/api/ports/2100").status_code == 200
+    assert n["k"] == detail_classifications
 
 
-def test_slow_rebuild_serves_previous_snapshot(monkeypatch, tmp_path):
+def test_http_read_does_not_wait_for_background_scan(monkeypatch, tmp_path):
     import threading
     import time
 
@@ -262,18 +266,19 @@ def test_slow_rebuild_serves_previous_snapshot(monkeypatch, tmp_path):
     from backend.compose_scanner import ComposeScan
     from backend.port_scanner import ListeningPort
 
-    main._occ.reset()
+    main._monitor.reset()
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
-    monkeypatch.setattr(main._occ, "stale_after", 0.2)
-
     state = {"slow": False}
     release = threading.Event()
+    started = threading.Event()
 
     def fake_listen(**_kw):
         if state["slow"]:
+            started.set()
             release.wait(timeout=5)
-        return [ListeningPort(port=2200, protocol="tcp", ip="0.0.0.0")]
+        port = 2300 if state["slow"] else 2200
+        return [ListeningPort(port=port, protocol="tcp", ip="0.0.0.0")]
 
     monkeypatch.setattr(main, "scan_listening_ports", fake_listen)
 
@@ -284,89 +289,21 @@ def test_slow_rebuild_serves_previous_snapshot(monkeypatch, tmp_path):
     assert "stale" not in first.json()["summary"]
 
     state["slow"] = True
-    main._occ.snapshot()["at"] -= main._occ.ttl + 0.05
-    builder_started = threading.Event()
-    results = []
-
-    def builder():
-        builder_started.set()
-        results.append(client.get("/api/ports"))
-
-    tb = threading.Thread(target=builder)
-    tb.start()
-    assert builder_started.wait(timeout=2)
-    time.sleep(0.1)
-
-    waiter_started = threading.Event()
-    def waiter():
-        waiter_started.set()
-        results.append(client.get("/api/ports"))
-
-    tw = threading.Thread(target=waiter)
-    tw.start()
-    assert waiter_started.wait(timeout=2)
-
-    stale_body = None
-    # Only the blocked-out waiter is served inside this window; the builder
-    # stays parked in the fake scanner until `release` below.
-    for _ in range(40):
-        time.sleep(0.05)
-        if len(results) >= 1 and results[-1].json()["summary"].get("stale") is True:
-            stale_body = results[-1].json()
-            break
-    assert stale_body is not None, "waiter was not served within the stale deadline"
-    assert any(row["port"] == 2200 for row in stale_body["ports"])
+    refresh = threading.Thread(target=main._monitor.refresh)
+    refresh.start()
+    assert started.wait(timeout=2)
+    before = time.monotonic()
+    during = client.get("/api/ports")
+    assert time.monotonic() - before < 0.5
+    assert any(row["port"] == 2200 for row in during.json()["ports"])
+    assert not any(row["port"] == 2300 for row in during.json()["ports"])
 
     release.set()
-    tb.join(timeout=5)
-    tw.join(timeout=5)
+    refresh.join(timeout=5)
     fresh = client.get("/api/ports")
     assert fresh.status_code == 200
-    assert "stale" not in fresh.json()["summary"]
-    assert any(row["port"] == 2200 for row in fresh.json()["ports"])
-
-
-def test_concurrent_polls_share_one_scan(monkeypatch, tmp_path):
-    import threading
-    import time
-
-    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("AUTH_USER", raising=False)
-    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
-    import backend.main as main
-    from backend.compose_scanner import ComposeScan
-
-    main._occ.reset()
-    n = {"c": 0}
-    started = threading.Event()
-    release = threading.Event()
-
-    def fake_containers():
-        n["c"] += 1
-        started.set()
-        release.wait(timeout=2)
-        time.sleep(0.05)
-        return []
-
-    monkeypatch.setattr(main, "scan_containers", fake_containers)
-    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
-    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
-    client = TestClient(app)
-    results = []
-
-    def worker():
-        results.append(client.get("/api/ports").status_code)
-
-    t1 = threading.Thread(target=worker)
-    t2 = threading.Thread(target=worker)
-    t1.start()
-    assert started.wait(timeout=2)
-    t2.start()
-    release.set()
-    t1.join(timeout=5)
-    t2.join(timeout=5)
-    assert results == [200, 200]
-    assert n["c"] == 1
+    assert any(row["port"] == 2300 for row in fresh.json()["ports"])
+    assert not any(row["port"] == 2200 for row in fresh.json()["ports"])
 
 
 def test_hidden_manual_writes_and_lists_require_unlock(monkeypatch, tmp_path):
@@ -394,7 +331,7 @@ def test_hidden_manual_writes_and_lists_require_unlock(monkeypatch, tmp_path):
         agent_events.reset()
 
 
-def test_store_hand_edit_invalidates_scan(monkeypatch, tmp_path):
+def test_monitor_picks_up_store_hand_edit(monkeypatch, tmp_path):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
@@ -404,10 +341,11 @@ def test_store_hand_edit_invalidates_scan(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_kw: ComposeScan())
-    main._occ.reset()
+    main._monitor.reset()
     with TestClient(app) as client:
         assert client.get("/api/ports/45000").json()["status"] == "free"
         (tmp_path / "port_light.json").write_text(json.dumps({
             "manual_ports": [{"port": 45000}],
         }))
+        main._monitor.refresh()
         assert client.get("/api/ports/45000").json()["status"] == "configured"

@@ -53,7 +53,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Automation API: `GET /api/ports/suggest` returns ports available in the latest scan, with optional reservations or expiring leases. An MCP stdio server and an agent integration are included.
 - Local history: port state transitions land in `history.db` inside your data volume (default 7 days; `HISTORY_RETENTION_DAYS=0` disables) — the detail drawer shows recent changes and `GET /api/ports/{n}/history` exposes them
 - Optional webhooks: `WEBHOOK_URL` + `WEBHOOK_EVENTS=new_listener,conflict` POST JSON when a port starts being used or two stacks collide
-- Responsive refresh: open UIs subscribe to `GET /api/events` (SSE) for saved configuration changes; periodic ETag polling discovers listener, Docker, and Compose changes
+- Background scanning updates history and webhooks without an open browser. Open UIs receive occupancy changes through `GET /api/events` (SSE), with periodic ETag polling for reconnects and peers
 - UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
 - Vanilla HTML/CSS/JS frontend served as native ES modules, without a production build step
 

@@ -53,7 +53,7 @@
 - 自动化 API：`GET /api/ports/suggest` 返回最近一次扫描中可用的端口，支持预留或到期释放的租约；同时提供 MCP stdio 服务器和智能体集成
 - 本地历史：端口状态变化写入数据卷内的 `history.db`（默认保留 7 天，`HISTORY_RETENTION_DAYS=0` 关闭）；详情抽屉显示最近变动，也可用 `GET /api/ports/{n}/history`
 - 可选 Webhook：设置 `WEBHOOK_URL` 与 `WEBHOOK_EVENTS=new_listener,conflict` 后，端口开始被占用或两个栈冲突时 POST JSON 通知
-- 及时刷新：打开的界面通过 `GET /api/events`（SSE）接收配置和存储变更，监听器、Docker 与 Compose 变化仍由带 ETag 的定时轮询发现
+- 后台扫描：无需打开浏览器即可更新历史和 webhook；界面通过 `GET /api/events`（SSE）接收占用变化，并保留 ETag 轮询以处理重连和其他主机
 - TCP 和 UDP；绑定范围（`0.0.0.0` / localhost / 局域网）
 - 前端使用原生 HTML/CSS/JS（native ES modules），生产运行不需要构建步骤
 

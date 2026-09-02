@@ -1,7 +1,7 @@
 """Degraded-scan reporting.
 
-Scanners degrade to honest-empty results in several places (Docker daemon
-down, untrusted listen table, unreadable Compose file, corrupt data file).
+Scanners return empty results after failures such as an unreachable Docker
+daemon, untrusted listen table, unreadable Compose file, or corrupt data file.
 This module records those events so "no occupancy" stays distinguishable
 from "could not scan". Events are kept in process memory and mirrored to
 the ``port-light`` logger; nothing leaves the machine.
@@ -25,7 +25,7 @@ _REPEAT_LOG_SECONDS = 60.0
 def report(source: str, scope: str, reason: str) -> None:
     """Record one degraded event.
 
-    ``source`` names the scanner ("docker", "compose", "listen", "store"),
+    ``source`` names the scanner or module (for example "docker" or "history"),
     ``scope`` narrows it down (a scan-root-relative path or a component),
     and ``reason`` is a short constant string. Callers must never include
     secrets or environment values.

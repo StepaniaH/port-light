@@ -2,6 +2,24 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## Unreleased
+
+### Changed
+
+- A background occupancy monitor now owns scanning, snapshot/ETag caching, history, webhooks, and SSE notifications. HTTP routes read completed snapshots; manual and hidden-port writes update stored state without rescanning host sources.
+- `scope=all` fetches peers concurrently. Peer requests validate every DNS answer, disable environment proxies, and still reject redirects. DNS rebinding limits are documented in the security policy.
+- The frontend API module returns data without importing views. The app coordinates polling, SSE, grid/detail rendering, and detail refresh callbacks.
+
+### Fixed
+
+- History database failures appear in health degradations; failed history reads return `503`.
+- Truncated Compose scans cannot produce reservations or advance the history baseline.
+- Detail lookups outside a previously cached grid range use the requested port's snapshot data.
+
+### Development
+
+- Added a Chromium smoke flow with two temporary instances covering startup, details, a saved label, and host switching; frontend CI runs it after module tests.
+
 ## 0.7.5 — 2026-09-02
 
 ### Fixed

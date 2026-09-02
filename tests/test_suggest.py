@@ -14,7 +14,7 @@ def _env(monkeypatch, tmp_path):
     import backend.main as main
     from backend.compose_scanner import ComposeScan
 
-    main._occ.reset()
+    main._monitor.reset()
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
@@ -70,22 +70,27 @@ def test_suggest_respects_basic_auth(monkeypatch):
     assert ok.status_code == 200
 
 
-def test_scope_all_unions_peer_occupancy(monkeypatch):
+def test_scope_all_fetches_peers_concurrently_and_unions_occupancy(monkeypatch):
+    import threading
     import backend.main as main
     from backend.compose_scanner import ComposeScan
 
-    main._occ.reset()
+    main._monitor.reset()
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
 
-    monkeypatch.setattr(main.hosts, "list_public_peers",
-                        lambda: [{"name": "nas", "url": "http://10.0.0.2:2100"}])
+    monkeypatch.setattr(main.hosts, "list_public_peers", lambda: [
+        {"name": "nas", "url": "http://10.0.0.2:2100", "port": 6000},
+        {"name": "server", "url": "http://10.0.0.3:2100", "port": 6001},
+    ])
+    barrier = threading.Barrier(2)
 
     def fake_fetch(peer, path, query, if_none_match=None):
         assert path == "/api/ports"
+        barrier.wait(timeout=2)
         return 200, {"ports": [
-            {"port": 6000}, {"port": 6001}, {"port": 6002},
+            {"port": peer["port"]},
         ], "summary": {"hidden_locked": False, "compose_incomplete": False,
                         "compose_truncated": False}}, None
 
@@ -96,8 +101,8 @@ def test_scope_all_unions_peer_occupancy(monkeypatch):
                      params={"count": 3, "start": 6000, "end": 6010,
                              "scope": "all"})
     body = res.json()
-    assert body["scope"] == "all:1/1"
-    assert body["ports"] == [6003, 6004, 6005]
+    assert body["scope"] == "all:2/2"
+    assert body["ports"] == [6002, 6003, 6004]
 
 
 def test_scope_all_uses_stored_peer_credentials(monkeypatch):
@@ -126,7 +131,7 @@ def test_scope_all_refuses_dead_peer(monkeypatch):
     import backend.main as main
     from backend.compose_scanner import ComposeScan
 
-    main._occ.reset()
+    main._monitor.reset()
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())

@@ -101,7 +101,7 @@ def test_history_uses_complete_snapshots(monkeypatch):
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_kw: ComposeScan())
-    main._occ.reset()
+    main._monitor.reset()
     port_store.add_manual_port(45000, "hidden service")
     port_store.add_hidden_port(45000)
     with TestClient(app) as client:
@@ -110,8 +110,10 @@ def test_history_uses_complete_snapshots(monkeypatch):
         client.get("/api/ports?include_hidden=true")
         assert history.query(45000) == []
         port_store.remove_manual_port(45000)
+        main._monitor.state_changed()
         client.get("/api/ports")
         port_store.add_manual_port(45000, "hidden service")
+        main._monitor.state_changed()
         client.get("/api/ports")
         assert [event["state"] for event in history.query(45000)] == ["free", "configured"]
 
@@ -132,3 +134,44 @@ def test_peer_history_routes_to_peer(monkeypatch):
         response = client.get("/api/hosts/abcdef123456/ports/45000/history?hours=12")
     assert response.status_code == 200
     assert response.json()["events"] == [{"state": "used"}]
+
+
+def test_history_database_failure_reports_degradation(monkeypatch, tmp_path):
+    from backend import degradations, main
+    from backend.compose_scanner import ComposeScan
+
+    # A directory in place of the database exercises the real SQLite failure.
+    (tmp_path / "history.db").mkdir()
+    monkeypatch.setattr(main, "scan_containers", lambda: [])
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_kw: ComposeScan())
+    degradations.reset()
+    main._monitor.reset()
+    with TestClient(app) as client:
+        assert client.get("/api/ports").status_code == 200
+        assert any(event["reason"] == "occupancy history write failed" for event in degradations.recent())
+        assert client.get("/api/ports/8080/history").status_code == 503
+
+
+@pytest.mark.parametrize("flag", ["incomplete", "truncated"])
+def test_partial_scan_keeps_history_baseline_and_refuses_reservation(monkeypatch, flag):
+    from backend import history, main, port_store
+    from backend.compose_scanner import ComposeScan
+    from backend.port_scanner import ListeningPort
+
+    listeners = [ListeningPort(port=42000, ip="127.0.0.1", protocol="tcp")]
+    scan = ComposeScan()
+    monkeypatch.setattr(main, "scan_containers", lambda: [])
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **kw: list(listeners))
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *a, **kw: scan)
+    main._monitor.reset()
+    with TestClient(app) as client:
+        listeners.clear()
+        setattr(scan, flag, True)
+        main._monitor.refresh()
+        assert history.query(42000) == []
+        assert client.get("/api/ports/suggest?reserve=true&start=42000&end=42000").status_code == 503
+        assert port_store.get_manual_ports() == []
+        setattr(scan, flag, False)
+        main._monitor.refresh()
+        assert [row["state"] for row in history.query(42000)] == ["free"]

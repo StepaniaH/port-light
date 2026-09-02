@@ -1,8 +1,8 @@
 """Local port-occupancy history, stored in SQLite next to port_light.json.
 
-Opt-in via ``HISTORY_RETENTION_DAYS`` (default 7; ``0`` disables the feature
-entirely). Only state transitions are written, so a quiet host costs nothing.
-Everything stays inside the data volume — nothing is exported anywhere.
+Controlled by ``HISTORY_RETENTION_DAYS`` (default 7; ``0`` disables history).
+Only state transitions are written. Configured hubs can read history through
+the authenticated peer API.
 """
 
 from __future__ import annotations
@@ -40,19 +40,23 @@ def _connect() -> sqlite3.Connection | None:
     if not enabled():
         return None
     if _conn is None:
+        conn = None
         try:
-            _conn = sqlite3.connect(_db_path(), check_same_thread=False)
-            _conn.execute(
+            conn = sqlite3.connect(_db_path(), check_same_thread=False)
+            conn.execute(
                 "CREATE TABLE IF NOT EXISTS events ("
                 "ts INTEGER NOT NULL, port INTEGER NOT NULL, state TEXT NOT NULL,"
                 "holders TEXT NOT NULL DEFAULT '[]')"
             )
-            _conn.execute(
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_events_port_ts ON events(port, ts)"
             )
-            _conn.commit()
+            conn.commit()
         except sqlite3.Error:
-            _conn = None
+            if conn is not None:
+                conn.close()
+            raise
+        _conn = conn
     return _conn
 
 

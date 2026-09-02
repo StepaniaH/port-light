@@ -20,7 +20,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *a, **kw: ComposeScan())
-    main._occ.reset()
+    main._monitor.reset()
     history.reset()
     agent_events.reset()
     yield
@@ -30,25 +30,24 @@ def isolated(monkeypatch, tmp_path):
 
 def test_concurrent_reservations_do_not_claim_the_same_port(monkeypatch):
     barrier = threading.Barrier(2)
-    scan = main._scan_snapshot
+    allocate = port_store.allocate_ports
 
     def together(*args, **kwargs):
-        result = scan(*args, **kwargs)
         barrier.wait(timeout=5)
-        return result
+        return allocate(*args, **kwargs)
 
-    monkeypatch.setattr(main, "_scan_snapshot", together)
+    monkeypatch.setattr(port_store, "allocate_ports", together)
 
-    def reserve(label):
-        with TestClient(main.app) as client:
+    with TestClient(main.app) as client:
+        def reserve(label):
             res = client.get("/api/ports/suggest", params={
                 "start": 45000, "end": 45001, "reserve": True, "label": label,
             })
             assert res.status_code == 200
             return res.json()["reserved"]
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        claims = list(pool.map(reserve, ("first", "second")))
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claims = list(pool.map(reserve, ("first", "second")))
     assert sorted(p for claim in claims for p in claim) == [45000, 45001]
     assert len(port_store.get_manual_ports()) == 2
 

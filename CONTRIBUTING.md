@@ -24,9 +24,13 @@ pytest
 npm ci
 npm run lint
 npm test
+npx playwright install chromium
+npm run smoke:browser
 ```
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants something like `PORT_LIGHT_DATA_DIR=./data`. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
+
+`npm run smoke:browser` starts two temporary local instances and checks startup, detail, a saved label, and host switching in Chromium. It removes its data and stops both servers on exit. Set `PYTHON` to override the Python executable.
 
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 

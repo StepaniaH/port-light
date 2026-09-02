@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 
 import pytest
 from fastapi.testclient import TestClient
@@ -57,6 +58,49 @@ def test_origin_url_strips_to_scheme_host_port(url, origin):
 def test_origin_url_rejects_ssrf_and_public_ips(url):
     with pytest.raises(hosts.HostsError):
         hosts.origin_url(url)
+
+
+@pytest.mark.parametrize("addresses", [
+    ["8.8.8.8"], ["10.0.0.2", "8.8.8.8"], ["169.254.169.254"],
+    ["::ffff:169.254.169.254"], [],
+])
+def test_peer_dns_rejects_any_disallowed_answer(monkeypatch, addresses):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 2100)) for address in addresses
+    ])
+
+    def unexpected_open(*args):
+        pytest.fail("disallowed address reached the HTTP client")
+
+    monkeypatch.setattr(hosts.urllib.request, "build_opener", unexpected_open)
+    assert hosts.fetch_peer_json({"url": "http://nas.lan:2100"}, "/api/ports", {}) == (502, None, None)
+
+
+def test_peer_dns_failure_returns_unreachable(monkeypatch):
+    def fail(*args, **kwargs):
+        raise socket.gaierror("DNS unavailable")
+
+    monkeypatch.setattr(socket, "getaddrinfo", fail)
+    assert hosts.fetch_peer_json({"url": "http://nas.lan:2100"}, "/api/ports", {}) == (502, None, None)
+
+
+def test_peer_dns_allows_private_addresses_and_keeps_hostname(monkeypatch):
+    import io
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.2", 2100)),
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fd00::2", 2100, 0, 0)),
+    ])
+
+    class Opener:
+        def open(self, req, timeout):
+            assert req.full_url == "http://nas.lan:2100/api/ports"
+            response = io.BytesIO(b'{"ports": []}')
+            response.headers = {}
+            return response
+
+    monkeypatch.setattr(hosts.urllib.request, "build_opener", lambda *args: Opener())
+    assert hosts.fetch_peer_json({"url": "http://nas.lan:2100"}, "/api/ports", {}) == (200, {"ports": []}, None)
 
 
 def test_hosts_crud_hides_password(tmp_path, monkeypatch):

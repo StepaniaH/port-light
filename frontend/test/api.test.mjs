@@ -1,93 +1,37 @@
-/* Tests for frontend/js/api.js URL/hash builders and fingerprint summary.
-   Imports go through the same ?v= specifier as the source modules so both
-   sides share one live S instance. */
-
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-
 import { readFileSync } from 'node:fs';
 import './helpers/env.mjs';
 
-const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
-const version = entrySrc.match(/\?v=(\d+)/);
-const V = version ? 'v=' + version[1] : '';
+const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
+const { S } = await import('../js/state.js?v=' + version);
+const { fetchPorts } = await import('../js/api.js?v=' + version);
 
-const { occupancyUrl, portApiUrl, portHash, fpSummary } = await import('../js/api.js?' + V);
-const { S } = await import('../js/state.js?' + V);
-
-function withState(patch, fn) {
-  const saved = {
-    rangeStart: S.rangeStart,
-    rangeEnd: S.rangeEnd,
-    showHidden: S.showHidden,
-    focusHostId: S.focusHostId,
-    selectedHostId: S.selectedHostId,
-    hostCatalog: S.hostCatalog,
+test('304 retains its body when the app discarded the earlier poll', async () => {
+  S.rangeStart = 42000;
+  S.rangeEnd = 42010;
+  const data = { ports: [{ port: 42000, status: 'used' }] };
+  globalThis.fetch = async () => new Response(JSON.stringify(data), { headers: { etag: '"new"' } });
+  await fetchPorts(); // A superseded app refresh can discard this result.
+  globalThis.fetch = async (_url, opts) => {
+    assert.equal(opts.headers['If-None-Match'], '"new"');
+    return new Response(null, { status: 304 });
   };
-  try {
-    Object.assign(S, patch);
-    fn();
-  } finally {
-    Object.assign(S, saved);
-  }
-}
-
-const PEER = 'deadbeef00112233';
-const withPeers = (fn) =>
-  withState({ hostCatalog: { local: { id: 'local', name: '', local: true }, peers: [{ id: PEER, name: 'nas' }] } }, fn);
-
-test('occupancyUrl targets the flat endpoint without peers', () => {
-  assert.equal(
-    occupancyUrl('local'),
-    '/api/ports?range_start=1&range_end=9999&include_hidden=false',
-  );
-  withPeers(() => {
-    assert.notEqual(
-      occupancyUrl('local'),
-      '/api/ports?range_start=1&range_end=9999&include_hidden=false',
-    );
-  });
+  assert.deepEqual((await fetchPorts()).data, data);
+  assert.deepEqual((await fetchPorts()).data, data);
 });
 
-test('occupancyUrl encodes state and peer hosts into the query', () => {
-  withPeers(() => {
-    assert.equal(
-      occupancyUrl(PEER),
-      '/api/hosts/' + PEER + '/ports?range_start=1&range_end=9999&include_hidden=false',
-    );
+test('unlock aborts a pending poll and does not reuse its conditional cache', async () => {
+  S.rangeStart = 42100;
+  globalThis.fetch = async (_url, opts) => new Promise((_resolve, reject) => {
+    opts.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
   });
-  withState({ rangeStart: 1000, rangeEnd: 2000, showHidden: true }, () => {
-    assert.equal(
-      occupancyUrl('local'),
-      '/api/ports?range_start=1000&range_end=2000&include_hidden=true',
-    );
-  });
-});
-
-test('portApiUrl switches between flat and per-host endpoints', () => {
-  assert.equal(portApiUrl('local', 8080), '/api/ports/8080');
-  withPeers(() => {
-    assert.equal(portApiUrl('local', 8080), '/api/hosts/local/ports/8080');
-    assert.equal(portApiUrl(PEER, 53), '/api/hosts/' + PEER + '/ports/53');
-  });
-});
-
-test('api endpoints URL-encode peer host ids; hashes pass them through raw', () => {
-  const weird = 'a b/c';
-  withState(
-    { hostCatalog: { local: { id: 'local', name: '', local: true }, peers: [{ id: weird, name: 'x' }] } },
-    () => {
-      assert.equal(portApiUrl(weird, 80), '/api/hosts/a%20b%2Fc/ports/80');
-      assert.equal(portHash(weird, 80), '#/h/a b/c/port/80');
-    },
-  );
-});
-
-test('fpSummary strips only the stale flag without mutating the input', () => {
-  const s = { compose_files: 3, ports_free: 10, stale: true };
-  const out = fpSummary(s);
-  assert.equal('stale' in out, false);
-  assert.equal(out.ports_free, 10);
-  assert.equal(s.stale, true);
-  assert.equal(fpSummary(null), null);
+  const pending = fetchPorts();
+  globalThis.fetch = async (_url, opts) => {
+    assert.equal(opts.headers['If-None-Match'], undefined);
+    return new Response('{"ports":[]}', { headers: { etag: '"unlocked"' } });
+  };
+  await fetchPorts({ isolated: true });
+  assert.equal((await pending).stale, true);
+  assert.equal((await fetchPorts()).ok, true);
 });

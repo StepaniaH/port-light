@@ -4,9 +4,11 @@
   "type": "module",
   "scripts": {
     "lint": "eslint frontend/js frontend/i18n.js",
-    "test": "node --test \"frontend/test/**/*.test.mjs\""
+    "test": "node --test \"frontend/test/**/*.test.mjs\"",
+    "smoke:browser": "node frontend/test/browser-smoke.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "eslint": "10.9.1",
     "globals": "17.12.0"
   }

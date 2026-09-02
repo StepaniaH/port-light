@@ -118,7 +118,12 @@ def fetch_peer_json(
     """
     if not path.startswith("/api/"):
         return 502, None, None
-    url = origin_url(peer["url"]) + path
+    try:
+        origin = _parse_peer_url(peer["url"])
+        _validate_addresses(origin)
+    except (HostsError, OSError, ValueError):
+        return 502, None, None
+    url = urlunparse(origin) + path
     if query:
         url = url + "?" + urlencode(query)
     headers = {
@@ -133,7 +138,8 @@ def fetch_peer_json(
     if user or password:
         token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
         req.add_header("Authorization", "Basic " + token)
-    opener = urllib.request.build_opener(_RefuseRedirect, _PassThroughErrors)
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _RefuseRedirect, _PassThroughErrors)
     try:
         with opener.open(req, timeout=FETCH_TIMEOUT_S) as resp:
             status = int(getattr(resp, "status", 200) or 200)
@@ -279,6 +285,22 @@ def _ip_allowed(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
             return True
         return ip in _CGNAT
     return bool(ip.is_private or ip.is_link_local)
+
+
+def _validate_addresses(parsed) -> None:
+    """Validate every current DNS answer before passing the URL to urllib.
+
+    urllib resolves again when connecting, so this does not pin the validated
+    addresses. Use literal private IPs or trusted DNS to prevent rebinding.
+    """
+    host = parsed.hostname
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    if not addresses or any(
+        not _ip_allowed(ipaddress.ip_address(address[4][0]))
+        for address in addresses
+    ):
+        raise HostsError("that host resolves to a disallowed address")
 
 
 def _parse_peer_url(url: str):

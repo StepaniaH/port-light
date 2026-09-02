@@ -53,8 +53,6 @@ export const S = {
   hostMaps: {},
   focusHostId: 'local',
   selectedHostId: 'local',
-  hostAborts: {},
-  hostEtags: {},
   hostRetrying: {},
   peersDraft: [],
   statusFilter: 'all',
@@ -97,8 +95,6 @@ export const S = {
   focusBack: null,
   pendingGridFocus: null,
   occupancyKey: '',
-  portsEtag: '',
-  portsEtagUrl: '',
   portDetailGen: 0,
   detailShownPort: null,
   knownCache: {},
@@ -107,7 +103,6 @@ export const S = {
   lockedHitCache: {},
   lockedHitInflight: {},
   lastHiddenLocked: null,
-  portsAbort: null,
 };
 
 export function resolveMode(requested, prefersLight) {

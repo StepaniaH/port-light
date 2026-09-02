@@ -1,22 +1,18 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=76';
-import { t, tx, escapeHtml, errorText } from './text.js?v=76';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=76';
-import { moveChipFocus } from './a11y.js?v=76';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=76';
-import { api, hasPeers, hostById, hostName, fetchHosts, setupRefresh } from './api.js?v=76';
-import { render, syncHiddenButton } from './grid.js?v=76';
-
-  export async function fetchSettings() {
-    const res = await api('/api/settings');
-    if (!res.ok) return null;
-    return res.json();
-  }
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=77';
+import { t, tx, escapeHtml, errorText } from './text.js?v=77';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=77';
+import { moveChipFocus } from './a11y.js?v=77';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=77';
+import { api, fetchHosts, fetchSettings } from './api.js?v=77';
+import { hasPeers, hostById, hostName } from './hosts.js?v=77';
+import { render, syncHiddenButton } from './grid.js?v=77';
 
   export function loadSettingsPage() {
     Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
       const doc = pair[0];
+      if (pair[1]) S.hostCatalog = pair[1];
       if (!doc) return;
       S.settingsDoc = doc;
       S.customThemes = Array.isArray(doc.custom_themes) ? doc.custom_themes : [];
@@ -974,8 +970,8 @@ import { render, syncHiddenButton } from './grid.js?v=76';
       S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
     }
     renderSettingsForm(body);
-    setupRefresh();
     status.className = 'is-ok';
     status.textContent = t('settings.saved');
     S.settingsDirty = false;
+    return true;
   }

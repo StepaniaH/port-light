@@ -1,8 +1,7 @@
 """End-to-end guard: a real bound socket must show up in the occupancy API.
 
-The rest of the suite feeds scanners fake fixtures; this file binds an actual
-listener so the listen-scan -> classify -> HTTP chain stays honest. Skips on
-hosts without a trusted listen table (no ss, e.g. macOS) instead of lying.
+These tests bind a listener and verify the listen-scan, classification, and
+HTTP response together. They skip hosts without a trusted listen table.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ PROBE_RANGE_END = 3999
 def client(monkeypatch):
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
-    main_module._occ.reset()
+    main_module._monitor.reset()
     return TestClient(main_module.app)
 
 
@@ -56,7 +55,7 @@ def _occupancy(client: TestClient) -> dict:
 
 
 def _reset_snapshot_cache() -> None:
-    main_module._occ.reset()
+    main_module._monitor.reset()
 
 
 @pytest.mark.skipif(not host_listen_trusted(), reason="no trusted listen table on this host")

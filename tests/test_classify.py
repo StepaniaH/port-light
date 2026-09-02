@@ -12,7 +12,6 @@ from backend.compose_scanner import ComposePort
 from backend.docker_scanner import ContainerInfo
 from backend.main import (
     _etag_matched,
-    _json_etag,
 )
 from backend.models import PortMapping
 from backend.port_scanner import ListeningPort
@@ -842,7 +841,7 @@ def test_classify_container_order_is_stable():
     names1 = [c["name"] for c in r1["ports"][0]["containers"]]
     names2 = [c["name"] for c in r2["ports"][0]["containers"]]
     assert names1 == names2 == ["alpha", "zeta"]
-    assert _json_etag(r1)[1] == _json_etag(r2)[1]
+    assert r1 == r2
 
 
 def test_etag_matched_weak_and_list():

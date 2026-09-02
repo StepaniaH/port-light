@@ -1,31 +1,190 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=76';
-import { errorText, escapeHtml, t } from './text.js?v=76';
-import { moveChipFocus, trapTab } from './a11y.js?v=76';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=77';
+import { errorText, escapeHtml, t } from './text.js?v=77';
+import { moveChipFocus, trapTab } from './a11y.js?v=77';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
-  syncHeaderHeight,
-} from './dom.js?v=76';
-import { openModal, closeModals, modalOpen } from './modal.js?v=76';
-import { applyRoute, parseHash, leaveSettingsOrStay } from './router.js?v=76';
-import { render, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=76';
-import {
-  hasPeers, api, fetchMeta, fetchHosts, retryHost, setupRefresh, tick, gridHash,
-  startEventStream,
-} from './api.js?v=76';
-import { closeDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=76';
+  syncHeaderHeight, markRefreshed, setSyncError,
+} from './dom.js?v=77';
+import { openModal, closeModals, modalOpen } from './modal.js?v=77';
+import { applyRoute as updateRoute, parseHash, leaveSettingsOrStay } from './router.js?v=77';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=77';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=77';
+import { hasPeers, listedHosts, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=77';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=77';
 import {
   goSettingsPanel, saveSettingsPage, applyServerSettings, markDirty,
-  syncDependentSettings, fetchSettings, syncLocaleTrigger, closeLocaleMenu,
+  syncDependentSettings, syncLocaleTrigger, closeLocaleMenu,
   moveLocaleHighlight, renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
-} from './settings.js?v=76';
+} from './settings.js?v=77';
 
 (function () {
   'use strict';
+
+  function render() {
+    renderGridView();
+    if (S.selectedPort !== null) {
+      const entry = portFromList(S.selectedPort, S.selectedHostId);
+      if (entry) renderDetail(entry);
+      else if (S.route.name === 'port') {
+        S.detailShownPort = null;
+        showPortDetail(S.selectedPort);
+      } else closeDetail(true);
+    }
+  }
+
+  function applyRoute() {
+    updateRoute({ render, refresh: tick });
+  }
+
+  async function updateHostHealth(hostId) {
+    const body = await fetchHostHealth(hostId);
+    if (body) {
+      if (!S.hostMaps[hostId]) S.hostMaps[hostId] = {};
+      S.hostMaps[hostId].scanners = body.scanners || {};
+    }
+  }
+
+  let loadGeneration = 0;
+
+  async function loadAllOccupancy(opts, generation) {
+    const ids = listedHosts().map(function (h) { return h.id; });
+    const results = await Promise.all(ids.map(async function (id) {
+      const [occupancy, health] = await Promise.all([fetchHostOccupancy(id, opts), fetchHostHealth(id)]);
+      return { occupancy, health };
+    }));
+    if (generation !== loadGeneration) return null;
+    let localOk = false;
+    ids.forEach(function (id, i) {
+      const { occupancy: result, health } = results[i];
+      if (!S.hostMaps[id]) S.hostMaps[id] = {};
+      if (!result || result.stale) return;
+      if (health) S.hostMaps[id].scanners = health.scanners || {};
+      if (result.ok) {
+        if (result.data) S.hostMaps[id].data = result.data;
+        S.hostMaps[id].error = '';
+        if (id === 'local') localOk = true;
+      } else {
+        S.hostMaps[id].error = result.auth ? 'auth' : 'down';
+      }
+    });
+    setSyncError(!localOk);
+    if (localOk) markRefreshed();
+    const focused = dataForHost(S.focusHostId);
+    if (focused) S.currentData = focused;
+    else if (S.hostMaps.local && S.hostMaps.local.data) S.currentData = S.hostMaps.local.data;
+    return S.currentData;
+  }
+
+  async function loadPorts(opts) {
+    const generation = ++loadGeneration;
+    const roots = hasPeers() ? [...hostBoards.querySelectorAll('.host-grid')] : [grid];
+    roots.forEach(root => root.setAttribute('aria-busy', 'true'));
+    try {
+      if (hasPeers()) return await loadAllOccupancy(opts, generation);
+      const result = await fetchPorts(opts);
+      if (generation !== loadGeneration || !result || result.stale) return null;
+      setSyncError(!result.ok);
+      if (!result.ok) return null;
+      markRefreshed();
+      return result.data || (result.unchanged ? S.currentData : null);
+    } finally {
+      if (generation === loadGeneration) roots.forEach(root => root.setAttribute('aria-busy', 'false'));
+    }
+  }
+
+  async function retryHost(hostId) {
+    if (!hostId || S.hostRetrying[hostId]) return;
+    S.hostRetrying[hostId] = true;
+    const btn = hostBoards && hostBoards.querySelector('[data-host-retry="' + hostId + '"]');
+    if (btn) btn.disabled = true;
+    let shouldRender = false;
+    try {
+      const result = await fetchHostOccupancy(hostId);
+      if (!S.hostMaps[hostId]) S.hostMaps[hostId] = {};
+      if (result && !result.stale) {
+        if (result.unchanged) {
+          S.hostMaps[hostId].error = '';
+        } else if (result.ok && result.data) {
+          S.hostMaps[hostId].data = result.data;
+          S.hostMaps[hostId].error = '';
+        } else {
+          S.hostMaps[hostId].error = result.auth ? 'auth' : 'down';
+        }
+      }
+      if (!result || result.stale) return;
+      await updateHostHealth(hostId);
+      S.occupancyKey = occupancyFingerprint();
+      if (hostId === S.focusHostId && S.hostMaps[hostId].data) {
+        S.currentData = S.hostMaps[hostId].data;
+      }
+      if (hostId === 'local') setSyncError(!!S.hostMaps[hostId].error);
+      if (!S.hostMaps[hostId].error) markRefreshed();
+      shouldRender = true;
+    } finally {
+      S.hostRetrying[hostId] = false;
+    }
+    if (shouldRender) render();
+  }
+  function tick() {
+    if (S.route.name === 'settings') return;
+    if (modalOpen()) return;
+    const wantHidden = S.showHidden;
+    return loadPorts().then(function (data) {
+      if (S.route.name === 'settings') return;
+      if (S.showHidden !== wantHidden) return;
+      if (!hasPeers()) {
+        if (!data) return;
+        if (data === S.currentData && S.occupancyKey) return;
+        S.currentData = data;
+      } else if (data) {
+        S.currentData = dataForHost(S.focusHostId) || data;
+      } else if (!S.currentData) {
+        return;
+      }
+      const lockedNow = !!(S.currentData && S.currentData.summary && S.currentData.summary.hidden_locked);
+      if (lockedNow !== S.lastHiddenLocked) {
+        S.lastHiddenLocked = lockedNow;
+        Object.keys(S.lockedHitCache).forEach(function (k) { delete S.lockedHitCache[k]; });
+        Object.keys(S.lockedHitInflight).forEach(function (k) { delete S.lockedHitInflight[k]; });
+      }
+      const key = occupancyFingerprint();
+      if (key !== S.occupancyKey) {
+        S.occupancyKey = key;
+        render();
+      }
+    }).then(function () {
+      if (!hasPeers()) fetchHostHealth('local').then(function (body) {
+        if (body) renderScanners(body.scanners || {}, null, S.currentData);
+      });
+    });
+  }
+  let eventStream = null;
+
+  function startEventStream() {
+    if (!window.EventSource || eventStream) return;
+    eventStream = new EventSource('/api/events');
+    eventStream.addEventListener('refresh', function () {
+      if (S.settings.auto_refresh && S.route.name !== 'settings' && !modalOpen()) tick();
+    });
+  }
+
+  function setupRefresh() {
+    if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
+    if (!eventStream) startEventStream();
+    if (S.settings.auto_refresh) {
+      tick();
+      S.refreshTimer = setInterval(tick, S.settings.refresh_ms || 5000);
+    } else {
+      tick();
+    }
+  }
+
+  configureDetail({ refresh: tick, loadPorts });
 
   hydrateCachedAppearance();
   try {
@@ -399,6 +558,29 @@ import {
   });
   detailBackdrop.addEventListener('click', function () { closeDetail(); });
 
+  document.getElementById('view-grid').addEventListener('click', function (e) {
+    const cell = e.target.closest('.port-cell');
+    if (!cell) return;
+    const port = parseInt(cell.dataset.port, 10);
+    const hostId = cell.dataset.host || 'local';
+    if (S.selectedPort === port && S.selectedHostId === hostId && S.route.name === 'port') {
+      closeDetail();
+      return;
+    }
+    S.selectedPort = port;
+    S.selectedHostId = hostId;
+    S.focusHostId = hostId;
+    const want = portHash(hostId, port);
+    if (location.hash !== want) location.hash = want;
+    else showPortDetail(port, portFromList(port, hostId));
+    if (S.settings.copy_on_click) {
+      navigator.clipboard.writeText(String(port)).then(function () {
+        const live = document.querySelector('.detail-copy-port[data-copy-port="' + port + '"]') || cell;
+        if (live.isConnected) showCopyToast(live);
+      }).catch(function () {});
+    }
+  });
+
   document.getElementById('view-grid').addEventListener('keydown', function (e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' &&
         e.key !== 'ArrowDown' && e.key !== 'Home' && e.key !== 'End' &&
@@ -457,7 +639,7 @@ import {
 
   document.getElementById('settings-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    saveSettingsPage();
+    saveSettingsPage().then(function (saved) { if (saved) setupRefresh(); });
   });
   document.getElementById('settings-nav').addEventListener('click', function (e) {
     const btn = e.target.closest('[role="tab"][data-settings-panel]');
@@ -600,12 +782,19 @@ import {
     syncFilterUI();
     applyAppearance();
     fetchMeta()
-      .then(fetchSettings)
+      .then(function (meta) {
+        if (meta) S.meta = meta;
+        const ver = document.getElementById('app-version');
+        if (ver && S.meta.version) ver.textContent = 'v' + S.meta.version;
+        return fetchSettings();
+      })
       .then(function (doc) {
         if (doc) applyServerSettings(doc);
         return fetchHosts();
       })
-      .then(function () {
+      .then(function (catalog) {
+        if (catalog) S.hostCatalog = catalog;
+        if (!hostById(S.focusHostId)) S.focusHostId = 'local';
         return window.PortLightI18n
           ? PortLightI18n.load(S.settings.locale || 'auto')
           : Promise.resolve();

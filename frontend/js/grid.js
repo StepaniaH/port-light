@@ -1,12 +1,12 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S, CARD_FIELD_KEYS } from './state.js?v=76';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=76';
-import { KIND_MATCHERS } from './kinds.js?v=76';
-import { isLease } from './leases.js?v=76';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=76';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl, portHash, api, fetchPorts, renderScanners } from './api.js?v=76';
-import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=76';
+import { S, CARD_FIELD_KEYS } from './state.js?v=77';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=77';
+import { KIND_MATCHERS } from './kinds.js?v=77';
+import { isLease } from './leases.js?v=77';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=77';
+import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=77';
+import { api } from './api.js?v=77';
 
 
   export function syncFilterUI() {
@@ -485,14 +485,7 @@ import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=76';
       renderSummary(S.currentData.summary);
       renderGrid(S.currentData.ports, grid, S.currentData, 'local');
     }
-    if (S.selectedPort !== null) {
-      const entry = portFromList(S.selectedPort, S.selectedHostId);
-      if (entry) renderDetail(entry);
-      else if (S.route.name === 'port') {
-        S.detailShownPort = null;
-        showPortDetail(S.selectedPort);
-      } else closeDetail(true);
-    }
+
   }
 
   export function renderGrid(ports, rootEl, dataCtx, hostId, restore) {
@@ -599,35 +592,38 @@ import { closeDetail, showPortDetail, renderDetail } from './detail.js?v=76';
         '</button>';
     }).join('');
 
-    rootEl.querySelectorAll('.port-cell').forEach(function (el) {
-      el.addEventListener('click', function () {
-        const port = parseInt(el.dataset.port, 10);
-        const hid = el.dataset.host || 'local';
-        if (S.selectedPort === port && (S.selectedHostId || 'local') === hid && S.route.name === 'port') {
-          closeDetail();
-          return;
-        }
-        S.selectedPort = port;
-        S.selectedHostId = hid;
-        S.focusHostId = hid;
-        const want = portHash(hid, port);
-        if (location.hash !== want) {
-          location.hash = want;
-        } else {
-          const entry = displayPorts.find(function (p) { return p.port === port; });
-          showPortDetail(port, entry);
-        }
-        if (S.settings.copy_on_click) {
-          navigator.clipboard.writeText(String(port)).then(function () {
-            const live = document.querySelector('.detail-copy-port[data-copy-port="' + port + '"]')
-              || rootEl.querySelector('.port-cell[data-port="' + port + '"]');
-            if (live) showCopyToast(live);
-          }).catch(function () {});
-        }
-      });
-    });
     if (restorePort && (!restoreHost || restoreHost === hostId)) {
       const again = rootEl.querySelector('.port-cell[data-port="' + restorePort + '"]');
       if (again) again.focus({ preventScroll: true });
     }
+  }
+
+  export function renderScanners(scanners, hostEl, data) {
+    const host = hostEl || document.getElementById('scanner-pills');
+    if (!host) return;
+    const items = [
+      ['proc', 'host'],
+      ['docker', 'docker'],
+      ['compose', 'compose'],
+    ];
+    const truncated = !!(data && data.summary && data.summary.compose_truncated);
+    const incomplete = !!(data && data.summary && data.summary.compose_incomplete);
+    host.innerHTML = items.map(function (pair) {
+      const name = t('scanner.' + pair[1]);
+      const ok = !!scanners[pair[0]];
+      const source = scanners.listen_source;
+      let title = t(ok ? 'scanner.available' : 'scanner.unavailable', { name: name });
+      if (pair[0] === 'proc' && ok && source && source !== 'none') {
+        const via = t('scanner.via.' + source, { name: name });
+        if (via && via.indexOf('scanner.via.') === -1) title = via;
+      }
+      if (pair[0] === 'compose' && truncated) {
+        title = t('scanner.truncated', { name: name });
+      } else if (pair[0] === 'compose' && incomplete) {
+        title = t('scanner.incomplete', { name: name });
+      }
+      const warn = pair[0] === 'compose' && (truncated || incomplete);
+      return '<span class="pill' + (ok ? ' ok' : ' bad') + (warn ? ' warn' : '') + '" role="img" title="' +
+        escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"></span>';
+    }).join('');
   }

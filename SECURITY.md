@@ -17,8 +17,8 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Docker socket | Often mounted into the container. Read-only is not the same as safe. |
 | `/host/proc` | Read-only view of host network tables (and other `/proc` data for PID 1). |
 | Compose mount | Read-only view of the bind you set, including sibling `.env` files. |
-| Data volume | Local JSON and SQLite under `/data`. Saved peer passwords are stored in `port_light.json`; file writes use owner-only permissions. Occupancy scans never leave that host. |
-| Peer URLs | `PUT /api/hosts` stores origins + optional Basic Auth. The hub fetches only `/api/ports` and `/api/health` on those origins (no redirects, no public IPv4). |
+| Data volume | Local JSON and SQLite under `/data`. Saved peer passwords are stored in `port_light.json`; file writes use owner-only permissions. Configured hubs can read peer snapshots, and opt-in webhooks send event names and port numbers. |
+| Peer URLs | `PUT /api/hosts` stores origins + optional Basic Auth. The hub fetches occupancy, detail, history, and health from those origins. Redirects and environment proxies are disabled. Every resolved address must pass the private-address policy; see the DNS limits below. |
 
 Without auth, anyone who can reach port 2100 can read the port map (names, images, Compose paths) and change manual/hidden entries.
 
@@ -31,6 +31,12 @@ Without auth, anyone who can reach port 2100 can read the port map (names, image
 5. Run as a non-root `user:` when the `/data` mount allows it.
 6. Do not point `COMPOSE_SCAN_DIR` at trees that contain secrets you would not put in a screenshot.
 7. Protect backups and mounts of `/data`; they can contain peer credentials, manual labels, and local history.
+
+## Peer DNS validation
+
+Every request resolves the peer hostname and checks all returned IPv4/IPv6 addresses. A public, IPv4 link-local, multicast, or unspecified address causes rejection of the entire result. IPv4-mapped IPv6 addresses receive the IPv4 checks too. Empty or failed DNS responses make the peer unavailable.
+
+The HTTP client resolves again when connecting. Validation does not pin the destination IP, so a DNS change between validation and connection can bypass the preflight check. Use literal private IPs or DNS you control. System DNS resolution is not covered by the 4-second HTTP socket timeout.
 
 ## Hidden ports
 

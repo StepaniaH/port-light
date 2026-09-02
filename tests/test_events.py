@@ -16,13 +16,19 @@ def _env(monkeypatch, tmp_path):
 
 def test_event_lines_push_refresh_on_store_change(monkeypatch):
     from backend import main, port_store
+    from backend.compose_scanner import ComposeScan
 
     monkeypatch.setattr(main, "scan_containers", lambda: [])
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_kw: ComposeScan())
+    main._monitor.reset()
+    main._monitor.refresh()
     async def check():
         gen = main._event_lines()
         assert await anext(gen) == "retry: 3000\n\n"
         assert "event: hello" in await anext(gen)
         port_store.add_manual_port(7602, "", "localhost")
+        main._monitor.state_changed()
         assert "event: refresh" in await asyncio.wait_for(anext(gen), timeout=2)
         await gen.aclose()
 

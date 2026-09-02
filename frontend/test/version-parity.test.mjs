@@ -20,3 +20,16 @@ test('every js import specifier pins the entry version', () => {
     }
   }
 });
+
+test('frontend imports remain acyclic and the API stays independent of views', () => {
+  const graph = new Map(readdirSync(dir).filter(f => f.endsWith('.js')).map(f => {
+    const source = readFileSync(new URL(f, dir), 'utf8');
+    return [f, [...source.matchAll(/from\s+['"]\.\/(\w+\.js)\?v=\d+['"]/g)].map(m => m[1])];
+  }));
+  function visit(file, path = []) {
+    assert.ok(!path.includes(file), 'Import cycle: ' + [...path, file].join(' → '));
+    for (const dependency of graph.get(file) || []) visit(dependency, [...path, file]);
+  }
+  for (const file of graph.keys()) visit(file);
+  assert.deepEqual(graph.get('api.js').sort(), ['hosts.js', 'state.js']);
+});

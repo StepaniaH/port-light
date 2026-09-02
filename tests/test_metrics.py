@@ -24,7 +24,7 @@ def test_metrics_enabled_reports_counts(monkeypatch, tmp_path):
     import backend.main as main
     from backend.compose_scanner import ComposeScan
 
-    main._occ.reset()
+    main._monitor.reset()
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [])
     monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
@@ -59,7 +59,7 @@ def test_metrics_aggregates_include_hidden_rows(monkeypatch, tmp_path):
     from backend.compose_scanner import ComposeScan
     from backend.port_scanner import ListeningPort
 
-    main._occ.reset()
+    main._monitor.reset()
     monkeypatch.setattr(main, "scan_containers", lambda: [])
     monkeypatch.setattr(
         main,
