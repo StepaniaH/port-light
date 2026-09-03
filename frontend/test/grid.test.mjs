@@ -5,7 +5,35 @@ import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
 const { S } = await import('../js/state.js?v=' + version);
-const { bindAddressView, buildSearchContext, renderGrid, renderSummary, renderScanners } = await import('../js/grid.js?v=' + version);
+const { bindAddressView, buildSearchContext, renderGrid, renderHostBoards, renderSummary, renderScanners } = await import('../js/grid.js?v=' + version);
+
+test('machine descriptions are optional escaped text below each title', () => {
+  const previous = { settings: S.settings, hostCatalog: S.hostCatalog, hostMaps: S.hostMaps, focusHostId: S.focusHostId };
+  const boards = document.getElementById('host-boards');
+  try {
+    S.settings = { ...S.settings, host_layout: 'waterfall' };
+    S.hostMaps = {};
+    S.focusHostId = 'local';
+    S.hostCatalog = {
+      local: { id: 'local', name: 'Hub', local: true, description: '' },
+      peers: [{ id: 'peer0001', name: 'NAS', description: '<script>demo</script> · 100.64.0.12' }],
+    };
+    renderHostBoards();
+    assert.equal(boards.querySelectorAll('.host-board').length, 2);
+    assert.equal(boards.querySelectorAll('.host-board-description').length, 1);
+    assert.match(boards.innerHTML, /&lt;script&gt;demo&lt;\/script&gt;/);
+    assert.doesNotMatch(boards.innerHTML, /<script>/);
+    S.settings.host_layout = 'tabs';
+    S.focusHostId = 'peer0001';
+    renderHostBoards();
+    assert.equal(boards.querySelectorAll('.host-board').length, 1);
+    assert.equal(boards.querySelector('.host-board').getAttribute('data-host'), 'peer0001');
+    assert.equal(boards.querySelectorAll('.host-board-description').length, 1);
+  } finally {
+    Object.assign(S, previous);
+    boards.innerHTML = '';
+  }
+});
 
 test('disabled scanner indicators are neutral, not failure indicators', () => {
   const root = document.createElement('div');

@@ -145,7 +145,9 @@
     "loading": "Leyendo la ocupación…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
-    "max": "Como máximo 6 equipos más.",
+    "description": "Descripción breve (opcional)",
+    "descriptionPlaceholder": "P. ej.: Tailscale 100.64.0.12 · Servidor doméstico",
+    "max": "Hasta {count} equipos adicionales.",
     "localOnly": "Ocultar, las etiquetas y añadir se aplican solo a este equipo.",
     "clearAuth": "Borrar las credenciales guardadas",
     "legendHost": "Recuentos de {name}",
@@ -217,9 +219,14 @@
         "blurb": "Idioma de la interfaz."
       }
     },
+    "layout": {
+      "selected": "Seleccionado",
+      "waterfall": "Muestra todos los equipos juntos y desplázate para explorarlos.",
+      "tabs": "Cambia de pestaña para ver un equipo a la vez."
+    },
     "cards": {
       "title": "Tarjetas",
-      "blurb": "Texto de estado y distintivos en cada celda de ocupación."
+      "blurb": "Diseño multiequipo, densidad de tarjetas, estado y distintivos."
     },
     "groups": {
       "appearance": {
@@ -264,6 +271,14 @@
     },
     "on": "activado",
     "off": "desactivado",
+    "refresh": {
+      "capacityPoint": "{interval} · máx. {hard}",
+      "capacityLimit": "{current}/{hard} máquinas configuradas. Este intervalo alcanza el límite del producto; una frecuencia menor reduce el tráfico, no amplía el límite.",
+      "seconds": "{count} s",
+      "minutes": "{count} min",
+      "capacity": "{current}/{hard} pares configurados. Se recomiendan hasta {recommended} con este intervalo.",
+      "overCapacity": "{current}/{hard} pares configurados; este intervalo es adecuado para un máximo de {recommended}. Aumenta el intervalo para reducir la carga continua."
+    },
     "scanners": {
       "invalid": "La selección de escáneres no es válida; no se puede comprobar la ocupación. Selecciona al menos una fuente y guarda. Si los ajustes están bloqueados, corrige PORT_LIGHT_SCANNERS en la configuración del despliegue y recrea el contenedor.",
       "required": "Debe quedar al menos un escáner local activado.",
@@ -310,8 +325,8 @@
         "help": "Consulta el mapa de ocupación a intervalos."
       },
       "refresh_ms": {
-        "label": "Intervalo de actualización (ms)",
-        "help": "Se usa cuando la actualización automática está activada. 1000–300000."
+        "label": "Intervalo de actualización",
+        "help": "Controla el sondeo del panel. Los análisis locales en segundo plano nunca esperan más de 30 segundos."
       },
       "port_range_start": {
         "label": "Inicio del rango",
@@ -320,6 +335,14 @@
       "port_range_end": {
         "label": "Fin del rango",
         "help": "Límite superior. No pinta de verde cada puerto sin usar."
+      },
+      "host_layout": {
+        "label": "Diseño multimáquina",
+        "help": "Muestra todas las máquinas en cascada o una por pestaña."
+      },
+      "host_description": {
+        "label": "Descripción de la máquina",
+        "help": "Nota opcional de texto plano bajo el nombre, hasta 120 caracteres."
       },
       "host_name": {
         "label": "Nombre del equipo",
@@ -417,6 +440,8 @@
     "bindFamilies": "Familias de direcciones"
   },
   "choice": {
+    "waterfall": "Cascada",
+    "tabs": "Pestañas",
     "auto": "Auto",
     "en": "English",
     "fr": "Français",

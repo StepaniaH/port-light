@@ -14,7 +14,7 @@
         ? s.theme_mode
         : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
       document.documentElement.setAttribute('data-mode', m);
-      var PAL = {gruvbox:['dark','light'],catppuccin:['dark','light'],solarized:['dark','light'],nord:['dark'],dracula:['dark'],'tokyo-night':['dark'],'one-dark':['dark'],everforest:['dark'],'rose-pine':['dark'],kanagawa:['dark']};
+      var PAL = {gruvbox:['dark','light'],catppuccin:['dark','light'],solarized:['dark','light'],nord:['dark','light'],dracula:['dark','light'],'tokyo-night':['dark','light'],'one-dark':['dark','light'],everforest:['dark','light'],'rose-pine':['dark','light'],kanagawa:['dark','light']};
       if (typeof s.theme_palette === 'string' && s.theme_palette && PAL[s.theme_palette] && PAL[s.theme_palette].indexOf(m) >= 0) {
         document.documentElement.setAttribute('data-palette', s.theme_palette);
       }
@@ -26,7 +26,7 @@
       }
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=82">
+  <link rel="stylesheet" href="/static/style.css?v=88">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -283,7 +283,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=82"></script>
-  <script type="module" src="/static/js/app.js?v=82"></script>
+  <script src="/static/i18n.js?v=88"></script>
+  <script type="module" src="/static/js/app.js?v=88"></script>
 </body>
 </html>

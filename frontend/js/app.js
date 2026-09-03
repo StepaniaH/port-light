@@ -1,26 +1,28 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=82';
-import { errorText, escapeHtml, t } from './text.js?v=82';
-import { moveChipFocus, trapTab } from './a11y.js?v=82';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=88';
+import { errorText, escapeHtml, t } from './text.js?v=88';
+import { moveChipFocus, trapTab } from './a11y.js?v=88';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=82';
-import { openModal, closeModals, modalOpen } from './modal.js?v=82';
-import { applyRoute as updateRoute, parseHash, leaveSettingsOrStay } from './router.js?v=82';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=82';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=82';
-import { hasPeers, listedHosts, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=82';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=82';
+} from './dom.js?v=88';
+import { openModal, closeModals, modalOpen } from './modal.js?v=88';
+import { applyRoute as updateRoute, parseHash, leaveSettingsOrStay } from './router.js?v=88';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=88';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=88';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=88';
+import { refreshFleet } from './fleet.js?v=88';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=88';
 import {
   goSettingsPanel, saveSettingsPage, applyServerSettings, markDirty,
   syncDependentSettings, syncLocaleTrigger, closeLocaleMenu,
   moveLocaleHighlight, renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
-} from './settings.js?v=82';
+  syncRefreshCapacity, updateRefreshSlider,
+} from './settings.js?v=88';
 
 (function () {
   'use strict';
@@ -52,28 +54,42 @@ import {
   let loadGeneration = 0;
 
   async function loadAllOccupancy(opts, generation) {
-    const ids = listedHosts().map(function (h) { return h.id; });
-    const results = await Promise.all(ids.map(async function (id) {
+    let ids = listedHosts().map(function (h) { return h.id; });
+    if (opts && opts.isolated) {
+      ids = [S.focusHostId || 'local'];
+    } else if (opts && opts.localOnly) {
+      ids = ['local'];
+    } else {
+      const focusIndex = ids.indexOf(S.focusHostId);
+      if (focusIndex > 0) ids.unshift(ids.splice(focusIndex, 1)[0]);
+    }
+    const results = await refreshFleet(ids, async function (id) {
+      if (generation !== loadGeneration) return { id, stale: true };
       const [occupancy, health] = await Promise.all([fetchHostOccupancy(id, opts), fetchHostHealth(id)]);
-      return { occupancy, health };
-    }));
-    if (generation !== loadGeneration) return null;
-    let localOk = false;
-    ids.forEach(function (id, i) {
-      const { occupancy: result, health } = results[i];
+      if (generation !== loadGeneration) return { id, stale: true };
+      const result = occupancy;
       if (!S.hostMaps[id]) S.hostMaps[id] = {};
-      if (!result || result.stale) return;
+      if (!result || result.stale) return { id, stale: true };
       if (health) S.hostMaps[id].scanners = health.scanners || {};
       if (result.ok) {
         if (result.data) S.hostMaps[id].data = result.data;
         S.hostMaps[id].error = '';
-        if (id === 'local') localOk = true;
       } else {
         S.hostMaps[id].error = result.auth ? 'auth' : 'down';
       }
+      if (id === S.focusHostId && result.ok && S.hostMaps[id].data) {
+        S.currentData = S.hostMaps[id].data;
+        markRefreshed();
+        if (usesFocusedHostView() && S.route.name !== 'settings') {
+          S.occupancyKey = occupancyFingerprint();
+          render();
+        }
+      }
+      return { id, ok: !!result.ok };
     });
-    setSyncError(!localOk);
-    if (localOk) markRefreshed();
+    if (generation !== loadGeneration) return null;
+    const localResult = results.find(function (result) { return result && result.id === 'local'; });
+    if (localResult && !localResult.stale) setSyncError(!localResult.ok);
     const focused = dataForHost(S.focusHostId);
     if (focused) S.currentData = focused;
     else if (S.hostMaps.local && S.hostMaps.local.data) S.currentData = S.hostMaps.local.data;
@@ -130,11 +146,11 @@ import {
     }
     if (shouldRender) render();
   }
-  function tick() {
+  function runTick(opts) {
     if (S.route.name === 'settings') return;
     if (modalOpen()) return;
     const wantHidden = S.showHidden;
-    return loadPorts().then(function (data) {
+    return loadPorts(opts).then(function (data) {
       if (S.route.name === 'settings') return;
       if (S.showHidden !== wantHidden) return;
       if (!hasPeers()) {
@@ -163,13 +179,35 @@ import {
       });
     });
   }
+  let refreshInFlight = null;
+  let refreshQueued = null;
+
+  function tick(opts) {
+    if (S.route.name === 'settings' || modalOpen()) return Promise.resolve(null);
+    const localOnly = !!(opts && opts.localOnly);
+    if (refreshInFlight) {
+      // A local event must not replace an already queued timer/manual fleet refresh.
+      refreshQueued = { localOnly: localOnly && (!refreshQueued || refreshQueued.localOnly) };
+      return refreshInFlight;
+    }
+    refreshInFlight = Promise.resolve(runTick({ localOnly })).finally(function () {
+      refreshInFlight = null;
+      if (refreshQueued) {
+        const queued = refreshQueued;
+        refreshQueued = null;
+        tick(queued);
+      }
+    });
+    return refreshInFlight;
+  }
+
   let eventStream = null;
 
   function startEventStream() {
     if (!window.EventSource || eventStream) return;
     eventStream = new EventSource('/api/events');
     eventStream.addEventListener('refresh', function () {
-      if (S.settings.auto_refresh && S.route.name !== 'settings' && !modalOpen()) tick();
+      if (S.settings.auto_refresh && S.route.name !== 'settings' && !modalOpen()) tick({ localOnly: true });
     });
   }
 
@@ -604,19 +642,28 @@ import {
   });
 
   if (hostSwitcher) {
+    hostSwitcher.addEventListener('keydown', function (e) {
+      if (moveChipFocus(this, e.key)) {
+        e.preventDefault();
+        document.activeElement.click();
+      }
+    });
     hostSwitcher.addEventListener('click', function (e) {
       const btn = e.target.closest('[data-host-switch]');
       if (!btn) return;
       const id = btn.getAttribute('data-host-switch');
       if (!id) return;
-      S.focusHostId = id;
       if (S.route.name === 'port' && S.selectedHostId !== id) {
         location.hash = gridHash(id);
         return;
       }
       const want = gridHash(id);
-      if ((location.hash || '#/') !== want) location.hash = want;
-      else render();
+      if ((location.hash || '#/') !== want) {
+        location.hash = want;
+        return;
+      }
+      S.focusHostId = id;
+      render();
     });
   }
   if (hostBoards) {
@@ -679,6 +726,7 @@ import {
         PortLightI18n.load(S.settings.locale).then(function () {
           PortLightI18n.applyDom();
           syncLocaleTrigger();
+          syncRefreshCapacity();
           syncHiddenButton();
           if (S.settingsDoc) {
             const lead = document.getElementById('settings-lead');
@@ -696,15 +744,18 @@ import {
     markDirty();
     syncDependentSettings();
   });
-  document.getElementById('settings-fields').addEventListener('input', markDirty);
+  document.getElementById('settings-fields').addEventListener('input', function (e) {
+    updateRefreshSlider(e.target);
+    markDirty();
+  });
   document.getElementById('settings-fields').addEventListener('click', function (e) {
     const add = e.target.closest('#peer-add');
     if (add) {
       e.preventDefault();
       if (S.hostCatalog.readonly || (S.settingsDoc && S.settingsDoc.readonly)) return;
       readPeersDraftFromForm();
-      if (S.peersDraft.length >= 6) return;
-      S.peersDraft.push({ id: '', name: '', url: '', username: '', password: '', has_auth: false, clear_auth: false });
+      if (S.peersDraft.length >= (Number(S.hostCatalog.max_peers) || 32)) return;
+      S.peersDraft.push({ id: '', name: '', description: '', url: '', username: '', password: '', has_auth: false, clear_auth: false });
       renderPeersEditor(false);
       markDirty();
       return;
@@ -820,7 +871,6 @@ import {
         syncHeaderHeight();
       });
   }
-
   if (window.PortLightI18n) PortLightI18n.load().then(startApp);
   else {
     document.documentElement.setAttribute('data-i18n-ready', '');

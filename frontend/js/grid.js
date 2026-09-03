@@ -1,14 +1,14 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S } from './state.js?v=82';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=82';
-import { KIND_MATCHERS } from './kinds.js?v=82';
-import { isLease } from './leases.js?v=82';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=82';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=82';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=82';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=82';
-import { api } from './api.js?v=82';
+import { S } from './state.js?v=88';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=88';
+import { KIND_MATCHERS } from './kinds.js?v=88';
+import { isLease } from './leases.js?v=88';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=88';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=88';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=88';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=88';
+import { api } from './api.js?v=88';
 
 
   export function syncFilterUI() {
@@ -410,27 +410,33 @@ import { api } from './api.js?v=82';
 
   export function renderHostSwitcher() {
     if (!hostSwitcher) return;
+    const focused = hostSwitcher.contains(document.activeElement) && document.activeElement.getAttribute('data-host-switch');
     hostSwitcher.innerHTML = listedHosts().map(function (h) {
       const on = h.id === S.focusHostId;
       return '<button type="button" class="host-chip' + (on ? ' active' : '') +
-        '" role="tab" aria-selected="' + (on ? 'true' : 'false') +
+        '" id="host-tab-' + escapeHtml(h.id) + '" role="tab" aria-controls="host-boards" tabindex="' + (on ? '0' : '-1') + '" aria-selected="' + (on ? 'true' : 'false') +
         '" data-host-switch="' + escapeHtml(h.id) + '">' +
         escapeHtml(h.name || h.id) + '</button>';
     }).join('');
+    if (focused) {
+      const button = document.getElementById('host-tab-' + focused);
+      if (button) button.focus({ preventScroll: true });
+    }
   }
 
   export function renderHostBoards() {
     if (!hostBoards) return;
     const restore = snapshotGridFocus();
     const warnings = scanWarningState(hostBoards);
-    const hosts = listedHosts();
+    const hosts = displayedHosts();
     hostBoards.innerHTML = hosts.map(function (h) {
       return '<article class="host-board' + (h.id === S.focusHostId ? ' is-active' : '') +
-        '" data-host="' + escapeHtml(h.id) + '">' +
-        '<header class="host-board-head"><div class="host-board-title">' +
+        '" data-host="' + escapeHtml(h.id) + '" aria-labelledby="host-title-' + escapeHtml(h.id) + '">' +
+        '<header class="host-board-head"><div class="host-board-identity"><h2 class="host-board-title" id="host-title-' + escapeHtml(h.id) + '">' +
         escapeHtml(h.name || h.id) +
         (h.local ? ' <span class="host-local">' + escapeHtml(t('hosts.thisMachine')) + '</span>' : '') +
-        '</div><div class="host-board-pills scanner-dots" data-host-pills="' +
+        '</h2>' + (h.description ? '<p class="host-board-description" title="' + escapeHtml(h.description) + '">' +
+          escapeHtml(h.description) + '</p>' : '') + '</div><div class="host-board-pills scanner-dots" data-host-pills="' +
         escapeHtml(h.id) + '"></div></header>' +
         '<p class="host-board-counts" data-host-counts="' + escapeHtml(h.id) + '"></p>' +
         '<div class="host-board-error hidden" hidden data-host-error="' + escapeHtml(h.id) + '">' +
@@ -500,15 +506,25 @@ import { api } from './api.js?v=82';
   export function render() {
     const multi = hasPeers();
     appEl.classList.toggle('multi-host', multi);
+    appEl.classList.toggle('tabbed-hosts', usesFocusedHostView());
     syncAddButton();
     if (multi) {
       grid.hidden = true;
       grid.classList.add('hidden');
       hostBoards.hidden = false;
       hostBoards.classList.remove('hidden');
-      hostSwitcher.hidden = false;
-      hostSwitcher.classList.remove('hidden');
-      renderHostSwitcher();
+      const tabbed = usesFocusedHostView();
+      hostSwitcher.hidden = !tabbed;
+      hostSwitcher.classList.toggle('hidden', !tabbed);
+      if (tabbed) {
+        renderHostSwitcher();
+        hostBoards.setAttribute('role', 'tabpanel');
+        hostBoards.setAttribute('aria-labelledby', 'host-tab-' + S.focusHostId);
+      } else {
+        hostSwitcher.innerHTML = '';
+        hostBoards.removeAttribute('role');
+        hostBoards.removeAttribute('aria-labelledby');
+      }
       renderHostBoards();
       const focused = dataForHost(S.focusHostId);
       if (focused && focused.summary) {

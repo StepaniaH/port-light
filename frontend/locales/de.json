@@ -145,7 +145,9 @@
     "loading": "Belegung wird gelesen…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
-    "max": "Maximal 6 weitere Rechner.",
+    "description": "Kurzbeschreibung (optional)",
+    "descriptionPlaceholder": "Z. B. Tailscale 100.64.0.12 · Heimserver",
+    "max": "Bis zu {count} weitere Rechner.",
     "localOnly": "Ausblenden, Bezeichnungen und Hinzufügen gelten nur für diesen Rechner.",
     "clearAuth": "Gespeicherte Anmeldung löschen",
     "legendHost": "Kennzahlen für {name}",
@@ -217,9 +219,14 @@
         "blurb": "Sprache der Oberfläche."
       }
     },
+    "layout": {
+      "selected": "Ausgewählt",
+      "waterfall": "Alle Rechner gemeinsam anzeigen und durch Scrollen durchsuchen.",
+      "tabs": "Über Tabs wechseln und jeweils einen Rechner anzeigen."
+    },
     "cards": {
       "title": "Karten",
-      "blurb": "Statustext und Badges auf jeder Belegungszelle."
+      "blurb": "Layout für mehrere Rechner, Kartendichte, Status und Badges."
     },
     "groups": {
       "appearance": {
@@ -264,6 +271,14 @@
     },
     "on": "ein",
     "off": "aus",
+    "refresh": {
+      "capacityPoint": "{interval} · max. {hard}",
+      "capacityLimit": "{current}/{hard} Rechner eingerichtet. Bei diesem Intervall ist die Produktgrenze erreicht; langsameres Abfragen senkt nur den Datenverkehr.",
+      "seconds": "{count} s",
+      "minutes": "{count} Min.",
+      "capacity": "{current}/{hard} Peers konfiguriert. Für dieses Intervall werden bis zu {recommended} empfohlen.",
+      "overCapacity": "{current}/{hard} Peers konfiguriert; dieses Intervall eignet sich für bis zu {recommended}. Ein längeres Intervall verringert die Dauerlast."
+    },
     "scanners": {
       "invalid": "Die Scannerauswahl ist ungültig; die Portbelegung kann nicht geprüft werden. Wähle mindestens eine Quelle und speichere. Bei gesperrten Einstellungen korrigiere PORT_LIGHT_SCANNERS in der Bereitstellungskonfiguration und erstelle den Container neu.",
       "required": "Mindestens ein lokaler Scanner muss aktiviert bleiben.",
@@ -310,8 +325,8 @@
         "help": "Fragt die Belegungskarte in einem Intervall ab."
       },
       "refresh_ms": {
-        "label": "Aktualisierungsintervall (ms)",
-        "help": "Wird bei eingeschalteter automatischer Aktualisierung verwendet. 1000–300000."
+        "label": "Aktualisierungsintervall",
+        "help": "Steuert die Abfragen des Dashboards. Lokale Hintergrundscans warten nie länger als 30 Sekunden."
       },
       "port_range_start": {
         "label": "Bereichsbeginn",
@@ -320,6 +335,14 @@
       "port_range_end": {
         "label": "Bereichsende",
         "help": "Obergrenze. Malt nicht jeden ungenutzten Port grün."
+      },
+      "host_layout": {
+        "label": "Mehrmaschinen-Layout",
+        "help": "Alle Rechner im Wasserfall oder einzeln in Tabs anzeigen."
+      },
+      "host_description": {
+        "label": "Rechnerbeschreibung",
+        "help": "Optionale Klartextnotiz unter dem Namen, höchstens 120 Zeichen."
       },
       "host_name": {
         "label": "Rechnername",
@@ -417,6 +440,8 @@
     "bindFamilies": "Adressfamilien"
   },
   "choice": {
+    "waterfall": "Wasserfall",
+    "tabs": "Tabs",
     "auto": "Auto",
     "en": "English",
     "fr": "Français",

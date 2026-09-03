@@ -4,13 +4,15 @@
 
 The warning “Occupancy data is incomplete or stale; free ports cannot be confirmed” means that at least one enabled scanner failed, returned incomplete data, or did not refresh in time. Port-Light keeps known occupied ports visible but does not treat missing observations as proof that a port is free.
 
-Hover over, focus, or click the warning to see guidance based on the current scan. Press Escape to close the disclosure. Remote-machine warnings describe that machine; the hub's local settings do not modify a peer. The guidance does not include raw log messages, private paths, or environment values.
+Hover over the information icon, or focus or click the warning, to see guidance based on the current scan. Press Escape to close the disclosure. Remote-machine warnings describe that machine; the hub's local settings do not modify a peer. The guidance does not include raw log messages, private paths, or environment values.
 
-### Upgrading from v0.7.6
+### Upgrading to v0.7.8
 
-No mandatory configuration migration is required. In v0.7.7, the scan-depth fix prevents discovery from entering directories beyond the selected depth. Upgrading also fixes repeated interleaved degradation logs. Neither fix grants access to unreadable directories or Docker sockets.
+No configuration migration is required. Existing peers and saved settings are preserved. The default multi-machine layout is now a responsive waterfall; choose tabs under Settings → Appearance → Cards if preferred.
 
-If your enabled scanners already work, updating the image and recreating the container is enough. If you use `latest`, keep it. If you pin release tags, change the image tag to `v0.7.7` before running these commands; pulling the old `v0.7.6` tag does not upgrade it:
+For deployments upgrading from v0.7.6, the scanner fixes introduced in v0.7.7 prevent discovery beyond the selected depth and repeated interleaved degradation logs. These fixes do not grant access to unreadable directories or Docker sockets.
+
+If your enabled scanners already work, updating the image and recreating the container is enough. Change a pinned image tag to `v0.7.8` before running these commands; pulling an older version tag does not upgrade it. Deployments using `latest` can retain that tag:
 
 ```bash
 docker compose pull port-light

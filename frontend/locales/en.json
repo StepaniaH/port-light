@@ -145,7 +145,9 @@
     "loading": "Reading occupancy…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
-    "max": "At most 6 other machines.",
+    "description": "Short description (optional)",
+    "descriptionPlaceholder": "e.g. Tailscale 100.64.0.12 · Home lab",
+    "max": "Up to {count} other machines.",
     "localOnly": "Hide, labels, and add apply only to this machine.",
     "clearAuth": "Clear saved login",
     "legendHost": "Counts for {name}",
@@ -217,9 +219,14 @@
         "blurb": "Interface language."
       }
     },
+    "layout": {
+      "selected": "Selected",
+      "waterfall": "Show all machines together and scroll to browse.",
+      "tabs": "Switch with tabs to focus on one machine at a time."
+    },
     "cards": {
       "title": "Cards",
-      "blurb": "Density, status, badges, and optional bind-address summaries."
+      "blurb": "Multi-machine layout, card density, status, and badges."
     },
     "groups": {
       "appearance": {
@@ -264,6 +271,14 @@
     },
     "on": "on",
     "off": "off",
+    "refresh": {
+      "capacityPoint": "{interval} · {hard} max",
+      "capacityLimit": "{current}/{hard} peers configured. The product limit is reached at this interval; slower polling reduces traffic, not the machine limit.",
+      "seconds": "{count}s",
+      "minutes": "{count}m",
+      "capacity": "{current}/{hard} peers configured. Recommended up to {recommended} at this interval.",
+      "overCapacity": "{current}/{hard} peers configured; this interval is best for up to {recommended}. Choose a slower refresh to reduce sustained load."
+    },
     "bindFamilies": "Address families",
     "scanners": {
       "invalid": "The scanner selection is invalid; occupancy cannot be checked. Select at least one source and save. If settings are locked, correct PORT_LIGHT_SCANNERS in your deployment and recreate the container.",
@@ -340,8 +355,8 @@
         "help": "Poll the occupancy map on an interval."
       },
       "refresh_ms": {
-        "label": "Refresh interval (ms)",
-        "help": "Used when auto-refresh is on. 1000–300000."
+        "label": "Refresh interval",
+        "help": "Controls dashboard polling. Local background scans never wait more than 30 seconds."
       },
       "port_range_start": {
         "label": "Range start",
@@ -350,6 +365,14 @@
       "port_range_end": {
         "label": "Range end",
         "help": "Upper bound. Does not paint every unused port green."
+      },
+      "host_layout": {
+        "label": "Multi-machine layout",
+        "help": "Show every machine in a waterfall, or one at a time in tabs."
+      },
+      "host_description": {
+        "label": "Machine description",
+        "help": "Optional plain-text note below the machine name, up to 120 characters."
       },
       "host_name": {
         "label": "Machine name",
@@ -434,6 +457,8 @@
     }
   },
   "choice": {
+    "waterfall": "Waterfall",
+    "tabs": "Tabs",
     "auto": "Auto",
     "en": "English",
     "fr": "Français",

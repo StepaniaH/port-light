@@ -1,4 +1,4 @@
-/* One real-browser flow against two temporary Port-Light instances. */
+/* One real-browser flow against a temporary multi-host Port-Light fleet. */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -83,12 +83,25 @@ try {
   await expect(page.locator('[data-i18n="settings.scanners.invalid"]')).toHaveCount(0);
   await expect.poll(async () => (await fetch(peer + '/api/ports/suggest')).status).toBe(200);
 
-  const hub = await startHost('Hub', [{ id: 'peer0001', name: 'Peer', url: peer }]);
+  const extraPeers = await Promise.all(Array.from({ length: 6 }, (_, i) => startHost('Peer ' + (i + 2))));
+  const peerRows = [peer, ...extraPeers].map((url, i) => ({
+    id: 'peer000' + (i + 1), name: 'Peer ' + (i + 1), url,
+  }));
+  const hub = await startHost('Hub', peerRows);
   page.on('console', message => {
     const expectedConflict = message.location().url === hub + '/api/manual-ports/batch' && message.text().includes('409');
     if (message.type() === 'error' && !expectedConflict) errors.push(message.text());
   });
   await page.goto(hub);
+  await expect(page.locator('.host-board')).toHaveCount(8);
+  await expect(page.locator('#host-switcher')).toBeHidden();
+  await expect(page.locator('.host-board-description')).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const id of ['local', 'peer0001', 'peer0007']) {
+    await expect(page.locator('.host-board[data-host="' + id + '"]')).toBeVisible();
+  }
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await page.setViewportSize({ width: 1280, height: 900 });
   const localCell = page.locator('#host-grid-local .port-cell[data-port="42000"]');
   await expect(localCell).toContainText('Hub service');
   await localCell.click();
@@ -104,13 +117,108 @@ try {
 
   await page.goto(hub + '/#/settings/occupancy');
   await expect(page.locator('input[name="host_name"]')).toHaveValue('Hub');
+  await expect(page.locator('[data-settings-panel="occupancy"] [data-setting="host_layout"]')).toHaveCount(0);
+  await page.locator('input[name="host_description"]').fill('Local · 100.64.0.10');
+  await page.locator('details.peer-row').first().locator('summary').click();
+  await page.locator('details.peer-row').first().locator('[data-peer-field="description"]').fill('Tailscale · 100.64.0.12');
+  await page.locator('details.peer-row').first().locator('summary').click();
   await expect(page.locator('input[name="local_scanners"]')).toHaveCount(3);
   await expect(page.locator('input[name="local_scanners"][value="listen"]')).toBeChecked();
   await expect(page.locator('input[name="local_scanners"][value="compose"]')).toBeChecked();
   await expect(page.locator('input[name="local_scanners"][value="docker"]')).not.toBeChecked();
   await expect(page.locator('.scanner-option .scanner-state.disabled')).toHaveCount(1);
+  await expect(page.locator('details.peer-row')).toHaveCount(7);
+  await expect(page.locator('details.peer-row[open]')).toHaveCount(0);
+  const refreshSlider = page.locator('[data-refresh-slider]');
+  await expect(refreshSlider).toBeVisible();
+  await refreshSlider.click();
+  assert.equal(await refreshSlider.evaluate(element => getComputedStyle(element).boxShadow), 'none');
+  assert.equal(await refreshSlider.evaluate(element => getComputedStyle(element).outlineStyle), 'none');
+  await refreshSlider.focus();
+  await page.keyboard.press('End');
+  await expect(page.locator('[data-refresh-hidden]')).toHaveValue('300000');
+  await expect(page.locator('#refresh-capacity')).toContainText('slower polling reduces traffic');
+  await page.keyboard.press('Home');
+  await expect(page.locator('[data-refresh-hidden]')).toHaveValue('5000');
+  await refreshSlider.evaluate(element => {
+    element.value = '2';
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('[data-refresh-hidden]')).toHaveValue('15000');
+  await expect(page.locator('#refresh-capacity')).toContainText('Recommended up to 18');
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+  const layoutChoice = page.locator('[data-setting="host_layout"]');
+  await expect(layoutChoice).toBeVisible();
+  await expect(layoutChoice.locator('input[value="waterfall"]')).toBeChecked();
+  await expect(page.locator('[data-settings-panel="appearance"] .settings-card').filter({ has: layoutChoice }).locator('h2')).toHaveText('Cards');
+  await expect(layoutChoice.locator('.layout-option-selected:visible')).toHaveCount(1);
+  await layoutChoice.locator('[data-i18n="choice.tabs"]').click();
+  const tabsOption = layoutChoice.locator('.layout-option').filter({ has: page.locator('input[value="tabs"]') });
+  await expect(tabsOption.locator('input')).toBeChecked();
+  await expect(tabsOption.locator('.layout-option-selected')).toBeVisible();
+  await expect(layoutChoice.locator('.layout-option-selected:visible')).toHaveCount(1);
+  assert.equal(await tabsOption.evaluate(element => getComputedStyle(element).outlineStyle), 'none');
+  assert.equal(await tabsOption.locator('input').evaluate(element => getComputedStyle(element).boxShadow), 'none');
+  await tabsOption.locator('input').press('ArrowLeft');
+  await expect(layoutChoice.locator('input[value="waterfall"]')).toBeChecked();
+  assert.equal(await layoutChoice.locator('.layout-option:has(input:checked)').evaluate(element => getComputedStyle(element).outlineStyle), 'solid');
+  await layoutChoice.locator('input[value="waterfall"]').press('ArrowRight');
+  await expect(tabsOption.locator('input')).toBeChecked();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(layoutChoice.locator('.layout-option')).toHaveCount(2);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('#settings-save').click();
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  assert.equal((await (await fetch(hub + '/api/settings')).json()).values.refresh_ms, 15000);
+  await page.goto(hub);
+  await expect(page.locator('.host-chip')).toHaveCount(8);
+  await expect(page.locator('.host-board')).toHaveCount(1);
+  await expect(page.locator('.host-board-description')).toHaveText('Local · 100.64.0.10');
+  await page.locator('#host-tab-local').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.host-board')).toHaveAttribute('data-host', 'peer0001');
+  await expect(page.locator('#host-tab-peer0001')).toBeFocused();
+  await expect(page.locator('.host-board-description')).toHaveText('Tailscale · 100.64.0.12');
+  await page.reload();
+  await expect(page.locator('.host-board-description')).toHaveText('Tailscale · 100.64.0.12');
+  await page.locator('#host-tab-local').click();
 
   await page.goto(hub + '/#/settings/appearance');
+  const palettes = ['gruvbox', 'catppuccin', 'solarized', 'nord', 'dracula',
+    'tokyo-night', 'one-dark', 'everforest', 'rose-pine', 'kanagawa'];
+  const rootElement = page.locator('html');
+  await page.locator('.theme-picker-core [data-theme-preview="light"]').click();
+  for (const family of palettes) {
+    const swatch = page.locator('[data-theme-preview="' + family + '-light"]');
+    await expect(swatch).not.toHaveClass(/is-unavailable/);
+    await swatch.click();
+    await expect(rootElement).toHaveAttribute('data-mode', 'light');
+    await expect(rootElement).toHaveAttribute('data-palette', family);
+    const colors = await swatch.evaluate(element => {
+      const pageStyle = getComputedStyle(document.documentElement);
+      const previewStyle = getComputedStyle(element);
+      return ['bg', 'used', 'configured', 'free'].map(key => [
+        pageStyle.getPropertyValue('--' + key).trim(),
+        previewStyle.getPropertyValue('--preview-' + (key === 'configured' ? 'cfg' : key)).trim(),
+      ]);
+    });
+    assert.ok(colors.every(([actual, preview]) => actual === preview), family + ' swatch colors');
+  }
+  await page.locator('.theme-swatch[data-theme-preview="nord-light"]').click();
+  await page.locator('#settings-save').click();
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  await page.reload();
+  await expect(rootElement).toHaveAttribute('data-palette', 'nord');
+  await expect(rootElement).toHaveAttribute('data-mode', 'light');
+  await page.locator('.theme-picker-core [data-theme-preview="system"]').click();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(rootElement).toHaveAttribute('data-mode', 'dark');
+  await expect(rootElement).toHaveAttribute('data-palette', 'nord');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(rootElement).toHaveAttribute('data-mode', 'light');
+  await expect(rootElement).toHaveAttribute('data-palette', 'nord');
+
   const showBinds = page.locator('input[name="show_bind_addresses"]');
   const showV4 = page.locator('input[name="show_bind_ipv4"]');
   const showV6 = page.locator('input[name="show_bind_ipv6"]');
@@ -191,9 +299,12 @@ try {
   await page.locator('[data-host-switch="local"]').click();
   const warning = page.locator('[data-host-error="local"] .scan-warning');
   const trigger = warning.locator('summary');
+  const warningInfo = warning.locator('.scan-warning-info');
   const explanation = warning.locator('.scan-warning-panel');
   await expect(warning).toBeVisible();
   await trigger.hover();
+  await expect(explanation).toBeHidden();
+  await warningInfo.hover();
   await expect(explanation).toBeVisible();
   await expect(explanation).toContainText('group_add');
   await expect(explanation).toContainText('docker compose restart does not apply');
@@ -212,7 +323,7 @@ try {
   await explanation.locator('a[href="#/settings/occupancy"]').click();
   await expect(page.locator('input[name="host_name"]')).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: invalid scanner recovery, startup, detail, saved label, mixed bind addresses, batch conflict and retry, host switch, scan guidance and mobile layout.');
+  console.log('Browser smoke passed: waterfall and saved tabs, mobile waterfall, persisted machine descriptions, slider focus and capacity guidance, keyboard host switch, invalid scanner recovery, detail, saved label, all light palettes, saved/system appearance, mixed bind addresses, batch conflict and retry, scan guidance and mobile layout.');
 } finally {
   if (browser) await browser.close();
   await Promise.all(processes.map(async child => {

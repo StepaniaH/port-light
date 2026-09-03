@@ -100,8 +100,13 @@ FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         "refresh_ms", "int", "REFRESH_MS", 5000, "grid",
-        "Refresh interval (ms)", "Used when auto-refresh is on. 1000–300000.",
+        "Refresh interval", "Dashboard polling interval; local background scans wait at most 30 seconds.",
         min=1000, max=300000,
+    ),
+    FieldSpec(
+        "host_layout", "choice", "PORT_LIGHT_HOST_LAYOUT", "waterfall", "appearance",
+        "Multi-machine layout", "Show every machine in a waterfall, or focus one machine at a time with tabs.",
+        choices=("waterfall", "tabs"),
     ),
     FieldSpec(
         "port_range_start", "int", "PORT_RANGE_START", 1, "grid",
@@ -117,6 +122,11 @@ FIELDS: tuple[FieldSpec, ...] = (
         "host_name", "str", "PORT_LIGHT_HOST_NAME", "", "local",
         "This machine", "Name shown above this machine's occupancy map. Empty uses the system hostname.",
         max_length=40,
+    ),
+    FieldSpec(
+        "host_description", "str", "PORT_LIGHT_HOST_DESCRIPTION", "", "local",
+        "Machine description", "Optional short note shown below this machine's name.",
+        max_length=120,
     ),
     FieldSpec(
         "local_scanners", "multi_choice", "PORT_LIGHT_SCANNERS",
@@ -357,6 +367,7 @@ def snapshot() -> dict[str, Any]:
             "choices": list(spec.choices),
             "min": spec.min,
             "max": spec.max,
+            "max_length": spec.max_length if spec.kind == "str" else None,
             "origin": origins[spec.key],
             "locked": readonly,
         })

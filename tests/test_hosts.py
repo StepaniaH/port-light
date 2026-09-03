@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import socket
+import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -110,6 +113,7 @@ def test_hosts_crud_hides_password(tmp_path, monkeypatch):
     assert listed["local"]["name"] == "Studio"
     assert listed["peers"] == []
     assert listed["readonly"] is False
+    assert listed["max_peers"] == hosts.MAX_PEERS
 
     created = client.put("/api/hosts", json={
         "peers": [{
@@ -172,13 +176,77 @@ def test_saved_empty_peers_does_not_fall_through_to_env(tmp_path, monkeypatch):
     assert client.get("/api/hosts").json()["peers"] == []
 
 
+def test_peer_description_roundtrip_preserves_old_clients_and_supports_clearing(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    row = {"name": "NAS", "url": "http://10.0.0.2:2100"}
+    created = client.put("/api/hosts", json={"peers": [row]}).json()["peers"][0]
+    assert created["description"] == ""
+    row["id"] = created["id"]
+    description = "机" * hosts.MAX_DESCRIPTION
+    saved = client.put("/api/hosts", json={"peers": [{**row, "description": " " + description + " "}]})
+    assert saved.status_code == 200
+    assert saved.json()["peers"][0]["description"] == description
+    assert port_store.get_peers()[0]["description"] == description
+    assert client.put("/api/hosts", json={"peers": [row]}).json()["peers"][0]["description"] == description
+    rejected = client.put("/api/hosts", json={"peers": [{**row, "description": description + "x"}]})
+    assert rejected.status_code == 400
+    cleared = client.put("/api/hosts", json={"peers": [{**row, "description": ""}]})
+    assert cleared.json()["peers"][0]["description"] == ""
+
+
+def test_peer_description_can_be_provided_by_environment(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch, PORT_LIGHT_SETTINGS_SOURCE="env",
+                     PORT_LIGHT_PEERS='[{"name":"NAS","url":"http://10.0.0.2:2100","description":"Tailscale 100.64.0.12"}]')
+    assert client.get("/api/hosts").json()["peers"][0]["description"] == "Tailscale 100.64.0.12"
+
+
+def test_overlong_stored_peer_description_is_rejected_without_overwriting_data(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    path = tmp_path / "port_light.json"
+    raw = json.dumps({"peers": [{
+        "id": "peer0001", "name": "NAS", "url": "http://10.0.0.2:2100",
+        "description": "x" * (hosts.MAX_DESCRIPTION + 1),
+    }]})
+    path.write_text(raw, encoding="utf-8")
+    assert client.get("/api/hosts").status_code == 503
+    assert path.read_text(encoding="utf-8") == raw
+
+
 def test_put_rejects_too_many_and_bad_urls(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
-    too_many = [{"name": f"m{i}", "url": f"http://10.0.0.{i}:2100"} for i in range(1, 8)]
+    allowed = [{"name": f"m{i}", "url": f"http://10.0.0.{i}:2100"}
+               for i in range(1, hosts.MAX_PEERS + 1)]
+    accepted = client.put("/api/hosts", json={"peers": allowed})
+    assert accepted.status_code == 200
+    assert accepted.json()["max_peers"] == hosts.MAX_PEERS
+    assert len(accepted.json()["peers"]) == hosts.MAX_PEERS
+    too_many = allowed + [{"name": "overflow", "url": "http://10.0.1.1:2100"}]
     assert client.put("/api/hosts", json={"peers": too_many}).status_code == 400
     assert client.put("/api/hosts", json={"peers": [{"name": "x", "url": "http://8.8.8.8:2100"}]}).status_code == 400
     assert client.put("/api/hosts", json={"peers": [{"name": "x", "url": "file:///tmp"}]}).status_code == 400
     assert client.put("/api/hosts", json={"peers": "nas"}).status_code == 400
+
+
+def test_peer_batch_fetch_has_bounded_concurrency(monkeypatch):
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def fake_fetch(peer, path, query, if_none_match=None):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.01)
+        with lock:
+            active -= 1
+        return 200, {"peer": peer["name"]}, None
+
+    monkeypatch.setattr(hosts, "fetch_peer_json", fake_fetch)
+    peers = [{"name": f"peer-{i}"} for i in range(hosts.PEER_FETCH_CONCURRENCY * 3)]
+    results = asyncio.run(hosts.fetch_peers_json(peers, "/api/ports", {}))
+    assert len(results) == len(peers)
+    assert peak == hosts.PEER_FETCH_CONCURRENCY
 
 
 def test_local_host_ports_alias(tmp_path, monkeypatch, empty_scan):

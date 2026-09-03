@@ -212,6 +212,36 @@ def test_local_host_name_can_be_saved_in_settings(tmp_path, monkeypatch):
     assert client.get("/api/hosts").json()["local"]["name"] == "My server"
 
 
+def test_host_layout_defaults_to_waterfall_and_can_be_saved(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("PORT_LIGHT_HOST_LAYOUT", raising=False)
+    client = TestClient(app)
+    settings_doc = client.get("/api/settings").json()
+    assert settings_doc["values"]["host_layout"] == "waterfall"
+    layout_field = next(field for field in settings_doc["fields"] if field["key"] == "host_layout")
+    assert layout_field["group"] == "appearance"
+    saved = client.put("/api/settings", json={"host_layout": "tabs"})
+    assert saved.status_code == 200
+    assert client.get("/api/settings").json()["values"]["host_layout"] == "tabs"
+    assert client.put("/api/settings", json={"host_layout": "automatic"}).status_code == 400
+
+
+def test_local_description_is_optional_bounded_and_can_be_cleared(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PORT_LIGHT_HOST_DESCRIPTION", "Environment note")
+    client = TestClient(app)
+    assert client.get("/api/hosts").json()["local"]["description"] == "Environment note"
+    description = "机" * 120
+    saved = client.put("/api/settings", json={"host_description": " " + description + " "})
+    assert saved.status_code == 200
+    field = next(row for row in saved.json()["fields"] if row["key"] == "host_description")
+    assert field["max_length"] == 120
+    assert client.get("/api/hosts").json()["local"]["description"] == description
+    assert client.put("/api/settings", json={"host_description": description + "x"}).status_code == 400
+    assert client.put("/api/settings", json={"host_description": ""}).status_code == 200
+    assert client.get("/api/hosts").json()["local"]["description"] == ""
+
+
 def test_settings_document_separates_scanner_intent_from_runtime_state(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("PORT_LIGHT_SCANNERS", "listen")

@@ -145,7 +145,9 @@
     "loading": "占用状況を読み込み中…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
-    "max": "ほかのマシンは最大 6 台です。",
+    "description": "短い説明（任意）",
+    "descriptionPlaceholder": "例：Tailscale 100.64.0.12 · 自宅サーバー",
+    "max": "ほかのマシンを最大 {count} 台追加できます。",
     "localOnly": "非表示・ラベル・追加はこのマシンにだけ効きます。",
     "clearAuth": "保存したログインを消す",
     "legendHost": "{name} の件数",
@@ -217,9 +219,14 @@
         "blurb": "インターフェースの表示言語。"
       }
     },
+    "layout": {
+      "selected": "選択中",
+      "waterfall": "すべてのマシンを並べて表示し、スクロールして閲覧します。",
+      "tabs": "上部のタブで切り替え、1 台ずつ表示します。"
+    },
     "cards": {
       "title": "カード",
-      "blurb": "各占有カードの状態テキストとバッジ。"
+      "blurb": "複数マシンのレイアウト、カードの密度、状態とバッジ。"
     },
     "groups": {
       "appearance": {
@@ -264,6 +271,14 @@
     },
     "on": "オン",
     "off": "オフ",
+    "refresh": {
+      "capacityPoint": "{interval} · 最大{hard}台",
+      "capacityLimit": "{current}/{hard}台を設定済み。この間隔で製品の上限に達します。間隔を延ばすと通信量は減りますが、台数の上限は増えません。",
+      "seconds": "{count} 秒",
+      "minutes": "{count} 分",
+      "capacity": "ピアを {current}/{hard} 台設定済みです。この間隔では最大 {recommended} 台を推奨します。",
+      "overCapacity": "ピアを {current}/{hard} 台設定済みです。この間隔の推奨上限は {recommended} 台です。更新を遅くすると継続的な負荷を抑えられます。"
+    },
     "scanners": {
       "invalid": "スキャナーの選択が無効なため、ポートの使用状況を確認できません。少なくとも1つのソースを選択して保存してください。設定が読み取り専用の場合は、デプロイ設定の PORT_LIGHT_SCANNERS を修正してコンテナを再作成してください。",
       "required": "ローカルスキャナーを 1 つ以上有効にしてください。",
@@ -310,8 +325,8 @@
         "help": "間隔を置いて占用マップを取得します。"
       },
       "refresh_ms": {
-        "label": "更新間隔（ミリ秒）",
-        "help": "自動更新がオンのときに使います。1000–300000。"
+        "label": "更新間隔",
+        "help": "ダッシュボードのポーリングを制御します。ローカルのバックグラウンドスキャンは最大 30 秒間隔です。"
       },
       "port_range_start": {
         "label": "範囲の開始",
@@ -320,6 +335,14 @@
       "port_range_end": {
         "label": "範囲の終了",
         "help": "上限です。未使用ポートをすべて緑にはしません。"
+      },
+      "host_layout": {
+        "label": "複数マシンのレイアウト",
+        "help": "全マシンをウォーターフォール表示するか、タブで1台ずつ表示します。"
+      },
+      "host_description": {
+        "label": "マシンの説明",
+        "help": "名前の下に表示する任意のプレーンテキストのメモ。最大120文字。"
       },
       "host_name": {
         "label": "マシン名",
@@ -417,6 +440,8 @@
     "bindFamilies": "アドレスファミリー"
   },
   "choice": {
+    "waterfall": "ウォーターフォール",
+    "tabs": "タブ",
     "auto": "自動",
     "en": "English",
     "fr": "Français",

@@ -7,6 +7,7 @@ remote ``docker.sock``.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import ipaddress
 import json
@@ -21,8 +22,10 @@ from urllib.parse import urlencode, urlparse, urlunparse
 from . import port_store, settings as app_settings
 
 LOCAL_ID = "local"
-MAX_PEERS = 6
+MAX_PEERS = 32
+PEER_FETCH_CONCURRENCY = 6
 MAX_NAME = 40
+MAX_DESCRIPTION = port_store.MAX_PEER_DESCRIPTION
 MAX_USER = 128
 MAX_PASSWORD = 256
 FETCH_TIMEOUT_S = 4.0
@@ -66,7 +69,13 @@ def local_display_name() -> str:
 
 
 def public_local() -> dict:
-    return {"id": LOCAL_ID, "name": local_display_name(), "local": True}
+    values, _ = app_settings.resolve()
+    return {
+        "id": LOCAL_ID,
+        "name": local_display_name(),
+        "description": str(values.get("host_description") or "").strip()[:MAX_DESCRIPTION],
+        "local": True,
+    }
 
 
 def list_public_peers() -> list[dict]:
@@ -82,6 +91,7 @@ def catalog() -> dict:
         "local": public_local(),
         "peers": list_public_peers(),
         "readonly": hosts_readonly(),
+        "max_peers": MAX_PEERS,
     }
 
 
@@ -178,6 +188,21 @@ def fetch_peer_json(
     return status, data, etag
 
 
+async def fetch_peers_json(
+    peers: list[dict],
+    path: str,
+    query: dict[str, str],
+) -> list[tuple[int, dict | None, str | None]]:
+    """Fetch one resource from many peers without unbounded fan-out."""
+    gate = asyncio.Semaphore(PEER_FETCH_CONCURRENCY)
+
+    async def fetch_one(peer: dict) -> tuple[int, dict | None, str | None]:
+        async with gate:
+            return await asyncio.to_thread(fetch_peer_json, peer, path, query)
+
+    return list(await asyncio.gather(*(fetch_one(peer) for peer in peers)))
+
+
 def _resolved_peers() -> list[dict]:
     source = app_settings.settings_source()
     if source == "env":
@@ -190,7 +215,10 @@ def _resolved_peers() -> list[dict]:
 
 
 def _file_peers() -> list[dict]:
-    return port_store.get_peers()
+    peers = port_store.get_peers()
+    if len(peers) > MAX_PEERS:
+        raise HostsError(f"at most {MAX_PEERS} other machines")
+    return peers
 
 
 def _env_peers() -> list[dict]:
@@ -208,6 +236,7 @@ def _public_peer(peer: dict) -> dict:
     return {
         "id": peer["id"],
         "name": peer["name"],
+        "description": str(peer.get("description") or ""),
         "url": peer["url"],
         "username": str(peer.get("username") or ""),
         "has_auth": bool(peer.get("username") or peer.get("password")),
@@ -250,6 +279,12 @@ def _normalize_peers(raw_peers, existing: list[dict]) -> list[dict]:
             host_id = secrets.token_hex(4)
         seen_ids.add(host_id)
         prev = by_id.get(host_id, {})
+        if "description" not in item:
+            description = str(prev.get("description") or "").strip()
+        else:
+            description = str(item.get("description") or "").strip()
+        if len(description) > MAX_DESCRIPTION:
+            raise HostsError("description is too long")
         if "username" not in item:
             username = str(prev.get("username") or "")
         else:
@@ -265,6 +300,7 @@ def _normalize_peers(raw_peers, existing: list[dict]) -> list[dict]:
         out.append({
             "id": host_id,
             "name": name,
+            "description": description,
             "url": url,
             "username": username,
             "password": password,

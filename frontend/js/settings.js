@@ -1,13 +1,14 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=82';
-import { t, tx, escapeHtml, errorText } from './text.js?v=82';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=82';
-import { moveChipFocus } from './a11y.js?v=82';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=82';
-import { api, fetchHosts, fetchSettings } from './api.js?v=82';
-import { hasPeers, hostById, hostName } from './hosts.js?v=82';
-import { bindAddressView, render, syncHiddenButton } from './grid.js?v=82';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=88';
+import { t, tx, escapeHtml, errorText } from './text.js?v=88';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=88';
+import { moveChipFocus } from './a11y.js?v=88';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=88';
+import { api, fetchHosts, fetchSettings } from './api.js?v=88';
+import { hasPeers, hostById, hostName } from './hosts.js?v=88';
+import { bindAddressView, render, syncHiddenButton } from './grid.js?v=88';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=88';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
@@ -27,6 +28,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     return {
       id: p.id || '',
       name: p.name || '',
+      description: p.description || '',
       url: p.url || '',
       username: p.username || '',
       password: '',
@@ -45,6 +47,86 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
   export function choiceLabel(c) {
     return t('choice.' + c);
+  }
+
+  export function formatRefreshInterval(value) {
+    const ms = Math.max(1000, Number(value) || 5000);
+    if (ms >= 60000 && ms % 60000 === 0) {
+      return t('settings.refresh.minutes', { count: ms / 60000 });
+    }
+    return t('settings.refresh.seconds', { count: ms / 1000 });
+  }
+
+  function refreshControlHtml(f, value, readonly, labelId) {
+    const choices = refreshChoices(value);
+    const current = Math.max(1000, Math.min(300000, Number(value) || 5000));
+    const index = choices.indexOf(current);
+    const hard = Number(S.hostCatalog.max_peers) || 32;
+    const capacityIndex = choices.findIndex(function (interval) { return recommendedPeerLimit(interval, hard) >= hard; });
+    const capacityPoint = capacityIndex > 0 && capacityIndex < choices.length - 1
+      ? '<span class="refresh-capacity-point" data-refresh-capacity-point data-capacity-interval="' + choices[capacityIndex] +
+        '" style="left:' + (capacityIndex / (choices.length - 1) * 100) + '%">' + escapeHtml(t('settings.refresh.capacityPoint', {
+          interval: formatRefreshInterval(choices[capacityIndex]), hard: hard,
+        })) + '</span>' : '';
+    const disabled = readonly ? ' disabled' : '';
+    return '<div class="refresh-control"><div class="refresh-value-row"><output for="refresh-slider" ' +
+      'id="refresh-value" data-refresh-value>' + escapeHtml(formatRefreshInterval(current)) + '</output></div>' +
+      '<input type="range" id="refresh-slider" min="0" max="' + (choices.length - 1) + '" step="1" value="' +
+      index + '" style="--refresh-progress:' + (index / (choices.length - 1) * 100) + '%" data-refresh-slider data-refresh-values="' + choices.join(',') + '" aria-labelledby="' +
+      escapeHtml(labelId) + '" aria-describedby="refresh-capacity" aria-valuetext="' +
+      escapeHtml(formatRefreshInterval(current)) + '"' + disabled + '>' +
+      '<input type="hidden" name="' + escapeHtml(f.key) + '" value="' + current + '" data-refresh-hidden>' +
+      '<div class="refresh-scale" aria-hidden="true"><span data-refresh-endpoint="' + choices[0] + '">' + escapeHtml(formatRefreshInterval(choices[0])) +
+      '</span>' + capacityPoint + '<span data-refresh-endpoint="' + choices[choices.length - 1] + '">' + escapeHtml(formatRefreshInterval(choices[choices.length - 1])) + '</span></div>' +
+      '<p class="refresh-capacity field-help" id="refresh-capacity" aria-live="polite"></p></div>';
+  }
+
+  export function syncRefreshCapacity() {
+    const hidden = document.querySelector('[data-refresh-hidden]');
+    const capacity = document.getElementById('refresh-capacity');
+    const slider = document.querySelector('[data-refresh-slider]');
+    const output = document.querySelector('[data-refresh-value]');
+    const maxNote = document.querySelector('[data-peer-limit]');
+    const capacityPoint = document.querySelector('[data-refresh-capacity-point]');
+    const hard = Number(S.hostCatalog.max_peers) || 32;
+    if (maxNote) maxNote.textContent = t('hosts.max', { count: hard });
+    document.querySelectorAll('[data-refresh-endpoint]').forEach(function (endpoint) {
+      endpoint.textContent = formatRefreshInterval(endpoint.getAttribute('data-refresh-endpoint'));
+    });
+    if (capacityPoint) capacityPoint.textContent = t('settings.refresh.capacityPoint', {
+      interval: formatRefreshInterval(capacityPoint.getAttribute('data-capacity-interval')), hard: hard,
+    });
+    if (hidden && output) {
+      output.textContent = formatRefreshInterval(Number(hidden.value));
+      if (slider) slider.setAttribute('aria-valuetext', output.textContent);
+    }
+    if (!hidden || !capacity) return;
+    const count = Array.isArray(S.peersDraft) ? S.peersDraft.length : (S.hostCatalog.peers || []).length;
+    const recommended = recommendedPeerLimit(Number(hidden.value), hard);
+    const over = count > recommended;
+    const atLimit = recommended >= hard;
+    capacity.classList.toggle('is-warning', over);
+    capacity.textContent = t(atLimit ? 'settings.refresh.capacityLimit'
+      : over ? 'settings.refresh.overCapacity' : 'settings.refresh.capacity', {
+      current: count,
+      recommended: recommended,
+      hard: hard,
+    });
+  }
+
+  export function updateRefreshSlider(input) {
+    if (!input || !input.matches('[data-refresh-slider]')) return false;
+    const choices = String(input.getAttribute('data-refresh-values') || '').split(',').map(Number);
+    const value = choices[Number(input.value)];
+    const hidden = document.querySelector('[data-refresh-hidden]');
+    const output = document.querySelector('[data-refresh-value]');
+    if (!Number.isFinite(value) || !hidden || !output) return false;
+    hidden.value = String(value);
+    input.style.setProperty('--refresh-progress', (Number(input.value) / (choices.length - 1) * 100) + '%');
+    output.textContent = formatRefreshInterval(value);
+    input.setAttribute('aria-valuetext', output.textContent);
+    syncRefreshCapacity();
+    return true;
   }
 
   export function settingsCard(titleKey, blurbKey, rowsHtml) {
@@ -318,6 +400,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
   export function syncPaletteAvailability() {
     const mode = currentMode();
+    const readonly = !!(S.settingsDoc && S.settingsDoc.readonly);
     document.querySelectorAll('.theme-swatch[data-theme-preview]').forEach(function (labelEl) {
       const input = labelEl.querySelector('input[name="theme_palette"]');
       if (!input) return;
@@ -326,16 +409,15 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         const id = family.slice(CUSTOM_PREFIX.length);
         const themeRow = (S.customThemes || []).find(function (x) { return x.id === id; });
         const ok = !!themeRow && themeRow.mode === mode;
-        input.disabled = !ok;
+        input.disabled = readonly || !ok;
         labelEl.classList.toggle('is-unavailable', !ok);
         return;
       }
       const previewId = family === '' ? mode
         : (PALETTE_VARIANTS[family].indexOf('light') >= 0 && mode === 'light' ? family + '-light' : family);
       labelEl.setAttribute('data-theme-preview', previewId);
-      if (family === '') return;
-      const available = paletteAvailable(family, mode);
-      input.disabled = !available;
+      const available = family === '' || paletteAvailable(family, mode);
+      input.disabled = readonly || !available;
       labelEl.classList.toggle('is-unavailable', !available);
     });
   }
@@ -528,6 +610,32 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       invalid + originHint(f) + '</div></fieldset>';
   }
 
+  function renderHostLayoutPicker(f, value, disabled) {
+    const board = '<span class="layout-preview-board"><i></i><i></i><i></i><i></i></span>';
+    const shortBoard = '<span class="layout-preview-board is-short"><i></i><i></i></span>';
+    const previews = {
+      waterfall: '<span class="layout-preview-columns"><span>' + board + shortBoard +
+        '</span><span>' + shortBoard + board + '</span></span>',
+      tabs: '<span class="layout-preview-tabs"><i></i><i></i><i></i></span>' + board,
+    };
+    return '<div class="layout-picker" role="radiogroup" aria-labelledby="setting-label-host_layout">' +
+      (f.choices || []).map(function (choice) {
+        const titleId = 'layout-title-' + choice;
+        const helpId = 'layout-help-' + choice;
+        const helpKey = 'settings.layout.' + choice;
+        return '<label class="layout-option"><input type="radio" name="host_layout" value="' +
+          escapeHtml(choice) + '"' + (choice === value ? ' checked' : '') + disabled +
+          ' aria-labelledby="' + escapeHtml(titleId) + '" aria-describedby="' + escapeHtml(helpId) + '">' +
+          '<span class="layout-option-header"><span class="layout-option-mark" aria-hidden="true">✓</span>' +
+          '<span class="layout-option-title" id="' + escapeHtml(titleId) + '" data-i18n="choice.' + escapeHtml(choice) + '">' +
+          escapeHtml(choiceLabel(choice)) + '</span><span class="layout-option-selected" aria-hidden="true" data-i18n="settings.layout.selected">' +
+          escapeHtml(t('settings.layout.selected')) + '</span></span>' +
+          '<span class="layout-preview" aria-hidden="true">' + (previews[choice] || '') + '</span>' +
+          '<span class="field-help" id="' + escapeHtml(helpId) + '" data-i18n="' + escapeHtml(helpKey) + '">' +
+          escapeHtml(t(helpKey)) + '</span></label>';
+      }).join('') + '</div>';
+  }
+
   export function renderField(f, value, readonly, doc) {
     if (f.type === 'multi_choice') return renderScannerField(f, value, readonly, doc);
     const disabled = readonly ? ' disabled' : '';
@@ -548,6 +656,8 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       control = renderModePicker(f.choices || [], value, disabled);
     } else if (f.key === 'theme_palette') {
       control = renderPalettePicker(f.choices || [], value, currentMode(), disabled);
+    } else if (f.key === 'host_layout') {
+      control = renderHostLayoutPicker(f, value, disabled);
     } else if (f.type === 'choice') {
       const choices = f.choices || [];
       control = '<div class="segmented" role="radiogroup" aria-label="' +
@@ -557,6 +667,8 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
             escapeHtml(c) + '"' + (c === value ? ' checked' : '') + disabled +
             '><span data-i18n="choice.' + c + '">' + escapeHtml(choiceLabel(c)) + '</span></label>';
         }).join('') + '</div>';
+    } else if (f.key === 'refresh_ms') {
+      control = refreshControlHtml(f, value, readonly, labelId);
     } else if (f.type === 'int') {
       const min = f.min != null ? ' min="' + f.min + '"' : '';
       const max = f.max != null ? ' max="' + f.max + '"' : '';
@@ -567,10 +679,11 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       control = '<textarea name="' + f.key + '" rows="3" data-locked="' + (readonly ? '1' : '0') + '"' + labelledBy + disabled + '>' +
         escapeHtml(lines) + '</textarea>';
     } else {
+      const maxLength = f.max_length != null ? ' maxlength="' + f.max_length + '"' : '';
       control = '<input type="text" name="' + f.key + '" value="' + escapeHtml(String(value || '')) +
-        '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + labelledBy + disabled + '>';
+        '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + maxLength + labelledBy + disabled + '>';
     }
-    const wide = f.key === 'theme_mode' || f.key === 'theme_palette' ? ' is-wide' : '';
+    const wide = ['theme_mode', 'theme_palette', 'host_layout', 'refresh_ms', 'host_description'].includes(f.key) ? ' is-wide' : '';
     const composeOption = f.key.indexOf('compose_scan_') === 0 ? ' data-compose-option' : '';
     const sourceHint = f.key === 'show_bind_addresses' || BIND_FAMILY_KEYS.includes(f.key)
       ? '' : originHint(f);
@@ -589,14 +702,22 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       const keep = row.has_auth && !row.clear_auth
         ? ' placeholder="' + escapeHtml(t('hosts.passwordKeep')) + '"'
         : '';
-      return '<div class="peer-row" data-peer-index="' + i + '" data-peer-id="' +
-        escapeHtml(row.id || '') + '" data-has-auth="' + (row.has_auth && !row.clear_auth ? '1' : '0') + '">' +
+      const open = row.id ? '' : ' open';
+      return '<details class="peer-row" data-peer-index="' + i + '" data-peer-id="' +
+        escapeHtml(row.id || '') + '" data-has-auth="' + (row.has_auth && !row.clear_auth ? '1' : '0') + '"' + open + '>' +
+        '<summary class="peer-row-summary"><span class="peer-summary-name">' +
+        escapeHtml(row.name || t('hosts.namePlaceholder')) + '</span><span class="peer-summary-url">' +
+        escapeHtml(row.url || t('hosts.urlPlaceholder')) + '</span></summary><div class="peer-row-fields">' +
         '<label><span data-i18n="hosts.name">' + escapeHtml(t('hosts.name')) + '</span>' +
         '<input data-peer-field="name" maxlength="40" value="' + escapeHtml(row.name || '') +
         '" placeholder="' + escapeHtml(t('hosts.namePlaceholder')) + '"' + disabled + '></label>' +
         '<label><span data-i18n="hosts.url">' + escapeHtml(t('hosts.url')) + '</span>' +
         '<input data-peer-field="url" value="' + escapeHtml(row.url || '') +
         '" placeholder="' + escapeHtml(t('hosts.urlPlaceholder')) + '"' + disabled + '></label>' +
+        '<label class="peer-description-field"><span data-i18n="hosts.description">' +
+        escapeHtml(t('hosts.description')) + '</span>' +
+        '<input data-peer-field="description" maxlength="120" value="' + escapeHtml(row.description || '') +
+        '" placeholder="' + escapeHtml(t('hosts.descriptionPlaceholder')) + '"' + disabled + '></label>' +
         '<label><span data-i18n="hosts.username">' + escapeHtml(t('hosts.username')) + '</span>' +
         '<input data-peer-field="username" autocomplete="off" value="' + escapeHtml(row.username || '') +
         '"' + disabled + '></label>' +
@@ -609,14 +730,16 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
             escapeHtml(t('hosts.clearAuth')) + '</button>'
           : '') +
         '<button type="button" class="btn-secondary" data-peer-remove' + disabled + '>' +
-        escapeHtml(t('hosts.remove')) + '</button></div></div>';
+        escapeHtml(t('hosts.remove')) + '</button></div></div></details>';
     }).join('');
-    const canAdd = !locked && S.peersDraft.length < 6;
+    const maxPeers = Number(S.hostCatalog.max_peers) || 32;
+    const canAdd = !locked && S.peersDraft.length < maxPeers;
     host.innerHTML = '<div class="peer-list">' + rows + '</div>' +
-      '<p class="field-help" data-i18n="hosts.max">' + escapeHtml(t('hosts.max')) + '</p>' +
+      '<p class="field-help" data-peer-limit>' + escapeHtml(t('hosts.max', { count: maxPeers })) + '</p>' +
       '<p class="field-help" data-i18n="hosts.dockerHint">' + escapeHtml(t('hosts.dockerHint')) + '</p>' +
       '<button type="button" class="btn-secondary" id="peer-add"' + (canAdd ? '' : ' disabled') + '>' +
       escapeHtml(t('hosts.add')) + '</button>';
+    syncRefreshCapacity();
   }
 
   export function readPeersDraftFromForm() {
@@ -629,6 +752,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       next.push({
         id: row.getAttribute('data-peer-id') || prev.id || '',
         name: ((row.querySelector('[data-peer-field="name"]') || {}).value || ''),
+        description: ((row.querySelector('[data-peer-field="description"]') || {}).value || ''),
         url: ((row.querySelector('[data-peer-field="url"]') || {}).value || ''),
         username: ((row.querySelector('[data-peer-field="username"]') || {}).value || ''),
         password: ((row.querySelector('[data-peer-field="password"]') || {}).value || ''),
@@ -647,6 +771,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       if (!name || !url) return null;
       const item = { name: name, url: url };
       if (row.id) item.id = row.id;
+      item.description = String(row.description || '').trim();
       if (row.clear_auth) {
         item.username = '';
         item.password = '';
@@ -945,10 +1070,11 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
     const appearanceFields = byGroup.appearance || [];
     const themeFields = appearanceFields.filter(function (f) {
-      return !CARD_FIELD_KEYS[f.key] && f.key !== 'locale' && f.key !== 'grid_density';
+      return !CARD_FIELD_KEYS[f.key] && f.key !== 'locale' && f.key !== 'grid_density' && f.key !== 'host_layout';
     });
     const languageFields = appearanceFields.filter(function (f) { return f.key === 'locale'; });
     const densityFields = appearanceFields.filter(function (f) { return f.key === 'grid_density'; });
+    const layoutFields = appearanceFields.filter(function (f) { return f.key === 'host_layout'; });
     const cardFields = appearanceFields.filter(function (f) { return CARD_FIELD_KEYS[f.key]; });
     const bindChildren = cardFields.filter(function (f) {
       return BIND_FAMILY_KEYS.includes(f.key);
@@ -973,7 +1099,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         settingsCard('settings.sections.theme.title', 'settings.sections.theme.blurb',
           '<div data-appearance-section="theme">' + rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
         settingsCard('settings.cards.title', 'settings.cards.blurb',
-          rowsFor(densityFields) + displayPreviewHtml() + rowsFor(primaryCardFields) + bindFamilyOptions)) +
+          rowsFor(layoutFields) + rowsFor(densityFields) + displayPreviewHtml() + rowsFor(primaryCardFields) + bindFamilyOptions)) +
       settingsPanelHtml('occupancy',
         settingsCard('settings.groups.local.title', 'settings.groups.local.blurb', rowsFor(byGroup.local || [])) +
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
@@ -1077,6 +1203,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         local: hostBody.local || S.hostCatalog.local,
         peers: Array.isArray(hostBody.peers) ? hostBody.peers : [],
         readonly: !!hostBody.readonly,
+        max_peers: Number(hostBody.max_peers) || Number(S.hostCatalog.max_peers) || 32,
       };
       S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
     }

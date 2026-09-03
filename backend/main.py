@@ -37,7 +37,7 @@ from .port_scanner import (
     scan_listening_ports,
 )
 
-VERSION = "0.7.7"
+VERSION = "0.7.8"
 
 _log_level = os.environ.get("PORT_LIGHT_LOG_LEVEL", "").strip().upper()
 if not logging.getLogger("port-light").handlers and not logging.getLogger().handlers:
@@ -476,13 +476,13 @@ def get_hosts() -> dict:
 @app.put("/api/hosts")
 def put_hosts(body: dict = Body(...)) -> dict:
     try:
-        peers = hosts.replace_peers(body.get("peers") if isinstance(body, dict) else None)
+        hosts.replace_peers(body.get("peers") if isinstance(body, dict) else None)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except hosts.HostsError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _monitor.state_changed()
-    return {"local": hosts.public_local(), "peers": peers, "readonly": False}
+    return hosts.catalog()
 
 
 @app.get("/api/hosts/{host_id}/health")
@@ -606,10 +606,7 @@ async def suggest_ports(
             "range_end": str(hi),
             "include_hidden": "true",
         }
-        responses = await asyncio.gather(*(
-            asyncio.to_thread(hosts.fetch_peer_json, peer, "/api/ports", query)
-            for peer in peers
-        ))
+        responses = await hosts.fetch_peers_json(peers, "/api/ports", query)
         reachable = 0
         for peer, (status, data, _etag) in zip(peers, responses, strict=True):
             summary = data.get("summary", {}) if isinstance(data, dict) else {}

@@ -145,7 +145,9 @@
     "loading": "正在讀取佔用…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
-    "max": "最多再加 6 台機器。",
+    "description": "簡短描述（選填）",
+    "descriptionPlaceholder": "例如：Tailscale 100.64.0.12 · 家用伺服器",
+    "max": "最多可新增 {count} 台其他機器。",
     "localOnly": "隱藏、標籤與新增只作用於此機器。",
     "clearAuth": "清除已儲存的登入",
     "legendHost": "{name} 的計數",
@@ -217,9 +219,14 @@
         "blurb": "介面顯示語言。"
       }
     },
+    "layout": {
+      "selected": "已選擇",
+      "waterfall": "同時顯示所有機器，向下捲動瀏覽。",
+      "tabs": "透過上方分頁切換，每次專注一台機器。"
+    },
     "cards": {
       "title": "卡片",
-      "blurb": "每張佔用卡片上的狀態文字與標記。"
+      "blurb": "多機器版面、卡片密度、狀態與標記。"
     },
     "groups": {
       "appearance": {
@@ -264,6 +271,14 @@
     },
     "on": "開",
     "off": "關",
+    "refresh": {
+      "capacityPoint": "{interval} · 上限 {hard} 台",
+      "capacityLimit": "已設定 {current}/{hard} 台其他機器；此間隔已達產品上限。繼續調慢只會降低輪詢流量，不增加機器上限。",
+      "seconds": "{count} 秒",
+      "minutes": "{count} 分鐘",
+      "capacity": "已設定 {current}/{hard} 台其他機器；此間隔建議最多 {recommended} 台。",
+      "overCapacity": "已設定 {current}/{hard} 台其他機器；此間隔建議最多 {recommended} 台。調慢重新整理可降低持續負載。"
+    },
     "scanners": {
       "invalid": "掃描來源設定無效，無法檢查連接埠占用情況。請至少選擇一個來源並儲存。若設定為唯讀，請修正部署設定中的 PORT_LIGHT_SCANNERS 並重建容器。",
       "required": "至少保留一個本機掃描來源。",
@@ -310,8 +325,8 @@
         "help": "依間隔輪詢佔用圖。"
       },
       "refresh_ms": {
-        "label": "重新整理間隔（毫秒）",
-        "help": "開啟自動重新整理時使用。1000–300000。"
+        "label": "重新整理間隔",
+        "help": "控制儀表板輪詢；本機背景掃描的等待時間不會超過 30 秒。"
       },
       "port_range_start": {
         "label": "範圍起點",
@@ -320,6 +335,14 @@
       "port_range_end": {
         "label": "範圍終點",
         "help": "上限。不會把所有未佔用的連接埠都畫成綠色。"
+      },
+      "host_layout": {
+        "label": "多機器版面",
+        "help": "瀑布流顯示全部機器；分頁一次顯示一台。"
+      },
+      "host_description": {
+        "label": "本機簡短描述",
+        "help": "顯示於機器名稱下方的選填純文字備註，最多 120 字。"
       },
       "host_name": {
         "label": "本機名稱",
@@ -417,6 +440,8 @@
     "bindFamilies": "位址類型"
   },
   "choice": {
+    "waterfall": "瀑布流",
+    "tabs": "分頁",
     "auto": "自動",
     "en": "English",
     "fr": "Français",

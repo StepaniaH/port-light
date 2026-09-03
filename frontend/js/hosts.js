@@ -1,7 +1,8 @@
 /* Host catalog, occupancy selectors, and route URLs. */
 
-import { S } from './state.js?v=82';
-import { t } from './text.js?v=82';
+import { S } from './state.js?v=88';
+import { t } from './text.js?v=88';
+import { usesFocusedFleet } from './fleet.js?v=88';
 
   export function hasPeers() {
     return !!(S.hostCatalog.peers && S.hostCatalog.peers.length);
@@ -9,6 +10,14 @@ import { t } from './text.js?v=82';
   export function listedHosts() {
     const local = S.hostCatalog.local || { id: 'local', name: '', local: true };
     return [local].concat(S.hostCatalog.peers || []);
+  }
+  export function usesFocusedHostView() {
+    return usesFocusedFleet(S.settings.host_layout);
+  }
+  export function displayedHosts() {
+    const hosts = listedHosts();
+    if (!usesFocusedHostView()) return hosts;
+    return [hostById(S.focusHostId) || hosts[0]];
   }
   export function hostById(id) {
     const hosts = listedHosts();
@@ -52,7 +61,7 @@ import { t } from './text.js?v=82';
       if (!S.currentData) return '';
       return JSON.stringify({ ports: S.currentData.ports, summary: S.currentData.summary });
     }
-    return JSON.stringify(listedHosts().map(function (h) {
+    return JSON.stringify(displayedHosts().map(function (h) {
       const m = S.hostMaps[h.id] || {};
       return {
         id: h.id,

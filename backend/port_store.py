@@ -34,6 +34,8 @@ from pathlib import Path
 
 from . import degradations
 
+MAX_PEER_DESCRIPTION = 120
+
 
 class StoreReadError(Exception):
     """The existing data file could not be read safely."""
@@ -113,6 +115,9 @@ def _load() -> dict:
     if any(not isinstance(peer, dict) or any(
         not isinstance(peer.get(key), str) or not peer[key].strip()
         for key in ("id", "name", "url")) for peer in data.get("peers", [])):
+        raise _read_error()
+    if any(len(str(peer.get("description") or "").strip()) > MAX_PEER_DESCRIPTION
+           for peer in data.get("peers", [])):
         raise _read_error()
     _FILE_MEMO[str(f)] = (token, data)
     return copy.deepcopy(data)
@@ -485,6 +490,7 @@ def get_peers() -> list[dict]:
         out.append({
             "id": host_id,
             "name": name,
+            "description": str(item.get("description") or "").strip(),
             "url": url,
             "username": str(item.get("username") or ""),
             "password": str(item.get("password") or ""),

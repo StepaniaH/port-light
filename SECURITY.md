@@ -20,7 +20,7 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Data volume | Local JSON and SQLite under `/data`. Saved peer passwords are stored in `port_light.json`; file writes use owner-only permissions. Configured hubs can read peer snapshots, and opt-in webhooks send event names and port numbers. |
 | Peer URLs | `PUT /api/hosts` stores origins + optional Basic Auth. The hub fetches occupancy, detail, history, and health from those origins. Redirects and environment proxies are disabled. Every resolved address must pass the private-address policy; see the DNS limits below. |
 
-Without auth, anyone who can reach port 2100 can read the port map (names, images, bind addresses, Compose paths) and change manual/hidden entries.
+Without auth, anyone who can reach port 2100 can read the port map (names, images, bind addresses, Compose paths), machine descriptions, and peer connection settings other than passwords. They can also change manual/hidden entries and editable settings.
 
 ## Recommendations
 
@@ -32,6 +32,7 @@ Without auth, anyone who can reach port 2100 can read the port map (names, image
 6. Do not point `COMPOSE_SCAN_DIR` at trees that contain secrets you would not put in a screenshot.
 7. Bind addresses appear in port details and can optionally appear on cards. Review screenshots before sharing them.
 8. Protect backups and mounts of `/data`; they can contain peer credentials, manual labels, and local history.
+9. Treat machine descriptions as public to dashboard/API users. Do not store passwords, tokens, or other secrets in these notes.
 
 ## Peer DNS validation
 

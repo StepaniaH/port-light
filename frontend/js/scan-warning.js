@@ -1,5 +1,5 @@
 /* Explanations derived from the current occupancy response, including older peers. */
-import { t, escapeHtml } from './text.js?v=82';
+import { t, escapeHtml } from './text.js?v=88';
 
 export function scanDiagnosticKeys(summary = {}) {
   if (summary.scan_complete === true && !summary.stale) return [];
@@ -49,6 +49,7 @@ export function scanWarningState(root) {
 export function wireScanWarnings(root, previous = []) {
   root.querySelectorAll('[data-scan-warning]').forEach(warning => {
     const trigger = warning.querySelector('summary');
+    const info = warning.querySelector('.scan-warning-info');
     let automatic = false;
     let dismissing = false;
     const open = () => {
@@ -56,7 +57,7 @@ export function wireScanWarnings(root, previous = []) {
       if (!warning.open) automatic = true;
       warning.open = true;
     };
-    warning.addEventListener('pointerenter', event => {
+    info.addEventListener('pointerenter', event => {
       if (event.pointerType === 'mouse') open();
     });
     warning.addEventListener('pointerleave', () => {

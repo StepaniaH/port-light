@@ -12,7 +12,7 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { occupancyUrl, portApiUrl, portHash, occupancyFingerprint } = await import('../js/hosts.js?' + V);
+const { displayedHosts, occupancyUrl, portApiUrl, portHash, occupancyFingerprint, usesFocusedHostView } = await import('../js/hosts.js?' + V);
 const { S } = await import('../js/state.js?' + V);
 
 function withState(patch, fn) {
@@ -23,6 +23,7 @@ function withState(patch, fn) {
     focusHostId: S.focusHostId,
     selectedHostId: S.selectedHostId,
     hostCatalog: S.hostCatalog,
+    settings: S.settings,
   };
   try {
     Object.assign(S, patch);
@@ -91,4 +92,28 @@ test('freshness changes trigger a view refresh', () => {
     S.currentData.summary.stale = true;
     assert.notEqual(occupancyFingerprint(), fresh);
   } finally { S.currentData = saved; }
+});
+
+test('tab layout renders only the focused host regardless of fleet size', () => {
+  const peers = Array.from({ length: 7 }, (_, i) => ({ id: 'peer000' + i, name: 'Peer ' + i }));
+  withState({
+    focusHostId: peers[4].id,
+    settings: { host_layout: 'tabs' },
+    hostCatalog: { local: { id: 'local', name: '', local: true }, peers, max_peers: 32 },
+  }, () => {
+    assert.equal(usesFocusedHostView(), true);
+    assert.deepEqual(displayedHosts().map(host => host.id), [peers[4].id]);
+  });
+});
+
+test('waterfall keeps all 32 peers visible instead of automatically switching layout', () => {
+  const peers = Array.from({ length: 32 }, (_, i) => ({ id: 'peer000' + i, name: 'Peer ' + i }));
+  withState({
+    focusHostId: 'local',
+    settings: { host_layout: 'waterfall' },
+    hostCatalog: { local: { id: 'local', name: '', local: true }, peers, max_peers: 32 },
+  }, () => {
+    assert.equal(usesFocusedHostView(), false);
+    assert.equal(displayedHosts().length, 33);
+  });
 });

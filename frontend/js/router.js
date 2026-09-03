@@ -1,12 +1,12 @@
 /* Hash router: #/, #/settings/:panel, #/port/:n, #/h/:host(/port/:n). */
 
-import { S, SETTINGS_PANELS } from './state.js?v=82';
-import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=82';
-import { hostById, hasPeers } from './hosts.js?v=82';
-import { t } from './text.js?v=82';
-import { applyPendingGridFocus } from './grid.js?v=82';
-import { closeDetail, showPortDetail } from './detail.js?v=82';
-import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './settings.js?v=82';
+import { S, SETTINGS_PANELS } from './state.js?v=88';
+import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=88';
+import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=88';
+import { t } from './text.js?v=88';
+import { applyPendingGridFocus } from './grid.js?v=88';
+import { closeDetail, showPortDetail } from './detail.js?v=88';
+import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './settings.js?v=88';
 
 
   export function parseHash(hash) {
@@ -54,6 +54,7 @@ import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './se
       }
     }
     const prev = S.route.name;
+    const previousHostId = S.focusHostId;
     S.route = next;
     const onSettings = S.route.name === 'settings';
     document.getElementById('view-grid').classList.toggle('hidden', onSettings);
@@ -78,6 +79,7 @@ import { loadSettingsPage, showSettingsPanel, revertUnsavedSettings } from './se
     if (prev === 'settings') refresh();
     if (S.route.hostId && hostById(S.route.hostId)) S.focusHostId = S.route.hostId;
     else if (S.route.name !== 'settings') S.focusHostId = 'local';
+    if (usesFocusedHostView() && S.focusHostId !== previousHostId) refresh();
     if (S.route.name === 'port') {
       S.selectedPort = S.route.port;
       S.selectedHostId = S.route.hostId || 'local';

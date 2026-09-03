@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking at Port-Light. Keep the codebase small.
+Contributions should keep the project focused on port occupancy and avoid unnecessary dependencies.
 
 ## Scope
 
@@ -8,7 +8,7 @@ This is a port occupancy map, not a Docker control plane. PRs that start/stop co
 
 Open an issue first for new scanners (Podman, remote Docker), auth changes, or a frontend framework.
 
-## Dev loop
+## Development
 
 Python 3.11+. Docker is optional if you only touch parsers.
 
@@ -30,7 +30,7 @@ npm run smoke:browser
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants `PORT_LIGHT_DATA_DIR=./data`. Set `PORT_LIGHT_SCANNERS=listen,compose` when Docker is intentionally absent, and point `COMPOSE_SCAN_DIR` to a readable directory. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
 
-`npm run smoke:browser` starts two temporary local instances and checks startup, recovery from invalid scanner configuration, detail, a saved label, local scanner settings, warning disclosures, bind-address rendering, atomic batch reservation with a conflicting writer and retry, and host switching in Chromium. It removes its data and stops both servers on exit. Set `PYTHON` to override the Python executable.
+`npm run smoke:browser` starts a temporary eight-instance local fleet and checks startup, recovery from invalid scanner configuration, default waterfall and saved tab layouts, persisted machine descriptions, slider focus and refresh-capacity guidance, detail, a saved label, local scanner settings, warning disclosures, bind-address rendering, atomic batch reservation with a conflicting writer and retry, and keyboard/mobile host switching in Chromium. It removes its data and stops every server on exit. Set `PYTHON` to override the Python executable.
 
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 

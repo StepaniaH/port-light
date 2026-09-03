@@ -1,7 +1,7 @@
 /* HTTP requests and conditional occupancy fetches. */
 
-import { S } from './state.js?v=82';
-import { occupancyUrl } from './hosts.js?v=82';
+import { S } from './state.js?v=88';
+import { occupancyUrl } from './hosts.js?v=88';
 
   export function apiHeaders(extra) {
     const headers = Object.assign({}, extra || {});
@@ -32,9 +32,10 @@ import { occupancyUrl } from './hosts.js?v=82';
     const body = await fetchJson('/api/hosts');
     if (!body) return null;
     return {
-      local: body.local || { id: 'local', name: '', local: true },
+      local: body.local || { id: 'local', name: '', description: '', local: true },
       peers: Array.isArray(body.peers) ? body.peers : [],
       readonly: !!body.readonly,
+      max_peers: Number(body.max_peers) || 32,
     };
   }
   const occupancyRequests = new Map();

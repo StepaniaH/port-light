@@ -145,7 +145,9 @@
     "loading": "正在读取占用…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
-    "max": "最多再加 6 台机器。",
+    "description": "短描述（可选）",
+    "descriptionPlaceholder": "例如：Tailscale 100.64.0.12 · 家庭服务器",
+    "max": "最多可添加 {count} 台其他机器。",
     "localOnly": "隐藏、标签和添加只作用于本机。",
     "clearAuth": "清除已保存的登录",
     "legendHost": "{name} 的计数",
@@ -217,9 +219,14 @@
         "blurb": "界面显示语言。"
       }
     },
+    "layout": {
+      "selected": "已选择",
+      "waterfall": "同时展示所有机器，向下滚动浏览。",
+      "tabs": "通过顶部标签切换，每次专注一台机器。"
+    },
     "cards": {
       "title": "卡片",
-      "blurb": "卡片密度、状态、标记和可选的绑定地址摘要。"
+      "blurb": "多机器布局、卡片密度、状态和标记。"
     },
     "groups": {
       "appearance": {
@@ -264,6 +271,14 @@
     },
     "on": "开",
     "off": "关",
+    "refresh": {
+      "capacityPoint": "{interval} · 上限 {hard} 台",
+      "capacityLimit": "已配置 {current}/{hard} 台其他机器；该间隔已达到产品上限。继续调慢只降低轮询流量，不增加机器上限。",
+      "seconds": "{count} 秒",
+      "minutes": "{count} 分钟",
+      "capacity": "已配置 {current}/{hard} 台其他机器；该间隔建议最多 {recommended} 台。",
+      "overCapacity": "已配置 {current}/{hard} 台其他机器；该间隔建议最多 {recommended} 台。调慢刷新可降低持续负载。"
+    },
     "bindFamilies": "地址类型",
     "scanners": {
       "invalid": "扫描源配置无效，无法检查端口占用。请至少选择一个来源并保存。若设置为只读，请修正部署配置中的 PORT_LIGHT_SCANNERS 并重建容器。",
@@ -340,8 +355,8 @@
         "help": "按间隔轮询占用图。"
       },
       "refresh_ms": {
-        "label": "刷新间隔（毫秒）",
-        "help": "开启自动刷新时使用。1000–300000。"
+        "label": "刷新间隔",
+        "help": "控制看板轮询；本机后台扫描的等待时间不会超过 30 秒。"
       },
       "port_range_start": {
         "label": "范围起点",
@@ -350,6 +365,14 @@
       "port_range_end": {
         "label": "范围终点",
         "help": "上限。不会把所有未占用端口都画成绿色。"
+      },
+      "host_layout": {
+        "label": "多机器布局",
+        "help": "瀑布流显示全部机器；分 Tab 时一次显示一台。"
+      },
+      "host_description": {
+        "label": "本机短描述",
+        "help": "显示在机器名称下方的可选纯文本备注，最多 120 字。"
       },
       "host_name": {
         "label": "本机名称",
@@ -434,6 +457,8 @@
     }
   },
   "choice": {
+    "waterfall": "瀑布流",
+    "tabs": "分 Tab",
     "auto": "自动",
     "en": "English",
     "fr": "Français",

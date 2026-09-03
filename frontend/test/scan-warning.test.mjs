@@ -38,13 +38,17 @@ test('warning provides upgrade guidance without exposing raw diagnostic data', (
   assert.doesNotMatch(remote, /#\/settings\/occupancy/);
 });
 
-test('warning opens on pointer or focus and dismisses with Escape', () => {
+test('warning opens only from the info icon on pointer hover and dismisses with Escape', () => {
   const root = document.createElement('div');
   root.innerHTML = scanWarningMarkup({ scan_complete: false }, 'local', 'summary');
   wireScanWarnings(root);
   const warning = root.querySelector('details');
   const trigger = warning.querySelector('summary');
+  const info = warning.querySelector('.scan-warning-info');
+  warning.open = false;
   warning.dispatchEvent({ type: 'pointerenter', pointerType: 'mouse' });
+  assert.equal(warning.open, false);
+  info.dispatchEvent({ type: 'pointerenter', pointerType: 'mouse' });
   assert.equal(warning.open, true);
   warning.dispatchEvent({ type: 'pointerleave' });
   assert.equal(warning.open, false);

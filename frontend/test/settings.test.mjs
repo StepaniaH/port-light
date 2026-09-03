@@ -13,7 +13,7 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { automationCardsHtml, renderField, renderModePicker, renderPalettePicker, renderSettingsForm, syncDependentSettings, themeEditorHtml } = await import('../js/settings.js?' + V);
+const { automationCardsHtml, formatRefreshInterval, renderField, renderModePicker, renderPalettePicker, renderPeersEditor, renderSettingsForm, syncDependentSettings, syncPaletteAvailability, syncRefreshCapacity, themeEditorHtml, updateRefreshSlider } = await import('../js/settings.js?' + V);
 const { SETTINGS_PANELS, S, applyAppearance, applyDensity, persistAppearance, DENSITY_PRESETS } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
@@ -187,19 +187,49 @@ test('palette picker renders builtin plus ten families', () => {
   assert.equal((html.match(/label class="theme-swatch/g) || []).length, 11);
 });
 
-test('palette picker greys mismatched single-variant families', () => {
-  const choices = ['', 'nord', 'dracula', 'gruvbox'];
-  const light = renderPalettePicker(choices, '', 'light', '');
-  assert.match(light, /is-unavailable[^>]*>\s*<input type="radio" name="theme_palette" value="dracula"[^>]*disabled/s);
-  assert.doesNotMatch(light, /value="gruvbox"[^>]*disabled/);
-  const dark = renderPalettePicker(choices, '', 'dark', '');
-  assert.doesNotMatch(dark, /value="dracula"[^>]*disabled/);
+test('palette picker enables every built-in family in light and dark modes', () => {
+  const choices = ['', 'nord', 'dracula', 'gruvbox', 'catppuccin', 'solarized',
+    'tokyo-night', 'one-dark', 'everforest', 'rose-pine', 'kanagawa'];
+  for (const mode of ['light', 'dark']) {
+    const picker = renderPalettePicker(choices, '', mode, '');
+    assert.doesNotMatch(picker, /is-unavailable| disabled/);
+    for (const family of choices.slice(1)) {
+      assert.ok(picker.includes(`data-theme-preview="${family}${mode === 'light' ? '-light' : ''}"`));
+    }
+  }
 });
 
 test('palette preview resolves variant per current mode', () => {
   const choices = ['', 'gruvbox'];
   assert.match(renderPalettePicker(choices, '', 'light', ''), /data-theme-preview="gruvbox-light"/);
   assert.match(renderPalettePicker(choices, '', 'dark', ''), /data-theme-preview="gruvbox"(?!-)/);
+});
+
+test('system-mode palette refresh keeps readonly settings locked', () => {
+  const previous = { doc: S.settingsDoc, settings: { ...S.settings }, themes: S.customThemes };
+  const queryAll = document.querySelectorAll;
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  try {
+    S.settingsDoc = { readonly: true };
+    S.settings.theme_mode = 'light';
+    S.customThemes = [{ id: '12345678', name: 'Light custom', mode: 'light',
+      colors: { used: '#275da8', configured: '#785a00', free: '#3f651f' } }];
+    root.innerHTML = renderPalettePicker(['', 'nord', 'dracula'], '', 'light', ' disabled');
+    document.querySelectorAll = selector => root.querySelectorAll(selector);
+    root.querySelectorAll('input').forEach(input => {
+      input.value = input.getAttribute('value') || '';
+      input.disabled = input.hasAttribute('disabled');
+    });
+    syncPaletteAvailability();
+    assert.ok(root.querySelectorAll('input[name="theme_palette"]').every(input => input.disabled));
+  } finally {
+    document.querySelectorAll = queryAll;
+    root.remove();
+    S.settingsDoc = previous.doc;
+    S.settings = previous.settings;
+    S.customThemes = previous.themes;
+  }
 });
 
 test('bind address switches omit repeated environment source hints', () => {
@@ -269,6 +299,7 @@ test('appearance panel renders theme/language/layout sections in order', () => {
     values: { show_bind_addresses: false, show_bind_ipv4: true, show_bind_ipv6: true }, readonly: false, source: 'auto',
     env_only: {}, origins: {},
     fields: [
+      { key: 'host_layout', type: 'choice', group: 'appearance', choices: ['waterfall', 'tabs'], origin: 'default' },
       { key: 'theme_mode', type: 'choice', group: 'appearance', choices: ['system', 'dark', 'light'], origin: 'default' },
       { key: 'grid_density', type: 'choice', group: 'appearance', choices: ['loose', 'standard', 'compact'], origin: 'default' },
       { key: 'locale', type: 'choice', group: 'appearance', choices: ['auto', 'en'], origin: 'default' },
@@ -281,6 +312,10 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   const panels = host.querySelectorAll('[data-settings-panel="appearance"] .settings-card > header h2');
   const titles = Array.from(panels).map((el) => el.getAttribute('data-i18n'));
   assert.deepEqual(titles, ['settings.sections.language.title', 'settings.sections.theme.title', 'settings.cards.title']);
+  const layoutRow = host.querySelector('[data-settings-panel="appearance"] [data-setting="host_layout"]');
+  assert.ok(layoutRow, 'multi-machine layout belongs to Appearance');
+  assert.equal(layoutRow.closest('.settings-card').querySelector('h2').getAttribute('data-i18n'), 'settings.cards.title');
+  assert.equal(host.querySelectorAll('[data-settings-panel="occupancy"] [data-setting="host_layout"]').length, 0);
   const preview = host.querySelector('[data-settings-panel="appearance"] [data-display-preview]');
   assert.ok(preview, 'layout card should carry the live display preview');
   assert.equal(preview.querySelectorAll('.port-cell').length, 3);
@@ -327,6 +362,7 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   assert.equal(bindIpv6.checked, false, 'master switch preserves IPv6 preference');
   const panelHtml = host.innerHTML;
   const iDensity = panelHtml.indexOf('name="grid_density"');
+  assert.ok(panelHtml.indexOf('name="host_layout"') < iDensity, 'machine layout precedes individual card density');
   const iPrev = panelHtml.indexOf('data-display-preview');
   const iStatus = panelHtml.indexOf('name="show_status_text"');
   assert.ok(iDensity > -1 && iDensity < iPrev, 'density segmented control renders ahead of the preview');
@@ -356,6 +392,149 @@ test('density renders as a segmented radiogroup', () => {
   assert.match(html, /value="loose"/);
   assert.match(html, /value="standard" checked/);
   assert.match(html, /value="compact"/);
+});
+
+test('host layout and optional description use the settings schema', () => {
+  const layout = renderField({ key: 'host_layout', type: 'choice', choices: ['waterfall', 'tabs'] }, 'waterfall', false);
+  assert.match(layout, /name="host_layout" value="waterfall" checked/);
+  assert.match(layout, /name="host_layout" value="tabs"/);
+  const description = renderField({ key: 'host_description', type: 'str', max_length: 120 }, 'Tailscale 100.64.0.12', false);
+  assert.match(description, /maxlength="120"/);
+  assert.match(description, /aria-labelledby="setting-label-host_description"/);
+});
+
+test('host layout choices have previews, explicit selection marks and accessible descriptions', () => {
+  const field = { key: 'host_layout', type: 'choice', choices: ['waterfall', 'tabs'] };
+  for (const selected of field.choices) {
+    const html = renderField(field, selected, false);
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    assert.equal(host.querySelectorAll('.layout-option').length, 2);
+    assert.equal(host.querySelectorAll('.layout-option-selected').length, 2);
+    assert.equal(host.querySelectorAll('.layout-preview[aria-hidden="true"]').length, 2);
+    assert.equal(host.querySelectorAll('input[checked]').length, 1);
+    assert.equal(host.querySelector('input[checked]').getAttribute('value'), selected);
+    for (const choice of field.choices) {
+      const radio = host.querySelector('input[value="' + choice + '"]');
+      assert.equal(radio.getAttribute('aria-labelledby'), 'layout-title-' + choice);
+      assert.equal(radio.getAttribute('aria-describedby'), 'layout-help-' + choice);
+      assert.ok(host.querySelector('#layout-title-' + choice));
+      assert.ok(host.querySelector('#layout-help-' + choice));
+    }
+    assert.doesNotMatch(html, /class="segmented"/);
+  }
+  const locked = renderField(field, 'tabs', true);
+  assert.equal((locked.match(/ disabled/g) || []).length, 2);
+});
+
+test('refresh interval renders as a discrete slider and preserves custom values', () => {
+  const saved = globalThis.window.PortLightI18n;
+  globalThis.window.PortLightI18n = {
+    t(key, vars) {
+      const raw = key === 'settings.refresh.seconds' ? '{count}s'
+        : key === 'settings.refresh.minutes' ? '{count}m' : key;
+      return vars ? raw.replace(/\{(\w+)\}/g, (_, name) => String(vars[name])) : raw;
+    },
+  };
+  try {
+    const html = renderField({ key: 'refresh_ms', type: 'int', min: 1000, max: 300000 }, 8000, false);
+    assert.match(html, /type="range"/);
+    assert.match(html, /data-refresh-values="5000,8000,10000,15000,30000,60000,120000,300000"/);
+    assert.match(html, /type="hidden" name="refresh_ms" value="8000"/);
+    assert.match(html, />8s<\/output>/);
+    assert.doesNotMatch(html, /type="number"/);
+    assert.equal(formatRefreshInterval(120000), '2m');
+  } finally {
+    if (saved) globalThis.window.PortLightI18n = saved;
+    else delete globalThis.window.PortLightI18n;
+  }
+});
+
+test('refresh slider updates its submitted value and peer recommendation', () => {
+  const savedI18n = globalThis.window.PortLightI18n;
+  const savedQuery = document.querySelector;
+  const savedPeers = S.peersDraft;
+  const savedCatalog = S.hostCatalog;
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  globalThis.window.PortLightI18n = {
+    t(key, vars) {
+      const dict = {
+        'settings.refresh.seconds': '{count}s',
+        'settings.refresh.capacity': '{current}/{recommended}/{hard}',
+        'settings.refresh.overCapacity': 'over:{current}/{recommended}/{hard}',
+        'settings.refresh.capacityLimit': 'limit:{current}/{hard}',
+      };
+      const raw = dict[key] || key;
+      return vars ? raw.replace(/\{(\w+)\}/g, (_, name) => String(vars[name])) : raw;
+    },
+  };
+  try {
+    S.peersDraft = Array.from({ length: 7 }, () => ({}));
+    S.hostCatalog = { local: { id: 'local' }, peers: [], max_peers: 32 };
+    root.innerHTML = renderField({ key: 'refresh_ms', type: 'int' }, 5000, false);
+    document.querySelector = selector => root.querySelector(selector);
+    const slider = root.querySelector('[data-refresh-slider]');
+    const hidden = root.querySelector('[data-refresh-hidden]');
+    slider.matches = selector => selector === '[data-refresh-slider]';
+    slider.value = '3';
+    hidden.value = '5000';
+    assert.equal(updateRefreshSlider(slider), true);
+    assert.equal(hidden.value, '30000');
+    assert.equal(slider.getAttribute('aria-valuetext'), '30s');
+    assert.equal(document.getElementById('refresh-capacity').textContent, 'limit:7/32');
+    assert.equal(slider.style.getPropertyValue('--refresh-progress'), '50%');
+    hidden.value = '300000';
+    syncRefreshCapacity();
+    assert.equal(document.getElementById('refresh-capacity').textContent, 'limit:7/32');
+    hidden.value = '5000';
+    syncRefreshCapacity();
+    assert.equal(document.getElementById('refresh-capacity').textContent, 'over:7/6/32');
+  } finally {
+    document.querySelector = savedQuery;
+    S.peersDraft = savedPeers;
+    S.hostCatalog = savedCatalog;
+    root.remove();
+    if (savedI18n) globalThis.window.PortLightI18n = savedI18n;
+    else delete globalThis.window.PortLightI18n;
+  }
+});
+
+test('peer editor collapses saved rows and honors the backend limit', () => {
+  const savedI18n = globalThis.window.PortLightI18n;
+  const savedPeers = S.peersDraft;
+  const savedCatalog = S.hostCatalog;
+  const host = document.createElement('div');
+  host.id = 'settings-peers';
+  document.body.appendChild(host);
+  globalThis.window.PortLightI18n = {
+    t(key, vars) {
+      if (key === 'hosts.max') return 'Maximum ' + vars.count;
+      return key;
+    },
+  };
+  try {
+    S.hostCatalog = { local: { id: 'local' }, peers: [], max_peers: 32 };
+    S.peersDraft = Array.from({ length: 7 }, (_, i) => ({
+      id: 'peer000' + i, name: 'Peer ' + i, url: 'http://10.0.0.' + (i + 1) + ':2100',
+    }));
+    renderPeersEditor(false);
+    assert.equal(host.querySelectorAll('details.peer-row').length, 7);
+    assert.equal(host.querySelectorAll('input[data-peer-field="description"][maxlength="120"]').length, 7);
+    assert.equal(host.querySelectorAll('details.peer-row[open]').length, 0);
+    assert.match(host.innerHTML, /Maximum 32/);
+    assert.equal(host.querySelector('#peer-add').hasAttribute('disabled'), false);
+
+    S.peersDraft = Array.from({ length: 32 }, (_, i) => ({ id: 'peer' + i, name: 'P' + i, url: 'http://10.0.0.1' }));
+    renderPeersEditor(false);
+    assert.equal(host.querySelector('#peer-add').hasAttribute('disabled'), true);
+  } finally {
+    S.peersDraft = savedPeers;
+    S.hostCatalog = savedCatalog;
+    host.remove();
+    if (savedI18n) globalThis.window.PortLightI18n = savedI18n;
+    else delete globalThis.window.PortLightI18n;
+  }
 });
 
 test('applyDensity applies presets exactly and falls back to standard', () => {

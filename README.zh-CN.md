@@ -42,11 +42,11 @@
 - 扫描不到的端口可以手动登记
 - 两个 Compose 项目在重叠的绑定地址上声明同一主机端口时标冲突
 - 常见 homelab 端口内置名称（SSH、Jellyfin、Postgres 等），可用本地文件覆盖
-- 5 秒自动刷新（设置里可关）
+- 可调自动刷新（设置中提供 5 秒至 5 分钟选项），并按所选间隔提示建议的其他机器容量
 - 点击复制端口号
 - 可选的卡片绑定地址摘要，可分别控制 IPv4/IPv6、紧凑显示 IPv6，并省略重复的通配绑定
-- 一个界面可以拉取其他 Port-Light 实例的占用图（局域网 / Tailscale）。每台机器仍自己扫描。
-- 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
+- 一个界面可以拉取最多 32 个其他 Port-Light 实例的占用图（局域网 / Tailscale）。默认以瀑布流展示全部机器，也可在「设置 → 外观 → 卡片」中选择分 Tab；机器名称下方可填写 IP 等简短备注。每台机器仍自己扫描。
+- 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等 10 套配色，每套都支持深色和浅色；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
 - 自定义色板、JSON 导入导出，以及宽松 / 标准 / 紧凑三种卡片密度
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
@@ -62,13 +62,13 @@
 
 - **局域网工具。** 未设置 `AUTH_USER` / `AUTH_PASSWORD` 时没有登录。请放在反向代理后面，或不要暴露到公网。见 [SECURITY.md](SECURITY.md)。
 - **从网格隐藏**只是显示过滤。只有配置了 `AUTH_*` 或 `HIDDEN_UNLOCK_PASSWORD` 时，API 才会真正不返回这些端口。
-- **多机是只读汇总。** 每台机器仍各自跑 Port-Light。一个界面可以通过局域网或 Tailscale 拉取其他机器的占用图（设置 → 占用图）。不要把 2100 端口暴露到公网。由 Hub 自己去拉这些地址；Docker 桥接容器常常连不上 Tailscale 的 `100.x` — 改填局域网 IP，或让 Hub 使用 `network_mode: host`。
+- **多机是只读汇总。** 每台机器仍各自跑 Port-Light。一个界面可以通过局域网或 Tailscale 拉取最多 32 台其他机器的占用图（设置 → 占用图）。刷新控件会按当前间隔提示建议容量；即使超过建议值，内部请求仍会限流。不要把 2100 端口暴露到公网。由 Hub 自己去拉这些地址；Docker 桥接容器常常连不上 Tailscale 的 `100.x` — 改填局域网 IP，或让 Hub 使用 `network_mode: host`。
 - 挂了 `/host/proc` 时（镜像默认如此），监听端口可以从 inode 对上进程名。没挂则只能看到 Docker 的容器名。`ss -tlnp` 的进程名仍需要 host network 或裸机。
 - `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
 
 后续计划与架构：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。API 与 MCP 集成：[docs/integrations.md](docs/integrations.md)。
 
-升级后若仍出现占用警告，可悬浮或点击警告查看对应扫描器的排查建议。镜像升级不能自动处理的权限与配置问题，见 [v0.7.6 升级与故障排查（英文）](docs/troubleshooting.md#occupancy-scan-warning)。
+升级后若仍出现占用警告，可将鼠标移至信息图标，或聚焦、点击警告查看对应扫描器的排查建议。镜像升级不能自动处理的权限与配置问题，见 [升级与故障排查（英文）](docs/troubleshooting.md#occupancy-scan-warning)。
 
 ## 快速开始
 
@@ -77,7 +77,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.7
+    image: stepaniah/port-light:v0.7.8
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -126,14 +126,16 @@ docker compose up -d
 | `SHOW_BIND_ADDRESSES` | `false` | 在已占用卡片上显示紧凑的绑定地址摘要。 |
 | `SHOW_BIND_IPV4` | `true` | 开启卡片绑定地址摘要时包含 IPv4 地址。 |
 | `SHOW_BIND_IPV6` | `true` | 开启卡片绑定地址摘要时包含 IPv6 地址。 |
-| `REFRESH_MS` | `5000` | 自动刷新间隔 |
+| `REFRESH_MS` | `5000` | 看板轮询间隔（1,000–300,000 毫秒）。设置页提供 5 秒至 5 分钟选项，并提示建议的其他机器容量；本机后台扫描间隔仍不超过 30 秒。 |
+| `PORT_LIGHT_HOST_LAYOUT` | `waterfall` | 默认以响应式瀑布流展示全部机器；`tabs` 为逐台切换。桌面和移动端均遵循此选择。 |
 | `URL_HOST` | 空 | 猜测链接里用的主机名 |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
 | `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 |
 | `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。只能用环境变量。 |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页保存的值覆盖 env。`env`：只认 Compose，设置页只读。 |
-| `PORT_LIGHT_HOST_NAME` | 主机名 | 并排显示其他占用图时，本机这一列的名称。也可在设置 → 占用图中修改。 |
-| `PORT_LIGHT_PEERS` | 未设置 | `{name, url, username?, password?}` 的 JSON 数组。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。与设置页同一把锁。 |
+| `PORT_LIGHT_HOST_NAME` | 主机名 | 多机器视图中本机占用图的名称。也可在设置 → 占用图中修改。 |
+| `PORT_LIGHT_HOST_DESCRIPTION` | 空 | 多机器视图中本机名称下方的可选纯文本短描述，最多 120 字。 |
+| `PORT_LIGHT_PEERS` | 未设置 | 最多 32 个 `{name, url, description?, username?, password?}` 条目的 JSON 数组。短描述为可选纯文本，最多 120 字。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。与设置页同一把锁。 |
 | `PORT_LIGHT_LOG_LEVEL` | `warning` | 后端日志级别（`debug` / `info` / `warning` / `error`）。扫描器降级（Docker 不可达、Compose 文件解析失败等）会记一条日志，并出现在 `/api/health` 的 `degradations` 里。只能用环境变量。 |
 | `WEBHOOK_URL` | 未设置 | 可选 webhook 目标（仅 http/https）。配合 `WEBHOOK_EVENTS=new_listener,conflict`，在端口开始占用或发生冲突时以 fire-and-forget 方式 POST `{event, port}`。 |
 | `WEBHOOK_SECRET` | 未设置 | 以 `X-Port-Light-Secret` 头发送。 |
@@ -153,8 +155,9 @@ docker compose up -d
 
 - 无遥测、无统计。
 - 除非配置了其他 Port-Light 实例或 webhook，否则应用不会发送出站 HTTP 请求。Webhook 只发送 `{event, port}`。
-- 除非配置了其他实例，否则扫描数据留在运行该实例的机器上；Hub 会接收已配置实例返回的占用数据。
+- 扫描数据存储在本机，并提供给页面和 API 客户端；Hub 会接收已配置实例返回的占用数据。启用身份验证可限制读取权限。
 - API 和端口详情原本就包含绑定地址；开启卡片摘要后，截图会更容易包含这些地址，分享前请检查截图内容。
+- 机器短描述是纯文本，拥有页面或 API 访问权限的人均可读取，也可能出现在截图中。请勿填写密码、令牌或其他秘密信息。
 - Compose 旁边的 `.env` 只用于本地 `${VAR}` 替换，不会上传。
 - 手动标签、端口历史、自动化调用标签和 peer 设置都保存在数据卷中。peer 密码保存在 `port_light.json`；应像保护其他凭据文件一样保护该数据卷。
 

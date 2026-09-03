@@ -18,9 +18,13 @@ export const PALETTE_VARIANTS = {
   gruvbox: ['dark', 'light'],
   catppuccin: ['dark', 'light'],
   solarized: ['dark', 'light'],
-  nord: ['dark'], dracula: ['dark'], 'tokyo-night': ['dark'],
-  'one-dark': ['dark'], everforest: ['dark'], 'rose-pine': ['dark'],
-  kanagawa: ['dark'],
+  nord: ['dark', 'light'],
+  dracula: ['dark', 'light'],
+  'tokyo-night': ['dark', 'light'],
+  'one-dark': ['dark', 'light'],
+  everforest: ['dark', 'light'],
+  'rose-pine': ['dark', 'light'],
+  kanagawa: ['dark', 'light'],
 };
 
 export const CUSTOM_PREFIX = '@custom:';
@@ -52,7 +56,7 @@ function findCustom(id) {
 
 export const S = {
   currentData: null,
-  hostCatalog: { local: { id: 'local', name: '', local: true }, peers: [], readonly: false },
+  hostCatalog: { local: { id: 'local', name: '', local: true }, peers: [], readonly: false, max_peers: 32 },
   hostMaps: {},
   focusHostId: 'local',
   selectedHostId: 'local',
@@ -82,6 +86,7 @@ export const S = {
     copy_on_click: true,
     auto_refresh: true,
     refresh_ms: 5000,
+    host_layout: 'waterfall',
     port_range_start: 1,
     port_range_end: 9999,
     guess_urls: true,

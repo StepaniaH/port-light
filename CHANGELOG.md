@@ -4,6 +4,32 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.7.8 — 2026-09-03
+
+### Added
+
+- Light variants for Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, and Kanagawa. All ten built-in palette families now support both light and dark modes, including system-mode changes and cached startup appearance.
+- A refresh-interval slider in Settings shows the recommended peer capacity for each cadence while preserving custom values loaded from configuration.
+- Optional machine descriptions appear below host titles. Both the local machine and saved peers support notes of up to 120 characters.
+
+### Changed
+
+- Multi-host dashboards now accept up to 32 peers. Settings offers a responsive waterfall (default) and an optional tabbed view, on desktop and mobile alike.
+- Refresh intervals at or beyond the recommended 32-peer capacity explicitly explain that slower polling reduces traffic without increasing the product limit.
+- Peer refreshes use bounded concurrency and overlapping refresh triggers coalesce into one pending round. `scope=all` peer checks are also capped at six concurrent requests.
+- Saved peer rows are collapsed by default in Settings so larger fleets remain manageable.
+- Multi-machine layout lives under Appearance → Cards, with miniature layout previews and an explicit checkmark and selected label.
+
+### Fixed
+
+- The refresh slider no longer inherits the rectangular text-field focus shadow; keyboard focus is shown around its circular thumb.
+- Choice controls no longer show a clipped vertical focus line on pointer clicks. Layout cards and segmented choices retain a separate keyboard-only focus outline.
+- Local event notifications refresh only the hub; remote polling follows the selected interval. Full-fleet refresh requests retain priority when events overlap.
+- Superseded refresh queues cannot cancel a newer hidden-port unlock request.
+- The Catppuccin light preview now uses its palette colors instead of the default dark swatch.
+- System appearance changes no longer re-enable palette controls when settings are read-only.
+- Occupancy warning guidance now opens on pointer hover only from the info icon, rather than from the entire warning row. Focus and click controls are unchanged.
+
 ## 0.7.7 — 2026-09-03
 
 ### Added
