@@ -1,14 +1,14 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S } from './state.js?v=88';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=88';
-import { KIND_MATCHERS } from './kinds.js?v=88';
-import { isLease } from './leases.js?v=88';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=88';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=88';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=88';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=88';
-import { api } from './api.js?v=88';
+import { S } from './state.js?v=89';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=89';
+import { KIND_MATCHERS } from './kinds.js?v=89';
+import { isLease } from './leases.js?v=89';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=89';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=89';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=89';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=89';
+import { api } from './api.js?v=89';
 
 
   export function syncFilterUI() {
@@ -429,6 +429,11 @@ import { api } from './api.js?v=88';
     const restore = snapshotGridFocus();
     const warnings = scanWarningState(hostBoards);
     const hosts = displayedHosts();
+    /* CSS columns can otherwise reserve more narrow columns than there are
+       boards. Capping the count at the actual fleet size lets a small fleet
+       expand across a wide screen while preserving masonry flow for larger
+       fleets. */
+    hostBoards.style.setProperty('--host-board-count', String(Math.max(1, hosts.length)));
     hostBoards.innerHTML = hosts.map(function (h) {
       return '<article class="host-board' + (h.id === S.focusHostId ? ' is-active' : '') +
         '" data-host="' + escapeHtml(h.id) + '" aria-labelledby="host-title-' + escapeHtml(h.id) + '">' +
@@ -540,6 +545,7 @@ import { api } from './api.js?v=88';
         hostBoards.hidden = true;
         hostBoards.classList.add('hidden');
         hostBoards.innerHTML = '';
+        hostBoards.style.removeProperty('--host-board-count');
       }
       if (hostSwitcher) {
         hostSwitcher.hidden = true;

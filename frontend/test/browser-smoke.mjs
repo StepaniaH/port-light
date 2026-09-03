@@ -78,7 +78,6 @@ try {
   await expect(page.locator('input[name="local_scanners"]:checked')).toHaveCount(0);
   await page.locator('input[name="local_scanners"][value="listen"]').check();
   await page.locator('input[name="local_scanners"][value="compose"]').check();
-  await page.locator('#settings-save').click();
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await expect(page.locator('[data-i18n="settings.scanners.invalid"]')).toHaveCount(0);
   await expect.poll(async () => (await fetch(peer + '/api/ports/suggest')).status).toBe(200);
@@ -117,6 +116,46 @@ try {
 
   await page.goto(hub + '/#/settings/occupancy');
   await expect(page.locator('input[name="host_name"]')).toHaveValue('Hub');
+  let releaseSave;
+  let saveHeld = false;
+  const saveGate = new Promise(resolve => { releaseSave = resolve; });
+  const holdSettingsSave = async route => {
+    if (route.request().method() === 'PUT') {
+      saveHeld = true;
+      await saveGate;
+    }
+    await route.continue();
+  };
+  await page.route(hub + '/api/settings', holdSettingsSave);
+  try {
+    await page.locator('input[name="host_name"]').fill('Pending hub name');
+    await expect.poll(() => saveHeld).toBe(true);
+    await page.getByRole('link', { name: /^Port-Light/ }).click();
+    await page.getByRole('link', { name: 'Settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Occupancy', exact: true }).click();
+    await expect(page.locator('input[name="host_name"]')).toHaveValue('Pending hub name');
+  } finally {
+    releaseSave();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  assert.equal((await (await fetch(hub + '/api/settings')).json()).values.host_name, 'Pending hub name');
+  await page.locator('input[name="host_name"]').fill('Hub');
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  const peerRow = page.locator('details.peer-row').first();
+  await peerRow.locator('summary').click();
+  await peerRow.locator('[data-peer-field="username"]').fill('smoke-user');
+  const peerPassword = peerRow.locator('[data-peer-field="password"]');
+  await peerPassword.fill('smoke-password');
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  await expect(peerPassword).toHaveValue('smoke-password');
+  await expect(peerRow.locator('[data-peer-clear-auth]')).toBeVisible();
+  await peerRow.locator('[data-peer-field="name"]').focus();
+  await expect(peerPassword).toHaveValue('');
+  await peerRow.locator('[data-peer-clear-auth]').click();
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  assert.equal((await (await fetch(hub + '/api/hosts')).json()).peers[0].has_auth, false);
+  await expect(page.locator('details.peer-row').first().locator('[data-peer-clear-auth]')).toHaveCount(0);
   await expect(page.locator('[data-settings-panel="occupancy"] [data-setting="host_layout"]')).toHaveCount(0);
   await page.locator('input[name="host_description"]').fill('Local · 100.64.0.10');
   await page.locator('details.peer-row').first().locator('summary').click();
@@ -168,7 +207,6 @@ try {
   await expect(layoutChoice.locator('.layout-option')).toHaveCount(2);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.locator('#settings-save').click();
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   assert.equal((await (await fetch(hub + '/api/settings')).json()).values.refresh_ms, 15000);
   await page.goto(hub);
@@ -185,6 +223,20 @@ try {
   await page.locator('#host-tab-local').click();
 
   await page.goto(hub + '/#/settings/appearance');
+  await expect(page.locator('#theme-editor')).toBeVisible();
+  let editorSettingsWrites = 0;
+  const countEditorWrites = request => {
+    if (request.url() === hub + '/api/settings' && request.method() === 'PUT') editorSettingsWrites++;
+  };
+  page.on('request', countEditorWrites);
+  await page.locator('#theme-editor summary').click();
+  await page.locator('#editor-name').fill('Draft palette');
+  await page.locator('[data-editor-hex="bg"]').fill('#223344');
+  await delay(900); // Longer than the general settings debounce.
+  assert.equal(editorSettingsWrites, 0);
+  assert.equal(await page.locator('html').evaluate(el => el.style.getPropertyValue('--bg')), '#223344');
+  page.off('request', countEditorWrites);
+  await page.locator('#theme-editor summary').click();
   const palettes = ['gruvbox', 'catppuccin', 'solarized', 'nord', 'dracula',
     'tokyo-night', 'one-dark', 'everforest', 'rose-pine', 'kanagawa'];
   const rootElement = page.locator('html');
@@ -206,7 +258,6 @@ try {
     assert.ok(colors.every(([actual, preview]) => actual === preview), family + ' swatch colors');
   }
   await page.locator('.theme-swatch[data-theme-preview="nord-light"]').click();
-  await page.locator('#settings-save').click();
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await page.reload();
   await expect(rootElement).toHaveAttribute('data-palette', 'nord');
@@ -230,7 +281,6 @@ try {
   await expect(showV4).toBeChecked();
   await expect(showV6).toBeChecked();
   await expect(page.locator('[data-setting^="show_bind_"] .origin-hint')).toHaveCount(0);
-  await page.locator('#settings-save').click();
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await page.goto(hub);
   const boundCell = page.locator('#host-grid-local .port-cell[data-port="42008"]');
@@ -249,7 +299,6 @@ try {
   await expect(showV4).not.toBeChecked();
   await expect(showV6).not.toBeChecked();
   await showV4.check();
-  await page.locator('#settings-save').click();
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await page.goto(hub);
   await expect(boundCell.locator('.bind-address-row')).toHaveCount(1);
@@ -293,7 +342,6 @@ try {
   // Enable the intentionally unavailable Docker source to exercise real warnings.
   await page.goto(hub + '/#/settings/occupancy');
   await page.locator('input[name="local_scanners"][value="docker"]').check();
-  await page.locator('#settings-save').click();
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await page.goto(hub);
   await page.locator('[data-host-switch="local"]').click();
@@ -323,7 +371,7 @@ try {
   await explanation.locator('a[href="#/settings/occupancy"]').click();
   await expect(page.locator('input[name="host_name"]')).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: waterfall and saved tabs, mobile waterfall, persisted machine descriptions, slider focus and capacity guidance, keyboard host switch, invalid scanner recovery, detail, saved label, all light palettes, saved/system appearance, mixed bind addresses, batch conflict and retry, scan guidance and mobile layout.');
+  console.log('Browser smoke passed: adaptive waterfall, autosaved tabs and settings, mobile waterfall, persisted machine descriptions, slider focus and capacity guidance, keyboard host switch, invalid scanner recovery, detail, saved label, all light palettes, saved/system appearance, mixed bind addresses, batch conflict and retry, scan guidance and mobile layout.');
 } finally {
   if (browser) await browser.close();
   await Promise.all(processes.map(async child => {

@@ -4,6 +4,20 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.7.9 — 2026-09-04
+
+### Changed
+
+- Settings changes now save automatically. Writes are debounced and serialized, and newer edits remain pending until their own save completes.
+- The default waterfall layout caps its column count at the number of displayed machines, allowing one- and two-machine dashboards to use available desktop width.
+- The English and Simplified Chinese READMEs now include a dashboard screenshot made with fictional host and service data.
+
+### Fixed
+
+- Pending settings edits survive navigation and custom-theme changes. Responses from earlier saves no longer replace newer machine credentials or theme choices.
+- Incomplete machine entries remain editable instead of being silently removed during automatic saves.
+- Saved-setting source hints and scanner status badges update without resetting the form.
+
 ### Development
 
 - Consolidated GitHub Actions into CI and Release. CI runs on `main` pushes and pull requests targeting `main`, cancels superseded runs, and runs Ruff once while retaining all Python and frontend checks.

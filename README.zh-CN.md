@@ -13,6 +13,10 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Port-Light 双主机自适应端口看板">
+</p>
+
 ## 它做什么
 
 把三条**本机**数据合成一张网格：
@@ -46,7 +50,7 @@
 - 点击复制端口号
 - 可选的卡片绑定地址摘要，可分别控制 IPv4/IPv6、紧凑显示 IPv6，并省略重复的通配绑定
 - 一个界面可以拉取最多 32 个其他 Port-Light 实例的占用图（局域网 / Tailscale）。默认以瀑布流展示全部机器，也可在「设置 → 外观 → 卡片」中选择分 Tab；机器名称下方可填写 IP 等简短备注。每台机器仍自己扫描。
-- 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等 10 套配色，每套都支持深色和浅色；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
+- 设置修改后会自动保存。外观仍会实时预览：深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等 10 套配色，每套都支持深色和浅色；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
 - 自定义色板、JSON 导入导出，以及宽松 / 标准 / 紧凑三种卡片密度
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
@@ -77,7 +81,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.8
+    image: stepaniah/port-light:v0.7.9
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -132,7 +136,7 @@ docker compose up -d
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
 | `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 |
 | `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。只能用环境变量。 |
-| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页保存的值覆盖 env。`env`：只认 Compose，设置页只读。 |
+| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页的值覆盖 env 默认值。`env`：只认 Compose，设置页只读。 |
 | `PORT_LIGHT_HOST_NAME` | 主机名 | 多机器视图中本机占用图的名称。也可在设置 → 占用图中修改。 |
 | `PORT_LIGHT_HOST_DESCRIPTION` | 空 | 多机器视图中本机名称下方的可选纯文本短描述，最多 120 字。 |
 | `PORT_LIGHT_PEERS` | 未设置 | 最多 32 个 `{name, url, description?, username?, password?}` 条目的 JSON 数组。短描述为可选纯文本，最多 120 字。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。与设置页同一把锁。 |
@@ -143,7 +147,9 @@ docker compose up -d
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
 | `AGENT_TOKEN` | 未设置 | 设置后，`GET /api/ports/suggest` 需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
 
-上表里除超时、路径和密钥外，也可以在 Web UI 的**设置**中修改，包括本机名称、扫描来源、Compose 发现范围和其他机器。保存内容写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
+上表里除超时、路径和密钥外，也可以在 Web UI 的**设置**中修改，包括本机名称、扫描来源、Compose 发现范围和其他机器。修改会自动写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
+
+状态栏会显示待保存、已保存或保存失败。离开页面前，请补全每台机器的名称和 URL。创建、导入或删除自定义色板仍需在色板编辑器中手动操作。
 
 把 [custom_ports.example.json](custom_ports.example.json) 复制为 `custom_ports.json`（已 gitignore）。分类：`system`、`web`、`database`、`message`、`proxy`、`vpn`、`selfhosted`、`dev`、`infra`、`gaming`。
 

@@ -20,6 +20,7 @@ test('machine descriptions are optional escaped text below each title', () => {
     };
     renderHostBoards();
     assert.equal(boards.querySelectorAll('.host-board').length, 2);
+    assert.equal(boards.style.getPropertyValue('--host-board-count'), '2');
     assert.equal(boards.querySelectorAll('.host-board-description').length, 1);
     assert.match(boards.innerHTML, /&lt;script&gt;demo&lt;\/script&gt;/);
     assert.doesNotMatch(boards.innerHTML, /<script>/);
@@ -27,6 +28,7 @@ test('machine descriptions are optional escaped text below each title', () => {
     S.focusHostId = 'peer0001';
     renderHostBoards();
     assert.equal(boards.querySelectorAll('.host-board').length, 1);
+    assert.equal(boards.style.getPropertyValue('--host-board-count'), '1');
     assert.equal(boards.querySelector('.host-board').getAttribute('data-host'), 'peer0001');
     assert.equal(boards.querySelectorAll('.host-board-description').length, 1);
   } finally {

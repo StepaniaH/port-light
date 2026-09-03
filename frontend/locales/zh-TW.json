@@ -145,6 +145,7 @@
     "loading": "正在讀取佔用…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
+    "incomplete": "請為每台機器填寫名稱和 URL，填寫完整後會自動儲存。",
     "description": "簡短描述（選填）",
     "descriptionPlaceholder": "例如：Tailscale 100.64.0.12 · 家用伺服器",
     "max": "最多可新增 {count} 台其他機器。",
@@ -172,13 +173,13 @@
   },
   "settings": {
     "title": "設定",
-    "lead": "儲存會寫入資料卷，並覆蓋對應的環境變數。",
+    "lead": "修改會自動儲存到資料卷，並覆蓋對應的環境變數。",
     "leadReadonly": "已由主機環境鎖定。請在 Compose 中修改後重建容器。",
-    "save": "儲存",
+    "autosave": "修改會自動儲存",
     "saving": "儲存中…",
     "saved": "已儲存",
-    "unsaved": "有未儲存的變更",
-    "discard": "放棄未儲存的設定？",
+    "unsaved": "等待自動儲存…",
+    "saveFailed": "無法儲存修改。再次修改任一設定即可重試。",
     "mustBeNumber": "{label}必須是數字",
     "nav": {
       "label": "設定分類",
@@ -280,7 +281,7 @@
       "overCapacity": "已設定 {current}/{hard} 台其他機器；此間隔建議最多 {recommended} 台。調慢重新整理可降低持續負載。"
     },
     "scanners": {
-      "invalid": "掃描來源設定無效，無法檢查連接埠占用情況。請至少選擇一個來源並儲存。若設定為唯讀，請修正部署設定中的 PORT_LIGHT_SCANNERS 並重建容器。",
+      "invalid": "掃描來源設定無效，無法檢查連接埠占用情況。請至少選擇一個來源，修改會自動儲存。若設定為唯讀，請修正部署設定中的 PORT_LIGHT_SCANNERS 並重建容器。",
       "required": "至少保留一個本機掃描來源。",
       "state": { "ok": "可用", "failed": "無法使用", "checking": "檢查中", "disabled": "已關閉" },
       "listen": { "label": "主機監聽連接埠", "help": "讀取本機監聽中的 TCP 與 UDP 連接埠。", "remediation": "檢查 /host/proc 掛載或 host 網路存取。" },

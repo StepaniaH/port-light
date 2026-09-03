@@ -145,6 +145,7 @@
     "loading": "Leyendo la ocupación…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
+    "incomplete": "Introduce un nombre y una URL para cada equipo. Las entradas completas se guardan automáticamente.",
     "description": "Descripción breve (opcional)",
     "descriptionPlaceholder": "P. ej.: Tailscale 100.64.0.12 · Servidor doméstico",
     "max": "Hasta {count} equipos adicionales.",
@@ -172,13 +173,13 @@
   },
   "settings": {
     "title": "Ajustes",
-    "lead": "Al guardar se escribe en el volumen de datos y tiene prioridad sobre la variable de entorno correspondiente.",
+    "lead": "Los cambios se guardan automáticamente en el volumen de datos y sustituyen las variables de entorno correspondientes.",
     "leadReadonly": "Bloqueado por el entorno del equipo. Modifique los valores en Compose y recree el contenedor.",
-    "save": "Guardar",
+    "autosave": "Los cambios se guardan automáticamente",
     "saving": "Guardando…",
     "saved": "Guardado",
-    "unsaved": "Cambios sin guardar",
-    "discard": "¿Descartar los ajustes sin guardar?",
+    "unsaved": "Esperando para guardar…",
+    "saveFailed": "No se pudieron guardar los cambios. Modifique un ajuste para reintentarlo.",
     "mustBeNumber": "{label} debe ser un número",
     "nav": {
       "label": "Secciones de ajustes",
@@ -280,7 +281,7 @@
       "overCapacity": "{current}/{hard} pares configurados; este intervalo es adecuado para un máximo de {recommended}. Aumenta el intervalo para reducir la carga continua."
     },
     "scanners": {
-      "invalid": "La selección de escáneres no es válida; no se puede comprobar la ocupación. Selecciona al menos una fuente y guarda. Si los ajustes están bloqueados, corrige PORT_LIGHT_SCANNERS en la configuración del despliegue y recrea el contenedor.",
+      "invalid": "La selección de escáneres no es válida; no se puede comprobar la ocupación. Selecciona al menos una fuente; el cambio se guarda automáticamente. Si los ajustes están bloqueados, corrige PORT_LIGHT_SCANNERS en la configuración del despliegue y recrea el contenedor.",
       "required": "Debe quedar al menos un escáner local activado.",
       "state": { "ok": "Disponible", "failed": "No disponible", "checking": "Comprobando", "disabled": "Desactivado" },
       "listen": { "label": "Puertos en escucha", "help": "Lee sockets TCP y UDP locales en escucha.", "remediation": "Comprueba /host/proc o el acceso a la red del host." },

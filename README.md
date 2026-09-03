@@ -13,6 +13,10 @@ A self-hosted dashboard for host port occupancy. It combines host listeners, Doc
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Port-Light dashboard showing two adaptive host boards">
+</p>
+
 ## What it does
 
 Port-Light merges three local sources into one grid:
@@ -46,7 +50,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Copy the port number on click
 - Optional card bind-address summaries, with separate IPv4/IPv6 controls, compact IPv6 rendering, and repetitive wildcard binds omitted
 - One UI can pull occupancy maps from up to 32 other Port-Light instances (LAN / Tailscale). A waterfall shows all machines by default; Settings → Appearance → Cards can switch to tabs. Optional notes below machine names can record IPs or other context. Each host still scans itself.
-- Appearance on Settings: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. All ten palette families include light and dark variants. UI language (English, Français, Deutsch, Español, 简体中文, 繁體中文, 日本語). Also via Compose env.
+- Settings save automatically after each change. Appearance controls keep their live preview: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. All ten palette families include light and dark variants. UI language (English, Français, Deutsch, Español, 简体中文, 繁體中文, 日本語). Also via Compose env.
 - Custom palettes, import/export, and Loose / Standard / Compact card-density presets
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
@@ -77,7 +81,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.8
+    image: stepaniah/port-light:v0.7.9
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -132,7 +136,7 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
 | `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. Env only. |
 | `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. Env only. |
-| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI save wins over env. `env`: Compose is the only source and the Settings page is read-only. |
+| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI values override env defaults. `env`: Compose is the only source and the Settings page is read-only. |
 | `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. Also configurable under Settings → Occupancy. |
 | `PORT_LIGHT_HOST_DESCRIPTION` | empty | Optional plain-text note under this machine's name in the multi-host view, up to 120 characters. |
 | `PORT_LIGHT_PEERS` | unset | JSON array of up to 32 `{name, url, description?, username?, password?}` entries, used when the data file has no `peers` key or when `PORT_LIGHT_SETTINGS_SOURCE=env`. Descriptions are optional plain text, up to 120 characters. Same lock as Settings. |
@@ -143,7 +147,9 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
 | `AGENT_TOKEN` | unset | When set, `GET /api/ports/suggest` requires a matching `X-Agent-Token` header. Env-only. |
 
-Most options (except timeout, paths, and secrets) can also be changed on **Settings** in the UI. This includes the local machine name, scanner selection, Compose discovery options, and peers. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
+Most options (except timeout, paths, and secrets) can also be changed on **Settings** in the UI. This includes the local machine name, scanner selection, Compose discovery options, and peers. Changes save automatically into `/data/port_light.json`. OpenAPI is at `/docs`.
+
+The status line reports pending, saved, or failed changes. Complete each machine's name and URL before leaving the page. Creating, importing, or deleting a custom palette remains an explicit action in the palette editor.
 
 Copy [custom_ports.example.json](custom_ports.example.json) to `custom_ports.json` (gitignored). Categories: `system`, `web`, `database`, `message`, `proxy`, `vpn`, `selfhosted`, `dev`, `infra`, `gaming`.
 

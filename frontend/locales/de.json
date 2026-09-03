@@ -145,6 +145,7 @@
     "loading": "Belegung wird gelesen…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
+    "incomplete": "Gib für jeden Rechner einen Namen und eine URL ein. Vollständige Einträge werden automatisch gespeichert.",
     "description": "Kurzbeschreibung (optional)",
     "descriptionPlaceholder": "Z. B. Tailscale 100.64.0.12 · Heimserver",
     "max": "Bis zu {count} weitere Rechner.",
@@ -172,13 +173,13 @@
   },
   "settings": {
     "title": "Einstellungen",
-    "lead": "Das Speichern schreibt in das Daten-Volume und setzt die entsprechende Umgebungsvariable außer Kraft.",
+    "lead": "Änderungen werden automatisch im Daten-Volume gespeichert und überschreiben passende Umgebungsvariablen.",
     "leadReadonly": "Durch die Host-Umgebung gesperrt. Ändern Sie die Werte in Compose und erstellen Sie den Container neu.",
-    "save": "Speichern",
+    "autosave": "Änderungen werden automatisch gespeichert",
     "saving": "Speichern…",
     "saved": "Gespeichert",
-    "unsaved": "Ungespeicherte Änderungen",
-    "discard": "Ungespeicherte Einstellungen verwerfen?",
+    "unsaved": "Wartet auf automatisches Speichern…",
+    "saveFailed": "Änderungen konnten nicht gespeichert werden. Ändern Sie eine Einstellung, um es erneut zu versuchen.",
     "mustBeNumber": "{label} muss eine Zahl sein",
     "nav": {
       "label": "Einstellungsabschnitte",
@@ -280,7 +281,7 @@
       "overCapacity": "{current}/{hard} Peers konfiguriert; dieses Intervall eignet sich für bis zu {recommended}. Ein längeres Intervall verringert die Dauerlast."
     },
     "scanners": {
-      "invalid": "Die Scannerauswahl ist ungültig; die Portbelegung kann nicht geprüft werden. Wähle mindestens eine Quelle und speichere. Bei gesperrten Einstellungen korrigiere PORT_LIGHT_SCANNERS in der Bereitstellungskonfiguration und erstelle den Container neu.",
+      "invalid": "Die Scannerauswahl ist ungültig; die Portbelegung kann nicht geprüft werden. Wähle mindestens eine Quelle; die Änderung wird automatisch gespeichert. Bei gesperrten Einstellungen korrigiere PORT_LIGHT_SCANNERS in der Bereitstellungskonfiguration und erstelle den Container neu.",
       "required": "Mindestens ein lokaler Scanner muss aktiviert bleiben.",
       "state": { "ok": "Verfügbar", "failed": "Nicht verfügbar", "checking": "Wird geprüft", "disabled": "Aus" },
       "listen": { "label": "Host-Listener", "help": "Liest lokale TCP- und UDP-Listener.", "remediation": "Prüfe /host/proc oder den Host-Netzwerkzugriff." },
