@@ -5,8 +5,9 @@ Published image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/por
 | Tag | Meaning |
 |-----|---------|
 | `v0.7.8` (and other `v*`) | Release built from that git tag |
-| `latest` | Same as the newest `v*` tag at build time |
-| `dev` | Manual `workflow_dispatch` builds |
+| `latest` | Most recently published version image |
+
+The Release workflow publishes version and `latest` tags only after the tagged commit passes CI on `main`. Manual branch builds no longer update the legacy `dev` image tag; use a version tag or build from source for development.
 
 Pin a version tag or digest for reproducible deployments.
 

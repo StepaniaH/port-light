@@ -2,7 +2,16 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -20,7 +29,8 @@ jobs:
       - name: Record dependency versions
         run: pip freeze
       - name: Lint
-        run: ruff check backend tests mcp
+        if: matrix.python-version == '3.13'
+        run: ruff check backend tests mcp scripts/check_release_ci.py
       - name: Test
         run: |
           set -o pipefail

@@ -19,7 +19,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
 # set COMPOSE_SCAN_DIR to a folder of compose projects
 uvicorn backend.main:app --reload --port 2100
-ruff check backend tests mcp
+ruff check backend tests mcp scripts/check_release_ci.py
 pytest
 npm ci
 npm run lint
@@ -71,7 +71,15 @@ Maintain technical documentation under `docs/` in English. Keep the existing Sim
 
 ## Release (maintainers)
 
+Development branches such as `dev` stay local; this repository keeps only `main` on the remote. External contributions can use pull requests from forks.
+
+[CI](.github/workflows/ci.yml) runs on pushes to `main` and pull requests targeting `main`, not on version tags. It tests Python 3.11–3.13 and the frontend, including the Chromium smoke flow. Ruff runs once, on Python 3.13. A newer push cancels an older CI run for the same branch or pull request.
+
 1. Move Unreleased notes into a version section in `CHANGELOG.md`.
 2. Bump `VERSION` in `backend/main.py`.
 3. Update pinned image examples in both READMEs and `docs/deployment.md`.
-4. Tag `vX.Y.Z` and push the tag. [docker-publish.yml](.github/workflows/docker-publish.yml) builds amd64+arm64 for Docker Hub and GHCR. [github-release.yml](.github/workflows/github-release.yml) opens a GitHub Release from the changelog section.
+4. Merge the local development branch into `main`, push only `main`, and wait for its CI to pass.
+5. Tag that tested commit `vX.Y.Z` and push the tag. [Release](.github/workflows/release.yml) verifies that the tagged commit belongs to `main` and has a successful `main` push run of `ci.yml`. It waits up to 15 minutes if CI has not finished; a failed, cancelled, or timed-out check blocks publication.
+6. Release builds amd64+arm64 images for Docker Hub and GHCR. Only after the images are pushed does it create the GitHub Release from the changelog section. It does not repeat the test suite.
+
+If publication is blocked by CI, fix or rerun the failing CI check first, then rerun the failed Release jobs in Actions. If a code change is needed, release a new tested commit; do not move an existing version tag. Manual branch builds no longer publish a `dev` image tag.

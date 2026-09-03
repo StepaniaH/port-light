@@ -4,6 +4,11 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Development
+
+- Consolidated GitHub Actions into CI and Release. CI runs on `main` pushes and pull requests targeting `main`, cancels superseded runs, and runs Ruff once while retaining all Python and frontend checks.
+- Release requires successful CI for the exact tagged commit on `main`, publishes the multi-architecture images, then creates the GitHub Release. Version tags no longer trigger a duplicate test run, and manual `dev` image publishing has been removed.
+
 ## 0.7.8 — 2026-09-03
 
 ### Added

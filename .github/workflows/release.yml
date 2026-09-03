@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tagged commit
+        id: source
+        run: |
+          sha="$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$sha" origin/main
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for main CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: python3 scripts/check_release_ci.py "$GITHUB_REPOSITORY" "$RELEASE_SHA"
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Image tags
+        id: meta
+        env:
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          owner="${REPOSITORY_OWNER,,}"
+          echo "tags=stepaniah/port-light:${GITHUB_REF_NAME},stepaniah/port-light:latest,ghcr.io/${owner}/port-light:${GITHUB_REF_NAME},ghcr.io/${owner}/port-light:latest" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  github-release:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build-and-push.outputs.sha }}
+          persist-credentials: false
+
+      - name: Notes from CHANGELOG
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          version = os.environ["TAG"].lstrip("v")
+          text = pathlib.Path("CHANGELOG.md").read_text()
+          m = re.search(rf"^## {re.escape(version)}\b.*?(?=^## |\Z)", text, re.M | re.S)
+          if not m:
+              m = re.search(r"^## Unreleased\b.*?(?=^## |\Z)", text, re.M | re.S)
+          notes = (m.group(0).strip() if m else f"See CHANGELOG.md for {os.environ['TAG']}.")
+          pathlib.Path("release-notes.md").write_text(notes + "\n")
+          PY
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          generate_release_notes: false
