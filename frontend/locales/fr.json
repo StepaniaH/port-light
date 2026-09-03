@@ -145,6 +145,7 @@
     "loading": "Lecture de l'occupation…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
+    "incomplete": "Saisissez un nom et une URL pour chaque machine. Les entrées complètes sont enregistrées automatiquement.",
     "description": "Description courte (facultative)",
     "descriptionPlaceholder": "Ex. : Tailscale 100.64.0.12 · Serveur maison",
     "max": "Jusqu’à {count} autres machines.",
@@ -172,13 +173,13 @@
   },
   "settings": {
     "title": "Réglages",
-    "lead": "L'enregistrement écrit dans le volume de données et remplace la variable d'environnement correspondante.",
+    "lead": "Les modifications sont enregistrées automatiquement dans le volume de données et remplacent les variables d'environnement correspondantes.",
     "leadReadonly": "Verrouillé par l'environnement de l'hôte. Modifiez les valeurs dans Compose et recréez le conteneur.",
-    "save": "Enregistrer",
+    "autosave": "Les modifications sont enregistrées automatiquement",
     "saving": "Enregistrement…",
     "saved": "Enregistré",
-    "unsaved": "Modifications non enregistrées",
-    "discard": "Abandonner les réglages non enregistrés\u00A0?",
+    "unsaved": "En attente d'enregistrement…",
+    "saveFailed": "Impossible d'enregistrer les modifications. Modifiez un réglage pour réessayer.",
     "mustBeNumber": "{label} doit être un nombre",
     "nav": {
       "label": "Sections des réglages",
@@ -280,7 +281,7 @@
       "overCapacity": "{current}/{hard} pairs configurés ; cet intervalle convient à {recommended} au maximum. Ralentissez l’actualisation pour réduire la charge continue."
     },
     "scanners": {
-      "invalid": "La sélection des scanners est invalide ; l’occupation ne peut pas être vérifiée. Sélectionnez au moins une source et enregistrez. Si les paramètres sont verrouillés, corrigez PORT_LIGHT_SCANNERS dans la configuration du déploiement et recréez le conteneur.",
+      "invalid": "La sélection des scanners est invalide ; l’occupation ne peut pas être vérifiée. Sélectionnez au moins une source ; la modification est enregistrée automatiquement. Si les paramètres sont verrouillés, corrigez PORT_LIGHT_SCANNERS dans la configuration du déploiement et recréez le conteneur.",
       "required": "Au moins un scanner local doit rester activé.",
       "state": { "ok": "Disponible", "failed": "Indisponible", "checking": "Vérification", "disabled": "Désactivé" },
       "listen": { "label": "Écoutes de l’hôte", "help": "Lit les sockets TCP et UDP en écoute.", "remediation": "Vérifiez /host/proc ou l’accès au réseau de l’hôte." },

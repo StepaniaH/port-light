@@ -1,19 +1,25 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=88';
-import { t, tx, escapeHtml, errorText } from './text.js?v=88';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=88';
-import { moveChipFocus } from './a11y.js?v=88';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=88';
-import { api, fetchHosts, fetchSettings } from './api.js?v=88';
-import { hasPeers, hostById, hostName } from './hosts.js?v=88';
-import { bindAddressView, render, syncHiddenButton } from './grid.js?v=88';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=88';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=89';
+import { t, tx, escapeHtml, errorText } from './text.js?v=89';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=89';
+import { moveChipFocus } from './a11y.js?v=89';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=89';
+import { api, fetchHosts, fetchSettings } from './api.js?v=89';
+import { hasPeers, hostById, hostName } from './hosts.js?v=89';
+import { bindAddressView } from './grid.js?v=89';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=89';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
   export function loadSettingsPage() {
-    Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
+    if (S.settingsDirty) {
+      showSettingsPanel(S.settingsPanel);
+      return Promise.resolve();
+    }
+    const loadRevision = S.settingsRevision;
+    return Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
+      if (S.settingsDirty || loadRevision !== S.settingsRevision) return;
       const doc = pair[0];
       if (pair[1]) S.hostCatalog = pair[1];
       if (!doc) return;
@@ -195,9 +201,18 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
   export function markDirty() {
     if (S.settingsDoc && S.settingsDoc.readonly) return;
     S.settingsDirty = true;
+    S.settingsRevision += 1;
     const status = document.getElementById('settings-status');
     status.className = '';
     status.textContent = t('settings.unsaved');
+  }
+
+  export function isAutosavedSetting(input) {
+    if (!input) return false;
+    if (input.matches('[data-peer-field], [data-refresh-slider]')) return true;
+    return (S.settingsDoc && S.settingsDoc.fields || []).some(function (field) {
+      return field.key === input.name;
+    });
   }
 
   export function applyServerSettings(doc) {
@@ -214,19 +229,6 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     persistAppearance();
   }
 
-  export function revertUnsavedSettings() {
-    S.settingsDirty = false;
-    if (!S.settingsDoc) return;
-    applyServerSettings(S.settingsDoc);
-    if (!window.PortLightI18n) return;
-    PortLightI18n.load(S.settings.locale || 'auto').then(function () {
-      PortLightI18n.applyDom();
-      syncHiddenButton();
-      if (S.currentData) render();
-      syncHeaderHeight();
-    });
-  }
-
   export function kvRow(labelKey, value, valueKey) {
     const val = valueKey
       ? '<span class="kv-val" data-i18n="' + valueKey + '">' + escapeHtml(String(value == null ? '' : value)) + '</span>'
@@ -239,6 +241,50 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     if (!f.origin || f.origin === 'default') return '';
     const key = f.origin === 'file' ? 'settings.origin.saved' : 'settings.origin.env';
     return '<span class="origin-hint" data-i18n="' + key + '" title="' + escapeHtml(f.env) + '">' + escapeHtml(t(key)) + '</span>';
+  }
+
+  export function syncSettingsMetadata(doc) {
+    (doc.fields || []).forEach(function (field) {
+      if (field.key === 'show_bind_addresses' || BIND_FAMILY_KEYS.includes(field.key)) return;
+      const row = document.querySelector('[data-setting="' + field.key + '"]');
+      if (!row) return;
+      let hint = row.querySelector('.origin-hint');
+      if (!field.origin || field.origin === 'default') {
+        if (hint) hint.remove();
+        return;
+      }
+      if (!hint) {
+        hint = document.createElement('span');
+        hint.className = 'origin-hint';
+        (row.querySelector('.setting-control') || row).appendChild(hint);
+      }
+      const key = field.origin === 'file' ? 'settings.origin.saved' : 'settings.origin.env';
+      hint.setAttribute('data-i18n', key);
+      hint.setAttribute('title', field.env || '');
+      hint.textContent = t(key);
+    });
+    document.querySelectorAll('.scanner-option').forEach(function (option) {
+      const input = option.querySelector('input');
+      const badge = option.querySelector('.scanner-state');
+      if (!input || !badge) return;
+      const state = input.checked ? scannerRuntime(doc, input.value).state : 'disabled';
+      badge.className = 'scanner-state ' + state;
+      badge.setAttribute('data-i18n', 'settings.scanners.state.' + state);
+      badge.textContent = t('settings.scanners.state.' + state);
+      let help = option.querySelector('.scanner-remediation');
+      if (state !== 'failed') {
+        if (help) help.remove();
+      } else {
+        if (!help) {
+          help = document.createElement('span');
+          help.className = 'scanner-remediation';
+          option.querySelector('.scanner-copy').appendChild(help);
+        }
+        const key = 'settings.scanners.' + input.value + '.remediation';
+        help.setAttribute('data-i18n', key);
+        help.textContent = t(key);
+      }
+    });
   }
 
   export function localeCopyHtml(c) {
@@ -435,12 +481,15 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     return out;
   }
 
-  export function themeEditorHtml(readonly) {
-    const dis = readonly ? ' disabled' : '';
-    const targets = ['<option value="">' + escapeHtml(t('settings.editor.new')) + '</option>']
+  function themeTargetsHtml() {
+    return ['<option value="">' + escapeHtml(t('settings.editor.new')) + '</option>']
       .concat((S.customThemes || []).map(function (th) {
         return '<option value="' + escapeHtml(th.id) + '">' + escapeHtml(th.name) + '</option>';
       })).join('');
+  }
+
+  export function themeEditorHtml(readonly) {
+    const dis = readonly ? ' disabled' : '';
     const rows = EDITOR_VARS.map(function (row) {
       return '<div class="editor-row"><label for="ed-' + row.key + '" data-i18n="' + row.labelKey + '">' +
         escapeHtml(t(row.labelKey)) + '</label>' +
@@ -454,7 +503,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       '<div class="editor-actions">' +
       '<button type="button" class="btn-secondary" data-editor-preset' + dis + '>' +
       escapeHtml(t('settings.editor.preset')) + '</button>' +
-      '<select class="dropdown" id="editor-target"' + dis + '>' + targets + '</select>' +
+      '<select class="dropdown" id="editor-target"' + dis + '>' + themeTargetsHtml() + '</select>' +
       '<input type="text" class="range-input" id="editor-name" maxlength="40" placeholder="' +
       escapeHtml(t('modal.optional')) + '"' + dis + '>' +
       '<button type="button" class="btn-secondary" data-editor-export' + dis + '>' +
@@ -511,6 +560,37 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     document.documentElement.style.setProperty(CUSTOM_CSS_NAMES[key], hex);
   }
 
+  export async function refreshThemeChoices(deletedId) {
+    const doc = await fetchSettings();
+    if (!doc) return;
+    S.customThemes = Array.isArray(doc.custom_themes) ? doc.custom_themes : [];
+    const paletteField = (doc.fields || []).find(function (field) { return field.key === 'theme_palette'; });
+    S.settingsDoc = Object.assign({}, S.settingsDoc, {
+      custom_themes: S.customThemes,
+      fields: (S.settingsDoc && S.settingsDoc.fields || []).map(function (field) {
+        return field.key === 'theme_palette' && paletteField ? paletteField : field;
+      }),
+    });
+    const removedSelection = deletedId && S.settings.theme_palette === CUSTOM_PREFIX + deletedId;
+    if (removedSelection) S.settings.theme_palette = '';
+    const control = document.querySelector('[data-setting="theme_palette"] .setting-control');
+    if (control && paletteField) {
+      control.innerHTML = renderPalettePicker(paletteField.choices || [], S.settings.theme_palette || '', currentMode(),
+        S.settingsDoc.readonly ? ' disabled' : '') + originHint(paletteField);
+    }
+    const target = document.getElementById('editor-target');
+    if (target) {
+      const selected = target.value;
+      target.innerHTML = themeTargetsHtml();
+      target.value = S.customThemes.some(function (theme) { return theme.id === selected; }) ? selected : '';
+    }
+    applyAppearance();
+    if (removedSelection && control) {
+      const builtin = control.querySelector('input[value=""]');
+      if (builtin) builtin.dispatchEvent(new Event('change', { bubbles: true }));
+    } else if (!S.settingsDirty) persistAppearance();
+  }
+
   async function saveEditorTheme(btn) {
     const status = document.getElementById('settings-status');
     const colors = collectEditorColors();
@@ -532,10 +612,8 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       if (status) { status.className = 'is-error'; status.textContent = errorText(body, res.status); }
       return;
     }
-    const docRes = await api('/api/settings');
-    if (docRes.ok) applyServerSettings(await docRes.json());
-    renderSettingsForm(S.settingsDoc);
-    if (status) { status.className = 'is-ok'; status.textContent = t('settings.saved'); }
+    await refreshThemeChoices();
+    if (status && !S.settingsDirty) { status.className = 'is-ok'; status.textContent = t('settings.saved'); }
   }
 
   function exportEditorTheme() {
@@ -566,9 +644,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         }),
       });
       if (!res.ok) throw new Error(String(res.status));
-      const docRes = await api('/api/settings');
-      if (docRes.ok) applyServerSettings(await docRes.json());
-      renderSettingsForm(S.settingsDoc);
+      await refreshThemeChoices();
     } catch (err) { /* status line shows nothing on cancel; invalid files are rejected server-side */ }
   }
 
@@ -765,10 +841,16 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
   export function peersPayload() {
     readPeersDraftFromForm();
-    return S.peersDraft.map(function (row) {
+    const rows = document.getElementById('settings-peers').querySelectorAll('.peer-row');
+    return S.peersDraft.map(function (row, index) {
       const name = String(row.name || '').trim();
       const url = String(row.url || '').trim();
-      if (!name || !url) return null;
+      if (!row.id && name && url) {
+        row.id = Array.from(crypto.getRandomValues(new Uint8Array(4)), function (byte) {
+          return byte.toString(16).padStart(2, '0');
+        }).join('');
+        rows[index].setAttribute('data-peer-id', row.id);
+      }
       const item = { name: name, url: url };
       if (row.id) item.id = row.id;
       item.description = String(row.description || '').trim();
@@ -780,7 +862,36 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       if (row.username) item.username = row.username;
       if (row.password) item.password = row.password;
       return item;
-    }).filter(Boolean);
+    });
+  }
+
+  export function syncSavedPeerRows() {
+    document.getElementById('settings-peers').querySelectorAll('.peer-row').forEach(function (row, index) {
+      const peer = S.peersDraft[index];
+      if (!peer) return;
+      row.setAttribute('data-peer-id', peer.id);
+      row.setAttribute('data-has-auth', peer.has_auth ? '1' : '0');
+      row.querySelector('.peer-summary-name').textContent = peer.name;
+      row.querySelector('.peer-summary-url').textContent = peer.url;
+      const password = row.querySelector('[data-peer-field="password"]');
+      password.setAttribute('placeholder', peer.has_auth ? t('hosts.passwordKeep') : '');
+      // A pause while typing can trigger a save; do not interrupt that input.
+      if (document.activeElement !== password) {
+        password.value = '';
+        password.removeAttribute('value');
+      }
+      const clear = row.querySelector('[data-peer-clear-auth]');
+      if (!peer.has_auth && clear) clear.remove();
+      if (peer.has_auth && !clear) {
+        const button = document.createElement('button');
+        button.setAttribute('type', 'button');
+        button.className = 'btn-secondary';
+        button.setAttribute('data-peer-clear-auth', '');
+        button.setAttribute('data-i18n', 'hosts.clearAuth');
+        button.textContent = t('hosts.clearAuth');
+        row.querySelector('.peer-row-actions').insertBefore(button, row.querySelector('[data-peer-remove]'));
+      }
+    });
   }
 
   function snippetBlock(captionKey, id, code) {
@@ -953,9 +1064,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       const id = btn.getAttribute('data-delete-theme');
       const res = await api('/api/custom-themes/' + id, { method: 'DELETE' });
       if (!res.ok) return;
-      const docRes = await api('/api/settings');
-      if (docRes.ok) applyServerSettings(await docRes.json());
-      renderSettingsForm(S.settingsDoc);
+      await refreshThemeChoices(id);
     });
     /* The file input and hex rows are rebuilt on every renderSettingsForm, so
        these two are wired as document-level delegates rather than bound to
@@ -1045,13 +1154,11 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     const fields = doc.fields || [];
     const host = document.getElementById('settings-fields');
     const lead = document.getElementById('settings-lead');
-    const saveBtn = document.getElementById('settings-save');
     const status = document.getElementById('settings-status');
     S.settingsDirty = false;
     status.className = '';
-    status.textContent = '';
+    status.textContent = doc.readonly ? '' : t('settings.autosave');
     lead.textContent = t(doc.readonly ? 'settings.leadReadonly' : 'settings.lead');
-    saveBtn.disabled = !!doc.readonly;
 
     const byGroup = {};
     const groupOrder = [];
@@ -1135,9 +1242,17 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
   }
 
   export async function saveSettingsPage() {
-    if (S.settingsDoc && S.settingsDoc.readonly) return;
+    if (S.settingsDoc && S.settingsDoc.readonly) return false;
     const status = document.getElementById('settings-status');
     const form = document.getElementById('settings-form');
+    const saveRevision = S.settingsRevision;
+    const themesAtStart = S.customThemes;
+    const peers = S.hostCatalog && S.hostCatalog.readonly ? null : peersPayload();
+    if (peers && peers.some(function (peer) { return !peer.name || !peer.url; })) {
+      status.className = 'is-error';
+      status.textContent = t('hosts.incomplete');
+      return false;
+    }
     const patch = {};
     const fields = S.settingsDoc && S.settingsDoc.fields ? S.settingsDoc.fields : [];
     for (let i = 0; i < fields.length; i++) {
@@ -1151,7 +1266,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         if (!patch[f.key].length) {
           status.className = 'is-error';
           status.textContent = t('settings.scanners.required');
-          return;
+          return false;
         }
       } else if (f.type === 'string_list') {
         patch[f.key] = String(el.value || '').split('\n').map(function (line) { return line.trim(); }).filter(Boolean);
@@ -1161,43 +1276,76 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         if (isNaN(n)) {
           status.className = 'is-error';
           status.textContent = t('settings.mustBeNumber', { label: fieldLabel(f) });
-          return;
+          return false;
         }
         patch[f.key] = n;
       } else patch[f.key] = el.value;
     }
     status.className = '';
     status.textContent = t('settings.saving');
-    const res = await api('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
-    const body = await res.json().catch(function () { return {}; });
+    let res;
+    let body;
+    try {
+      res = await api('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      body = await res.json().catch(function () { return {}; });
+    } catch (err) {
+      status.className = 'is-error';
+      status.textContent = t('settings.saveFailed');
+      return false;
+    }
     if (!res.ok) {
       status.className = 'is-error';
       status.textContent = errorText(body, res.status);
-      return;
+      return false;
+    }
+    // Theme changes use a separate endpoint and may finish during this save.
+    if (S.customThemes !== themesAtStart) {
+      body.custom_themes = S.customThemes;
+      const paletteField = (S.settingsDoc.fields || []).find(function (field) { return field.key === 'theme_palette'; });
+      if (paletteField) {
+        (body.fields || []).forEach(function (field) {
+          if (field.key === 'theme_palette') field.choices = paletteField.choices;
+        });
+      }
     }
     const saved = S.settingsDoc && S.settingsDoc.values ? S.settingsDoc.values : S.settings;
     const rangeEdited = patch.port_range_start !== saved.port_range_start
       || patch.port_range_end !== saved.port_range_end;
-    if (rangeEdited) S.rangeFromView = false;
-    applyServerSettings(body);
-    S.rangeFromView = true;
-    saveView();
+    const settingsResponseIsCurrent = saveRevision === S.settingsRevision;
+    if (settingsResponseIsCurrent) {
+      if (rangeEdited) S.rangeFromView = false;
+      applyServerSettings(body);
+      S.rangeFromView = true;
+      saveView();
+    } else {
+      /* Keep newer live previews intact while recording the server snapshot
+         that the next queued save will replace. */
+      S.settingsDoc = body;
+      S.customThemes = Array.isArray(body.custom_themes) ? body.custom_themes : [];
+    }
     if (!(S.hostCatalog && S.hostCatalog.readonly)) {
-      const hostRes = await api('/api/hosts', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ peers: peersPayload() }),
-      });
-      const hostBody = await hostRes.json().catch(function () { return {}; });
+      let hostRes;
+      let hostBody;
+      try {
+        hostRes = await api('/api/hosts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ peers: peers }),
+        });
+        hostBody = await hostRes.json().catch(function () { return {}; });
+      } catch (err) {
+        status.className = 'is-error';
+        status.textContent = t('settings.saveFailed');
+        return false;
+      }
       if (!hostRes.ok) {
-        renderSettingsForm(body);
         status.className = 'is-error';
         status.textContent = errorText(hostBody, hostRes.status);
-        return;
+        return false;
       }
       S.hostCatalog = {
         local: hostBody.local || S.hostCatalog.local,
@@ -1205,11 +1353,19 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         readonly: !!hostBody.readonly,
         max_peers: Number(hostBody.max_peers) || Number(S.hostCatalog.max_peers) || 32,
       };
-      S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
+      if (saveRevision === S.settingsRevision) {
+        S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
+        syncSavedPeerRows();
+      }
     }
-    renderSettingsForm(body);
-    status.className = 'is-ok';
-    status.textContent = t('settings.saved');
-    S.settingsDirty = false;
+    if (patch.local_scanners && patch.local_scanners.length) {
+      const scannerRepair = document.querySelector('[data-i18n="settings.scanners.invalid"]');
+      if (scannerRepair) scannerRepair.remove();
+    }
+    const saveIsCurrent = saveRevision === S.settingsRevision;
+    if (saveIsCurrent) syncSettingsMetadata(body);
+    S.settingsDirty = !saveIsCurrent;
+    status.className = saveIsCurrent ? 'is-ok' : '';
+    status.textContent = t(saveIsCurrent ? 'settings.saved' : 'settings.unsaved');
     return true;
   }

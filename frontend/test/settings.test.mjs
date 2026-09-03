@@ -287,9 +287,6 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   const status = document.createElement('p');
   status.id = 'settings-status';
   document.body.appendChild(status);
-  const save = document.createElement('button');
-  save.id = 'settings-save';
-  document.body.appendChild(save);
   globalThis.window.PortLightI18n = {
     t(key) { return key; },
     load() { return Promise.resolve('en'); },
@@ -367,7 +364,7 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   const iStatus = panelHtml.indexOf('name="show_status_text"');
   assert.ok(iDensity > -1 && iDensity < iPrev, 'density segmented control renders ahead of the preview');
   assert.ok(iPrev < iStatus, 'preview precedes the card toggles');
-  host.remove(); lead.remove(); status.remove(); save.remove();
+  host.remove(); lead.remove(); status.remove();
 });
 
 test('theme editor renders 15 color rows and controls', () => {

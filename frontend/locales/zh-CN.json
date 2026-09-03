@@ -145,6 +145,7 @@
     "loading": "正在读取占用…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
+    "incomplete": "请为每台机器填写名称和 URL，填写完整后会自动保存。",
     "description": "短描述（可选）",
     "descriptionPlaceholder": "例如：Tailscale 100.64.0.12 · 家庭服务器",
     "max": "最多可添加 {count} 台其他机器。",
@@ -172,13 +173,13 @@
   },
   "settings": {
     "title": "设置",
-    "lead": "保存会写入数据卷，并覆盖对应的环境变量。",
+    "lead": "修改会自动保存到数据卷，并覆盖对应的环境变量。",
     "leadReadonly": "已由主机环境锁定。请在 Compose 中修改后重建容器。",
-    "save": "保存",
+    "autosave": "修改会自动保存",
     "saving": "保存中…",
     "saved": "已保存",
-    "unsaved": "有未保存的更改",
-    "discard": "放弃未保存的设置？",
+    "unsaved": "等待自动保存…",
+    "saveFailed": "无法保存修改。再次修改任一设置即可重试。",
     "mustBeNumber": "{label}必须是数字",
     "nav": {
       "label": "设置分类",
@@ -281,7 +282,7 @@
     },
     "bindFamilies": "地址类型",
     "scanners": {
-      "invalid": "扫描源配置无效，无法检查端口占用。请至少选择一个来源并保存。若设置为只读，请修正部署配置中的 PORT_LIGHT_SCANNERS 并重建容器。",
+      "invalid": "扫描源配置无效，无法检查端口占用。请至少选择一个来源，修改会自动保存。若设置为只读，请修正部署配置中的 PORT_LIGHT_SCANNERS 并重建容器。",
       "required": "至少保留一个本机扫描来源。",
       "state": {
         "ok": "可用",

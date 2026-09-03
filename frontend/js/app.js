@@ -1,28 +1,28 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=88';
-import { errorText, escapeHtml, t } from './text.js?v=88';
-import { moveChipFocus, trapTab } from './a11y.js?v=88';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=89';
+import { errorText, escapeHtml, t } from './text.js?v=89';
+import { moveChipFocus, trapTab } from './a11y.js?v=89';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=88';
-import { openModal, closeModals, modalOpen } from './modal.js?v=88';
-import { applyRoute as updateRoute, parseHash, leaveSettingsOrStay } from './router.js?v=88';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=88';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=88';
-import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=88';
-import { refreshFleet } from './fleet.js?v=88';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=88';
+} from './dom.js?v=89';
+import { openModal, closeModals, modalOpen } from './modal.js?v=89';
+import { applyRoute as updateRoute } from './router.js?v=89';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=89';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=89';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=89';
+import { refreshFleet } from './fleet.js?v=89';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=89';
 import {
-  goSettingsPanel, saveSettingsPage, applyServerSettings, markDirty,
+  goSettingsPanel, saveSettingsPage, applyServerSettings, markDirty, isAutosavedSetting,
   syncDependentSettings, syncLocaleTrigger, closeLocaleMenu,
   moveLocaleHighlight, renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
   syncRefreshCapacity, updateRefreshSlider,
-} from './settings.js?v=88';
+} from './settings.js?v=89';
 
 (function () {
   'use strict';
@@ -37,6 +37,24 @@ import {
         showPortDetail(S.selectedPort);
       } else closeDetail(true);
     }
+  }
+
+  let settingsSaveTimer = null;
+  let settingsSaveQueue = Promise.resolve();
+
+  function scheduleSettingsAutosave(delay) {
+    if (S.settingsDoc && S.settingsDoc.readonly) return;
+    if (settingsSaveTimer) clearTimeout(settingsSaveTimer);
+    settingsSaveTimer = setTimeout(function () {
+      settingsSaveTimer = null;
+      settingsSaveQueue = settingsSaveQueue.catch(function () { return false; }).then(function () {
+        if (!S.settingsDirty) return false;
+        return saveSettingsPage();
+      }).then(function (saved) {
+        if (saved) setupRefresh();
+        return saved;
+      });
+    }, Math.max(0, Number(delay) || 0));
   }
 
   function applyRoute() {
@@ -275,15 +293,6 @@ import {
   try {
     window.matchMedia('(max-width: 900px)').addEventListener('change', syncDetailModal);
   } catch (e) {}
-
-  document.addEventListener('click', function (e) {
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    const a = e.target.closest && e.target.closest('a[href^="#"]');
-    if (!a || !S.settingsDirty || S.route.name !== 'settings') return;
-    const next = parseHash(a.getAttribute('href'));
-    if (next.name === 'settings') return;
-    if (!leaveSettingsOrStay()) e.preventDefault();
-  }, true);
 
   window.addEventListener('hashchange', applyRoute);
 
@@ -534,7 +543,6 @@ import {
       if (modalOpen()) { closeModals(); return; }
       if (closeLocaleMenu({ focusTrigger: true })) return;
       if (S.route.name === 'settings') {
-        if (!leaveSettingsOrStay()) return;
         location.hash = '#/';
         return;
       }
@@ -693,7 +701,7 @@ import {
 
   document.getElementById('settings-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    saveSettingsPage().then(function (saved) { if (saved) setupRefresh(); });
+    scheduleSettingsAutosave(0);
   });
   document.getElementById('settings-nav').addEventListener('click', function (e) {
     const btn = e.target.closest('[role="tab"][data-settings-panel]');
@@ -717,6 +725,7 @@ import {
     if (nextBtn) nextBtn.focus();
   });
   document.getElementById('settings-fields').addEventListener('change', function (e) {
+    if (!isAutosavedSetting(e.target)) return;
     const field = e.target && e.target.name;
     if (LIVE_APPLY_KEYS.indexOf(field) >= 0) {
       S.settings[field] = e.target.value;
@@ -743,10 +752,13 @@ import {
     }
     markDirty();
     syncDependentSettings();
+    scheduleSettingsAutosave(180);
   });
   document.getElementById('settings-fields').addEventListener('input', function (e) {
+    if (!isAutosavedSetting(e.target)) return;
     updateRefreshSlider(e.target);
     markDirty();
+    scheduleSettingsAutosave(700);
   });
   document.getElementById('settings-fields').addEventListener('click', function (e) {
     const add = e.target.closest('#peer-add');
@@ -758,6 +770,7 @@ import {
       S.peersDraft.push({ id: '', name: '', description: '', url: '', username: '', password: '', has_auth: false, clear_auth: false });
       renderPeersEditor(false);
       markDirty();
+      scheduleSettingsAutosave(180);
       return;
     }
     const row = e.target.closest('.peer-row');
@@ -769,6 +782,7 @@ import {
       if (!isNaN(i)) S.peersDraft.splice(i, 1);
       renderPeersEditor(!!(S.settingsDoc && S.settingsDoc.readonly) || !!S.hostCatalog.readonly);
       markDirty();
+      scheduleSettingsAutosave(180);
       return;
     }
     if (e.target.closest('[data-peer-clear-auth]')) {
@@ -783,6 +797,7 @@ import {
       }
       renderPeersEditor(false);
       markDirty();
+      scheduleSettingsAutosave(180);
     }
   });
 

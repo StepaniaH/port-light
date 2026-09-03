@@ -96,6 +96,7 @@ export const S = {
   customThemes: [],
   settingsDoc: null,
   settingsDirty: false,
+  settingsRevision: 0,
   settingsPanel: 'appearance',
   refreshTimer: null,
   meta: { hidden_unlock_required: false, hidden_ports_withheld: false, version: '', settings_readonly: false },

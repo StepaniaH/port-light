@@ -4,9 +4,10 @@ Published image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/por
 
 | Tag | Meaning |
 |-----|---------|
-| `v0.7.8` (and other `v*`) | Release built from that git tag |
-| `latest` | Same as the newest `v*` tag at build time |
-| `dev` | Manual `workflow_dispatch` builds |
+| `v0.7.9` (and other `v*`) | Release built from that git tag |
+| `latest` | Most recently published version image |
+
+The Release workflow publishes version and `latest` tags only after the tagged commit passes CI on `main`. Manual branch builds no longer update the legacy `dev` image tag; use a version tag or build from source for development.
 
 Pin a version tag or digest for reproducible deployments.
 
@@ -15,7 +16,7 @@ Pin a version tag or digest for reproducible deployments.
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.8
+    image: stepaniah/port-light:v0.7.9
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -54,7 +55,7 @@ docker run -d \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  stepaniah/port-light:v0.7.8
+  stepaniah/port-light:v0.7.9
 ```
 
 ## Build from this repo
@@ -92,7 +93,7 @@ services:
       - internal
 
   port-light:
-    image: stepaniah/port-light:v0.7.8
+    image: stepaniah/port-light:v0.7.9
     restart: unless-stopped
     ports:
       - "2100:2100"
@@ -159,7 +160,7 @@ podman run -d --name port-light --restart unless-stopped \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  docker.io/stepaniah/port-light:v0.7.8
+  docker.io/stepaniah/port-light:v0.7.9
 ```
 
 Rootless socket is typically `$XDG_RUNTIME_DIR/podman/podman.sock`. SELinux hosts often need `:z` (or `:Z`) on the volume flags.
@@ -185,7 +186,7 @@ If `port_light.json` becomes unreadable or invalid, fix its permissions or resto
 
 ## Settings (Compose and Web UI)
 
-Non-secret options (theme, language, range, refresh, local machine name, scanner selection, Compose discovery, `URL_HOST`, …) can be set as environment variables **or** on the Settings page (`#/settings`). The UI writes `settings` into `/data/port_light.json`. That overlay wins on the next refresh. Mounts, socket permissions, absolute paths, and secrets remain deployment-only.
+Non-secret options (theme, language, range, refresh, local machine name, scanner selection, Compose discovery, `URL_HOST`, …) can be set as environment variables **or** on the Settings page (`#/settings`). Changes save automatically into `/data/port_light.json`; that overlay wins on the next refresh. Mounts, socket permissions, absolute paths, and secrets remain deployment-only.
 
 To keep GitOps / Compose as the only source:
 

@@ -145,6 +145,7 @@
     "loading": "Reading occupancy…",
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
+    "incomplete": "Enter a name and URL for each machine. Complete entries save automatically.",
     "description": "Short description (optional)",
     "descriptionPlaceholder": "e.g. Tailscale 100.64.0.12 · Home lab",
     "max": "Up to {count} other machines.",
@@ -172,13 +173,13 @@
   },
   "settings": {
     "title": "Settings",
-    "lead": "Saving writes to the data volume and overrides the matching environment variable.",
+    "lead": "Changes are saved automatically to the data volume and override matching environment variables.",
     "leadReadonly": "Locked by the host environment. Change values in Compose and recreate the container.",
-    "save": "Save",
+    "autosave": "Changes save automatically",
     "saving": "Saving…",
     "saved": "Saved",
-    "unsaved": "Unsaved changes",
-    "discard": "Discard unsaved settings?",
+    "unsaved": "Waiting to save…",
+    "saveFailed": "Could not save changes. Edit a setting to retry.",
     "mustBeNumber": "{label} must be a number",
     "nav": {
       "label": "Settings sections",
@@ -281,7 +282,7 @@
     },
     "bindFamilies": "Address families",
     "scanners": {
-      "invalid": "The scanner selection is invalid; occupancy cannot be checked. Select at least one source and save. If settings are locked, correct PORT_LIGHT_SCANNERS in your deployment and recreate the container.",
+      "invalid": "The scanner selection is invalid; occupancy cannot be checked. Select at least one source; the change saves automatically. If settings are locked, correct PORT_LIGHT_SCANNERS in your deployment and recreate the container.",
       "required": "Keep at least one local scanner enabled.",
       "state": {
         "ok": "Available",
