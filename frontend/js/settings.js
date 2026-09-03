@@ -1,13 +1,13 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=81';
-import { t, tx, escapeHtml, errorText } from './text.js?v=81';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=81';
-import { moveChipFocus } from './a11y.js?v=81';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=81';
-import { api, fetchHosts, fetchSettings } from './api.js?v=81';
-import { hasPeers, hostById, hostName } from './hosts.js?v=81';
-import { bindAddressView, render, syncHiddenButton } from './grid.js?v=81';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=82';
+import { t, tx, escapeHtml, errorText } from './text.js?v=82';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=82';
+import { moveChipFocus } from './a11y.js?v=82';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=82';
+import { api, fetchHosts, fetchSettings } from './api.js?v=82';
+import { hasPeers, hostById, hostName } from './hosts.js?v=82';
+import { bindAddressView, render, syncHiddenButton } from './grid.js?v=82';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
@@ -499,6 +499,9 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
   export function renderScannerField(f, value, readonly, doc) {
     const selected = Array.isArray(value) ? value : [];
+    const invalid = selected.length ? '' :
+      '<p class="scanner-remediation" role="alert" data-i18n="settings.scanners.invalid">' +
+      escapeHtml(t('settings.scanners.invalid')) + '</p>';
     const rows = (f.choices || []).map(function (scanner) {
       const checked = selected.indexOf(scanner) >= 0;
       const runtime = scannerRuntime(doc, scanner);
@@ -522,7 +525,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       '<legend class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' +
       escapeHtml(fieldHelp(f)) + '</span></legend><div class="setting-control scanner-options">' + rows +
-      originHint(f) + '</div></fieldset>';
+      invalid + originHint(f) + '</div></fieldset>';
   }
 
   export function renderField(f, value, readonly, doc) {

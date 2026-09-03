@@ -17,6 +17,7 @@ from typing import Any, Literal
 
 from . import degradations
 from . import port_store
+from .scan_status import SCANNER_NAMES, normalize_scanners
 
 Origin = Literal["default", "env", "file"]
 SourceMode = Literal["auto", "env", "file"]
@@ -119,9 +120,9 @@ FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         "local_scanners", "multi_choice", "PORT_LIGHT_SCANNERS",
-        ("listen", "docker", "compose"), "local",
+        SCANNER_NAMES, "local",
         "Local scanners", "Choose which local sources contribute occupancy. Keep at least one enabled.",
-        choices=("listen", "docker", "compose"),
+        choices=SCANNER_NAMES,
     ),
     FieldSpec(
         "compose_scan_depth", "int", "COMPOSE_SCAN_DEPTH", 4, "scanning",
@@ -229,18 +230,7 @@ def _coerce(spec: FieldSpec, raw: Any) -> Any:
             raise ValueError(f"{spec.key} must be <= {spec.max}")
         return value
     if spec.kind == "multi_choice":
-        if isinstance(raw, str):
-            items = raw.split(",")
-        elif isinstance(raw, (list, tuple, set, frozenset)):
-            items = raw
-        else:
-            raise ValueError(f"{spec.key} must be a list")
-        selected = {str(item).strip() for item in items if str(item).strip()}
-        unknown = selected - set(spec.choices)
-        if unknown:
-            raise ValueError(f"{spec.key} contains unknown choices: {', '.join(sorted(unknown))}")
-        if not selected:
-            raise ValueError(f"{spec.key} must select at least one choice")
+        selected = normalize_scanners(raw)
         return [choice for choice in spec.choices if choice in selected]
     if spec.kind == "string_list":
         if isinstance(raw, str):
@@ -293,12 +283,18 @@ def _coerce_url_host(text: str) -> str:
 
 def _parse_env(spec: FieldSpec) -> Any | None:
     raw = _env_raw(spec)
-    if raw is None or raw == "":
+    if raw is None or (raw == "" and spec.key != "local_scanners"):
         return None
     try:
         return _coerce(spec, raw)
     except ValueError:
-        return None
+        return _invalid_value(spec)
+
+
+def _invalid_value(spec: FieldSpec) -> Any:
+    # Never enable scanners by falling back from an invalid selection. An empty
+    # selection keeps settings repairable, but enabled_scanners rejects scans.
+    return [] if spec.key == "local_scanners" else None
 
 
 def _default_value(spec: FieldSpec) -> Any:
@@ -315,11 +311,11 @@ def resolve() -> tuple[dict[str, Any], dict[str, Origin]]:
     for spec in FIELDS:
         env_val = _parse_env(spec)
         file_val = stored[spec.key] if spec.key in stored else None
-        if file_val is not None:
+        if file_val is not None or (spec.key == "local_scanners" and spec.key in stored):
             try:
                 file_val = _coerce(spec, file_val)
             except ValueError:
-                file_val = None
+                file_val = _invalid_value(spec)
 
         if mode == "env":
             if env_val is not None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+import pytest
 
 from backend.main import app
 from backend import settings as app_settings
@@ -165,15 +166,50 @@ def test_local_scanners_are_one_atomic_setting(tmp_path, monkeypatch):
     assert client.put("/api/settings", json={"local_scanners": ["listen", "nope"]}).status_code == 400
 
 
+@pytest.mark.parametrize("selection", ["listen,dokcer", "", " , "])
+def test_invalid_scanner_env_blocks_scans_but_can_be_repaired_in_settings(empty_scan, monkeypatch, selection):
+    monkeypatch.setenv("PORT_LIGHT_SCANNERS", selection)
+    client = TestClient(app)
+    assert client.get("/api/ports").status_code == 503
+    assert client.get("/api/ports/suggest").status_code == 503
+    document = client.get("/api/settings")
+    assert document.status_code == 200
+    assert document.json()["values"]["local_scanners"] == []
+    assert document.json()["origins"]["local_scanners"] == "env"
+    assert document.json()["local_scanning"]["ready"] is False
+    repaired = client.put("/api/settings", json={"local_scanners": ["listen"]})
+    assert repaired.status_code == 200
+    assert client.get("/api/ports").status_code == 200
+
+
+def test_invalid_saved_scanners_do_not_fall_back_to_environment(empty_scan):
+    from backend import port_store
+
+    port_store.update_stored_settings({"local_scanners": ["dokcer"]})
+    client = TestClient(app)
+    assert client.get("/api/ports").status_code == 503
+    assert client.get("/api/settings").json()["origins"]["local_scanners"] == "file"
+
+
+def test_invalid_scanner_env_remains_readonly_in_env_mode(empty_scan, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_SCANNERS", "listen,dokcer")
+    monkeypatch.setenv("PORT_LIGHT_SETTINGS_SOURCE", "env")
+    client = TestClient(app)
+    document = client.get("/api/settings").json()
+    assert document["readonly"] is True
+    assert document["values"]["local_scanners"] == []
+    assert client.put("/api/settings", json={"local_scanners": ["listen"]}).status_code == 403
+
+
 def test_local_host_name_can_be_saved_in_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("PORT_LIGHT_HOST_NAME", "Environment name")
     monkeypatch.delenv("PORT_LIGHT_SETTINGS_SOURCE", raising=False)
     client = TestClient(app)
 
-    saved = client.put("/api/settings", json={"host_name": "Mario"})
+    saved = client.put("/api/settings", json={"host_name": "My server"})
     assert saved.status_code == 200
-    assert client.get("/api/hosts").json()["local"]["name"] == "Mario"
+    assert client.get("/api/hosts").json()["local"]["name"] == "My server"
 
 
 def test_settings_document_separates_scanner_intent_from_runtime_state(tmp_path, monkeypatch):

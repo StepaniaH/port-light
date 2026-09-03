@@ -107,6 +107,7 @@ export function summarizeBindAddresses(ips, options) {
   (Array.isArray(ips) ? ips : []).forEach(function (raw) {
     const row = normalizedAddress(raw);
     if (!row || !enabled[row.family] || seen[row.family].has(row.value)) return;
+    if (options.omitWildcards && isWildcard(row)) return;
     seen[row.family].set(row.value, row);
   });
 

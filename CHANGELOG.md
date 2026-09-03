@@ -4,6 +4,29 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.7.7 — 2026-09-03
+
+### Added
+
+- Local machine name, scanner selection, Compose scan depth, excluded folder names, and file limit can be managed from Settings. Deployment paths, mounts, and permissions remain deployment configuration.
+- Occupancy warnings open troubleshooting guidance on hover, focus, or click, including checks for scanner failures and instructions for upgrading from v0.7.6.
+
+### Changed
+
+- Card summaries omit wildcard addresses (`0.0.0.0` and `::`) while preserving specific addresses. Full bindings remain in port details, with clearer descriptions of wildcard listeners.
+- Updated scanner settings, diagnostics, and bind-address copy in all seven interface languages. Technical troubleshooting documentation is maintained in English.
+
+### Fixed
+
+- Compose discovery no longer enters directories beyond the selected scan depth. Excluded folder names prevent discovery in unrelated data directories.
+- Repeated scanner failures are rate-limited independently of recent health-event history, including when more than 20 distinct failures occur.
+- Invalid scanner selections no longer silently enable every scanner. Occupancy checks and allocation fail closed while the settings page remains available for repair.
+
+### Upgrade notes
+
+- No mandatory configuration migration is required. Keep `latest` if already in use, or update a pinned image tag to `v0.7.7`, then pull and recreate the container.
+- Image updates do not grant Docker socket or directory permissions. Apply deployment changes with `docker compose up -d port-light`; `docker compose restart` does not apply changed environment variables, groups, or mounts. See [Troubleshooting](https://github.com/StepaniaH/port-light/blob/v0.7.7/docs/troubleshooting.md#upgrading-from-v076).
+
 ## 0.7.6 — 2026-09-03
 
 ### Added

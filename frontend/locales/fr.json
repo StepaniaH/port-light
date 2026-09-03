@@ -53,7 +53,7 @@
       "upgrade": "Une mise à jour ne modifie ni les montages ni les droits. Après modification des variables d’environnement, de user ou de group_add dans Compose, lance docker compose up -d pour recréer le conteneur. docker compose restart n’applique pas ces changements.",
       "remote": "Cet avertissement concerne une machine distante. Corrige le problème sur celle-ci ; les paramètres locaux ne modifient pas sa configuration.",
       "settings": "Ouvrir les paramètres d’occupation locale",
-      "guide": "Guide de configuration et de mise à jour"
+      "guide": "Configuration et mise à jour (anglais)"
     },
     "label": "Scanners",
     "host": "Hôte",
@@ -62,7 +62,7 @@
     "available": "{name} disponible",
     "unavailable": "{name} indisponible",
     "truncated": "{name} a atteint la limite de fichiers — certains ports déclarés peuvent manquer",
-    "incomplete": "{name} a ignoré une pile que Compose refuserait (variable d'environnement ou include requis)",
+    "incomplete": "Le scan de {name} est incomplet ; vérifie les droits de lecture et les erreurs de configuration",
     "via": {
       "host_proc": "{name} via /host/proc",
       "ss": "{name} via ss",
@@ -122,7 +122,7 @@
     "saveLabel": "Enregistrer le libellé",
     "copyPort": "Copier le numéro de port",
     "publicBind": "Adresse générique",
-    "publicBindHint": "Ce port accepte les connexions depuis n'importe quelle adresse de l'hôte.",
+    "publicBindHint": "0.0.0.0 correspond à toutes les adresses IPv4 locales ; :: à toutes les adresses IPv6 locales. L’accès externe dépend toujours du pare-feu et de la configuration réseau.",
     "remoteReadOnly": "Lecture seule — cette carte provient de {name}. Masquage, libellés et ajouts restent sur cette machine.",
     "expiresIn": "Expire dans {time}",
     "reservationHint": "Cette réservation ne peut être modifiée ou libérée qu’avec le jeton renvoyé lors de sa création."
@@ -265,10 +265,11 @@
     "on": "activé",
     "off": "désactivé",
     "scanners": {
+      "invalid": "La sélection des scanners est invalide ; l’occupation ne peut pas être vérifiée. Sélectionnez au moins une source et enregistrez. Si les paramètres sont verrouillés, corrigez PORT_LIGHT_SCANNERS dans la configuration du déploiement et recréez le conteneur.",
       "required": "Au moins un scanner local doit rester activé.",
       "state": { "ok": "Disponible", "failed": "Indisponible", "checking": "Vérification", "disabled": "Désactivé" },
       "listen": { "label": "Écoutes de l’hôte", "help": "Lit les sockets TCP et UDP en écoute.", "remediation": "Vérifiez /host/proc ou l’accès au réseau de l’hôte." },
-      "docker": { "label": "Conteneurs Docker", "help": "Lit les ports publiés et les conteneurs en réseau hôte.", "remediation": "Montez le socket Docker et accordez l’accès à son groupe." },
+      "docker": { "label": "Conteneurs Docker", "help": "Lit les ports publiés et les conteneurs en réseau hôte.", "remediation": "Vérifiez le montage du socket. Pour un utilisateur non-root, ajoutez le GID du socket à group_add." },
       "compose": { "label": "Fichiers Compose", "help": "Lit les ports déclarés dans les projets Compose.", "remediation": "Vérifiez le répertoire, la profondeur, les exclusions et les droits." }
     },
     "fields": {
@@ -354,7 +355,7 @@
       },
       "show_bind_addresses": {
         "label": "Adresses d’écoute sur les cartes",
-        "help": "Afficher un résumé compact sous le nom du service. Les adresses complètes restent dans les détails du port."
+        "help": "Affiche les adresses spécifiques sous le nom du service. Les liaisons génériques répétées restent dans les détails du port."
       },
       "show_bind_ipv4": {
         "label": "Adresses IPv4",

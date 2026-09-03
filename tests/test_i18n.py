@@ -188,3 +188,23 @@ def test_cache_bust_matches_index():
     assert f"i18n.js?v={version}" in html
     assert f"js/app.js?v={version}" in html
     assert f"style.css?v={version}" in html
+
+
+def test_scanner_guidance_is_adapted_in_every_locale():
+    for code in CODES:
+        tree = json.loads((LOCALES_DIR / f"{code}.json").read_text(encoding="utf-8"))
+        diagnostics = tree["scanner"]["diagnostics"]
+        assert tree["settings"]["nav"]["occupancy"] in diagnostics["selection"], code
+        assert "group_add" in tree["settings"]["scanners"]["docker"]["remediation"], code
+        for command in ("docker compose up -d", "docker compose restart"):
+            assert command in diagnostics["upgrade"], (code, command)
+        for token in ("0.0.0.0", "::", "IPv4", "IPv6"):
+            assert token in tree["detail"]["publicBindHint"], (code, token)
+
+
+def test_diagnostic_sentences_are_translated_not_english_scaffolds():
+    english = json.loads((LOCALES_DIR / "en.json").read_text(encoding="utf-8"))
+    for code in CODES[1:]:
+        tree = json.loads((LOCALES_DIR / f"{code}.json").read_text(encoding="utf-8"))
+        for key, value in english["scanner"]["diagnostics"].items():
+            assert tree["scanner"]["diagnostics"][key] != value, (code, key)

@@ -8,16 +8,16 @@ Hover over, focus, or click the warning to see guidance based on the current sca
 
 ### Upgrading from v0.7.6
 
-No mandatory configuration migration is required. The scan-depth fix prevents discovery from entering directories beyond the selected depth. Upgrading also fixes repeated interleaved degradation logs. Neither fix grants access to unreadable directories or Docker sockets.
+No mandatory configuration migration is required. In v0.7.7, the scan-depth fix prevents discovery from entering directories beyond the selected depth. Upgrading also fixes repeated interleaved degradation logs. Neither fix grants access to unreadable directories or Docker sockets.
 
-If your enabled scanners already work, updating the image and recreating the container is enough:
+If your enabled scanners already work, updating the image and recreating the container is enough. If you use `latest`, keep it. If you pin release tags, change the image tag to `v0.7.7` before running these commands; pulling the old `v0.7.6` tag does not upgrade it:
 
 ```bash
 docker compose pull port-light
 docker compose up -d port-light
 ```
 
-Keep your chosen image tag (`latest` or a release tag). Existing scanner selections and deployment permissions are not changed automatically.
+Existing scanner selections and deployment permissions are not changed automatically.
 
 If the warning remains, follow the relevant check below.
 
@@ -61,23 +61,4 @@ Disable a scanner only if that source is intentionally outside your occupancy ch
 
 Saved settings normally override environment defaults. If `PORT_LIGHT_SETTINGS_SOURCE=env` or `SETTINGS_READONLY=1` is set, edit the deployment configuration instead; the settings page remains read-only. For v0.7.6 instances that do not yet expose scanner selection in the UI, use `PORT_LIGHT_SCANNERS` in Compose, then recreate the container. Do not assume that upgrading the hub upgrades its peers.
 
-## 从 v0.7.6 升级后仍有警告
-
-“占用信息不完整或已过期”表示至少一个已启用的扫描源失败、返回不完整数据，或者扫描结果未能及时更新。已知占用端口仍会显示，但不会把缺失信息的端口判断为空闲。
-
-本次修复不要求统一迁移配置。扫描深度修复会阻止程序进入超出设定深度的目录，日志修复会避免交替出现的相同错误重复刷屏。但镜像升级不会自动补齐 Docker socket 权限、修改挂载，或关闭扫描源。
-
-- **原配置已正常工作**：保留自己选择的镜像标签（包括 `latest`），运行 `docker compose pull port-light`、`docker compose up -d port-light` 即可。
-- **Docker 扫描失败**：检查 Docker 服务、socket 挂载或 `DOCKER_HOST`。使用非 root 容器时，在宿主机运行 `stat -c '%g' /var/run/docker.sock`，将结果写入部署目录 `.env` 的 `DOCKER_SOCKET_GID`，并按上面的 YAML 为服务添加 `group_add`。不要直接复制其他机器的组号，也不建议改成 root、特权模式或 `chmod 666`。
-- **Compose 目录扫描失败**：检查 `/compose` 挂载及读取权限。如果数据库等数据目录与 Compose 文件混放，在“设置 → 占用图”中减小扫描深度或排除数据目录。深度 `1` 会读取根目录及其直接子目录中的 Compose 文件，不进入更深层目录。
-- **Compose 配置解析不完整**：按该机器的容器日志修正 YAML、必填环境变量、`include` 或 `extends` 引用。排除目录只影响文件发现，明确引用的文件仍会读取。
-- **达到 Compose 文件上限**：缩小扫描范围、排除非配置目录，或提高最大文件数。确认需要检查的配置没有被遗漏。
-- **结果已过期**：等待下一次扫描；持续出现时，检查该机器的日志和扫描耗时。旧扫描器状态不代表当前失败原因。
-
-在新版“设置 → 占用图”中修改扫描源、深度、排除目录和文件上限后，后续扫描自动应用，无需重启。挂载、文件权限、`user`、`group_add` 和环境变量仍属于部署配置；修改后运行 `docker compose up -d port-light`，单独 `docker compose restart` 不会应用这些更改。
-
-仅在不需要某个扫描源时关闭它。关闭 Compose 后，不会检查未运行服务声明的端口；关闭 Docker 后，会缺少只有 Docker API 才能提供的信息。“扫描完整”只针对你选择的扫描来源及目录范围。
-
-设置页保存的值通常优先于环境变量。若设置了 `PORT_LIGHT_SETTINGS_SOURCE=env` 或 `SETTINGS_READONLY=1`，设置页为只读，应从部署配置修改。尚未升级的 v0.7.6 可通过 `PORT_LIGHT_SCANNERS` 选择扫描源，再重建容器。远端机器需要分别处理；升级本机不会自动升级远端。
-
-新版警告支持鼠标悬浮、键盘聚焦和点击展开，Escape 关闭。详情只使用当前响应中的扫描状态给出排查建议，不会展示原始日志、私有路径或环境变量值。
+An invalid or empty scanner selection blocks occupancy checks instead of silently enabling all sources. The settings page remains available: select at least one valid source and save, or correct `PORT_LIGHT_SCANNERS` in the deployment if settings are locked. Valid names are `listen`, `docker`, and `compose`.

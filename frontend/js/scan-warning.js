@@ -1,5 +1,5 @@
 /* Explanations derived from the current occupancy response, including older peers. */
-import { t, escapeHtml } from './text.js?v=81';
+import { t, escapeHtml } from './text.js?v=82';
 
 export function scanDiagnosticKeys(summary = {}) {
   if (summary.scan_complete === true && !summary.stale) return [];

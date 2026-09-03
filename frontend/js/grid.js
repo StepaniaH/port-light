@@ -1,14 +1,14 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S } from './state.js?v=81';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=81';
-import { KIND_MATCHERS } from './kinds.js?v=81';
-import { isLease } from './leases.js?v=81';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=81';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=81';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=81';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=81';
-import { api } from './api.js?v=81';
+import { S } from './state.js?v=82';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=82';
+import { KIND_MATCHERS } from './kinds.js?v=82';
+import { isLease } from './leases.js?v=82';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=82';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=82';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=82';
+import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=82';
+import { api } from './api.js?v=82';
 
 
   export function syncFilterUI() {
@@ -361,7 +361,8 @@ import { api } from './api.js?v=81';
       showV4: options.showV4,
       showV6: options.showV6,
       density: options.density,
-    }).filter(function (row) { return !row.wildcard; });
+      omitWildcards: true,
+    });
     const html = summaries.length ? '<div class="bind-addresses" aria-hidden="true">' +
       summaries.map(function (row) {
         return '<div class="bind-address-row"><span class="bind-family">' + row.family +

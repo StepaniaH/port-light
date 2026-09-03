@@ -1,7 +1,7 @@
 /* Host catalog, occupancy selectors, and route URLs. */
 
-import { S } from './state.js?v=81';
-import { t } from './text.js?v=81';
+import { S } from './state.js?v=82';
+import { t } from './text.js?v=82';
 
   export function hasPeers() {
     return !!(S.hostCatalog.peers && S.hostCatalog.peers.length);

@@ -54,6 +54,18 @@ test('bind address view omits wildcard-only families from cards', () => {
   assert.match(mixed.html, /fd12::19/);
 });
 
+test('bind address cards retain specific addresses beside same-family wildcards', () => {
+  const view = bindAddressView([
+    '0.0.0.0', '::ffff:0:0', '192.0.2.1', '192.0.2.2',
+    '0:0:0:0:0:0:0:0', 'fd12::19',
+  ], { enabled: true });
+  assert.deepEqual(view.summaries.map(row => row.addresses), [
+    ['192.0.2.1', '192.0.2.2'], ['fd12::19'],
+  ]);
+  assert.match(view.html, /bind-more">\+1/);
+  assert.doesNotMatch(view.html, /0\.0\.0\.0/);
+});
+
 test('grid cards render selected bind families and expose exact values in title', () => {
   const previous = Object.assign({}, S.settings);
   const root = document.createElement('div');
@@ -92,9 +104,9 @@ test('bind address accessibility labels use complete locale templates', () => {
         },
       };
       const view = bindAddressView(['0.0.0.0', '192.0.2.1', '2001:db8::1'], { enabled: true });
-      assert.deepEqual(view.ariaParts, [locale === 'en'
-        ? 'IPv6: 2001:db8::1'
-        : 'IPv6：2001:db8::1']);
+      assert.deepEqual(view.ariaParts, locale === 'en'
+        ? ['IPv4: 192.0.2.1', 'IPv6: 2001:db8::1']
+        : ['IPv4：192.0.2.1', 'IPv6：2001:db8::1']);
     }
   } finally {
     window.PortLightI18n = previous;

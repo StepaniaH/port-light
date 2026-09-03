@@ -53,7 +53,7 @@
       "upgrade": "升级不会自动修改挂载和权限。若更改 Compose 的环境变量、user 或 group_add，请运行 docker compose up -d 重建容器；docker compose restart 不会应用这些更改。",
       "remote": "这条警告来自远端机器。请在那台机器上处理；本机设置不会修改远端配置。",
       "settings": "打开本机占用设置",
-      "guide": "配置与升级说明"
+      "guide": "配置与升级说明（英文）"
     },
     "label": "扫描器",
     "host": "主机",
@@ -266,6 +266,7 @@
     "off": "关",
     "bindFamilies": "地址类型",
     "scanners": {
+      "invalid": "扫描源配置无效，无法检查端口占用。请至少选择一个来源并保存。若设置为只读，请修正部署配置中的 PORT_LIGHT_SCANNERS 并重建容器。",
       "required": "至少保留一个本机扫描来源。",
       "state": {
         "ok": "可用",

@@ -62,7 +62,7 @@
     "available": "{name} available",
     "unavailable": "{name} unavailable",
     "truncated": "{name} hit the file cap — some declared ports may be missing",
-    "incomplete": "{name} skipped a stack Compose would refuse (required env or include)",
+    "incomplete": "{name} scan is incomplete; check read permissions and configuration parsing errors",
     "via": {
       "host_proc": "{name} via /host/proc",
       "ss": "{name} via ss",
@@ -122,7 +122,7 @@
     "saveLabel": "Save label",
     "copyPort": "Copy port number",
     "publicBind": "Wildcard address",
-    "publicBindHint": "This port accepts connections from any address on the host.",
+    "publicBindHint": "0.0.0.0 binds all local IPv4 addresses; :: binds all local IPv6 addresses. External access still depends on firewall and network configuration.",
     "remoteReadOnly": "Read-only — this map is from {name}. Hide, labels, and add stay on this machine.",
     "expiresIn": "Expires in {time}",
     "reservationHint": "This reservation can only be changed or released with the token returned when it was created."
@@ -266,6 +266,7 @@
     "off": "off",
     "bindFamilies": "Address families",
     "scanners": {
+      "invalid": "The scanner selection is invalid; occupancy cannot be checked. Select at least one source and save. If settings are locked, correct PORT_LIGHT_SCANNERS in your deployment and recreate the container.",
       "required": "Keep at least one local scanner enabled.",
       "state": {
         "ok": "Available",
@@ -281,7 +282,7 @@
       "docker": {
         "label": "Docker containers",
         "help": "Reads published ports and host-network containers.",
-        "remediation": "Mount the Docker socket and grant its group to the container process."
+        "remediation": "Check the socket mount. For a non-root user, add the socket's GID to group_add."
       },
       "compose": {
         "label": "Compose files",

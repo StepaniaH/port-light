@@ -90,3 +90,32 @@ def test_interleaved_reports_are_rate_limited_per_error(monkeypatch, caplog):
     )
     assert docker_hits == 1
     assert [event["source"] for event in degradations.recent()] == ["compose", "docker"]
+
+
+def test_log_deduplication_outlives_recent_event_history(monkeypatch, caplog):
+    clock = {"t": 500.0}
+    monkeypatch.setattr(degradations.time, "monotonic", lambda: clock["t"])
+    with caplog.at_level("WARNING", logger="port-light"):
+        for _ in range(2):
+            for i in range(21):
+                degradations.report("compose", f"project-{i}", "unreadable")
+        assert len(caplog.records) == 21
+        assert len(degradations.recent(100)) == 20
+        clock["t"] += _REPEAT_LOG_SECONDS
+        for i in range(21):
+            degradations.report("compose", f"project-{i}", "unreadable")
+        assert len(caplog.records) == 42
+
+
+def test_log_key_retention_and_volume_are_bounded(monkeypatch, caplog):
+    monkeypatch.setattr(degradations, "_MAX_LOG_KEYS", 3)
+    monkeypatch.setattr(degradations.time, "monotonic", lambda: 10.0)
+    with caplog.at_level("WARNING", logger="port-light"):
+        for i in range(10):
+            degradations.report("compose", f"project-{i}", "unreadable")
+    assert len(degradations._logged) == 3
+    assert len(caplog.records) == 3
+    assert len(degradations.recent(20)) == 10
+    assert degradations.recent(0) == []
+    degradations.reset()
+    assert not degradations._logged

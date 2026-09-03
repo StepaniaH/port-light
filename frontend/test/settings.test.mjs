@@ -19,6 +19,15 @@ const { parseHash } = await import('../js/router.js?' + V);
 
 const mod = { renderSettingsForm, themeEditorHtml, renderField };
 
+test('invalid scanner selections show repair guidance without disabling the form', () => {
+  const field = { key: 'local_scanners', type: 'multi_choice', choices: ['listen', 'docker', 'compose'] };
+  const editable = renderField(field, [], false, {});
+  assert.match(editable, /role="alert" data-i18n="settings.scanners.invalid"/);
+  assert.doesNotMatch(editable, /<input[^>]* disabled/);
+  assert.doesNotMatch(renderField(field, ['listen'], false, {}), /settings.scanners.invalid/);
+  assert.match(renderField(field, [], true, {}), /<input[^>]* disabled/);
+});
+
 const base = {
   agent_token: false,
   metrics: true,

@@ -68,7 +68,7 @@
 
 后续计划与架构：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。API 与 MCP 集成：[docs/integrations.md](docs/integrations.md)。
 
-升级后若仍出现占用警告，可悬浮或点击警告查看对应扫描器的排查建议。镜像升级不能自动处理的权限与配置问题，见 [v0.7.6 升级与故障排查](docs/troubleshooting.md#从-v076-升级后仍有警告)。
+升级后若仍出现占用警告，可悬浮或点击警告查看对应扫描器的排查建议。镜像升级不能自动处理的权限与配置问题，见 [v0.7.6 升级与故障排查（英文）](docs/troubleshooting.md#occupancy-scan-warning)。
 
 ## 快速开始
 
@@ -77,7 +77,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.6
+    image: stepaniah/port-light:v0.7.7
     container_name: port-light
     restart: unless-stopped
     ports:

@@ -53,7 +53,7 @@
       "upgrade": "Actualizar no cambia montajes ni permisos. Tras cambiar variables de entorno, user o group_add en Compose, ejecuta docker compose up -d para recrear el contenedor. docker compose restart no aplica esos cambios.",
       "remote": "Esta advertencia corresponde a una máquina remota. Resuélvela allí; los ajustes locales no cambian la configuración remota.",
       "settings": "Abrir ajustes de ocupación local",
-      "guide": "Guía de configuración y actualización"
+      "guide": "Configuración y actualización (inglés)"
     },
     "label": "Escáneres",
     "host": "Equipo",
@@ -62,7 +62,7 @@
     "available": "{name} disponible",
     "unavailable": "{name} no disponible",
     "truncated": "{name} alcanzó el límite de archivos — pueden faltar algunos puertos declarados",
-    "incomplete": "{name} omitió una pila que Compose rechazaría (variable de entorno o include requeridos)",
+    "incomplete": "El análisis de {name} está incompleto; revisa los permisos de lectura y los errores de configuración",
     "via": {
       "host_proc": "{name} vía /host/proc",
       "ss": "{name} vía ss",
@@ -122,7 +122,7 @@
     "saveLabel": "Guardar etiqueta",
     "copyPort": "Copiar el número de puerto",
     "publicBind": "Dirección comodín",
-    "publicBindHint": "Este puerto acepta conexiones desde cualquier dirección del equipo.",
+    "publicBindHint": "0.0.0.0 enlaza todas las direcciones IPv4 locales; :: enlaza todas las direcciones IPv6 locales. El acceso externo sigue dependiendo del cortafuegos y de la configuración de red.",
     "remoteReadOnly": "Solo lectura — este mapa procede de {name}. Ocultar, las etiquetas y añadir permanecen en este equipo.",
     "expiresIn": "Caduca en {time}",
     "reservationHint": "Esta reserva solo se puede cambiar o liberar con el token devuelto al crearla."
@@ -265,10 +265,11 @@
     "on": "activado",
     "off": "desactivado",
     "scanners": {
+      "invalid": "La selección de escáneres no es válida; no se puede comprobar la ocupación. Selecciona al menos una fuente y guarda. Si los ajustes están bloqueados, corrige PORT_LIGHT_SCANNERS en la configuración del despliegue y recrea el contenedor.",
       "required": "Debe quedar al menos un escáner local activado.",
       "state": { "ok": "Disponible", "failed": "No disponible", "checking": "Comprobando", "disabled": "Desactivado" },
       "listen": { "label": "Puertos en escucha", "help": "Lee sockets TCP y UDP locales en escucha.", "remediation": "Comprueba /host/proc o el acceso a la red del host." },
-      "docker": { "label": "Contenedores Docker", "help": "Lee puertos publicados y contenedores con red del host.", "remediation": "Monta el socket de Docker y concede acceso a su grupo." },
+      "docker": { "label": "Contenedores Docker", "help": "Lee puertos publicados y contenedores con red del host.", "remediation": "Revisa el montaje del socket. Para un usuario sin root, añade el GID del socket a group_add." },
       "compose": { "label": "Archivos Compose", "help": "Lee los puertos declarados por proyectos Compose.", "remediation": "Comprueba directorio, profundidad, exclusiones y permisos." }
     },
     "fields": {
@@ -354,7 +355,7 @@
       },
       "show_bind_addresses": {
         "label": "Direcciones vinculadas en tarjetas",
-        "help": "Mostrar un resumen compacto bajo el nombre del servicio. Las direcciones completas siguen en los detalles del puerto."
+        "help": "Muestra direcciones específicas bajo el nombre del servicio. Las vinculaciones comodín repetidas solo aparecen en los detalles del puerto."
       },
       "show_bind_ipv4": {
         "label": "Direcciones IPv4",

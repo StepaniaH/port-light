@@ -26,7 +26,7 @@ async function unusedPort() {
   return port;
 }
 
-async function startHost(name, peers = []) {
+async function startHost(name, peers = [], scanners = 'listen,compose') {
   const data = join(temporary, name);
   const compose = join(data, 'compose');
   await mkdir(compose, { recursive: true });
@@ -40,6 +40,7 @@ async function startHost(name, peers = []) {
   sample:
     image: example.invalid/service
     ports:
+      - "42008:80"
       - "192.0.2.8:42008:80"
       - "[2001:db8:1234:5678::]:42008:80"
 `);
@@ -48,7 +49,7 @@ async function startHost(name, peers = []) {
     !/^(PORT_LIGHT_|AUTH_|HIDDEN_|AGENT_|WEBHOOK_|COMPOSE_|DOCKER_|URL_|PORT_RANGE_|HISTORY_)/.test(key)));
   const child = spawn(python, ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(port)], {
     cwd: root, env: { ...env, PORT_LIGHT_DATA_DIR: data, COMPOSE_SCAN_DIR: compose,
-      PORT_LIGHT_SCANNERS: 'listen,compose', PORT_LIGHT_SETTINGS_SOURCE: 'file', PORT_LIGHT_HOST_NAME: name, PORT_LIGHT_PORT: String(port),
+      PORT_LIGHT_SCANNERS: scanners, PORT_LIGHT_SETTINGS_SOURCE: 'file', PORT_LIGHT_HOST_NAME: name, PORT_LIGHT_PORT: String(port),
       DOCKER_HOST: 'unix://' + join(data, 'no-docker.sock'), HISTORY_RETENTION_DAYS: '7' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -66,12 +67,23 @@ async function startHost(name, peers = []) {
 }
 
 try {
-  const peer = await startHost('Peer');
-  const hub = await startHost('Hub', [{ id: 'peer0001', name: 'Peer', url: peer }]);
+  const peer = await startHost('Peer', [], 'listen,comopse');
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  assert.equal((await fetch(peer + '/api/ports/suggest')).status, 503);
+  await page.goto(peer + '/#/settings/occupancy');
+  await expect(page.locator('[data-i18n="settings.scanners.invalid"]')).toBeVisible();
+  await expect(page.locator('input[name="local_scanners"]:checked')).toHaveCount(0);
+  await page.locator('input[name="local_scanners"][value="listen"]').check();
+  await page.locator('input[name="local_scanners"][value="compose"]').check();
+  await page.locator('#settings-save').click();
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  await expect(page.locator('[data-i18n="settings.scanners.invalid"]')).toHaveCount(0);
+  await expect.poll(async () => (await fetch(peer + '/api/ports/suggest')).status).toBe(200);
+
+  const hub = await startHost('Hub', [{ id: 'peer0001', name: 'Peer', url: peer }]);
   page.on('console', message => {
     const expectedConflict = message.location().url === hub + '/api/manual-ports/batch' && message.text().includes('409');
     if (message.type() === 'error' && !expectedConflict) errors.push(message.text());
@@ -200,7 +212,7 @@ try {
   await explanation.locator('a[href="#/settings/occupancy"]').click();
   await expect(page.locator('input[name="host_name"]')).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: startup, detail, saved label, bind settings, batch conflict and retry, host switch, scan guidance and mobile layout.');
+  console.log('Browser smoke passed: invalid scanner recovery, startup, detail, saved label, mixed bind addresses, batch conflict and retry, host switch, scan guidance and mobile layout.');
 } finally {
   if (browser) await browser.close();
   await Promise.all(processes.map(async child => {

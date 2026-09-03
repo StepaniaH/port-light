@@ -53,7 +53,7 @@
       "upgrade": "升級不會自動修改掛載與權限。若更改 Compose 的環境變數、user 或 group_add，請執行 docker compose up -d 重建容器；docker compose restart 不會套用這些變更。",
       "remote": "此警告來自遠端主機。請在該主機上處理；本機設定不會修改遠端設定。",
       "settings": "開啟本機佔用設定",
-      "guide": "設定與升級說明"
+      "guide": "設定與升級說明（英文）"
     },
     "label": "掃描器",
     "host": "主機",
@@ -61,8 +61,8 @@
     "compose": "Compose",
     "available": "{name}可用",
     "unavailable": "{name}不可用",
-    "truncated": "{name}達到檔案上限，部分宣告連接埠可能沒畫出來",
-    "incomplete": "{name}略過了 Compose 會拒絕啟動的堆疊（缺必填環境變數或 include）",
+    "truncated": "{name}掃描達到檔案上限，部分宣告連接埠未納入統計",
+    "incomplete": "{name}掃描不完整，請檢查讀取權限與設定解析錯誤",
     "via": {
       "host_proc": "{name} · /host/proc",
       "ss": "{name} · ss",
@@ -122,7 +122,7 @@
     "saveLabel": "儲存標籤",
     "copyPort": "複製連接埠號碼",
     "publicBind": "萬用位址",
-    "publicBindHint": "此連接埠接受主機上任意位址的連線。",
+    "publicBindHint": "0.0.0.0 表示所有本機 IPv4 位址，:: 表示所有本機 IPv6 位址；是否能從外部存取仍取決於防火牆與網路設定。",
     "remoteReadOnly": "唯讀 — 這張佔用圖來自 {name}。隱藏、標籤與新增仍只作用於此機器。",
     "expiresIn": "{time} 後到期",
     "reservationHint": "此預約只能使用建立時傳回的憑證修改或釋放。"
@@ -265,10 +265,11 @@
     "on": "開",
     "off": "關",
     "scanners": {
+      "invalid": "掃描來源設定無效，無法檢查連接埠占用情況。請至少選擇一個來源並儲存。若設定為唯讀，請修正部署設定中的 PORT_LIGHT_SCANNERS 並重建容器。",
       "required": "至少保留一個本機掃描來源。",
       "state": { "ok": "可用", "failed": "無法使用", "checking": "檢查中", "disabled": "已關閉" },
       "listen": { "label": "主機監聽連接埠", "help": "讀取本機監聽中的 TCP 與 UDP 連接埠。", "remediation": "檢查 /host/proc 掛載或 host 網路存取。" },
-      "docker": { "label": "Docker 容器", "help": "讀取容器發佈連接埠與 host 網路容器。", "remediation": "掛載 Docker socket，並讓容器程序加入 socket 群組。" },
+      "docker": { "label": "Docker 容器", "help": "讀取容器發佈連接埠與 host 網路容器。", "remediation": "檢查 socket 掛載；非 root 使用者需在 group_add 中加入 socket 的 GID。" },
       "compose": { "label": "Compose 檔案", "help": "讀取 Compose 專案宣告的連接埠。", "remediation": "檢查掃描目錄、深度、排除項目與檔案權限。" }
     },
     "fields": {
@@ -354,7 +355,7 @@
       },
       "show_bind_addresses": {
         "label": "在卡片上顯示綁定位址",
-        "help": "在服務名稱下方顯示精簡摘要；完整位址仍可在連接埠詳細資料中查看。"
+        "help": "在服務名稱下方顯示具體位址；重複的萬用位址繫結只保留在連接埠詳細資料中。"
       },
       "show_bind_ipv4": {
         "label": "IPv4 位址",

@@ -53,7 +53,7 @@
       "upgrade": "Ein Upgrade ändert weder Mounts noch Berechtigungen. Führe nach Änderungen an Compose-Umgebungsvariablen, user oder group_add docker compose up -d aus, um den Container neu zu erstellen. docker compose restart übernimmt diese Änderungen nicht.",
       "remote": "Diese Warnung betrifft einen entfernten Rechner. Behebe sie dort; lokale Einstellungen ändern dessen Konfiguration nicht.",
       "settings": "Lokale Belegungseinstellungen öffnen",
-      "guide": "Konfigurations- und Upgrade-Anleitung"
+      "guide": "Konfiguration und Upgrade (Englisch)"
     },
     "label": "Scanner",
     "host": "Host",
@@ -62,7 +62,7 @@
     "available": "{name} verfügbar",
     "unavailable": "{name} nicht verfügbar",
     "truncated": "{name} hat das Dateilimit erreicht — einige deklarierte Ports könnten fehlen",
-    "incomplete": "{name} hat einen Stack übersprungen, den Compose ablehnen würde (erforderliche Umgebungsvariable oder include)",
+    "incomplete": "{name}-Scan unvollständig; prüfe Leserechte und Fehler in der Konfiguration",
     "via": {
       "host_proc": "{name} über /host/proc",
       "ss": "{name} über ss",
@@ -122,7 +122,7 @@
     "saveLabel": "Bezeichnung speichern",
     "copyPort": "Portnummer kopieren",
     "publicBind": "Wildcard-Adresse",
-    "publicBindHint": "Dieser Port akzeptiert Verbindungen von jeder Adresse des Hosts.",
+    "publicBindHint": "0.0.0.0 bindet an alle lokalen IPv4-Adressen, :: an alle lokalen IPv6-Adressen. Der externe Zugriff hängt weiterhin von Firewall und Netzwerkkonfiguration ab.",
     "remoteReadOnly": "Schreibgeschützt — diese Karte stammt von {name}. Ausblenden, Bezeichnungen und Hinzufügen bleiben auf diesem Rechner.",
     "expiresIn": "Läuft ab in {time}",
     "reservationHint": "Diese Reservierung kann nur mit dem bei der Erstellung zurückgegebenen Token geändert oder freigegeben werden."
@@ -265,10 +265,11 @@
     "on": "ein",
     "off": "aus",
     "scanners": {
+      "invalid": "Die Scannerauswahl ist ungültig; die Portbelegung kann nicht geprüft werden. Wähle mindestens eine Quelle und speichere. Bei gesperrten Einstellungen korrigiere PORT_LIGHT_SCANNERS in der Bereitstellungskonfiguration und erstelle den Container neu.",
       "required": "Mindestens ein lokaler Scanner muss aktiviert bleiben.",
       "state": { "ok": "Verfügbar", "failed": "Nicht verfügbar", "checking": "Wird geprüft", "disabled": "Aus" },
       "listen": { "label": "Host-Listener", "help": "Liest lokale TCP- und UDP-Listener.", "remediation": "Prüfe /host/proc oder den Host-Netzwerkzugriff." },
-      "docker": { "label": "Docker-Container", "help": "Liest veröffentlichte Ports und Host-Netzwerk-Container.", "remediation": "Binde den Docker-Socket ein und erteile der Containergruppe Zugriff." },
+      "docker": { "label": "Docker-Container", "help": "Liest veröffentlichte Ports und Host-Netzwerk-Container.", "remediation": "Prüfe den Socket-Mount. Füge bei einem Nicht-root-Benutzer die GID des Sockets zu group_add hinzu." },
       "compose": { "label": "Compose-Dateien", "help": "Liest in Compose-Projekten deklarierte Ports.", "remediation": "Prüfe Scanverzeichnis, Tiefe, Ausschlüsse und Dateirechte." }
     },
     "fields": {
@@ -354,7 +355,7 @@
       },
       "show_bind_addresses": {
         "label": "Bind-Adressen auf Karten",
-        "help": "Eine kompakte Zusammenfassung unter dem Dienstnamen anzeigen. Vollständige Adressen bleiben in den Portdetails."
+        "help": "Zeigt konkrete Adressen unter dem Dienstnamen. Wiederholte Wildcard-Bindungen bleiben in den Portdetails."
       },
       "show_bind_ipv4": {
         "label": "IPv4-Adressen",

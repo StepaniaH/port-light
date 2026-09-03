@@ -30,7 +30,7 @@ npm run smoke:browser
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants `PORT_LIGHT_DATA_DIR=./data`. Set `PORT_LIGHT_SCANNERS=listen,compose` when Docker is intentionally absent, and point `COMPOSE_SCAN_DIR` to a readable directory. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
 
-`npm run smoke:browser` starts two temporary local instances and checks startup, detail, a saved label, bind-address settings and rendering, atomic batch reservation with a conflicting writer and retry, and host switching in Chromium. It removes its data and stops both servers on exit. Set `PYTHON` to override the Python executable.
+`npm run smoke:browser` starts two temporary local instances and checks startup, recovery from invalid scanner configuration, detail, a saved label, local scanner settings, warning disclosures, bind-address rendering, atomic batch reservation with a conflicting writer and retry, and host switching in Chromium. It removes its data and stops both servers on exit. Set `PYTHON` to override the Python executable.
 
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 
@@ -51,6 +51,10 @@ UI copy lives in `frontend/locales/{en,fr,de,es,zh-CN,zh-TW,ja}.json`. English i
 Bump the `?v=` on `i18n.js` and the `CACHE_BUST` constant inside it when locale JSON changes.
 
 The root `docker-compose.yml` **builds from source**. It bind-mounts `./custom_ports.json` — create that file first, or drop the volume.
+
+## Documentation
+
+Maintain technical documentation under `docs/` in English. Keep the existing Simplified Chinese landing page in `README.zh-CN.md`; do not combine translated sections in one document. UI translations remain supported in all seven locales.
 
 ## Style
 

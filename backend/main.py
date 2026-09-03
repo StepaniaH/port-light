@@ -37,7 +37,7 @@ from .port_scanner import (
     scan_listening_ports,
 )
 
-VERSION = "0.7.6"
+VERSION = "0.7.7"
 
 _log_level = os.environ.get("PORT_LIGHT_LOG_LEVEL", "").strip().upper()
 if not logging.getLogger("port-light").handlers and not logging.getLogger().handlers:
@@ -385,7 +385,9 @@ def _settings_document(body: dict | None = None) -> dict:
     body = body or app_settings.snapshot()
     body["custom_themes"] = themes.list_themes()
     monitor = _monitor.status()
-    enabled = enabled_scanners(body["values"]["local_scanners"])
+    # Invalid selections resolve to [] so this page remains available for repair.
+    # Scanning and allocation still validate through enabled_scanners.
+    enabled = set(body["values"]["local_scanners"])
     scanners = []
     for name in SCANNER_NAMES:
         if name not in enabled:
@@ -398,7 +400,7 @@ def _settings_document(body: dict | None = None) -> dict:
             row["via"] = listen_scan_source()
         scanners.append(row)
     body["local_scanning"] = {
-        "ready": monitor["ready"],
+        "ready": bool(enabled) and monitor["ready"],
         "initialized": monitor["initialized"],
         "scan_age_seconds": monitor["scan_age_seconds"],
         "scanners": scanners,
