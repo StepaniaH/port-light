@@ -308,14 +308,18 @@ def scan_compose_files(
     scan_dir: str,
     max_depth: int | None = None,
     max_files: int | None = None,
+    exclude_dirs: tuple[str, ...] | list[str] | None = None,
 ) -> list[ComposePort]:
-    return scan_compose_tree(scan_dir, max_depth=max_depth, max_files=max_files).ports
+    return scan_compose_tree(
+        scan_dir, max_depth=max_depth, max_files=max_files, exclude_dirs=exclude_dirs,
+    ).ports
 
 
 def scan_compose_tree(
     scan_dir: str,
     max_depth: int | None = None,
     max_files: int | None = None,
+    exclude_dirs: tuple[str, ...] | list[str] | None = None,
 ) -> ComposeScan:
     if not os.path.isdir(scan_dir):
         degradations.report("compose", "scan root", "directory unavailable")
@@ -325,7 +329,9 @@ def scan_compose_tree(
     files_cap = max_files if max_files is not None else _env_int("COMPOSE_SCAN_MAX_FILES", 400)
 
     try:
-        files, truncated = _find_compose_files(scan_dir, depth, files_cap)
+        files, truncated = _find_compose_files(
+            scan_dir, depth, files_cap, exclude_dirs=exclude_dirs or (),
+        )
     except OSError:
         degradations.report("compose", "scan root", "directory unreadable")
         return ComposeScan(incomplete=True)
@@ -379,9 +385,15 @@ def _degradation_scope(scan_dir: str, exc: ComposeWouldFail) -> str:
     return text or "unknown"
 
 
-def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> tuple[list[str], bool]:
+def _find_compose_files(
+    scan_dir: str,
+    max_depth: int,
+    max_files: int,
+    exclude_dirs: tuple[str, ...] | list[str] = (),
+) -> tuple[list[str], bool]:
     found: list[str] = []
     scan_dir = os.path.abspath(scan_dir)
+    skip_dirs = _SKIP_DIRS | frozenset(exclude_dirs)
     def on_error(exc):
         raise exc
 
@@ -391,7 +403,9 @@ def _find_compose_files(scan_dir: str, max_depth: int, max_files: int) -> tuple[
         if depth > max_depth:
             dirs.clear()
             continue
-        dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS and not d.startswith("."))
+        dirs[:] = sorted(d for d in dirs if d not in skip_dirs and not d.startswith("."))
+        if depth == max_depth:
+            dirs.clear()
         for name in sorted(files):
             if not _is_compose_filename(name):
                 continue

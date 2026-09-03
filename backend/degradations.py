@@ -32,9 +32,12 @@ def report(source: str, scope: str, reason: str) -> None:
     key = (source, scope, reason)
     now = int(time.time())
     with _lock:
-        last = _recent[-1] if _recent else None
-        if last is not None and (last["source"], last["scope"], last["reason"]) == key:
+        last = next((event for event in reversed(_recent)
+                     if (event["source"], event["scope"], event["reason"]) == key), None)
+        if last is not None:
+            _recent.remove(last)
             last["ts"] = now
+            _recent.append(last)
         else:
             last = {"source": source, "scope": scope, "reason": reason, "ts": now}
             _recent.append(last)

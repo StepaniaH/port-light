@@ -77,6 +77,10 @@ def test_settings_fields_have_locale_copy():
         _lookup(english, f"settings.groups.{spec.group}.title")
         _lookup(english, f"settings.groups.{spec.group}.blurb")
         for choice in spec.choices:
+            if spec.kind == "multi_choice":
+                _lookup(english, f"settings.scanners.{choice}.label")
+                _lookup(english, f"settings.scanners.{choice}.help")
+                continue
             if choice == "":
                 continue  # empty palette = built-in option, translated via settings.theme.builtin
             _lookup(english, f"choice.{choice}")

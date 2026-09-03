@@ -37,14 +37,14 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 
 - Container / service names on the cards
 - Search by port number, with nearby free alternatives if it is taken
-- Occupancy counts filter in-use / configured; kind chips for running, system, Docker, web, UDP, localhost, all interfaces, hidden
+- Occupancy counts filter in-use / configured; kind chips for running, system, Docker, web, UDP, localhost, wildcard binds, hidden
 - Sort by port, name, or status; clamp the visible range
 - Manual entries for things the scanners miss
 - Compose conflict warning when two projects publish the same host port on overlapping bind addresses
 - Built-in names for common homelab ports (SSH, Jellyfin, Postgres, …), plus a local override file
 - 5-second auto-refresh (toggle in settings)
 - Copy the port number on click
-- Optional card bind-address summaries, with separate IPv4/IPv6 controls and compact IPv6 rendering
+- Optional card bind-address summaries, with separate IPv4/IPv6 controls, compact IPv6 rendering, and repetitive wildcard binds omitted
 - One UI can pull occupancy maps from other Port-Light instances (LAN / Tailscale). Each host still scans itself.
 - Appearance on Settings: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. UI language (English, Français, Deutsch, Español, 简体中文, 繁體中文, 日本語). Also via Compose env.
 - Custom palettes, import/export, and Loose / Standard / Compact card-density presets
@@ -67,6 +67,8 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
 
 Roadmap and architecture: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md). API and MCP integrations: [docs/integrations.md](docs/integrations.md).
+
+If an occupancy warning persists after upgrading, hover over or select it for scanner-specific guidance. See [troubleshooting and upgrading from v0.7.6](docs/troubleshooting.md#occupancy-scan-warning) for configuration changes that an image update cannot apply.
 
 ## Quick start
 
@@ -106,10 +108,11 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | Enabled sources, comma-separated; omitted sources are explicitly disabled. Select at least one. Env only. |
+| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | Enabled sources, comma-separated; omitted sources are explicitly disabled. Select at least one. Also configurable under Settings → Occupancy. |
 | `PORT_LIGHT_SCAN_TIMEOUT_S` | `10` | Background refresh deadline in seconds (1–60). A timeout retains the snapshot and marks it stale. Env only. |
 | `COMPOSE_SCAN_DIR` | `/compose` | Directory to scan for `compose.y*ml` / `docker-compose.y*ml` (env only) |
 | `COMPOSE_SCAN_DEPTH` | `4` | Max subdirectory depth under the scan dir |
+| `COMPOSE_SCAN_EXCLUDE_DIRS` | unset | Comma-separated folder names to skip during automatic Compose discovery. Explicit `include` / `extends` files are still read. |
 | `COMPOSE_SCAN_MAX_FILES` | `400` | Cap on compose files parsed per refresh |
 | `PORT_RANGE_START` | `1` | Start of the range used for the **free** summary count |
 | `PORT_RANGE_END` | `9999` | End of that range (does not fill the grid with green cells) |
@@ -129,7 +132,7 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 | `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. Env only. |
 | `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. Env only. |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI save wins over env. `env`: Compose is the only source and the Settings page is read-only. |
-| `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. |
+| `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. Also configurable under Settings → Occupancy. |
 | `PORT_LIGHT_PEERS` | unset | JSON array of `{name, url, username?, password?}` used when the data file has no `peers` key, or when `PORT_LIGHT_SETTINGS_SOURCE=env`. Same lock as Settings. |
 | `PORT_LIGHT_LOG_LEVEL` | `warning` | Backend log level (`debug` / `info` / `warning` / `error`). Degraded scans (Docker unreachable, unreadable Compose file, …) log one line and show up in `/api/health` under `degradations`. Env-only. |
 | `WEBHOOK_URL` | unset | Opt-in webhook target (`http(s)` only). With `WEBHOOK_EVENTS=new_listener,conflict`, Port-Light POSTs `{event, port}` JSON (fire-and-forget). |
@@ -138,7 +141,7 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
 | `AGENT_TOKEN` | unset | When set, `GET /api/ports/suggest` requires a matching `X-Agent-Token` header. Env-only. |
 
-Most options (except scanner selection, timeout, paths, and secrets) can also be changed on **Settings** in the UI. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
+Most options (except timeout, paths, and secrets) can also be changed on **Settings** in the UI. This includes the local machine name, scanner selection, Compose discovery options, and peers. Saves go into `/data/port_light.json`. OpenAPI is at `/docs`.
 
 Copy [custom_ports.example.json](custom_ports.example.json) to `custom_ports.json` (gitignored). Categories: `system`, `web`, `database`, `message`, `proxy`, `vpn`, `selfhosted`, `dev`, `infra`, `gaming`.
 

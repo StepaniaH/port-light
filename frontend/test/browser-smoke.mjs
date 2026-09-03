@@ -90,6 +90,14 @@ try {
   assert.equal(saved.manual_label, 'Updated service');
   await page.keyboard.press('Escape');
 
+  await page.goto(hub + '/#/settings/occupancy');
+  await expect(page.locator('input[name="host_name"]')).toHaveValue('Hub');
+  await expect(page.locator('input[name="local_scanners"]')).toHaveCount(3);
+  await expect(page.locator('input[name="local_scanners"][value="listen"]')).toBeChecked();
+  await expect(page.locator('input[name="local_scanners"][value="compose"]')).toBeChecked();
+  await expect(page.locator('input[name="local_scanners"][value="docker"]')).not.toBeChecked();
+  await expect(page.locator('.scanner-option .scanner-state.disabled')).toHaveCount(1);
+
   await page.goto(hub + '/#/settings/appearance');
   const showBinds = page.locator('input[name="show_bind_addresses"]');
   const showV4 = page.locator('input[name="show_bind_ipv4"]');
@@ -161,8 +169,38 @@ try {
   await peerCell.click();
   await expect(detail).toContainText('Peer service');
   await expect(detail.locator('[data-label-form]')).toHaveCount(0);
+
+  // Enable the intentionally unavailable Docker source to exercise real warnings.
+  await page.goto(hub + '/#/settings/occupancy');
+  await page.locator('input[name="local_scanners"][value="docker"]').check();
+  await page.locator('#settings-save').click();
+  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  await page.goto(hub);
+  await page.locator('[data-host-switch="local"]').click();
+  const warning = page.locator('[data-host-error="local"] .scan-warning');
+  const trigger = warning.locator('summary');
+  const explanation = warning.locator('.scan-warning-panel');
+  await expect(warning).toBeVisible();
+  await trigger.hover();
+  await expect(explanation).toBeVisible();
+  await expect(explanation).toContainText('group_add');
+  await expect(explanation).toContainText('docker compose restart does not apply');
+  await trigger.focus();
+  await trigger.press('Escape');
+  await expect(explanation).toBeHidden();
+  await trigger.click();
+  await expect(explanation).toBeVisible();
+  await trigger.click();
+  await expect(explanation).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await trigger.click();
+  await expect(explanation).toBeVisible();
+  const bounds = await explanation.boundingBox();
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+  await explanation.locator('a[href="#/settings/occupancy"]').click();
+  await expect(page.locator('input[name="host_name"]')).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: startup, detail, saved label, bind settings, batch conflict and retry, host switch.');
+  console.log('Browser smoke passed: startup, detail, saved label, bind settings, batch conflict and retry, host switch, scan guidance and mobile layout.');
 } finally {
   if (browser) await browser.close();
   await Promise.all(processes.map(async child => {

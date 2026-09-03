@@ -72,3 +72,21 @@ def test_repeat_report_within_window_logs_once(monkeypatch, caplog):
         for record in caplog.records
     )
     assert hits == 2
+
+
+def test_interleaved_reports_are_rate_limited_per_error(monkeypatch, caplog):
+    clock = {"t": 500.0}
+    monkeypatch.setattr(degradations.time, "monotonic", lambda: clock["t"])
+    with caplog.at_level("WARNING", logger="port-light"):
+        degradations.report("docker", "scan", "unavailable")
+        clock["t"] += 1.0
+        degradations.report("compose", "scan", "unavailable")
+        clock["t"] += 1.0
+        degradations.report("docker", "scan", "unavailable")
+
+    docker_hits = sum(
+        "source=docker scope=scan reason=unavailable" in record.getMessage()
+        for record in caplog.records
+    )
+    assert docker_hits == 1
+    assert [event["source"] for event in degradations.recent()] == ["compose", "docker"]

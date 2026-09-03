@@ -26,7 +26,7 @@
     "access": "网页",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "全部接口",
+    "public": "通配地址",
     "hidden": "隐藏",
     "kinds": "类型",
     "sort": "排序",
@@ -40,14 +40,29 @@
     "byStatus": "状态"
   },
   "scanner": {
+    "diagnostics": {
+      "title": "为什么无法确认空闲端口？",
+      "listen": "主机监听扫描失败。检查 /proc 是否挂载到 /host/proc，以及容器用户的读取权限。裸机部署请检查 ss 或 /proc 是否可用。",
+      "docker": "Docker 扫描失败。检查 Docker 是否运行、socket 是否挂载或 DOCKER_HOST 是否可达。非 root 容器还需通过 group_add 加入 socket 所属用户组；组号以宿主机为准。",
+      "compose": "Compose 目录扫描失败。检查 /compose 挂载和目录读取权限。若数据库等数据目录与 Compose 文件放在一起，可减小扫描深度或排除这些数据目录；不要排除需要扫描的 Compose 配置。",
+      "composeTruncated": "Compose 扫描达到文件上限。缩小扫描范围、排除非配置目录，或提高最大文件数；漏扫文件中的声明端口目前不会计入。",
+      "composeIncomplete": "部分 Compose 文件或目录无法读取，或配置未能完整解析。检查目录权限与扫描范围，再按容器日志修正 YAML、必填环境变量和 include/extends 错误。修正后会自动重新扫描。",
+      "stale": "最近一次占用扫描已过期或刷新失败。等待下一次扫描；若持续出现，请检查该机器的日志和扫描耗时。之前的扫描器状态不能说明当前失败原因。",
+      "unknown": "当前响应没有足够的诊断信息。刷新后若仍未恢复，请查看该机器的日志和扫描器状态。",
+      "selection": "在该机器的“设置 → 占用图”选择需要的扫描源。仅在不需要某来源时关闭它；关闭 Compose 后，不会检查未运行服务的声明端口。",
+      "upgrade": "升级不会自动修改挂载和权限。若更改 Compose 的环境变量、user 或 group_add，请运行 docker compose up -d 重建容器；docker compose restart 不会应用这些更改。",
+      "remote": "这条警告来自远端机器。请在那台机器上处理；本机设置不会修改远端配置。",
+      "settings": "打开本机占用设置",
+      "guide": "配置与升级说明"
+    },
     "label": "扫描器",
     "host": "主机",
     "docker": "Docker",
     "compose": "Compose",
     "available": "{name}可用",
     "unavailable": "{name}不可用",
-    "truncated": "{name}达到文件上限，部分声明端口可能没画出来",
-    "incomplete": "{name}跳过了 Compose 会拒绝启动的栈（缺必填环境变量或 include）",
+    "truncated": "{name}扫描达到文件上限，部分声明端口未纳入统计",
+    "incomplete": "{name}扫描不完整，请检查读取权限和配置解析错误",
     "via": {
       "host_proc": "{name} · /host/proc",
       "ss": "{name} · ss",
@@ -106,8 +121,8 @@
     "label": "标签",
     "saveLabel": "保存标签",
     "copyPort": "复制端口号",
-    "publicBind": "全部接口",
-    "publicBindHint": "该端口接受主机上任意地址的连接。",
+    "publicBind": "通配地址",
+    "publicBindHint": "0.0.0.0 表示所有本地 IPv4 地址，:: 表示所有本地 IPv6 地址；是否能从外部访问还取决于防火墙和网络配置。",
     "remoteReadOnly": "只读 — 这张占用图来自 {name}。隐藏、标签和添加仍只作用于本机。",
     "expiresIn": "{time} 后到期",
     "reservationHint": "此预约只能使用创建时返回的凭证修改或释放。"
@@ -215,9 +230,13 @@
         "title": "占用图",
         "blurb": "刷新间隔，以及空闲计数所用的端口范围。"
       },
+      "local": {
+        "title": "本机",
+        "blurb": "设置本机名称，并选择哪些本地来源参与端口占用判断。"
+      },
       "scanning": {
         "title": "Compose 扫描",
-        "blurb": "每次刷新时向下查找 compose.yml 的深度。"
+        "blurb": "控制 Compose 项目发现范围，不会更改主机挂载或文件权限。"
       },
       "links": {
         "title": "访问地址",
@@ -246,6 +265,30 @@
     "on": "开",
     "off": "关",
     "bindFamilies": "地址类型",
+    "scanners": {
+      "required": "至少保留一个本机扫描来源。",
+      "state": {
+        "ok": "可用",
+        "failed": "不可用",
+        "checking": "检查中",
+        "disabled": "已关闭"
+      },
+      "listen": {
+        "label": "主机监听端口",
+        "help": "读取本机正在监听的 TCP 和 UDP 端口。",
+        "remediation": "检查 /host/proc 挂载或 host 网络访问。"
+      },
+      "docker": {
+        "label": "Docker 容器",
+        "help": "读取容器发布端口和 host 网络容器。",
+        "remediation": "检查 socket 挂载；非 root 用户需在 group_add 中加入 socket 的 GID。"
+      },
+      "compose": {
+        "label": "Compose 文件",
+        "help": "读取 Compose 项目中声明的端口。",
+        "remediation": "检查扫描目录、深度、排除项和文件权限。"
+      }
+    },
     "fields": {
       "locale": {
         "label": "语言",
@@ -277,7 +320,7 @@
       },
       "show_bind_addresses": {
         "label": "在卡片上显示绑定地址",
-        "help": "在服务名下方显示紧凑摘要，完整地址仍可在端口详情中查看。"
+        "help": "在服务名下方显示具体地址；重复的通配绑定只保留在端口详情中。"
       },
       "show_bind_ipv4": {
         "label": "IPv4 地址",
@@ -307,9 +350,21 @@
         "label": "范围终点",
         "help": "上限。不会把所有未占用端口都画成绿色。"
       },
+      "host_name": {
+        "label": "本机名称",
+        "help": "显示在本机占用图上方；留空时使用系统主机名。"
+      },
+      "local_scanners": {
+        "label": "本机扫描来源",
+        "help": "所有已启用来源均成功后，Port-Light 才会确认端口空闲。"
+      },
       "compose_scan_depth": {
         "label": "Compose 扫描深度",
         "help": "在 COMPOSE_SCAN_DIR 下向下走多少层目录。"
+      },
+      "compose_scan_exclude_dirs": {
+        "label": "排除的目录",
+        "help": "每行一个目录名；Compose 中显式 include 或 extends 的文件仍会读取。"
       },
       "compose_scan_max_files": {
         "label": "Compose 文件上限",
@@ -321,7 +376,7 @@
       },
       "url_host": {
         "label": "URL 主机名",
-        "help": "猜测链接时用来代替 localhost。留空则用局域网绑定地址；对所有接口监听时仍用 localhost。"
+        "help": "猜测链接时用来代替 localhost。留空则用局域网绑定地址；监听通配地址时仍用 localhost。"
       },
       "url_scheme": {
         "label": "URL 协议",
@@ -434,7 +489,6 @@
     "aria": "端口占用网格",
     "updated": "更新于 {time}",
     "leaseBadge": "Agent 租约",
-    "anyAddress": "全部接口",
     "bindAddress": "{family}：{address}",
     "bindAddressMore": "{family}：{address}（+{count}）"
   },
@@ -449,7 +503,7 @@
     "unknown": "未知"
   },
   "scope": {
-    "public": "全部接口",
+    "public": "通配地址",
     "lan": "局域网",
     "link": "链路本地",
     "localhost": "localhost"

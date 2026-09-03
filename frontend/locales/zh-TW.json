@@ -26,7 +26,7 @@
     "access": "網頁",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "全部介面",
+    "public": "萬用位址",
     "hidden": "隱藏",
     "kinds": "類型",
     "sort": "排序",
@@ -40,6 +40,21 @@
     "byStatus": "狀態"
   },
   "scanner": {
+    "diagnostics": {
+      "title": "為何無法確認可用連接埠？",
+      "listen": "主機監聽掃描失敗。請檢查 /proc 是否掛載至 /host/proc，以及容器使用者的讀取權限。直接部署於主機時，請檢查 ss 或 /proc 是否可用。",
+      "docker": "Docker 掃描失敗。請檢查 Docker 是否執行中、socket 是否掛載或 DOCKER_HOST 是否可連線。非 root 容器還需透過 group_add 加入 socket 所屬群組；群組編號以主機為準。",
+      "compose": "Compose 目錄掃描失敗。請檢查 /compose 掛載與目錄讀取權限。若資料庫等資料目錄與 Compose 檔案放在一起，可降低掃描深度或排除這些資料目錄；請勿排除需要掃描的 Compose 設定。",
+      "composeTruncated": "Compose 掃描已達檔案上限。請縮小掃描範圍、排除非設定目錄，或提高檔案上限；未掃描檔案中的宣告連接埠目前不會計入。",
+      "composeIncomplete": "部分 Compose 檔案或目錄無法讀取，或設定無法完整解析。請檢查目錄權限與掃描範圍，再依容器日誌修正 YAML、必要環境變數與 include/extends 錯誤。修正後會自動重新掃描。",
+      "stale": "最近一次佔用掃描已過期或更新失敗。請等待下次掃描；若持續出現，請檢查該主機的日誌與掃描時間。先前的掃描器狀態無法說明目前失敗原因。",
+      "unknown": "目前回應沒有足夠的診斷資訊。重新整理後若仍未恢復，請查看該主機的日誌與掃描器狀態。",
+      "selection": "在該主機的「設定 → 佔用圖」選擇需要的掃描來源。僅在不需要某來源時停用它；停用 Compose 後，不會檢查未執行服務的宣告連接埠。",
+      "upgrade": "升級不會自動修改掛載與權限。若更改 Compose 的環境變數、user 或 group_add，請執行 docker compose up -d 重建容器；docker compose restart 不會套用這些變更。",
+      "remote": "此警告來自遠端主機。請在該主機上處理；本機設定不會修改遠端設定。",
+      "settings": "開啟本機佔用設定",
+      "guide": "設定與升級說明"
+    },
     "label": "掃描器",
     "host": "主機",
     "docker": "Docker",
@@ -106,7 +121,7 @@
     "label": "標籤",
     "saveLabel": "儲存標籤",
     "copyPort": "複製連接埠號碼",
-    "publicBind": "全部介面",
+    "publicBind": "萬用位址",
     "publicBindHint": "此連接埠接受主機上任意位址的連線。",
     "remoteReadOnly": "唯讀 — 這張佔用圖來自 {name}。隱藏、標籤與新增仍只作用於此機器。",
     "expiresIn": "{time} 後到期",
@@ -215,6 +230,10 @@
         "title": "佔用圖",
         "blurb": "重新整理間隔，以及閒置計數所用的連接埠範圍。"
       },
+      "local": {
+        "title": "本機",
+        "blurb": "設定本機名稱，並選擇哪些本機來源參與連接埠佔用判斷。"
+      },
       "scanning": {
         "title": "Compose 掃描",
         "blurb": "每次重新整理時向下尋找 compose.yml 的深度。"
@@ -245,6 +264,13 @@
     },
     "on": "開",
     "off": "關",
+    "scanners": {
+      "required": "至少保留一個本機掃描來源。",
+      "state": { "ok": "可用", "failed": "無法使用", "checking": "檢查中", "disabled": "已關閉" },
+      "listen": { "label": "主機監聽連接埠", "help": "讀取本機監聽中的 TCP 與 UDP 連接埠。", "remediation": "檢查 /host/proc 掛載或 host 網路存取。" },
+      "docker": { "label": "Docker 容器", "help": "讀取容器發佈連接埠與 host 網路容器。", "remediation": "掛載 Docker socket，並讓容器程序加入 socket 群組。" },
+      "compose": { "label": "Compose 檔案", "help": "讀取 Compose 專案宣告的連接埠。", "remediation": "檢查掃描目錄、深度、排除項目與檔案權限。" }
+    },
     "fields": {
       "locale": {
         "label": "語言",
@@ -294,9 +320,21 @@
         "label": "範圍終點",
         "help": "上限。不會把所有未佔用的連接埠都畫成綠色。"
       },
+      "host_name": {
+        "label": "本機名稱",
+        "help": "顯示在本機佔用圖上方；留空時使用系統主機名稱。"
+      },
+      "local_scanners": {
+        "label": "本機掃描來源",
+        "help": "所有已啟用來源皆成功後，才會確認連接埠閒置。"
+      },
       "compose_scan_depth": {
         "label": "Compose 掃描深度",
         "help": "在 COMPOSE_SCAN_DIR 下向下走多少層目錄。"
+      },
+      "compose_scan_exclude_dirs": {
+        "label": "排除的資料夾",
+        "help": "每行一個名稱；明確 include 或 extends 的檔案仍會讀取。"
       },
       "compose_scan_max_files": {
         "label": "Compose 檔案上限",
@@ -308,7 +346,7 @@
       },
       "url_host": {
         "label": "URL 主機名稱",
-        "help": "猜測連結時用來代替 localhost。留空則用區網繫結位址；對所有介面監聽時仍用 localhost。"
+        "help": "猜測連結時用來代替 localhost。留空則用區網繫結位址；監聽萬用位址時仍用 localhost。"
       },
       "url_scheme": {
         "label": "URL 通訊協定",
@@ -434,7 +472,6 @@
     "aria": "連接埠佔用一覽",
     "updated": "更新於 {time}",
     "leaseBadge": "Agent 租約",
-    "anyAddress": "所有介面",
     "bindAddress": "{family}：{address}",
     "bindAddressMore": "{family}：{address}（+{count}）"
   },
@@ -449,7 +486,7 @@
     "unknown": "未知"
   },
   "scope": {
-    "public": "全部介面",
+    "public": "萬用位址",
     "lan": "區域網路",
     "link": "連結本機",
     "localhost": "localhost"

@@ -208,6 +208,35 @@ test('bind address switches omit repeated environment source hints', () => {
   assert.match(ordinary, /origin-hint/);
 });
 
+test('local scanner field renders intent separately from runtime state', () => {
+  const html = renderField({
+    key: 'local_scanners', type: 'multi_choice', group: 'local', origin: 'env',
+    env: 'PORT_LIGHT_SCANNERS', choices: ['listen', 'docker', 'compose'],
+    label: 'Local scanners', help: 'Select scanners',
+  }, ['listen', 'compose'], false, {
+    local_scanning: { scanners: [
+      { id: 'listen', enabled: true, state: 'ok' },
+      { id: 'docker', enabled: false, state: 'disabled' },
+      { id: 'compose', enabled: true, state: 'failed' },
+    ] },
+  });
+  assert.match(html, /name="local_scanners" value="listen" checked/);
+  assert.match(html, /name="local_scanners" value="docker"(?! checked)/);
+  assert.match(html, /name="local_scanners" value="compose" checked/);
+  assert.match(html, /scanner-state ok/);
+  assert.match(html, /scanner-state failed/);
+  assert.equal((html.match(/origin-hint/g) || []).length, 1);
+});
+
+test('local name and discovery controls have accessible labels', () => {
+  for (const [key, type, value] of [['host_name', 'str', 'Preview'],
+    ['compose_scan_depth', 'int', 1], ['compose_scan_exclude_dirs', 'string_list', []]]) {
+    const html = renderField({ key, type, origin: 'default' }, value, false);
+    assert.ok(html.includes('id="setting-label-' + key + '"'));
+    assert.ok(html.includes('aria-labelledby="setting-label-' + key + '"'));
+  }
+});
+
 test('appearance panel renders theme/language/layout sections in order', () => {
   const { renderSettingsForm } = mod;
   const host = document.createElement('div');

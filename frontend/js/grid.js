@@ -1,13 +1,14 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S } from './state.js?v=79';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=79';
-import { KIND_MATCHERS } from './kinds.js?v=79';
-import { isLease } from './leases.js?v=79';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=79';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=79';
-import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=79';
-import { api } from './api.js?v=79';
+import { S } from './state.js?v=81';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=81';
+import { KIND_MATCHERS } from './kinds.js?v=81';
+import { isLease } from './leases.js?v=81';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=81';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=81';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=81';
+import { hasPeers, listedHosts, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=81';
+import { api } from './api.js?v=81';
 
 
   export function syncFilterUI() {
@@ -360,13 +361,11 @@ import { api } from './api.js?v=79';
       showV4: options.showV4,
       showV6: options.showV6,
       density: options.density,
-    });
-    const any = t('grid.anyAddress');
+    }).filter(function (row) { return !row.wildcard; });
     const html = summaries.length ? '<div class="bind-addresses" aria-hidden="true">' +
       summaries.map(function (row) {
-        const visible = row.wildcard ? any : row.display;
         return '<div class="bind-address-row"><span class="bind-family">' + row.family +
-          '</span><span class="bind-value">' + escapeHtml(visible) + '</span>' +
+          '</span><span class="bind-value">' + escapeHtml(row.display) + '</span>' +
           (row.additional ? '<span class="bind-more">+' + row.additional + '</span>' : '') +
           '</div>';
       }).join('') + '</div>' : '';
@@ -374,7 +373,7 @@ import { api } from './api.js?v=79';
       html,
       summaries,
       ariaParts: summaries.map(function (row) {
-        const vars = { family: row.label, address: row.wildcard ? any : row.primary, count: row.additional };
+        const vars = { family: row.label, address: row.primary, count: row.additional };
         return row.additional ? t('grid.bindAddressMore', vars) : t('grid.bindAddress', vars);
       }),
       titleParts: summaries.map(function (row) {
@@ -384,6 +383,7 @@ import { api } from './api.js?v=79';
   }
 
   export function renderSummary(s) {
+    const warnings = scanWarningState(summary);
     function toggle(active, attrs, dot, n, label) {
       return '<button type="button" class="stat' + (active ? ' active' : '') + '" ' + attrs +
         ' aria-pressed="' + (active ? 'true' : 'false') + '">' +
@@ -401,9 +401,10 @@ import { api } from './api.js?v=79';
         t('legend.hidden') + (s.hidden_locked ? ' (' + t('legend.locked') + ')' : ''));
     }
     if (scanUnavailable(s)) {
-      html += '<span class="scan-warning" role="status">' + escapeHtml(t('scanner.snapshotUnavailable')) + '</span>';
+      html += scanWarningMarkup(s, S.focusHostId || 'local', 'summary');
     }
     summary.innerHTML = html;
+    wireScanWarnings(summary, warnings);
   }
 
   export function renderHostSwitcher() {
@@ -420,6 +421,7 @@ import { api } from './api.js?v=79';
   export function renderHostBoards() {
     if (!hostBoards) return;
     const restore = snapshotGridFocus();
+    const warnings = scanWarningState(hostBoards);
     const hosts = listedHosts();
     hostBoards.innerHTML = hosts.map(function (h) {
       return '<article class="host-board' + (h.id === S.focusHostId ? ' is-active' : '') +
@@ -431,7 +433,7 @@ import { api } from './api.js?v=79';
         escapeHtml(h.id) + '"></div></header>' +
         '<p class="host-board-counts" data-host-counts="' + escapeHtml(h.id) + '"></p>' +
         '<div class="host-board-error hidden" hidden data-host-error="' + escapeHtml(h.id) + '">' +
-        '<span></span><button type="button" class="btn-secondary" data-host-retry="' +
+        '<div class="host-scan-notice"></div><button type="button" class="btn-secondary" data-host-retry="' +
         escapeHtml(h.id) + '">' + escapeHtml(t('hosts.retry')) + '</button></div>' +
         '<div class="host-grid" id="host-grid-' + escapeHtml(h.id) +
         '" tabindex="-1" role="region" data-i18n-aria="grid.aria"></div></article>';
@@ -445,9 +447,11 @@ import { api } from './api.js?v=79';
       if ((map.error || (map.data && scanUnavailable(map.data.summary))) && err) {
         err.hidden = false;
         err.classList.remove('hidden');
-        const text = err.querySelector('span');
-        if (text) text.textContent = t(!map.error ? 'scanner.snapshotUnavailable'
-          : map.error === 'auth' ? 'hosts.authFailed' : 'hosts.unreachable');
+        const notice = err.querySelector('.host-scan-notice');
+        if (notice) {
+          if (!map.error) notice.innerHTML = scanWarningMarkup(map.data.summary, h.id, 'board');
+          else notice.textContent = t(map.error === 'auth' ? 'hosts.authFailed' : 'hosts.unreachable');
+        }
         const retry = err.querySelector('[data-host-retry]');
         if (retry) retry.disabled = !!S.hostRetrying[h.id];
       }
@@ -463,6 +467,7 @@ import { api } from './api.js?v=79';
         root.innerHTML = '<div class="empty">' + escapeHtml(t('hosts.loading')) + '</div>';
       }
     });
+    wireScanWarnings(hostBoards, warnings);
   }
 
   export function showCopyToast(cell) {
@@ -680,8 +685,9 @@ import { api } from './api.js?v=79';
         title = t('scanner.incomplete', { name: name });
       }
       if (sourceState === 'disabled') title = t('scanner.disabled', { name: name });
-      const warn = pair[0] === 'compose' && (truncated || incomplete);
-      return '<span class="pill' + (ok ? ' ok' : ' bad') + (warn ? ' warn' : '') + '" role="img" title="' +
+      const disabled = sourceState === 'disabled';
+      const warn = !disabled && pair[0] === 'compose' && (truncated || incomplete);
+      return '<span class="pill' + (disabled ? ' disabled' : ok ? ' ok' : ' bad') + (warn ? ' warn' : '') + '" role="img" title="' +
         escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"></span>';
     }).join('');
   }

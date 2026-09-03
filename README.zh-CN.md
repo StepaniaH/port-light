@@ -37,14 +37,14 @@
 
 - 卡片上直接显示容器 / 服务名
 - 按端口号搜索；已被占用时给出附近空闲端口
-- 占用数字可筛选占用 / 已配置；类型芯片：运行中、系统、Docker、网页、UDP、localhost、所有接口、隐藏
+- 占用数字可筛选占用 / 已配置；类型芯片：运行中、系统、Docker、网页、UDP、localhost、通配地址、隐藏
 - 按端口、名称、状态排序；可限制显示区间
 - 扫描不到的端口可以手动登记
 - 两个 Compose 项目在重叠的绑定地址上声明同一主机端口时标冲突
 - 常见 homelab 端口内置名称（SSH、Jellyfin、Postgres 等），可用本地文件覆盖
 - 5 秒自动刷新（设置里可关）
 - 点击复制端口号
-- 可选的卡片绑定地址摘要，可分别控制 IPv4/IPv6，并紧凑显示 IPv6
+- 可选的卡片绑定地址摘要，可分别控制 IPv4/IPv6、紧凑显示 IPv6，并省略重复的通配绑定
 - 一个界面可以拉取其他 Port-Light 实例的占用图（局域网 / Tailscale）。每台机器仍自己扫描。
 - 深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等配色预设；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
 - 自定义色板、JSON 导入导出，以及宽松 / 标准 / 紧凑三种卡片密度
@@ -67,6 +67,8 @@
 - `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
 
 后续计划与架构：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。API 与 MCP 集成：[docs/integrations.md](docs/integrations.md)。
+
+升级后若仍出现占用警告，可悬浮或点击警告查看对应扫描器的排查建议。镜像升级不能自动处理的权限与配置问题，见 [v0.7.6 升级与故障排查](docs/troubleshooting.md#从-v076-升级后仍有警告)。
 
 ## 快速开始
 
@@ -106,10 +108,11 @@ docker compose up -d
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | 启用的扫描来源，逗号分隔；未列出的来源明确禁用。至少选择一项。只能用环境变量。 |
+| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | 启用的扫描来源，逗号分隔；未列出的来源明确禁用。至少选择一项。也可在设置 → 占用图中修改。 |
 | `PORT_LIGHT_SCAN_TIMEOUT_S` | `10` | 后台刷新超时秒数（1–60），超时后保留快照并标记过期。只能用环境变量。 |
 | `COMPOSE_SCAN_DIR` | `/compose` | 扫描 compose 文件的目录（只能用环境变量） |
 | `COMPOSE_SCAN_DEPTH` | `4` | 扫描子目录的最大深度 |
+| `COMPOSE_SCAN_EXCLUDE_DIRS` | 未设置 | 自动发现时跳过的目录名，逗号分隔；Compose 中显式 `include` / `extends` 的文件仍会读取。 |
 | `COMPOSE_SCAN_MAX_FILES` | `400` | 每次刷新最多解析的 compose 文件数 |
 | `PORT_RANGE_START` | `1` | **空闲数量**统计的起始端口 |
 | `PORT_RANGE_END` | `9999` | 上述区间的结束（不会把网格填满绿格） |
@@ -129,7 +132,7 @@ docker compose up -d
 | `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 |
 | `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。只能用环境变量。 |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页保存的值覆盖 env。`env`：只认 Compose，设置页只读。 |
-| `PORT_LIGHT_HOST_NAME` | 主机名 | 并排显示其他占用图时，本机这一列的名称。 |
+| `PORT_LIGHT_HOST_NAME` | 主机名 | 并排显示其他占用图时，本机这一列的名称。也可在设置 → 占用图中修改。 |
 | `PORT_LIGHT_PEERS` | 未设置 | `{name, url, username?, password?}` 的 JSON 数组。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。与设置页同一把锁。 |
 | `PORT_LIGHT_LOG_LEVEL` | `warning` | 后端日志级别（`debug` / `info` / `warning` / `error`）。扫描器降级（Docker 不可达、Compose 文件解析失败等）会记一条日志，并出现在 `/api/health` 的 `degradations` 里。只能用环境变量。 |
 | `WEBHOOK_URL` | 未设置 | 可选 webhook 目标（仅 http/https）。配合 `WEBHOOK_EVENTS=new_listener,conflict`，在端口开始占用或发生冲突时以 fire-and-forget 方式 POST `{event, port}`。 |
@@ -138,7 +141,7 @@ docker compose up -d
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
 | `AGENT_TOKEN` | 未设置 | 设置后，`GET /api/ports/suggest` 需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
 
-上表里除扫描来源、超时、路径和密钥外，也可以在 Web UI 的 **Settings** 里改，写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
+上表里除超时、路径和密钥外，也可以在 Web UI 的**设置**中修改，包括本机名称、扫描来源、Compose 发现范围和其他机器。保存内容写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
 
 把 [custom_ports.example.json](custom_ports.example.json) 复制为 `custom_ports.json`（已 gitignore）。分类：`system`、`web`、`database`、`message`、`proxy`、`vpn`、`selfhosted`、`dev`、`infra`、`gaming`。
 

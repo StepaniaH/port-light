@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "Alle Schnittstellen",
+    "public": "Wildcard-Adresse",
     "hidden": "Verborgen",
     "kinds": "Art",
     "sort": "Sortierung",
@@ -40,6 +40,21 @@
     "byStatus": "Status"
   },
   "scanner": {
+    "diagnostics": {
+      "title": "Warum lassen sich freie Ports nicht bestätigen?",
+      "listen": "Die Erfassung der Host-Listener ist fehlgeschlagen. Prüfe den Mount von /proc nach /host/proc und die Leserechte des Container-Benutzers. Bei direkter Installation müssen ss oder /proc verfügbar sein.",
+      "docker": "Der Docker-Scan ist fehlgeschlagen. Prüfe den Daemon, den Socket-Mount oder die Verbindung über DOCKER_HOST. Ein Nicht-root-Container benötigt außerdem die Host-Gruppe des Sockets über group_add; verwende die GID dieses Rechners.",
+      "compose": "Der Compose-Verzeichnisscan ist fehlgeschlagen. Prüfe den /compose-Mount und die Leserechte. Liegen Datenbankordner neben Compose-Dateien, reduziere die Scantiefe oder schließe diese Datenordner aus. Benötigte Compose-Konfigurationen dürfen nicht ausgeschlossen werden.",
+      "composeTruncated": "Das Compose-Dateilimit wurde erreicht. Grenze den Scan ein, schließe Ordner ohne Konfiguration aus oder erhöhe das Limit. Deklarierte Ports in nicht gescannten Dateien fehlen.",
+      "composeIncomplete": "Einige Compose-Dateien oder Verzeichnisse konnten nicht gelesen oder Konfigurationen nicht vollständig analysiert werden. Prüfe Rechte und Scanbereich, dann die Container-Logs auf YAML-Fehler, Pflichtvariablen und include/extends. Der Scan wird automatisch wiederholt.",
+      "stale": "Der letzte Belegungsscan ist veraltet oder eine Aktualisierung ist fehlgeschlagen. Warte auf den nächsten Scan. Prüfe bei anhaltenden Problemen die Logs und Scandauer dieses Rechners. Frühere Scannerzustände erklären den aktuellen Fehler nicht.",
+      "unknown": "Diese Antwort enthält nicht genügend Diagnoseinformationen. Falls eine Aktualisierung nicht hilft, prüfe die Logs und den Scannerstatus dieses Rechners.",
+      "selection": "Wähle die benötigten Quellen unter Einstellungen → Belegung auf diesem Rechner. Deaktiviere nur Quellen, die du nicht benötigst. Ohne Compose fehlen deklarierte Ports nicht laufender Dienste.",
+      "upgrade": "Ein Upgrade ändert weder Mounts noch Berechtigungen. Führe nach Änderungen an Compose-Umgebungsvariablen, user oder group_add docker compose up -d aus, um den Container neu zu erstellen. docker compose restart übernimmt diese Änderungen nicht.",
+      "remote": "Diese Warnung betrifft einen entfernten Rechner. Behebe sie dort; lokale Einstellungen ändern dessen Konfiguration nicht.",
+      "settings": "Lokale Belegungseinstellungen öffnen",
+      "guide": "Konfigurations- und Upgrade-Anleitung"
+    },
     "label": "Scanner",
     "host": "Host",
     "docker": "Docker",
@@ -106,7 +121,7 @@
     "label": "Bezeichnung",
     "saveLabel": "Bezeichnung speichern",
     "copyPort": "Portnummer kopieren",
-    "publicBind": "Alle Schnittstellen",
+    "publicBind": "Wildcard-Adresse",
     "publicBindHint": "Dieser Port akzeptiert Verbindungen von jeder Adresse des Hosts.",
     "remoteReadOnly": "Schreibgeschützt — diese Karte stammt von {name}. Ausblenden, Bezeichnungen und Hinzufügen bleiben auf diesem Rechner.",
     "expiresIn": "Läuft ab in {time}",
@@ -215,6 +230,10 @@
         "title": "Belegung",
         "blurb": "Aktualisierungsintervall und der Bereich, der für die Zählung der freien Ports verwendet wird."
       },
+      "local": {
+        "title": "Dieser Rechner",
+        "blurb": "Name und lokale Quellen für die Portbelegung."
+      },
       "scanning": {
         "title": "Compose-Scan",
         "blurb": "Wie tief bei jeder Aktualisierung nach compose.yml-Dateien gesucht wird."
@@ -245,6 +264,13 @@
     },
     "on": "ein",
     "off": "aus",
+    "scanners": {
+      "required": "Mindestens ein lokaler Scanner muss aktiviert bleiben.",
+      "state": { "ok": "Verfügbar", "failed": "Nicht verfügbar", "checking": "Wird geprüft", "disabled": "Aus" },
+      "listen": { "label": "Host-Listener", "help": "Liest lokale TCP- und UDP-Listener.", "remediation": "Prüfe /host/proc oder den Host-Netzwerkzugriff." },
+      "docker": { "label": "Docker-Container", "help": "Liest veröffentlichte Ports und Host-Netzwerk-Container.", "remediation": "Binde den Docker-Socket ein und erteile der Containergruppe Zugriff." },
+      "compose": { "label": "Compose-Dateien", "help": "Liest in Compose-Projekten deklarierte Ports.", "remediation": "Prüfe Scanverzeichnis, Tiefe, Ausschlüsse und Dateirechte." }
+    },
     "fields": {
       "locale": {
         "label": "Sprache",
@@ -294,9 +320,21 @@
         "label": "Bereichsende",
         "help": "Obergrenze. Malt nicht jeden ungenutzten Port grün."
       },
+      "host_name": {
+        "label": "Rechnername",
+        "help": "Wird über der lokalen Karte angezeigt. Leer verwendet den System-Hostnamen."
+      },
+      "local_scanners": {
+        "label": "Lokale Scanner",
+        "help": "Alle aktivierten Quellen müssen erfolgreich sein, bevor freie Ports bestätigt werden."
+      },
       "compose_scan_depth": {
         "label": "Compose-Scantiefe",
         "help": "Wie viele Verzeichnisebenen unter COMPOSE_SCAN_DIR durchsucht werden."
+      },
+      "compose_scan_exclude_dirs": {
+        "label": "Ausgeschlossene Ordner",
+        "help": "Ein Ordnername pro Zeile; explizite include- und extends-Dateien werden weiterhin gelesen."
       },
       "compose_scan_max_files": {
         "label": "Compose-Dateilimit",
@@ -434,7 +472,6 @@
     "aria": "Raster der Portbelegung",
     "updated": "Aktualisiert {time}",
     "leaseBadge": "Agenten-Reservierung",
-    "anyAddress": "alle",
     "bindAddress": "{family}: {address}",
     "bindAddressMore": "{family}: {address} (+{count})"
   },
@@ -449,7 +486,7 @@
     "unknown": "Unbekannt"
   },
   "scope": {
-    "public": "alle Schnittstellen",
+    "public": "Wildcard-Adresse",
     "lan": "LAN",
     "link": "link-local",
     "localhost": "localhost"

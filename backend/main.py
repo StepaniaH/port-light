@@ -31,7 +31,7 @@ from .compose_scanner import ComposeScan, scan_compose_tree
 from .docker_scanner import scan_containers
 from .known_ports import get_known_port
 from .occupancy_monitor import OccupancyMonitor, SnapshotUnavailable, complete
-from .scan_status import ScanUnavailable, enabled_scanners
+from .scan_status import SCANNER_NAMES, ScanUnavailable, enabled_scanners
 from .port_scanner import (
     listen_scan_source,
     scan_listening_ports,
@@ -262,9 +262,10 @@ def _scan_key(values: dict) -> tuple:
     return (
         os.environ.get("PORT_LIGHT_DATA_DIR", "/data"),
         _compose_dir(),
-        tuple(sorted(enabled_scanners())),
+        tuple(sorted(enabled_scanners(values["local_scanners"]))),
         values["compose_scan_depth"],
         values["compose_scan_max_files"],
+        tuple(values["compose_scan_exclude_dirs"]),
         values["guess_urls"],
         values["url_host"],
         values["url_scheme"],
@@ -272,7 +273,7 @@ def _scan_key(values: dict) -> tuple:
 
 
 def _build_snapshot(values: dict) -> dict:
-    enabled = enabled_scanners()
+    enabled = enabled_scanners(values["local_scanners"])
     snap = {"containers": [], "listening": [], "compose_scan": ComposeScan(), "sources": {}}
     prefer: list[int] = []
     for source, field, scan in (
@@ -280,7 +281,8 @@ def _build_snapshot(values: dict) -> dict:
         ("listen", "listening", lambda: scan_listening_ports(prefer_pids=prefer)),
         ("compose", "compose_scan", lambda: scan_compose_tree(
             _compose_dir(), max_depth=values["compose_scan_depth"],
-            max_files=values["compose_scan_max_files"])),
+            max_files=values["compose_scan_max_files"],
+            exclude_dirs=values["compose_scan_exclude_dirs"])),
     ):
         if source not in enabled:
             snap["sources"][source] = "disabled"
@@ -379,11 +381,34 @@ def _etag_matched(header: str | None, etag: str) -> bool:
     return False
 
 
+def _settings_document(body: dict | None = None) -> dict:
+    body = body or app_settings.snapshot()
+    body["custom_themes"] = themes.list_themes()
+    monitor = _monitor.status()
+    enabled = enabled_scanners(body["values"]["local_scanners"])
+    scanners = []
+    for name in SCANNER_NAMES:
+        if name not in enabled:
+            state = "disabled"
+        else:
+            observed = monitor["sources"].get(name)
+            state = observed if observed in ("ok", "failed") else "checking"
+        row = {"id": name, "enabled": name in enabled, "state": state}
+        if name == "listen" and state == "ok":
+            row["via"] = listen_scan_source()
+        scanners.append(row)
+    body["local_scanning"] = {
+        "ready": monitor["ready"],
+        "initialized": monitor["initialized"],
+        "scan_age_seconds": monitor["scan_age_seconds"],
+        "scanners": scanners,
+    }
+    return body
+
+
 @app.get("/api/settings")
 def get_settings() -> dict:
-    body = app_settings.snapshot()
-    body["custom_themes"] = themes.list_themes()
-    return body
+    return _settings_document()
 
 
 @app.put("/api/settings")
@@ -391,7 +416,7 @@ def put_settings(body: dict = Body(...)) -> dict:
     try:
         result = app_settings.apply_patch(body)
         _monitor.state_changed()
-        return result
+        return _settings_document(result)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:

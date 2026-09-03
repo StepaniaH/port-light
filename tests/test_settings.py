@@ -8,7 +8,7 @@ from backend import settings as app_settings
 
 def test_settings_field_groups_match_the_settings_panes():
     assert {spec.group for spec in app_settings.FIELDS} <= {
-        "appearance", "grid", "scanning", "links",
+        "appearance", "grid", "local", "scanning", "links",
     }
 
 
@@ -146,6 +146,47 @@ def test_bind_address_card_settings_default_off_with_both_families_ready(monkeyp
     assert saved.json()["values"]["show_bind_addresses"] is True
     assert saved.json()["values"]["show_bind_ipv4"] is False
     assert saved.json()["values"]["show_bind_ipv6"] is True
+
+
+def test_local_scanners_are_one_atomic_setting(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PORT_LIGHT_SCANNERS", "listen,docker,compose")
+    monkeypatch.delenv("PORT_LIGHT_SETTINGS_SOURCE", raising=False)
+    client = TestClient(app)
+
+    saved = client.put("/api/settings", json={"local_scanners": ["listen", "docker"]})
+    assert saved.status_code == 200
+    assert saved.json()["values"]["local_scanners"] == ["listen", "docker"]
+    values, origins = app_settings.resolve()
+    assert values["local_scanners"] == ["listen", "docker"]
+    assert origins["local_scanners"] == "file"
+
+    assert client.put("/api/settings", json={"local_scanners": []}).status_code == 400
+    assert client.put("/api/settings", json={"local_scanners": ["listen", "nope"]}).status_code == 400
+
+
+def test_local_host_name_can_be_saved_in_settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PORT_LIGHT_HOST_NAME", "Environment name")
+    monkeypatch.delenv("PORT_LIGHT_SETTINGS_SOURCE", raising=False)
+    client = TestClient(app)
+
+    saved = client.put("/api/settings", json={"host_name": "Mario"})
+    assert saved.status_code == 200
+    assert client.get("/api/hosts").json()["local"]["name"] == "Mario"
+
+
+def test_settings_document_separates_scanner_intent_from_runtime_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PORT_LIGHT_SCANNERS", "listen")
+    client = TestClient(app)
+
+    body = client.get("/api/settings").json()
+    assert body["values"]["local_scanners"] == ["listen"]
+    states = {row["id"]: row for row in body["local_scanning"]["scanners"]}
+    assert states["listen"]["enabled"] is True
+    assert states["docker"] == {"id": "docker", "enabled": False, "state": "disabled"}
+    assert states["compose"] == {"id": "compose", "enabled": False, "state": "disabled"}
 
 
 def test_density_maps_legacy_comfortable(monkeypatch, tmp_path):

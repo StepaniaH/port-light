@@ -36,6 +36,10 @@ The image includes a `HEALTHCHECK` on `GET /api/health`. Compose does not need a
 
 Create `./data` first if you run the container as a non-root `user:` so the bind mount is writable.
 
+When a non-root container reads `/var/run/docker.sock`, add the socket's numeric host GID as a supplementary group. Find it with `stat -c '%g' /var/run/docker.sock`, record it as `DOCKER_SOCKET_GID` in your `.env`, then add `group_add: ["${DOCKER_SOCKET_GID}"]` to the Port-Light service. The number is host-specific. A read-only socket mount neither grants Unix socket access nor restricts Docker API calls; use a socket proxy to restrict API access.
+
+After changing `user`, `group_add`, mounts, or environment variables, use `docker compose up -d port-light` to recreate the service. `docker compose restart` does not apply these changes. For persistent occupancy warnings after an upgrade, see the [troubleshooting and upgrade guide](troubleshooting.md#occupancy-scan-warning).
+
 Do **not** add `cap_add: NET_ADMIN` unless you are on the bare-metal `ss` path. The usual `/host/proc` mount already fills process names via socket inodes.
 
 ## Docker run
@@ -172,7 +176,7 @@ If a Quadlet or rootless snippet works on your machine, open an issue or PR with
 
 `GET /api/health` always responds to liveness probes without Basic Auth or port data. `status` is `ok` or `degraded`; `occupancy` includes `initialized`, `ready`, `scan_age_seconds`, and per-source states (`ok`, `failed`, `disabled`). The existing `scanners` flags reflect completed observations, so health does not contact Docker. Container healthchecks test HTTP availability; consumers that require usable occupancy must also check `occupancy.ready`.
 
-All three sources are enabled by default. If this deployment intentionally has no Docker or Compose source, select only those in use, for example `PORT_LIGHT_SCANNERS=listen` on a native host. Unavailable enabled sources are failures, never empty successful scans. Free-port planning, suggestions, and batch reservations return `503` until enabled sources recover. Disabling a source means its occupancy is not checked.
+All three sources are enabled by default. If this deployment intentionally has no Docker or Compose source, select only those in use in Settings → Occupancy or set `PORT_LIGHT_SCANNERS=listen` on a native host. Unavailable enabled sources are failures, never empty successful scans. Free-port planning, suggestions, and batch reservations return `503` until enabled sources recover. Disabling a source means its occupancy is not checked.
 
 `PORT_LIGHT_SCAN_TIMEOUT_S` bounds waiting for a background refresh (default 10 seconds, range 1–60). Timed-out scans retain old data and cannot publish a late result. A stuck filesystem call cannot be forcibly interrupted; its worker slot remains occupied until it exits, keeping thread usage bounded. Restore the mount/daemon or restart the service if it stays blocked.
 
@@ -181,7 +185,7 @@ If `port_light.json` becomes unreadable or invalid, fix its permissions or resto
 
 ## Settings (Compose and Web UI)
 
-Non-secret options (theme, language, range, refresh, `URL_HOST`, compose scan depth, …) can be set as environment variables **or** on the Settings page (`#/settings`). The UI writes `settings` into `/data/port_light.json`. That overlay wins on the next refresh.
+Non-secret options (theme, language, range, refresh, local machine name, scanner selection, Compose discovery, `URL_HOST`, …) can be set as environment variables **or** on the Settings page (`#/settings`). The UI writes `settings` into `/data/port_light.json`. That overlay wins on the next refresh. Mounts, socket permissions, absolute paths, and secrets remain deployment-only.
 
 To keep GitOps / Compose as the only source:
 

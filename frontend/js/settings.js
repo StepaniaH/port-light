@@ -1,13 +1,13 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=79';
-import { t, tx, escapeHtml, errorText } from './text.js?v=79';
-import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=79';
-import { moveChipFocus } from './a11y.js?v=79';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=79';
-import { api, fetchHosts, fetchSettings } from './api.js?v=79';
-import { hasPeers, hostById, hostName } from './hosts.js?v=79';
-import { bindAddressView, render, syncHiddenButton } from './grid.js?v=79';
+import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=81';
+import { t, tx, escapeHtml, errorText } from './text.js?v=81';
+import { settingsBtn, rangeStartInput, rangeEndInput, syncHeaderHeight } from './dom.js?v=81';
+import { moveChipFocus } from './a11y.js?v=81';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=81';
+import { api, fetchHosts, fetchSettings } from './api.js?v=81';
+import { hasPeers, hostById, hostName } from './hosts.js?v=81';
+import { bindAddressView, render, syncHiddenButton } from './grid.js?v=81';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 
@@ -85,12 +85,29 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     const row = form.querySelector('[data-setting="refresh_ms"]');
     if (auto && row) row.classList.toggle('is-inactive', !auto.checked);
 
+    const scannerInputs = Array.prototype.slice.call(
+      form.querySelectorAll('input[name="local_scanners"]'));
+    const selected = scannerInputs.filter(function (input) { return input.checked; });
+    scannerInputs.forEach(function (input) {
+      const locked = input.getAttribute('data-locked') === '1';
+      input.disabled = locked || (selected.length === 1 && input.checked);
+    });
+    const compose = scannerInputs.find(function (input) { return input.value === 'compose'; });
+    form.querySelectorAll('[data-compose-option]').forEach(function (optionRow) {
+      const inactive = !!compose && !compose.checked;
+      optionRow.classList.toggle('is-inactive', inactive);
+      optionRow.querySelectorAll('input, textarea, select').forEach(function (control) {
+        control.disabled = control.getAttribute('data-locked') === '1' || inactive;
+      });
+    });
+
     const parent = form.elements.show_bind_addresses;
     const familyGroup = document.getElementById('bind-address-family-options');
-    if (!parent || !familyGroup) return;
-    if (parent.checked) familyGroup.removeAttribute('hidden');
-    else familyGroup.setAttribute('hidden', '');
-    parent.setAttribute('aria-expanded', parent.checked ? 'true' : 'false');
+    if (parent && familyGroup) {
+      if (parent.checked) familyGroup.removeAttribute('hidden');
+      else familyGroup.setAttribute('hidden', '');
+      parent.setAttribute('aria-expanded', parent.checked ? 'true' : 'false');
+    }
   }
 
   export function markDirty() {
@@ -473,8 +490,46 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     } catch (err) { /* status line shows nothing on cancel; invalid files are rejected server-side */ }
   }
 
-  export function renderField(f, value, readonly) {
+  function scannerRuntime(doc, scanner) {
+    const rows = doc && doc.local_scanning && doc.local_scanning.scanners;
+    return (rows || []).find(function (row) { return row.id === scanner; }) || {
+      id: scanner, enabled: false, state: 'checking',
+    };
+  }
+
+  export function renderScannerField(f, value, readonly, doc) {
+    const selected = Array.isArray(value) ? value : [];
+    const rows = (f.choices || []).map(function (scanner) {
+      const checked = selected.indexOf(scanner) >= 0;
+      const runtime = scannerRuntime(doc, scanner);
+      const state = checked ? (runtime.state || 'checking') : 'disabled';
+      const disabled = readonly ? ' disabled' : '';
+      const remediation = state === 'failed'
+        ? '<span class="scanner-remediation" data-i18n="settings.scanners.' + scanner + '.remediation">' +
+          escapeHtml(t('settings.scanners.' + scanner + '.remediation')) + '</span>'
+        : '';
+      return '<label class="scanner-option"><span class="scanner-option-main">' +
+        '<input type="checkbox" name="' + escapeHtml(f.key) + '" value="' + escapeHtml(scanner) + '"' +
+        (checked ? ' checked' : '') + ' data-locked="' + (readonly ? '1' : '0') + '"' + disabled + '>' +
+        '<span class="scanner-copy"><span class="scanner-name" data-i18n="settings.scanners.' + scanner + '.label">' +
+        escapeHtml(t('settings.scanners.' + scanner + '.label')) + '</span>' +
+        '<span class="field-help" data-i18n="settings.scanners.' + scanner + '.help">' +
+        escapeHtml(t('settings.scanners.' + scanner + '.help')) + '</span>' + remediation + '</span></span>' +
+        '<span class="scanner-state ' + escapeHtml(state) + '" data-i18n="settings.scanners.state.' + state + '">' +
+        escapeHtml(t('settings.scanners.state.' + state)) + '</span></label>';
+    }).join('');
+    return '<fieldset class="setting-row is-wide scanner-setting" data-setting="' + escapeHtml(f.key) + '">' +
+      '<legend class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
+      escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' +
+      escapeHtml(fieldHelp(f)) + '</span></legend><div class="setting-control scanner-options">' + rows +
+      originHint(f) + '</div></fieldset>';
+  }
+
+  export function renderField(f, value, readonly, doc) {
+    if (f.type === 'multi_choice') return renderScannerField(f, value, readonly, doc);
     const disabled = readonly ? ' disabled' : '';
+    const labelId = 'setting-label-' + f.key;
+    const labelledBy = ' aria-labelledby="' + escapeHtml(labelId) + '"';
     let control = '';
     let tag = 'div';
     if (f.type === 'bool') {
@@ -502,15 +557,21 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     } else if (f.type === 'int') {
       const min = f.min != null ? ' min="' + f.min + '"' : '';
       const max = f.max != null ? ' max="' + f.max + '"' : '';
-      control = '<input type="number" name="' + f.key + '" value="' + escapeHtml(String(value)) + '"' + min + max + disabled + '>';
+      control = '<input type="number" name="' + f.key + '" value="' + escapeHtml(String(value)) + '"' + min + max +
+        ' data-locked="' + (readonly ? '1' : '0') + '"' + labelledBy + disabled + '>';
+    } else if (f.type === 'string_list') {
+      const lines = Array.isArray(value) ? value.join('\n') : '';
+      control = '<textarea name="' + f.key + '" rows="3" data-locked="' + (readonly ? '1' : '0') + '"' + labelledBy + disabled + '>' +
+        escapeHtml(lines) + '</textarea>';
     } else {
       control = '<input type="text" name="' + f.key + '" value="' + escapeHtml(String(value || '')) +
-        '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + disabled + '>';
+        '" placeholder="' + escapeHtml(t('modal.optional')) + '"' + labelledBy + disabled + '>';
     }
     const wide = f.key === 'theme_mode' || f.key === 'theme_palette' ? ' is-wide' : '';
+    const composeOption = f.key.indexOf('compose_scan_') === 0 ? ' data-compose-option' : '';
     const sourceHint = f.key === 'show_bind_addresses' || BIND_FAMILY_KEYS.includes(f.key)
       ? '' : originHint(f);
-    return '<' + tag + ' class="setting-row' + wide + '" data-setting="' + escapeHtml(f.key) + '"><span class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
+    return '<' + tag + ' class="setting-row' + wide + '" data-setting="' + escapeHtml(f.key) + '"' + composeOption + '><span class="setting-copy"><span class="setting-label" id="' + escapeHtml(labelId) + '" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
       '</span></span><span class="setting-control">' + control + sourceHint +
       '</span></' + tag + '>';
@@ -875,7 +936,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     });
     function rowsFor(list) {
       return (list || []).map(function (f) {
-        return renderField(f, values[f.key], doc.readonly);
+        return renderField(f, values[f.key], doc.readonly, doc);
       }).join('');
     }
 
@@ -897,7 +958,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         (values.show_bind_addresses ? '' : ' hidden') + '><legend data-i18n="settings.bindFamilies">' +
         escapeHtml(t('settings.bindFamilies')) + '</legend>' + rowsFor(bindChildren) + '</fieldset>'
       : '';
-    const knownGroups = { appearance: true, grid: true, scanning: true, links: true };
+    const knownGroups = { appearance: true, grid: true, local: true, scanning: true, links: true };
     const extraAdvanced = groupOrder.filter(function (g) { return !knownGroups[g]; }).map(function (g) {
       return settingsCard('settings.groups.' + g + '.title', 'settings.groups.' + g + '.blurb', rowsFor(byGroup[g]));
     }).join('');
@@ -911,11 +972,12 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         settingsCard('settings.cards.title', 'settings.cards.blurb',
           rowsFor(densityFields) + displayPreviewHtml() + rowsFor(primaryCardFields) + bindFamilyOptions)) +
       settingsPanelHtml('occupancy',
+        settingsCard('settings.groups.local.title', 'settings.groups.local.blurb', rowsFor(byGroup.local || [])) +
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
+        settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +
       settingsPanelHtml('automation', automationCardsHtml(S.meta && S.meta.automation ? S.meta.automation : {})) +
       settingsPanelHtml('advanced',
-        settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
         extraAdvanced +
         settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div>'));
@@ -953,7 +1015,18 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       const f = fields[i];
       const el = form.elements[f.key];
       if (!el || el.disabled) continue;
-      if (f.type === 'bool') patch[f.key] = el.checked;
+      if (f.type === 'multi_choice') {
+        patch[f.key] = Array.prototype.slice.call(
+          form.querySelectorAll('input[name="' + f.key + '"]:checked'))
+          .map(function (input) { return input.value; });
+        if (!patch[f.key].length) {
+          status.className = 'is-error';
+          status.textContent = t('settings.scanners.required');
+          return;
+        }
+      } else if (f.type === 'string_list') {
+        patch[f.key] = String(el.value || '').split('\n').map(function (line) { return line.trim(); }).filter(Boolean);
+      } else if (f.type === 'bool') patch[f.key] = el.checked;
       else if (f.type === 'int') {
         const n = parseInt(el.value, 10);
         if (isNaN(n)) {

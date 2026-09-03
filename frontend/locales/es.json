@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "Todas las interfaces",
+    "public": "Dirección comodín",
     "hidden": "Ocultos",
     "kinds": "Tipo",
     "sort": "Orden",
@@ -40,6 +40,21 @@
     "byStatus": "Estado"
   },
   "scanner": {
+    "diagnostics": {
+      "title": "¿Por qué no se pueden confirmar los puertos libres?",
+      "listen": "Falló el análisis de los puertos en escucha del host. Revisa el montaje de /proc en /host/proc y los permisos de lectura del usuario del contenedor. En una instalación directa, comprueba que ss o /proc estén disponibles.",
+      "docker": "Falló el análisis de Docker. Revisa el daemon, el montaje del socket o la conexión DOCKER_HOST. Un contenedor sin root también necesita el grupo del socket del host mediante group_add; usa el GID de esa máquina.",
+      "compose": "Falló el análisis del directorio Compose. Revisa el montaje /compose y los permisos de lectura. Si hay carpetas de datos junto a los archivos Compose, reduce la profundidad o excluye esas carpetas. No excluyas las configuraciones Compose que necesitas analizar.",
+      "composeTruncated": "Se alcanzó el límite de archivos Compose. Reduce el alcance, excluye carpetas sin configuración o aumenta el límite. No se incluyen los puertos declarados en archivos sin analizar.",
+      "composeIncomplete": "No se pudieron leer algunos archivos o directorios Compose, o interpretar sus configuraciones. Revisa los permisos y el alcance, y después los logs para detectar errores de YAML, variables obligatorias e include/extends. El análisis se reintenta automáticamente.",
+      "stale": "El último análisis de ocupación está desactualizado o falló una actualización. Espera al siguiente análisis; si persiste, revisa los logs y su duración en esa máquina. Los estados anteriores no identifican el fallo actual.",
+      "unknown": "Esta respuesta no contiene suficiente información de diagnóstico. Si no se recupera al actualizar, revisa los logs y el estado de los analizadores de esa máquina.",
+      "selection": "Selecciona las fuentes necesarias en Ajustes → Ocupación de esa máquina. Desactiva una fuente solo si no la necesitas; sin Compose se omiten los puertos declarados de servicios que no están en ejecución.",
+      "upgrade": "Actualizar no cambia montajes ni permisos. Tras cambiar variables de entorno, user o group_add en Compose, ejecuta docker compose up -d para recrear el contenedor. docker compose restart no aplica esos cambios.",
+      "remote": "Esta advertencia corresponde a una máquina remota. Resuélvela allí; los ajustes locales no cambian la configuración remota.",
+      "settings": "Abrir ajustes de ocupación local",
+      "guide": "Guía de configuración y actualización"
+    },
     "label": "Escáneres",
     "host": "Equipo",
     "docker": "Docker",
@@ -106,7 +121,7 @@
     "label": "Etiqueta",
     "saveLabel": "Guardar etiqueta",
     "copyPort": "Copiar el número de puerto",
-    "publicBind": "Todas las interfaces",
+    "publicBind": "Dirección comodín",
     "publicBindHint": "Este puerto acepta conexiones desde cualquier dirección del equipo.",
     "remoteReadOnly": "Solo lectura — este mapa procede de {name}. Ocultar, las etiquetas y añadir permanecen en este equipo.",
     "expiresIn": "Caduca en {time}",
@@ -215,6 +230,10 @@
         "title": "Ocupación",
         "blurb": "Intervalo de actualización y rango utilizado para el recuento de puertos libres."
       },
+      "local": {
+        "title": "Este equipo",
+        "blurb": "Nombre y orígenes locales que contribuyen a la ocupación."
+      },
       "scanning": {
         "title": "Escaneo de Compose",
         "blurb": "Hasta qué profundidad buscar archivos compose.yml en cada actualización."
@@ -245,6 +264,13 @@
     },
     "on": "activado",
     "off": "desactivado",
+    "scanners": {
+      "required": "Debe quedar al menos un escáner local activado.",
+      "state": { "ok": "Disponible", "failed": "No disponible", "checking": "Comprobando", "disabled": "Desactivado" },
+      "listen": { "label": "Puertos en escucha", "help": "Lee sockets TCP y UDP locales en escucha.", "remediation": "Comprueba /host/proc o el acceso a la red del host." },
+      "docker": { "label": "Contenedores Docker", "help": "Lee puertos publicados y contenedores con red del host.", "remediation": "Monta el socket de Docker y concede acceso a su grupo." },
+      "compose": { "label": "Archivos Compose", "help": "Lee los puertos declarados por proyectos Compose.", "remediation": "Comprueba directorio, profundidad, exclusiones y permisos." }
+    },
     "fields": {
       "locale": {
         "label": "Idioma",
@@ -294,9 +320,21 @@
         "label": "Fin del rango",
         "help": "Límite superior. No pinta de verde cada puerto sin usar."
       },
+      "host_name": {
+        "label": "Nombre del equipo",
+        "help": "Aparece sobre el mapa local. Vacío usa el nombre del sistema."
+      },
+      "local_scanners": {
+        "label": "Escáneres locales",
+        "help": "Todos los orígenes activados deben funcionar para confirmar puertos libres."
+      },
       "compose_scan_depth": {
         "label": "Profundidad de escaneo de Compose",
         "help": "Cuántos niveles de directorios recorrer bajo COMPOSE_SCAN_DIR."
+      },
+      "compose_scan_exclude_dirs": {
+        "label": "Carpetas excluidas",
+        "help": "Un nombre por línea; los archivos include y extends explícitos se siguen leyendo."
       },
       "compose_scan_max_files": {
         "label": "Límite de archivos de Compose",
@@ -434,7 +472,6 @@
     "aria": "Cuadrícula de ocupación de puertos",
     "updated": "Actualizado {time}",
     "leaseBadge": "Reserva de agente",
-    "anyAddress": "todas",
     "bindAddress": "{family}: {address}",
     "bindAddressMore": "{family}: {address} (+{count})"
   },
@@ -449,7 +486,7 @@
     "unknown": "Desconocido"
   },
   "scope": {
-    "public": "todas las interfaces",
+    "public": "dirección comodín",
     "lan": "LAN",
     "link": "enlace local",
     "localhost": "localhost"

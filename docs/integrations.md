@@ -56,6 +56,11 @@ that completes with no rows is `ok`; a source that cannot be read is `failed`.
 Omitting a source explicitly marks it `disabled` and excludes its occupancy
 from the checks. At least one source must remain enabled.
 
+The same selection is editable as one set under **Settings → Occupancy** and
+through `PUT /api/settings` with `local_scanners: ["listen", "docker"]`.
+Saved values override environment defaults unless settings are locked to the
+environment. Changes apply to subsequent scans without a container restart.
+
 For a native installation with listeners and Compose files but no Docker:
 
 ```yaml

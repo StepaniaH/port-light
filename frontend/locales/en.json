@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "All interfaces",
+    "public": "Wildcard",
     "hidden": "Hidden",
     "kinds": "Kind",
     "sort": "Sort",
@@ -40,6 +40,21 @@
     "byStatus": "Status"
   },
   "scanner": {
+    "diagnostics": {
+      "title": "Why can't free ports be confirmed?",
+      "listen": "Host listener scanning failed. Check the /proc to /host/proc mount and the container user's read permissions. On a bare-metal deployment, check that ss or /proc is available.",
+      "docker": "Docker scanning failed. Check the daemon, socket mount, or DOCKER_HOST connection. A non-root container also needs the socket's host group via group_add; use the GID from that machine.",
+      "compose": "Compose directory scanning failed. Check the /compose mount and directory read permissions. If database data folders sit beside Compose files, reduce scan depth or exclude those data folders. Do not exclude Compose configurations you need to scan.",
+      "composeTruncated": "The Compose file limit was reached. Narrow the scan, exclude non-configuration folders, or raise the file limit. Declared ports in unscanned files are not included.",
+      "composeIncomplete": "Some Compose files or directories could not be read, or configurations could not be fully parsed. Check directory permissions and scan scope, then container logs for YAML, required variable, and include/extends errors. Scanning retries automatically.",
+      "stale": "The last occupancy scan is stale or a refresh failed. Wait for the next scan; if this persists, check that machine's logs and scan duration. Earlier scanner states do not identify the current failure.",
+      "unknown": "This response does not contain enough diagnostic information. If refreshing does not recover it, check that machine's logs and scanner status.",
+      "selection": "Select the sources you need in that machine's Settings → Occupancy. Disable a source only if you do not need it; disabling Compose omits declared ports of services that are not running.",
+      "upgrade": "Upgrading does not change mounts or permissions. After changing Compose environment variables, user, or group_add, run docker compose up -d to recreate the container. docker compose restart does not apply those changes.",
+      "remote": "This warning belongs to a remote machine. Resolve it there; local settings do not change the remote configuration.",
+      "settings": "Open local occupancy settings",
+      "guide": "Configuration and upgrade guide"
+    },
     "label": "Scanners",
     "host": "Host",
     "docker": "Docker",
@@ -106,7 +121,7 @@
     "label": "Label",
     "saveLabel": "Save label",
     "copyPort": "Copy port number",
-    "publicBind": "All interfaces",
+    "publicBind": "Wildcard address",
     "publicBindHint": "This port accepts connections from any address on the host.",
     "remoteReadOnly": "Read-only — this map is from {name}. Hide, labels, and add stay on this machine.",
     "expiresIn": "Expires in {time}",
@@ -215,9 +230,13 @@
         "title": "Occupancy",
         "blurb": "Refresh interval and the range used for the free count."
       },
+      "local": {
+        "title": "This machine",
+        "blurb": "Name this machine and choose which local sources contribute occupancy."
+      },
       "scanning": {
         "title": "Compose scan",
-        "blurb": "How far to walk for compose.yml files on each refresh."
+        "blurb": "Control Compose project discovery without changing host mounts or permissions."
       },
       "links": {
         "title": "Access URLs",
@@ -246,6 +265,30 @@
     "on": "on",
     "off": "off",
     "bindFamilies": "Address families",
+    "scanners": {
+      "required": "Keep at least one local scanner enabled.",
+      "state": {
+        "ok": "Available",
+        "failed": "Unavailable",
+        "checking": "Checking",
+        "disabled": "Off"
+      },
+      "listen": {
+        "label": "Host listeners",
+        "help": "Reads local TCP and UDP listening sockets.",
+        "remediation": "Check the /host/proc mount or host-network access."
+      },
+      "docker": {
+        "label": "Docker containers",
+        "help": "Reads published ports and host-network containers.",
+        "remediation": "Mount the Docker socket and grant its group to the container process."
+      },
+      "compose": {
+        "label": "Compose files",
+        "help": "Reads ports declared by Compose projects.",
+        "remediation": "Check the scan directory, depth, exclusions, and file permissions."
+      }
+    },
     "fields": {
       "locale": {
         "label": "Language",
@@ -277,7 +320,7 @@
       },
       "show_bind_addresses": {
         "label": "Bind addresses on cards",
-        "help": "Show a compact summary below the service name. Full addresses remain in port details."
+        "help": "Show specific addresses below the service name. Repetitive wildcard binds stay in port details."
       },
       "show_bind_ipv4": {
         "label": "IPv4 addresses",
@@ -307,9 +350,21 @@
         "label": "Range end",
         "help": "Upper bound. Does not paint every unused port green."
       },
+      "host_name": {
+        "label": "Machine name",
+        "help": "Shown above this machine's map. Empty uses the system hostname."
+      },
+      "local_scanners": {
+        "label": "Local scanners",
+        "help": "Enabled sources are required to succeed before Port-Light confirms free ports."
+      },
       "compose_scan_depth": {
         "label": "Compose scan depth",
         "help": "How many directory levels under COMPOSE_SCAN_DIR to walk."
+      },
+      "compose_scan_exclude_dirs": {
+        "label": "Excluded folders",
+        "help": "One folder name per line. Explicit include and extends files are still followed."
       },
       "compose_scan_max_files": {
         "label": "Compose file cap",
@@ -434,7 +489,6 @@
     "aria": "Port occupancy grid",
     "updated": "Updated {time}",
     "leaseBadge": "Agent lease",
-    "anyAddress": "any",
     "bindAddress": "{family}: {address}",
     "bindAddressMore": "{family}: {address} (+{count})"
   },
@@ -449,7 +503,7 @@
     "unknown": "Unknown"
   },
   "scope": {
-    "public": "all interfaces",
+    "public": "wildcard",
     "lan": "LAN",
     "link": "link-local",
     "localhost": "localhost"

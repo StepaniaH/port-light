@@ -54,7 +54,8 @@ class _PassThroughErrors(urllib.request.HTTPErrorProcessor):
 
 
 def local_display_name() -> str:
-    raw = (os.environ.get("PORT_LIGHT_HOST_NAME") or "").strip()
+    values, _ = app_settings.resolve()
+    raw = str(values.get("host_name") or "").strip()
     if raw:
         return raw[:MAX_NAME]
     try:

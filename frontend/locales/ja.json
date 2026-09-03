@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "全インターフェース",
+    "public": "ワイルドカード",
     "hidden": "非表示",
     "kinds": "種類",
     "sort": "並び替え",
@@ -40,6 +40,21 @@
     "byStatus": "状態"
   },
   "scanner": {
+    "diagnostics": {
+      "title": "空きポートを確認できない理由",
+      "listen": "ホストの待受ポートのスキャンに失敗しました。/proc から /host/proc へのマウントと、コンテナユーザーの読み取り権限を確認してください。直接インストールした場合は ss または /proc が利用可能か確認してください。",
+      "docker": "Docker のスキャンに失敗しました。デーモン、ソケットのマウント、DOCKER_HOST の接続を確認してください。非 root コンテナには group_add でホストのソケット所有グループを追加する必要があります。GID はそのマシンで確認してください。",
+      "compose": "Compose ディレクトリのスキャンに失敗しました。/compose のマウントと読み取り権限を確認してください。Compose ファイルの隣にデータベースなどのデータフォルダーがある場合は、深さを減らすか、それらを除外できます。必要な Compose 設定は除外しないでください。",
+      "composeTruncated": "Compose ファイル数の上限に達しました。対象範囲を絞る、設定以外のフォルダーを除外する、または上限を増やしてください。未スキャンのファイルで宣言されたポートは含まれません。",
+      "composeIncomplete": "一部の Compose ファイルやディレクトリを読み取れないか、設定を完全に解析できませんでした。権限とスキャン範囲を確認し、ログで YAML、必須変数、include/extends のエラーを確認してください。自動で再スキャンされます。",
+      "stale": "直近の使用状況スキャンが古いか、更新に失敗しています。次のスキャンを待ち、続く場合はそのマシンのログとスキャン時間を確認してください。以前のスキャナー状態から現在の原因は特定できません。",
+      "unknown": "この応答には十分な診断情報がありません。更新しても復旧しない場合は、そのマシンのログとスキャナーの状態を確認してください。",
+      "selection": "そのマシンの「設定 → 使用状況」で必要なソースを選択してください。不要なソースだけを無効にしてください。Compose を無効にすると、停止中サービスの宣言ポートは確認されません。",
+      "upgrade": "アップグレードではマウントや権限は変更されません。Compose の環境変数、user、group_add を変更した後は、docker compose up -d でコンテナを再作成してください。docker compose restart では反映されません。",
+      "remote": "この警告はリモートマシンのものです。そのマシンで対処してください。ローカル設定はリモート設定を変更しません。",
+      "settings": "ローカルの使用状況設定を開く",
+      "guide": "設定とアップグレードの説明"
+    },
     "label": "スキャナー",
     "host": "ホスト",
     "docker": "Docker",
@@ -106,7 +121,7 @@
     "label": "ラベル",
     "saveLabel": "ラベルを保存",
     "copyPort": "ポート番号をコピー",
-    "publicBind": "全インターフェース",
+    "publicBind": "ワイルドカードアドレス",
     "publicBindHint": "このポートはホスト上の任意のアドレスからの接続を受け付けます。",
     "remoteReadOnly": "読み取り専用 — このマップは {name} のものです。非表示・ラベル・追加はこのマシンにだけ効きます。",
     "expiresIn": "{time}後に失効",
@@ -215,6 +230,10 @@
         "title": "ポートマップ",
         "blurb": "更新間隔と、空き数に使うポート範囲。"
       },
+      "local": {
+        "title": "このマシン",
+        "blurb": "表示名と、ポート使用状況に含めるローカル情報源。"
+      },
       "scanning": {
         "title": "Compose スキャン",
         "blurb": "更新のたびに compose.yml を探す深さ。"
@@ -245,6 +264,13 @@
     },
     "on": "オン",
     "off": "オフ",
+    "scanners": {
+      "required": "ローカルスキャナーを 1 つ以上有効にしてください。",
+      "state": { "ok": "利用可能", "failed": "利用不可", "checking": "確認中", "disabled": "オフ" },
+      "listen": { "label": "ホストのリスナー", "help": "ローカルの TCP / UDP 待受ソケットを読み取ります。", "remediation": "/host/proc のマウントまたはホストネットワークへのアクセスを確認してください。" },
+      "docker": { "label": "Docker コンテナ", "help": "公開ポートとホストネットワークのコンテナを読み取ります。", "remediation": "Docker ソケットをマウントし、そのグループへのアクセスを付与してください。" },
+      "compose": { "label": "Compose ファイル", "help": "Compose プロジェクトで宣言されたポートを読み取ります。", "remediation": "ディレクトリ、深さ、除外項目、権限を確認してください。" }
+    },
     "fields": {
       "locale": {
         "label": "言語",
@@ -294,9 +320,21 @@
         "label": "範囲の終了",
         "help": "上限です。未使用ポートをすべて緑にはしません。"
       },
+      "host_name": {
+        "label": "マシン名",
+        "help": "ローカルマップの上に表示します。空欄ではシステムのホスト名を使います。"
+      },
+      "local_scanners": {
+        "label": "ローカルスキャナー",
+        "help": "有効な情報源がすべて成功した場合にのみ空きポートを確定します。"
+      },
       "compose_scan_depth": {
         "label": "Compose スキャンの深さ",
         "help": "COMPOSE_SCAN_DIR の下を何階層まで辿るか。"
+      },
+      "compose_scan_exclude_dirs": {
+        "label": "除外フォルダー",
+        "help": "1 行に 1 つ。明示された include / extends ファイルは引き続き読み取ります。"
       },
       "compose_scan_max_files": {
         "label": "Compose ファイルの上限",
@@ -308,7 +346,7 @@
       },
       "url_host": {
         "label": "URL のホスト名",
-        "help": "推定リンクで localhost の代わりに使います。空なら LAN のバインドアドレス。全インターフェースのときは localhost。"
+        "help": "推定リンクで localhost の代わりに使います。空なら LAN のバインドアドレス。ワイルドカードの場合は localhost。"
       },
       "url_scheme": {
         "label": "URL のスキーム",
@@ -434,7 +472,6 @@
     "aria": "ポート占用グリッド",
     "updated": "{time} に更新",
     "leaseBadge": "Agentリース",
-    "anyAddress": "すべて",
     "bindAddress": "{family}：{address}",
     "bindAddressMore": "{family}：{address}（+{count}）"
   },
@@ -449,7 +486,7 @@
     "unknown": "不明"
   },
   "scope": {
-    "public": "全インターフェース",
+    "public": "ワイルドカード",
     "lan": "LAN",
     "link": "リンクローカル",
     "localhost": "localhost"

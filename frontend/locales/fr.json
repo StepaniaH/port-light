@@ -26,7 +26,7 @@
     "access": "Web",
     "udp": "UDP",
     "localhost": "localhost",
-    "public": "Toutes les interfaces",
+    "public": "Adresse générique",
     "hidden": "Masqués",
     "kinds": "Type",
     "sort": "Tri",
@@ -40,6 +40,21 @@
     "byStatus": "Statut"
   },
   "scanner": {
+    "diagnostics": {
+      "title": "Pourquoi les ports libres ne peuvent-ils pas être confirmés ?",
+      "listen": "Le scan des ports en écoute de l’hôte a échoué. Vérifie le montage de /proc vers /host/proc et les droits de lecture de l’utilisateur du conteneur. Pour une installation directe, vérifie que ss ou /proc est disponible.",
+      "docker": "Le scan Docker a échoué. Vérifie le daemon, le montage du socket ou la connexion DOCKER_HOST. Un conteneur non-root doit aussi appartenir au groupe du socket de l’hôte via group_add ; utilise le GID de cette machine.",
+      "compose": "Le scan du répertoire Compose a échoué. Vérifie le montage /compose et les droits de lecture. Si des dossiers de données côtoient les fichiers Compose, réduis la profondeur ou exclus ces dossiers. N’exclus pas les configurations Compose nécessaires.",
+      "composeTruncated": "La limite de fichiers Compose est atteinte. Réduis le périmètre, exclus les dossiers sans configuration ou augmente la limite. Les ports déclarés dans les fichiers non analysés ne sont pas inclus.",
+      "composeIncomplete": "Certains fichiers ou répertoires Compose sont illisibles, ou des configurations sont incomplètes. Vérifie les droits et le périmètre du scan, puis les logs pour les erreurs YAML, les variables obligatoires et include/extends. Le scan est relancé automatiquement.",
+      "stale": "Le dernier scan d’occupation est périmé ou une actualisation a échoué. Attends le prochain scan ; si le problème persiste, vérifie les logs et la durée du scan sur cette machine. Les anciens états des scanners n’identifient pas la panne actuelle.",
+      "unknown": "Cette réponse ne contient pas assez d’informations de diagnostic. Si l’actualisation ne rétablit pas le scan, consulte les logs et l’état des scanners de cette machine.",
+      "selection": "Choisis les sources nécessaires dans Paramètres → Occupation sur cette machine. Ne désactive une source que si elle est inutile ; sans Compose, les ports déclarés des services arrêtés sont ignorés.",
+      "upgrade": "Une mise à jour ne modifie ni les montages ni les droits. Après modification des variables d’environnement, de user ou de group_add dans Compose, lance docker compose up -d pour recréer le conteneur. docker compose restart n’applique pas ces changements.",
+      "remote": "Cet avertissement concerne une machine distante. Corrige le problème sur celle-ci ; les paramètres locaux ne modifient pas sa configuration.",
+      "settings": "Ouvrir les paramètres d’occupation locale",
+      "guide": "Guide de configuration et de mise à jour"
+    },
     "label": "Scanners",
     "host": "Hôte",
     "docker": "Docker",
@@ -106,7 +121,7 @@
     "label": "Libellé",
     "saveLabel": "Enregistrer le libellé",
     "copyPort": "Copier le numéro de port",
-    "publicBind": "Toutes les interfaces",
+    "publicBind": "Adresse générique",
     "publicBindHint": "Ce port accepte les connexions depuis n'importe quelle adresse de l'hôte.",
     "remoteReadOnly": "Lecture seule — cette carte provient de {name}. Masquage, libellés et ajouts restent sur cette machine.",
     "expiresIn": "Expire dans {time}",
@@ -215,6 +230,10 @@
         "title": "Occupation",
         "blurb": "Intervalle d'actualisation et plage utilisée pour le décompte des ports libres."
       },
+      "local": {
+        "title": "Cette machine",
+        "blurb": "Nom et sources locales utilisées pour l’occupation des ports."
+      },
       "scanning": {
         "title": "Analyse Compose",
         "blurb": "Profondeur de recherche des fichiers compose.yml à chaque actualisation."
@@ -245,6 +264,13 @@
     },
     "on": "activé",
     "off": "désactivé",
+    "scanners": {
+      "required": "Au moins un scanner local doit rester activé.",
+      "state": { "ok": "Disponible", "failed": "Indisponible", "checking": "Vérification", "disabled": "Désactivé" },
+      "listen": { "label": "Écoutes de l’hôte", "help": "Lit les sockets TCP et UDP en écoute.", "remediation": "Vérifiez /host/proc ou l’accès au réseau de l’hôte." },
+      "docker": { "label": "Conteneurs Docker", "help": "Lit les ports publiés et les conteneurs en réseau hôte.", "remediation": "Montez le socket Docker et accordez l’accès à son groupe." },
+      "compose": { "label": "Fichiers Compose", "help": "Lit les ports déclarés dans les projets Compose.", "remediation": "Vérifiez le répertoire, la profondeur, les exclusions et les droits." }
+    },
     "fields": {
       "locale": {
         "label": "Langue",
@@ -294,9 +320,21 @@
         "label": "Fin de plage",
         "help": "Borne supérieure. Ne peint pas chaque port inutilisé en vert."
       },
+      "host_name": {
+        "label": "Nom de la machine",
+        "help": "Affiché au-dessus de la carte locale. Vide utilise le nom système."
+      },
+      "local_scanners": {
+        "label": "Scanners locaux",
+        "help": "Toutes les sources activées doivent réussir avant de confirmer les ports libres."
+      },
       "compose_scan_depth": {
         "label": "Profondeur d'analyse Compose",
         "help": "Nombre de niveaux de répertoires à parcourir sous COMPOSE_SCAN_DIR."
+      },
+      "compose_scan_exclude_dirs": {
+        "label": "Dossiers exclus",
+        "help": "Un nom par ligne ; les fichiers include et extends explicites restent suivis."
       },
       "compose_scan_max_files": {
         "label": "Limite de fichiers Compose",
@@ -434,7 +472,6 @@
     "aria": "Grille d'occupation des ports",
     "updated": "Mis à jour à {time}",
     "leaseBadge": "Réservation d'agent",
-    "anyAddress": "toutes",
     "bindAddress": "{family} : {address}",
     "bindAddressMore": "{family} : {address} (+{count})"
   },
@@ -449,7 +486,7 @@
     "unknown": "Inconnu"
   },
   "scope": {
-    "public": "toutes les interfaces",
+    "public": "adresse générique",
     "lan": "LAN",
     "link": "lien local",
     "localhost": "localhost"

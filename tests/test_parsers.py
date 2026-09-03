@@ -6,6 +6,7 @@ import pytest
 
 from backend.compose_scanner import (
     ComposeWouldFail,
+    _find_compose_files,
     _read_env_file,
     expand_port_range,
     parse_expose_entry,
@@ -89,6 +90,53 @@ def test_compose_include_and_depth(tmp_path):
     db = [p for p in ports if p.port == 5432]
     assert {p.project_dir for p in db} == {"apps/wiki"}
     assert {p.project_name for p in db} == {"wiki"}
+
+
+def test_compose_depth_does_not_enter_children_beyond_the_limit(tmp_path, monkeypatch):
+    """Depth 1 includes project files without touching project data dirs."""
+    project = tmp_path / "app"
+    project.mkdir()
+    compose = project / "compose.yml"
+    compose.write_text("services: {}\n", encoding="utf-8")
+
+    def guarded_walk(root, onerror=None):
+        root_dirs = ["app"]
+        yield str(tmp_path), root_dirs, []
+        if "app" not in root_dirs:
+            return
+        project_dirs = ["private-data"]
+        yield str(project), project_dirs, ["compose.yml"]
+        if "private-data" in project_dirs:
+            raise PermissionError(str(project / "private-data"))
+
+    monkeypatch.setattr(os, "walk", guarded_walk)
+    files, truncated = _find_compose_files(str(tmp_path), max_depth=1, max_files=10)
+
+    assert files == [str(compose)]
+    assert truncated is False
+
+
+def test_compose_discovery_can_exclude_directory_names(tmp_path):
+    app = tmp_path / "app"
+    data = app / "data"
+    data.mkdir(parents=True)
+    main = app / "compose.yml"
+    ignored = data / "compose.yml"
+    main.write_text("include:\n  - data/compose.yml\n", encoding="utf-8")
+    ignored.write_text(
+        "services:\n  nested:\n    ports:\n      - '9123:80'\n",
+        encoding="utf-8",
+    )
+
+    files, truncated = _find_compose_files(
+        str(tmp_path), max_depth=4, max_files=10, exclude_dirs=("data",),
+    )
+
+    assert files == [str(main)]
+    assert truncated is False
+    assert {row.port for row in scan_compose_files(
+        str(tmp_path), max_depth=4, max_files=10, exclude_dirs=("data",),
+    )} == {9123}
 
 
 def test_include_env_file_and_export(tmp_path):

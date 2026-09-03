@@ -458,6 +458,7 @@ a:focus-visible,
 .scanner-dots .pill.ok { background: var(--free); }
 .scanner-dots .pill.ok.warn { background: var(--configured); }
 .scanner-dots .pill.bad { opacity: 0.55; }
+.scanner-dots .pill.disabled { background: var(--text-dim); opacity: 0.4; }
 .sync-error { font-size: 0.72rem; color: var(--danger); white-space: nowrap; }
 .sync-age { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
@@ -481,7 +482,24 @@ a:focus-visible,
 .legend .stat:not(.is-static):hover { background: var(--card-hover); color: var(--text); }
 .legend .stat.active { background: var(--chip-active-bg); color: var(--accent); }
 .legend .stat.is-static { cursor: default; }
-.scan-warning { flex-basis: 100%; color: var(--configured); }
+.scan-warning { position: relative; flex-basis: 100%; min-width: 0; color: var(--configured); }
+.scan-warning > summary { cursor: pointer; list-style: none; line-height: 1.6; border-radius: 4px; }
+.scan-warning > summary::-webkit-details-marker { display: none; }
+.scan-warning > summary:focus-visible { outline: none; box-shadow: var(--focus); }
+.scan-warning-info { white-space: nowrap; }
+.scan-warning-panel {
+  position: absolute; top: 100%; left: 0; z-index: 35;
+  box-sizing: border-box; width: min(32rem, 100%); max-height: 65vh; overflow-y: auto;
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); color: var(--text); font-size: 0.8rem; line-height: 1.65;
+  box-shadow: 0 8px 28px #0003;
+}
+.scan-warning-panel p { margin: 8px 0; }
+.scan-warning-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; }
+.scan-warning-links a { color: var(--accent); text-underline-offset: 3px; }
+.host-scan-notice { flex: 1 1 100%; min-width: 0; }
+/* Host boards scroll horizontally; keep their disclosures inside the board. */
+.host-board .scan-warning-panel { position: static; width: 100%; margin-top: 8px; }
 .legend .num { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
 .legend .stat.active .num { color: var(--accent); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
@@ -1059,13 +1077,36 @@ a:focus-visible,
 .setting-control { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .origin-hint { font-size: 0.68rem; color: var(--text-dim); cursor: help; }
 
+.scanner-setting { margin: 0; min-width: 0; border-right: 0; border-bottom: 0; border-left: 0; }
+.scanner-setting legend { padding: 0; }
+.scanner-options { width: 100%; gap: 7px; }
+.scanner-option {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--bg); cursor: pointer;
+}
+.scanner-option-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.scanner-option-main > input { margin-top: 3px; accent-color: var(--accent); }
+.scanner-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.scanner-name { font-size: 0.82rem; font-weight: 600; }
+.scanner-state {
+  padding: 2px 7px; border-radius: 999px; font-size: 0.68rem; font-weight: 650;
+  color: var(--text-dim); background: var(--elevated);
+}
+.scanner-state.ok { color: var(--free); }
+.scanner-state.failed { color: var(--danger); }
+.scanner-state.checking { color: var(--configured); }
+.scanner-remediation { margin-top: 3px; color: var(--danger); font-size: 0.72rem; }
+
 .setting-row input[type="number"],
 .setting-row input[type="text"],
-.setting-row select {
+.setting-row select,
+.setting-row textarea {
   width: 200px; height: 34px; padding: 0 10px;
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
 }
-.setting-row input:focus, .setting-row select:focus { outline: none; box-shadow: var(--focus); }
+.setting-row textarea { height: auto; min-height: 72px; padding-top: 8px; resize: vertical; }
+.setting-row input:focus, .setting-row select:focus, .setting-row textarea:focus { outline: none; box-shadow: var(--focus); }
 
 .seg-opt {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1173,7 +1214,10 @@ a:focus-visible,
   .setting-row input[type="number"],
   .setting-row input[type="text"],
   .setting-row select,
+  .setting-row textarea,
   .locale-dropdown { width: 100%; }
+  .scanner-option { grid-template-columns: 1fr; }
+  .scanner-state { justify-self: start; }
   .theme-picker-palettes { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
   .setting-control .segmented { width: 100%; }
   .setting-control .segmented .seg-opt { flex: 1; }

@@ -28,7 +28,7 @@ _FALSE = frozenset({"0", "false", "no", "off"})
 @dataclass(frozen=True)
 class FieldSpec:
     key: str
-    kind: Literal["bool", "int", "str", "choice"]
+    kind: Literal["bool", "int", "str", "choice", "multi_choice", "string_list"]
     env: str
     default: Any
     group: str
@@ -113,9 +113,24 @@ FIELDS: tuple[FieldSpec, ...] = (
         min=1, max=65535,
     ),
     FieldSpec(
+        "host_name", "str", "PORT_LIGHT_HOST_NAME", "", "local",
+        "This machine", "Name shown above this machine's occupancy map. Empty uses the system hostname.",
+        max_length=40,
+    ),
+    FieldSpec(
+        "local_scanners", "multi_choice", "PORT_LIGHT_SCANNERS",
+        ("listen", "docker", "compose"), "local",
+        "Local scanners", "Choose which local sources contribute occupancy. Keep at least one enabled.",
+        choices=("listen", "docker", "compose"),
+    ),
+    FieldSpec(
         "compose_scan_depth", "int", "COMPOSE_SCAN_DEPTH", 4, "scanning",
         "Compose scan depth", "How many directory levels under COMPOSE_SCAN_DIR to walk.",
         min=1, max=16,
+    ),
+    FieldSpec(
+        "compose_scan_exclude_dirs", "string_list", "COMPOSE_SCAN_EXCLUDE_DIRS", (), "scanning",
+        "Excluded folders", "Folder names to skip during Compose discovery, one per line.",
     ),
     FieldSpec(
         "compose_scan_max_files", "int", "COMPOSE_SCAN_MAX_FILES", 400, "scanning",
@@ -213,6 +228,39 @@ def _coerce(spec: FieldSpec, raw: Any) -> Any:
         if spec.max is not None and value > spec.max:
             raise ValueError(f"{spec.key} must be <= {spec.max}")
         return value
+    if spec.kind == "multi_choice":
+        if isinstance(raw, str):
+            items = raw.split(",")
+        elif isinstance(raw, (list, tuple, set, frozenset)):
+            items = raw
+        else:
+            raise ValueError(f"{spec.key} must be a list")
+        selected = {str(item).strip() for item in items if str(item).strip()}
+        unknown = selected - set(spec.choices)
+        if unknown:
+            raise ValueError(f"{spec.key} contains unknown choices: {', '.join(sorted(unknown))}")
+        if not selected:
+            raise ValueError(f"{spec.key} must select at least one choice")
+        return [choice for choice in spec.choices if choice in selected]
+    if spec.kind == "string_list":
+        if isinstance(raw, str):
+            items = re.split(r"[,\n]", raw)
+        elif isinstance(raw, (list, tuple, set, frozenset)):
+            items = raw
+        else:
+            raise ValueError(f"{spec.key} must be a list")
+        values: list[str] = []
+        for item in items:
+            value = str(item).strip()
+            if not value or value in values:
+                continue
+            if (value in (".", "..") or "/" in value or "\\" in value
+                    or len(value) > 80 or any(ord(ch) < 32 for ch in value)):
+                raise ValueError(f"{spec.key} contains an invalid folder name")
+            values.append(value)
+        if len(values) > 32:
+            raise ValueError(f"{spec.key} contains too many folder names")
+        return values
     text = "" if raw is None else str(raw).strip()
     if spec.key == "theme_palette":
         custom = re.fullmatch(r"@custom:([0-9a-f]{8})", text)
@@ -253,6 +301,12 @@ def _parse_env(spec: FieldSpec) -> Any | None:
         return None
 
 
+def _default_value(spec: FieldSpec) -> Any:
+    if spec.kind in ("multi_choice", "string_list"):
+        return _coerce(spec, spec.default)
+    return spec.default
+
+
 def resolve() -> tuple[dict[str, Any], dict[str, Origin]]:
     stored = _migrate_stored(port_store.get_stored_settings())
     mode = settings_source()
@@ -271,21 +325,21 @@ def resolve() -> tuple[dict[str, Any], dict[str, Origin]]:
             if env_val is not None:
                 values[spec.key], origins[spec.key] = env_val, "env"
             else:
-                values[spec.key], origins[spec.key] = spec.default, "default"
+                values[spec.key], origins[spec.key] = _default_value(spec), "default"
         elif mode == "file":
             if file_val is not None:
                 values[spec.key], origins[spec.key] = file_val, "file"
             elif env_val is not None:
                 values[spec.key], origins[spec.key] = env_val, "env"
             else:
-                values[spec.key], origins[spec.key] = spec.default, "default"
+                values[spec.key], origins[spec.key] = _default_value(spec), "default"
         else:
             if file_val is not None:
                 values[spec.key], origins[spec.key] = file_val, "file"
             elif env_val is not None:
                 values[spec.key], origins[spec.key] = env_val, "env"
             else:
-                values[spec.key], origins[spec.key] = spec.default, "default"
+                values[spec.key], origins[spec.key] = _default_value(spec), "default"
     start, end = values["port_range_start"], values["port_range_end"]
     if end < start:
         values["port_range_end"] = start

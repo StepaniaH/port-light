@@ -5,7 +5,14 @@ import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
 const { S } = await import('../js/state.js?v=' + version);
-const { bindAddressView, buildSearchContext, renderGrid, renderSummary } = await import('../js/grid.js?v=' + version);
+const { bindAddressView, buildSearchContext, renderGrid, renderSummary, renderScanners } = await import('../js/grid.js?v=' + version);
+
+test('disabled scanner indicators are neutral, not failure indicators', () => {
+  const root = document.createElement('div');
+  renderScanners({}, root, { summary: { sources: { listen: 'ok', docker: 'failed', compose: 'disabled' } } });
+  assert.equal(root.querySelectorAll('.pill.disabled').length, 1);
+  assert.equal(root.querySelectorAll('.pill.bad').length, 1);
+});
 
 test('search and summary do not claim free ports from incomplete or stale data', () => {
   for (let port = 41950; port < 42051; port++) S.knownCache[port] = null;
@@ -34,6 +41,17 @@ test('bind address view is optional and keeps full addresses out of visual elisi
   assert.match(on.html, /2001:…:7334/);
   assert.match(on.html, /bind-more">\+1/);
   assert.ok(on.titleParts.some((part) => part.includes('2001:db8:85a3::8a2e:370:7334')));
+});
+
+test('bind address view omits wildcard-only families from cards', () => {
+  const onlyWildcards = bindAddressView(['0.0.0.0', '::'], { enabled: true });
+  assert.equal(onlyWildcards.html, '');
+  assert.deepEqual(onlyWildcards.ariaParts, []);
+
+  const mixed = bindAddressView(['0.0.0.0', 'fd12::19'], { enabled: true });
+  assert.doesNotMatch(mixed.html, /v4/);
+  assert.match(mixed.html, /v6/);
+  assert.match(mixed.html, /fd12::19/);
 });
 
 test('grid cards render selected bind families and expose exact values in title', () => {
@@ -74,9 +92,9 @@ test('bind address accessibility labels use complete locale templates', () => {
         },
       };
       const view = bindAddressView(['0.0.0.0', '192.0.2.1', '2001:db8::1'], { enabled: true });
-      assert.deepEqual(view.ariaParts, locale === 'en'
-        ? ['IPv4: any (+1)', 'IPv6: 2001:db8::1']
-        : ['IPv4：全部接口（+1）', 'IPv6：2001:db8::1']);
+      assert.deepEqual(view.ariaParts, [locale === 'en'
+        ? 'IPv6: 2001:db8::1'
+        : 'IPv6：2001:db8::1']);
     }
   } finally {
     window.PortLightI18n = previous;
