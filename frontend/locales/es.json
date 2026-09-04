@@ -9,7 +9,52 @@
     "showHidden": "Mostrar puertos ocultos",
     "hiddenVisible": "Puertos ocultos visibles",
     "settings": "Ajustes",
+    "doctor": "Diagnóstico de instalación",
     "findFree": "Buscar puertos libres"
+  },
+  "doctor": {
+    "title": "Setup / Doctor",
+    "lead": "Comprueba la instalación y crea un informe de diagnóstico anonimizado.",
+    "refresh": "Ejecutar comprobaciones", "copy": "Copiar informe anonimizado", "download": "Descargar informe",
+    "running": "Ejecutando comprobaciones…", "failed": "No se pudo cargar el diagnóstico.",
+    "copied": "Informe anonimizado copiado.", "copyFailed": "No se pudo copiar el informe.",
+    "preview": "Vista previa del informe anonimizado",
+    "summary": "{pass} correctas · {warning} avisos · {fail} fallos",
+    "status": { "pass": "Correcto", "warning": "Aviso", "fail": "Fallo", "info": "Info" },
+    "overall": { "healthy": "La instalación parece correcta", "attention": "La instalación requiere atención" },
+    "check": {
+      "settings_store": "Almacenamiento de ajustes", "snapshot": "Instantánea de ocupación",
+      "listen": "Puertos en escucha", "docker": "Docker", "compose": "Detección de Compose",
+      "degradations": "Degradaciones recientes"
+    },
+    "detail": {
+      "readonly": "Los ajustes se administran deliberadamente desde el entorno.",
+      "writable": "Se puede escribir en el directorio de datos.", "not_writable": "No se puede escribir en el directorio de datos.",
+      "not_initialized": "El primer análisis de ocupación aún no ha terminado.",
+      "stale": "La última instantánea de ocupación está obsoleta.", "ready": "La instantánea de ocupación está completa y actualizada.",
+      "incomplete": "El resultado del análisis está incompleto.", "disabled": "Esta fuente está desactivada.",
+      "ok": "El último análisis de esta fuente terminó correctamente.", "failed": "El último análisis de esta fuente falló.",
+      "access_failed": "No se puede acceder al socket o directorio requerido.",
+      "checking": "Esta fuente aún no ha informado de un resultado.", "untrusted": "La tabla de escucha disponible puede no representar al host.",
+      "recent": "Se registraron degradaciones recientes.", "none": "No se registraron degradaciones recientes."
+    },
+    "evidence": {
+      "age": "Antigüedad de la instantánea: {value} s", "listen": "Fuente seleccionada: {source}",
+      "docker": "Transporte: {transport}", "compose": "Archivos Compose analizados: {count}",
+      "events": "Eventos recientes: {count}", "settings": "Fuente de ajustes: {source}"
+    },
+    "remediation": {
+      "settings_store": "Comprueba el montaje del volumen de datos y los permisos de escritura del usuario del contenedor.",
+      "snapshot": "Espera a la siguiente actualización; si persiste, corrige la fuente con fallos y revisa los registros.",
+      "listen": "Comprueba el montaje de solo lectura de /host/proc o la red del host, y la disponibilidad de ss o lsof.",
+      "docker": "Comprueba el montaje del socket de Docker y concede al usuario del contenedor el GID del socket.",
+      "compose": "Comprueba el montaje de Compose, permisos, profundidad, límite de archivos, exclusiones y errores de análisis.",
+      "degradations": "Revisa las comprobaciones fallidas y los registros y vuelve a ejecutar Doctor."
+    },
+    "transport": {
+      "configured": "destino configurado", "socket_readable": "socket accesible",
+      "socket_denied": "permiso del socket denegado", "socket_missing": "socket no encontrado"
+    }
   },
   "legend": {
     "inUse": "en uso",
@@ -146,6 +191,7 @@
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
     "incomplete": "Introduce un nombre y una URL para cada equipo. Las entradas completas se guardan automáticamente.",
+    "saveFailed": "No se pudieron guardar los equipos. Edita un equipo para reintentar.",
     "description": "Descripción breve (opcional)",
     "descriptionPlaceholder": "P. ej.: Tailscale 100.64.0.12 · Servidor doméstico",
     "max": "Hasta {count} equipos adicionales.",
@@ -200,8 +246,13 @@
       "new": "Nueva paleta personalizada",
       "save": "Guardar",
       "export": "Exportar",
+      "exported": "Archivo de paleta exportado.",
+      "exportFailed": "No se pudo exportar el archivo de paleta.",
       "import": "Importar",
       "invalid": "Corrija los valores de color resaltados y ponga un nombre a la paleta.",
+      "saveFailed": "No se pudo guardar la paleta.",
+      "importFailed": "No se pudo importar el archivo de paleta.",
+      "deleteFailed": "No se pudo eliminar la paleta.",
       "vars": {
         "bg": "Fondo", "elevated": "Superficies elevadas", "card": "Tarjetas",
         "cardHover": "Tarjeta al pasar el cursor", "border": "Bordes", "text": "Texto",
@@ -263,7 +314,8 @@
     },
     "origin": {
       "saved": "Guardado",
-      "env": "Entorno"
+      "env": "Entorno",
+      "restore": "Restaurar valor heredado"
     },
     "source": {
       "auto": "Auto",

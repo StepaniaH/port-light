@@ -26,7 +26,7 @@
       }
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=89">
+  <link rel="stylesheet" href="/static/style.css?v=90">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -161,6 +161,11 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
           <button type="button" id="btn-unhide" class="icon-btn" data-i18n-title="action.showHidden" aria-pressed="false">
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 3c-3.2 0-5.9 2.1-7.2 5 1.3 2.9 4 5 7.2 5s5.9-2.1 7.2-5C13.9 5.1 11.2 3 8 3zm0 8.2A3.2 3.2 0 1 1 8 4.8a3.2 3.2 0 0 1 0 6.4zM8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8z"/></svg>
           </button>
+          <a href="#/doctor" id="btn-doctor" class="icon-btn" data-nav="doctor" data-i18n-title="action.doctor">
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
+              <path d="M2 8h2.2l1.1-3.2 2.1 6.4L9 7.1l1 1.9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
           <a href="#/settings" id="btn-settings" class="icon-btn" data-nav="settings" data-i18n-title="action.settings">
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5.87-2.13.9.52a.75.75 0 0 1 .28 1.02l-.7 1.21a.75.75 0 0 1-.95.32l-1.04-.4a5.03 5.03 0 0 1-1.13.65l-.16 1.1A.75.75 0 0 1 9.32 14H6.68a.75.75 0 0 1-.74-.64l-.16-1.1a5.03 5.03 0 0 1-1.13-.65l-1.04.4a.75.75 0 0 1-.95-.32l-.7-1.21a.75.75 0 0 1 .28-1.02l.9-.52a5.1 5.1 0 0 1 0-1.74l-.9-.52a.75.75 0 0 1-.28-1.02l.7-1.21a.75.75 0 0 1 .95-.32l1.04.4c.35-.27.73-.5 1.13-.65l.16-1.1A.75.75 0 0 1 6.68 2h2.64a.75.75 0 0 1 .74.64l.16 1.1c.4.15.78.38 1.13.65l1.04-.4a.75.75 0 0 1 .95.32l.7 1.21a.75.75 0 0 1-.28 1.02l-.9.52c.08.57.08 1.17 0 1.74z"/></svg>
           </a>
@@ -226,6 +231,22 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
       </form>
     </section>
 
+    <section id="view-doctor" class="view hidden">
+      <main id="doctor-page" class="doctor-page" tabindex="-1">
+        <div class="page-intro">
+          <h1 data-i18n="doctor.title">Doctor</h1>
+          <p class="settings-lead" data-i18n="doctor.lead">Check setup health and create a sanitized diagnostic report.</p>
+        </div>
+        <div class="doctor-actions">
+          <button type="button" class="btn-secondary" id="doctor-refresh" data-i18n="doctor.refresh">Run checks</button>
+          <button type="button" class="btn-secondary" id="doctor-copy" data-i18n="doctor.copy" disabled>Copy sanitized report</button>
+          <a class="btn-secondary" id="doctor-download" href="/api/doctor/report" download data-i18n="doctor.download">Download report</a>
+        </div>
+        <p id="doctor-status" class="action-status" role="status" aria-live="polite"></p>
+        <div id="doctor-results"></div>
+      </main>
+    </section>
+
     <div id="detail-backdrop" class="hidden"></div>
     <aside id="detail-panel" class="hidden" data-i18n-aria="detail.panel">
       <div id="detail-content"></div>
@@ -282,7 +303,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=89"></script>
-  <script type="module" src="/static/js/app.js?v=89"></script>
+  <script src="/static/i18n.js?v=90"></script>
+  <script type="module" src="/static/js/app.js?v=90"></script>
 </body>
 </html>

@@ -1,28 +1,24 @@
 /* Port-Light frontend */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=89';
-import { errorText, escapeHtml, t } from './text.js?v=89';
-import { moveChipFocus, trapTab } from './a11y.js?v=89';
+import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=90';
+import { errorText, escapeHtml, t } from './text.js?v=90';
+import { moveChipFocus, trapTab } from './a11y.js?v=90';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=89';
-import { openModal, closeModals, modalOpen } from './modal.js?v=89';
-import { applyRoute as updateRoute } from './router.js?v=89';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=89';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=89';
-import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=89';
-import { refreshFleet } from './fleet.js?v=89';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=89';
-import {
-  goSettingsPanel, saveSettingsPage, applyServerSettings, markDirty, isAutosavedSetting,
-  syncDependentSettings, syncLocaleTrigger, closeLocaleMenu,
-  moveLocaleHighlight, renderPeersEditor, readPeersDraftFromForm, syncPaletteAvailability,
-  syncRefreshCapacity, updateRefreshSlider,
-} from './settings.js?v=89';
+} from './dom.js?v=90';
+import { openModal, closeModals, modalOpen } from './modal.js?v=90';
+import { applyRoute as updateRoute } from './router.js?v=90';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=90';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=90';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=90';
+import { refreshFleet } from './fleet.js?v=90';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=90';
+import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=90';
+import { mountDoctorPage } from './doctor.js?v=90';
 
 (function () {
   'use strict';
@@ -39,26 +35,11 @@ import {
     }
   }
 
-  let settingsSaveTimer = null;
-  let settingsSaveQueue = Promise.resolve();
-
-  function scheduleSettingsAutosave(delay) {
-    if (S.settingsDoc && S.settingsDoc.readonly) return;
-    if (settingsSaveTimer) clearTimeout(settingsSaveTimer);
-    settingsSaveTimer = setTimeout(function () {
-      settingsSaveTimer = null;
-      settingsSaveQueue = settingsSaveQueue.catch(function () { return false; }).then(function () {
-        if (!S.settingsDirty) return false;
-        return saveSettingsPage();
-      }).then(function (saved) {
-        if (saved) setupRefresh();
-        return saved;
-      });
-    }, Math.max(0, Number(delay) || 0));
-  }
+  let settingsPage = null;
+  let doctorPage = null;
 
   function applyRoute() {
-    updateRoute({ render, refresh: tick });
+    updateRoute({ render, refresh: tick, settingsPage, doctorPage });
   }
 
   async function updateHostHealth(hostId) {
@@ -70,6 +51,10 @@ import {
   }
 
   let loadGeneration = 0;
+
+  function onWorkspacePage() {
+    return S.route.name === 'settings' || S.route.name === 'doctor';
+  }
 
   async function loadAllOccupancy(opts, generation) {
     let ids = listedHosts().map(function (h) { return h.id; });
@@ -98,7 +83,7 @@ import {
       if (id === S.focusHostId && result.ok && S.hostMaps[id].data) {
         S.currentData = S.hostMaps[id].data;
         markRefreshed();
-        if (usesFocusedHostView() && S.route.name !== 'settings') {
+        if (usesFocusedHostView() && !onWorkspacePage()) {
           S.occupancyKey = occupancyFingerprint();
           render();
         }
@@ -165,11 +150,11 @@ import {
     if (shouldRender) render();
   }
   function runTick(opts) {
-    if (S.route.name === 'settings') return;
+    if (onWorkspacePage()) return;
     if (modalOpen()) return;
     const wantHidden = S.showHidden;
     return loadPorts(opts).then(function (data) {
-      if (S.route.name === 'settings') return;
+      if (onWorkspacePage()) return;
       if (S.showHidden !== wantHidden) return;
       if (!hasPeers()) {
         if (!data) return;
@@ -201,7 +186,7 @@ import {
   let refreshQueued = null;
 
   function tick(opts) {
-    if (S.route.name === 'settings' || modalOpen()) return Promise.resolve(null);
+    if (onWorkspacePage() || modalOpen()) return Promise.resolve(null);
     const localOnly = !!(opts && opts.localOnly);
     if (refreshInFlight) {
       // A local event must not replace an already queued timer/manual fleet refresh.
@@ -225,7 +210,7 @@ import {
     if (!window.EventSource || eventStream) return;
     eventStream = new EventSource('/api/events');
     eventStream.addEventListener('refresh', function () {
-      if (S.settings.auto_refresh && S.route.name !== 'settings' && !modalOpen()) tick({ localOnly: true });
+      if (S.settings.auto_refresh && !onWorkspacePage() && !modalOpen()) tick({ localOnly: true });
     });
   }
 
@@ -241,6 +226,16 @@ import {
   }
 
   configureDetail({ refresh: tick, loadPorts });
+
+  settingsPage = mountSettingsPage(document.getElementById('settings-form'), {
+    onSaved: setupRefresh,
+    onLocaleApplied() {
+      syncHiddenButton();
+      if (S.currentData) render();
+      syncHeaderHeight();
+    },
+  });
+  doctorPage = mountDoctorPage(document.getElementById('doctor-page'));
 
   hydrateCachedAppearance();
   try {
@@ -270,6 +265,7 @@ import {
 
   function occupancyFocusTarget() {
     if (S.route.name === 'settings') return document.getElementById('settings-form');
+    if (S.route.name === 'doctor') return document.getElementById('doctor-page');
     if (hasPeers()) {
       return document.getElementById('host-grid-' + S.focusHostId)
         || document.querySelector('.host-grid')
@@ -282,7 +278,7 @@ import {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
       if ((S.settings.theme_mode || 'system') === 'system') {
         applyTheme();
-        syncPaletteAvailability();
+        if (settingsPage) settingsPage.syncPaletteAvailability();
       }
     });
   } catch (e) {}
@@ -541,8 +537,8 @@ import {
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       if (modalOpen()) { closeModals(); return; }
-      if (closeLocaleMenu({ focusTrigger: true })) return;
-      if (S.route.name === 'settings') {
+      if (settingsPage && settingsPage.closeTransient({ focusTrigger: true })) return;
+      if (onWorkspacePage()) {
         location.hash = '#/';
         return;
       }
@@ -583,25 +579,24 @@ import {
       if (e.key === 'ArrowUp') { e.preventDefault(); moveLocaleHighlight(-1); return; }
       if (e.key === 'Home') { e.preventDefault(); moveLocaleHighlight('start'); return; }
       if (e.key === 'End') { e.preventDefault(); moveLocaleHighlight('end'); return; }
-      if (e.key === 'Tab') { closeLocaleMenu(); return; }
+      if (e.key === 'Tab') { settingsPage.closeTransient(); return; }
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
       if (S.route.name === 'settings' && !(S.settingsDoc && S.settingsDoc.readonly)) {
         e.preventDefault();
-        const form = document.getElementById('settings-form');
-        if (form) form.requestSubmit();
+        if (settingsPage) settingsPage.flush();
       }
       return;
     }
     if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (S.route.name === 'settings' || modalOpen()) return;
+    if (onWorkspacePage() || modalOpen()) return;
     e.preventDefault();
     searchInput.focus();
   });
   window.addEventListener('beforeunload', function (e) {
-    if (!S.settingsDirty) return;
+    if (!settingsPage || !settingsPage.hasPending()) return;
     e.preventDefault();
     e.returnValue = '';
   });
@@ -699,153 +694,12 @@ import {
     });
   }
 
-  document.getElementById('settings-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    scheduleSettingsAutosave(0);
-  });
-  document.getElementById('settings-nav').addEventListener('click', function (e) {
-    const btn = e.target.closest('[role="tab"][data-settings-panel]');
-    if (!btn) return;
-    e.preventDefault();
-    goSettingsPanel(btn.getAttribute('data-settings-panel'));
-  });
-  document.getElementById('settings-nav').addEventListener('keydown', function (e) {
-    const btn = e.target.closest('[role="tab"][data-settings-panel]');
-    if (!btn) return;
-    let i = SETTINGS_PANELS.indexOf(btn.getAttribute('data-settings-panel'));
-    if (i < 0) return;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') i = (i + 1) % SETTINGS_PANELS.length;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') i = (i - 1 + SETTINGS_PANELS.length) % SETTINGS_PANELS.length;
-    else if (e.key === 'Home') i = 0;
-    else if (e.key === 'End') i = SETTINGS_PANELS.length - 1;
-    else return;
-    e.preventDefault();
-    goSettingsPanel(SETTINGS_PANELS[i]);
-    const nextBtn = document.getElementById('settings-tab-' + SETTINGS_PANELS[i]);
-    if (nextBtn) nextBtn.focus();
-  });
-  document.getElementById('settings-fields').addEventListener('change', function (e) {
-    if (!isAutosavedSetting(e.target)) return;
-    const field = e.target && e.target.name;
-    if (LIVE_APPLY_KEYS.indexOf(field) >= 0) {
-      S.settings[field] = e.target.value;
-      applyAppearance();
-      if (field === 'theme_mode') syncPaletteAvailability();
-      if (field === 'locale' && window.PortLightI18n) {
-        PortLightI18n.load(S.settings.locale).then(function () {
-          PortLightI18n.applyDom();
-          syncLocaleTrigger();
-          syncRefreshCapacity();
-          syncHiddenButton();
-          if (S.settingsDoc) {
-            const lead = document.getElementById('settings-lead');
-            lead.textContent = t(S.settingsDoc.readonly ? 'settings.leadReadonly' : 'settings.lead');
-          }
-          const status = document.getElementById('settings-status');
-          if (S.settingsDirty && status && !status.classList.contains('is-error')) {
-            status.textContent = t('settings.unsaved');
-          }
-          if (S.currentData) render();
-          syncHeaderHeight();
-        });
-      }
-    }
-    markDirty();
-    syncDependentSettings();
-    scheduleSettingsAutosave(180);
-  });
-  document.getElementById('settings-fields').addEventListener('input', function (e) {
-    if (!isAutosavedSetting(e.target)) return;
-    updateRefreshSlider(e.target);
-    markDirty();
-    scheduleSettingsAutosave(700);
-  });
-  document.getElementById('settings-fields').addEventListener('click', function (e) {
-    const add = e.target.closest('#peer-add');
-    if (add) {
-      e.preventDefault();
-      if (S.hostCatalog.readonly || (S.settingsDoc && S.settingsDoc.readonly)) return;
-      readPeersDraftFromForm();
-      if (S.peersDraft.length >= (Number(S.hostCatalog.max_peers) || 32)) return;
-      S.peersDraft.push({ id: '', name: '', description: '', url: '', username: '', password: '', has_auth: false, clear_auth: false });
-      renderPeersEditor(false);
-      markDirty();
-      scheduleSettingsAutosave(180);
-      return;
-    }
-    const row = e.target.closest('.peer-row');
-    if (!row) return;
-    if (e.target.closest('[data-peer-remove]')) {
-      e.preventDefault();
-      readPeersDraftFromForm();
-      const i = parseInt(row.getAttribute('data-peer-index'), 10);
-      if (!isNaN(i)) S.peersDraft.splice(i, 1);
-      renderPeersEditor(!!(S.settingsDoc && S.settingsDoc.readonly) || !!S.hostCatalog.readonly);
-      markDirty();
-      scheduleSettingsAutosave(180);
-      return;
-    }
-    if (e.target.closest('[data-peer-clear-auth]')) {
-      e.preventDefault();
-      readPeersDraftFromForm();
-      const i = parseInt(row.getAttribute('data-peer-index'), 10);
-      if (!isNaN(i) && S.peersDraft[i]) {
-        S.peersDraft[i].clear_auth = true;
-        S.peersDraft[i].has_auth = false;
-        S.peersDraft[i].username = '';
-        S.peersDraft[i].password = '';
-      }
-      renderPeersEditor(false);
-      markDirty();
-      scheduleSettingsAutosave(180);
-    }
-  });
-
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
       return;
     }
     if (S.settings.auto_refresh) setupRefresh();
-  });
-
-  document.getElementById('settings-fields').addEventListener('click', function (e) {
-    const trigger = e.target.closest('.locale-trigger');
-    if (trigger) {
-      e.preventDefault();
-      const drop = trigger.closest('.locale-dropdown');
-      const open = !drop.classList.contains('is-open');
-      closeLocaleMenu();
-      if (open) {
-        drop.classList.add('is-open');
-        trigger.setAttribute('aria-expanded', 'true');
-        const selected = drop.querySelector('.locale-row.is-selected') || drop.querySelector('.locale-row');
-        if (selected) selected.focus({ preventScroll: true });
-      }
-      return;
-    }
-    const row = e.target.closest('.locale-row');
-    if (!row) return;
-    e.preventDefault();
-    const drop = row.closest('.locale-dropdown');
-    const input = drop.querySelector('input[name="locale"]');
-    const value = row.getAttribute('data-value');
-    if (input.value === value) {
-      closeLocaleMenu({ focusTrigger: true });
-      return;
-    }
-    input.value = value;
-    drop.querySelectorAll('.locale-row').forEach(function (r) {
-      const on = r === row;
-      r.classList.toggle('is-selected', on);
-      r.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    syncLocaleTrigger();
-    closeLocaleMenu({ focusTrigger: true });
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  document.addEventListener('click', function (e) {
-    if (!e.target.closest('.locale-dropdown')) closeLocaleMenu();
   });
 
   function startApp() {

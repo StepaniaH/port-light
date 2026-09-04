@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import agent_events, degradations, history, hosts, port_store, themes
+from . import agent_events, degradations, doctor, history, hosts, port_store, themes
 from . import settings as app_settings
 from .auth import (
     auth_configured,
@@ -28,16 +28,17 @@ from .auth import (
 )
 from .classification import classify, free_port_payload
 from .compose_scanner import ComposeScan, scan_compose_tree
-from .docker_scanner import scan_containers
+from .docker_scanner import HAS_DOCKER, scan_containers
 from .known_ports import get_known_port
 from .occupancy_monitor import OccupancyMonitor, SnapshotUnavailable, complete
 from .scan_status import SCANNER_NAMES, ScanUnavailable, enabled_scanners
 from .port_scanner import (
+    host_listen_trusted,
     listen_scan_source,
     scan_listening_ports,
 )
 
-VERSION = "0.7.9"
+VERSION = "0.8.0"
 
 _log_level = os.environ.get("PORT_LIGHT_LOG_LEVEL", "").strip().upper()
 if not logging.getLogger("port-light").handlers and not logging.getLogger().handlers:
@@ -213,6 +214,74 @@ def health(request: Request) -> dict:
         },
         "degradations": recent,
     }
+
+
+def _path_access(path: Path) -> tuple[bool, bool]:
+    """Return existence/readability without exposing the path in diagnostics."""
+    try:
+        return path.is_dir(), path.is_dir() and os.access(path, os.R_OK | os.X_OK)
+    except OSError:
+        return False, False
+
+
+def _data_dir_writable(path: Path) -> bool:
+    try:
+        if path.exists():
+            return path.is_dir() and os.access(path, os.W_OK | os.X_OK)
+        parent = path.parent
+        while not parent.exists() and parent != parent.parent:
+            parent = parent.parent
+        return parent.is_dir() and os.access(parent, os.W_OK | os.X_OK)
+    except OSError:
+        return False
+
+
+def _doctor_document() -> dict:
+    values = _values()
+    monitor = _monitor.status()
+    compose_exists, compose_readable = _path_access(Path(_compose_dir()))
+    data_dir = Path(os.environ.get("PORT_LIGHT_DATA_DIR", "/data"))
+    docker_host = bool(os.environ.get("DOCKER_HOST", "").strip())
+    docker_socket = Path("/var/run/docker.sock")
+    if docker_host:
+        docker_transport = "configured"
+    elif docker_socket.exists():
+        docker_transport = "socket_readable" if os.access(docker_socket, os.R_OK | os.W_OK) else "socket_denied"
+    else:
+        docker_transport = "socket_missing"
+    return doctor.build_diagnostics({
+        "version": VERSION,
+        "settings_source": app_settings.settings_source(),
+        "settings_readonly": app_settings.settings_readonly(),
+        "data_dir_writable": _data_dir_writable(data_dir),
+        "enabled_scanners": list(values["local_scanners"]),
+        "monitor": monitor,
+        "listen_source": listen_scan_source(),
+        "listen_trusted": host_listen_trusted(),
+        "docker_library_available": HAS_DOCKER,
+        "docker_transport": docker_transport,
+        "compose_root_available": compose_exists,
+        "compose_root_readable": compose_readable,
+        "peer_count": len(hosts.list_public_peers()),
+        "auth_required": auth_configured(),
+        "hidden_unlock_required": hidden_unlock_configured(),
+        "degradations": degradations.recent(10),
+    })
+
+
+@app.get("/api/doctor")
+def get_doctor() -> dict:
+    document = _doctor_document()
+    return {**document, "report": doctor.report_text(document)}
+
+
+@app.get("/api/doctor/report")
+def get_doctor_report() -> Response:
+    return Response(
+        content=doctor.report_text(_doctor_document()),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="port-light-diagnostics.json"'},
+    )
 
 
 def _metrics_enabled() -> bool:

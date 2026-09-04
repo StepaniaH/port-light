@@ -6,13 +6,22 @@ import { readFileSync } from 'node:fs';
 import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
-const { isAutosavedSetting, loadSettingsPage, markDirty, peersPayload, refreshThemeChoices,
-  renderPeersEditor, saveSettingsPage, syncSavedPeerRows, syncSettingsMetadata } =
+const { goSettingsPanel, isAutosavedSetting, loadSettingsPage, markDirty, markPeersDirty, peersPayload, refreshThemeChoices,
+  renderPeersEditor, restoreInheritedSetting, savePeersPage, saveSettingsFields, saveSettingsPage,
+  syncSavedPeerRows, syncSettingsMetadata } =
   await import('../js/settings.js?v=' + version);
 const { S } = await import('../js/state.js?v=' + version);
 
 async function withSettingsState(run) {
-  const savedState = { ...S };
+  const savedState = {
+    ...S,
+    settingsConfirmed: { ...S.settingsConfirmed },
+    settingsDraft: { ...S.settingsDraft },
+    settingsDirtyKeys: new Set(S.settingsDirtyKeys),
+    settingsResetKeys: new Set(S.settingsResetKeys),
+    settingsSubmittingKeys: new Set(S.settingsSubmittingKeys),
+    settingsKeyRevisions: { ...S.settingsKeyRevisions },
+  };
   const savedFetch = globalThis.fetch;
   const savedQuery = document.querySelector;
   const savedQueryAll = document.querySelectorAll;
@@ -84,14 +93,160 @@ test('a settings load cannot replace an edit made while the request was in fligh
   });
 });
 
+test('ordinary settings saves send only the dirty field', async () => {
+  await withSettingsState(async form => {
+    const fields = [
+      { key: 'host_name', type: 'str', origin: 'default' },
+      { key: 'theme_mode', type: 'choice', origin: 'default', choices: ['system', 'dark', 'light'] },
+    ];
+    form.elements = {
+      host_name: { name: 'host_name', value: 'Renamed host' },
+      theme_mode: { name: 'theme_mode', value: 'dark' },
+    };
+    S.settingsDoc = { readonly: false, fields, values: { host_name: 'Old host', theme_mode: 'dark' }, custom_themes: [] };
+    S.settingsDraft = { host_name: 'Old host', theme_mode: 'dark' };
+    S.settingsDirtyKeys = new Set();
+    S.settingsResetKeys = new Set();
+    S.settingsSubmittingKeys = new Set();
+    S.settingsKeyRevisions = {};
+    markDirty(form.elements.host_name);
+    let submitted;
+    globalThis.fetch = async (_url, opts) => {
+      submitted = JSON.parse(opts.body);
+      return { ok: true, status: 200, json: async () => ({
+        readonly: false, fields, values: { host_name: 'Renamed host', theme_mode: 'dark' }, custom_themes: [],
+      }) };
+    };
+    assert.equal(await saveSettingsFields(), true);
+    assert.deepEqual(submitted, { host_name: 'Renamed host' });
+    assert.equal(S.settingsDirtyKeys.size, 0);
+  });
+});
+
+test('changing a setting back to its confirmed value clears the dirty key', async () => {
+  await withSettingsState(async form => {
+    const field = { key: 'host_name', type: 'str', origin: 'default' };
+    form.elements = { host_name: { name: 'host_name', value: 'Old host' } };
+    S.settingsDoc = { readonly: false, fields: [field], values: { host_name: 'Old host' }, custom_themes: [] };
+    S.settingsConfirmed = { host_name: 'Old host' };
+    S.settingsDraft = { host_name: 'Old host' };
+    S.settingsDirtyKeys = new Set();
+    S.settingsResetKeys = new Set();
+    S.settingsSubmittingKeys = new Set();
+    S.settingsKeyRevisions = {};
+
+    form.elements.host_name.value = 'New host';
+    markDirty(form.elements.host_name);
+    assert.deepEqual(Array.from(S.settingsDirtyKeys), ['host_name']);
+    form.elements.host_name.value = 'Old host';
+    markDirty(form.elements.host_name);
+    assert.equal(S.settingsDirtyKeys.size, 0);
+    assert.equal(document.getElementById('settings-status').textContent, '');
+    assert.equal(await saveSettingsFields(), false);
+  });
+});
+
+test('reverting while the same key is in flight remains dirty for a follow-up save', async () => {
+  await withSettingsState(async form => {
+    const field = { key: 'host_name', type: 'str', origin: 'default' };
+    form.elements = { host_name: { name: 'host_name', value: 'Old host' } };
+    S.settingsDoc = { readonly: false, fields: [field], values: { host_name: 'Old host' }, custom_themes: [] };
+    S.settingsConfirmed = { host_name: 'Old host' };
+    S.settingsDraft = { host_name: 'New host' };
+    S.settingsDirtyKeys = new Set(['host_name']);
+    S.settingsResetKeys = new Set();
+    S.settingsSubmittingKeys = new Set(['host_name']);
+    S.settingsKeyRevisions = { host_name: 10 };
+    S.settingsRevision = 10;
+    markDirty(form.elements.host_name);
+    assert.deepEqual(Array.from(S.settingsDirtyKeys), ['host_name']);
+    assert.ok(S.settingsKeyRevisions.host_name > 10);
+  });
+});
+
+test('switching settings panels resets the page scroll position', async () => {
+  await withSettingsState(async () => {
+    const savedScroll = window.scrollTo;
+    const calls = [];
+    window.scrollTo = (...args) => calls.push(args);
+    try {
+      goSettingsPanel('occupancy');
+      assert.deepEqual(calls, [[0, 0]]);
+    } finally {
+      window.scrollTo = savedScroll;
+    }
+  });
+});
+
+test('restoring an inherited setting submits null and adopts the resolved value', async () => {
+  await withSettingsState(async form => {
+    const savedField = {
+      key: 'host_name', type: 'str', origin: 'file', can_reset: true,
+      inherited_value: 'Environment host', inherited_origin: 'env', env: 'PORT_LIGHT_HOST_NAME',
+    };
+    form.elements = { host_name: { name: 'host_name', value: 'Saved host' } };
+    S.settingsDoc = { readonly: false, fields: [savedField], values: { host_name: 'Saved host' }, custom_themes: [] };
+    S.settingsDraft = { host_name: 'Saved host' };
+    S.settingsDirtyKeys = new Set();
+    S.settingsResetKeys = new Set();
+    S.settingsSubmittingKeys = new Set();
+    S.settingsKeyRevisions = {};
+    let submitted;
+    globalThis.fetch = async (_url, opts) => {
+      submitted = JSON.parse(opts.body);
+      return { ok: true, status: 200, json: async () => ({
+        readonly: false,
+        fields: [{ ...savedField, origin: 'env', can_reset: false, inherited_value: 'Environment host' }],
+        values: { host_name: 'Environment host' }, custom_themes: [],
+      }) };
+    };
+    assert.equal(restoreInheritedSetting('host_name'), true);
+    assert.equal(form.elements.host_name.value, 'Environment host');
+    assert.equal(await saveSettingsFields(), true);
+    assert.deepEqual(submitted, { host_name: null });
+    assert.equal(S.settingsDraft.host_name, 'Environment host');
+  });
+});
+
+test('settings and machine saves keep independent success and failure state', async () => {
+  await withSettingsState(async form => {
+    const field = { key: 'host_name', type: 'str', origin: 'default' };
+    form.elements = { host_name: { name: 'host_name', value: 'Renamed host' } };
+    S.settingsDoc = { readonly: false, fields: [field], values: { host_name: 'Old host' }, custom_themes: [] };
+    S.settingsDraft = { host_name: 'Old host' };
+    S.settingsDirtyKeys = new Set();
+    S.settingsResetKeys = new Set();
+    S.settingsSubmittingKeys = new Set();
+    S.settingsKeyRevisions = {};
+    markDirty(form.elements.host_name);
+    S.hostCatalog = { readonly: false, peers: [{ id: 'peer0001', name: 'Peer', url: 'http://10.0.0.2:2100' }] };
+    S.peersDraft = [{ id: 'peer0001', name: 'Peer', url: 'http://10.0.0.2:2100' }];
+    markPeersDirty();
+    globalThis.fetch = async url => {
+      if (String(url) === '/api/settings') return {
+        ok: true, status: 200,
+        json: async () => ({ readonly: false, fields: [field], values: { host_name: 'Renamed host' }, custom_themes: [] }),
+      };
+      return { ok: false, status: 503, json: async () => ({ detail: 'Machine store unavailable' }) };
+    };
+    assert.equal(await saveSettingsPage(), true);
+    assert.equal(S.settingsDirtyKeys.size, 0);
+    assert.equal(S.peersDirty, true);
+    assert.equal(S.settingsDirty, true);
+    assert.equal(document.getElementById('settings-status').textContent, 'settings.saved');
+    assert.equal(document.getElementById('peers-status').textContent, 'Machine store unavailable');
+  });
+});
+
 test('a change during the hosts request preserves the newer clear-auth draft for the next save', async () => {
   await withSettingsState(async form => {
     const doc = { readonly: false, fields: [{ key: 'theme_mode', type: 'choice' }], values: { theme_mode: 'dark' }, custom_themes: [] };
     form.elements = { theme_mode: { value: 'dark', disabled: false } };
     S.settingsDoc = doc;
     S.settings = { ...S.settings, theme_mode: 'dark' };
+    S.peersDirty = true;
+    S.peersRevision = 10;
     S.settingsDirty = true;
-    S.settingsRevision = 10;
     S.rangeFromView = true;
     const savedPeer = { id: 'peer0001', name: 'Peer', description: '', url: 'http://10.0.0.2:2100', username: 'admin', has_auth: true };
     const newerDraft = { ...savedPeer, username: '', password: '', has_auth: false, clear_auth: true };
@@ -102,15 +257,15 @@ test('a change during the hosts request preserves the newer clear-auth draft for
       if (String(url) === '/api/hosts') {
         S.peersDraft = [newerDraft];
         renderDraft();
-        markDirty();
+        markPeersDirty();
         return { ok: true, status: 200, json: async () => ({ ...S.hostCatalog, peers: [savedPeer] }) };
       }
       return { ok: true, status: 200, json: async () => doc };
     };
-    assert.equal(await saveSettingsPage(), true);
+    assert.equal(await savePeersPage(), true);
     assert.equal(S.settingsDirty, true);
-    assert.equal(S.settingsRevision, 11);
-    assert.equal(document.getElementById('settings-status').textContent, 'settings.unsaved');
+    assert.equal(S.peersRevision, 11);
+    assert.equal(document.getElementById('peers-status').textContent, 'settings.unsaved');
     assert.deepEqual(S.peersDraft, [newerDraft]);
     assert.deepEqual(peersPayload(), [{ id: 'peer0001', name: 'Peer', description: '', url: 'http://10.0.0.2:2100', username: '', password: '' }]);
   });
@@ -142,19 +297,24 @@ test('theme catalog refresh leaves pending ordinary settings and their input nod
 
 test('an overlapping settings response does not restore an older custom-theme catalog', async () => {
   await withSettingsState(async form => {
-    const doc = { fields: [{ key: 'theme_palette', choices: [''] }], values: { theme_palette: '' }, custom_themes: [] };
+    const doc = { fields: [{ key: 'theme_palette', type: 'choice', choices: [''] }], values: { theme_palette: '' }, custom_themes: [] };
     form.elements = { theme_palette: { value: '', disabled: false } };
     S.settingsDoc = doc;
     S.customThemes = [];
+    S.settingsDraft = { theme_palette: '' };
+    S.settingsDirtyKeys = new Set(['theme_palette']);
+    S.settingsResetKeys = new Set();
+    S.settingsSubmittingKeys = new Set();
+    S.settingsKeyRevisions = { theme_palette: 10 };
     S.settingsDirty = true;
     S.hostCatalog = { readonly: true };
     const themes = [{ id: 'test', name: 'Test', colors: {} }];
     globalThis.fetch = async () => {
       S.customThemes = themes;
-      S.settingsDoc = { ...doc, fields: [{ key: 'theme_palette', choices: ['', '@custom:test'] }] };
+      S.settingsDoc = { ...doc, fields: [{ key: 'theme_palette', type: 'choice', choices: ['', '@custom:test'] }] };
       return { ok: true, json: async () => doc };
     };
-    assert.equal(await saveSettingsPage(), true);
+    assert.equal(await saveSettingsFields(), true);
     assert.deepEqual(S.customThemes, themes);
     assert.deepEqual(S.settingsDoc.fields[0].choices, ['', '@custom:test']);
   });
@@ -186,13 +346,14 @@ test('temporarily incomplete peer fields do not remove the saved peer', async ()
     S.settingsDoc = { readonly: false, fields: [] };
     S.hostCatalog = { readonly: false, peers: [peer] };
     S.peersDraft = [{ ...peer, name: '' }];
+    S.peersDirty = true;
     S.settingsDirty = true;
     renderDraft();
     globalThis.fetch = async () => { throw new Error('Incomplete rows must not be submitted'); };
-    assert.equal(await saveSettingsPage(), false);
+    assert.equal(await savePeersPage(), false);
     assert.equal(S.settingsDirty, true);
     assert.deepEqual(S.hostCatalog.peers, [peer]);
-    assert.equal(document.getElementById('settings-status').textContent, 'hosts.incomplete');
+    assert.equal(document.getElementById('peers-status').textContent, 'hosts.incomplete');
   });
 });
 

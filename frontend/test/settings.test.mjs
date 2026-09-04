@@ -377,6 +377,7 @@ test('theme editor renders 15 color rows and controls', () => {
   assert.ok(out.includes('data-editor-save'));
   assert.ok(out.includes('data-editor-import'));
   assert.ok(out.includes('data-editor-export'));
+  assert.ok(out.indexOf('</details>') < out.indexOf('id="theme-editor-status"'));
   const locked = themeEditorHtml(true);
   assert.match(locked, /disabled/);
 });

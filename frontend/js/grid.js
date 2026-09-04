@@ -1,14 +1,14 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S } from './state.js?v=89';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=89';
-import { KIND_MATCHERS } from './kinds.js?v=89';
-import { isLease } from './leases.js?v=89';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=89';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=89';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=89';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=89';
-import { api } from './api.js?v=89';
+import { S } from './state.js?v=90';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=90';
+import { KIND_MATCHERS } from './kinds.js?v=90';
+import { isLease } from './leases.js?v=90';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=90';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=90';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=90';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=90';
+import { api } from './api.js?v=90';
 
 
   export function syncFilterUI() {
@@ -34,7 +34,7 @@ import { api } from './api.js?v=89';
   }
 
   export function applyPendingGridFocus() {
-    if (S.route.name === 'settings') {
+    if (S.route.name === 'settings' || S.route.name === 'doctor') {
       S.pendingGridFocus = null;
       return;
     }

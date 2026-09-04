@@ -147,13 +147,13 @@ try {
   await peerRow.locator('[data-peer-field="username"]').fill('smoke-user');
   const peerPassword = peerRow.locator('[data-peer-field="password"]');
   await peerPassword.fill('smoke-password');
-  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  await expect(page.locator('#peers-status')).toHaveClass(/is-ok/);
   await expect(peerPassword).toHaveValue('smoke-password');
   await expect(peerRow.locator('[data-peer-clear-auth]')).toBeVisible();
   await peerRow.locator('[data-peer-field="name"]').focus();
   await expect(peerPassword).toHaveValue('');
   await peerRow.locator('[data-peer-clear-auth]').click();
-  await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  await expect(page.locator('#peers-status')).toHaveClass(/is-ok/);
   assert.equal((await (await fetch(hub + '/api/hosts')).json()).peers[0].has_auth, false);
   await expect(page.locator('details.peer-row').first().locator('[data-peer-clear-auth]')).toHaveCount(0);
   await expect(page.locator('[data-settings-panel="occupancy"] [data-setting="host_layout"]')).toHaveCount(0);
@@ -185,6 +185,20 @@ try {
   });
   await expect(page.locator('[data-refresh-hidden]')).toHaveValue('15000');
   await expect(page.locator('#refresh-capacity')).toContainText('Recommended up to 18');
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  assert.ok(await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight));
+  await page.evaluate(() => { document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight; });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  await page.evaluate(() => { document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight; });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await page.evaluate(() => { location.hash = '#/settings/advanced'; });
+  await expect(page.getByRole('tab', { name: 'Advanced', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   const layoutChoice = page.locator('[data-setting="host_layout"]');
   await expect(layoutChoice).toBeVisible();
@@ -230,8 +244,14 @@ try {
   };
   page.on('request', countEditorWrites);
   await page.locator('#theme-editor summary').click();
+  await page.locator('[data-editor-save]').click();
+  await expect(page.locator('#theme-editor-status')).toHaveClass(/is-error/);
   await page.locator('#editor-name').fill('Draft palette');
   await page.locator('[data-editor-hex="bg"]').fill('#223344');
+  const exportDownload = page.waitForEvent('download');
+  await page.locator('[data-editor-export]').click();
+  await exportDownload;
+  await expect(page.locator('#theme-editor-status')).toHaveClass(/is-ok/);
   await delay(900); // Longer than the general settings debounce.
   assert.equal(editorSettingsWrites, 0);
   assert.equal(await page.locator('html').evaluate(el => el.style.getPropertyValue('--bg')), '#223344');
@@ -368,10 +388,23 @@ try {
   await expect(explanation).toBeVisible();
   const bounds = await explanation.boundingBox();
   assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
-  await explanation.locator('a[href="#/settings/occupancy"]').click();
+
+  await page.goto(hub + '/#/doctor');
+  await expect(page.locator('#doctor-page h1')).toHaveText('Setup / Doctor');
+  await expect(page.locator('.doctor-check')).toHaveCount(6);
+  await expect(page.locator('#doctor-copy')).toBeEnabled();
+  await expect(page.locator('#doctor-download')).toHaveAttribute('href', '/api/doctor/report');
+  await expect(page.locator('.doctor-report-preview')).toContainText('"schema_version": 1');
+  const diagnosticReport = await (await fetch(hub + '/api/doctor/report')).text();
+  assert.doesNotMatch(diagnosticReport, /smoke-user|smoke-password|Local ·|Tailscale ·/);
+  assert.ok(!diagnosticReport.includes(peer));
+  assert.ok(!diagnosticReport.includes(hub));
+
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Occupancy', exact: true }).click();
   await expect(page.locator('input[name="host_name"]')).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log('Browser smoke passed: adaptive waterfall, autosaved tabs and settings, mobile waterfall, persisted machine descriptions, slider focus and capacity guidance, keyboard host switch, invalid scanner recovery, detail, saved label, all light palettes, saved/system appearance, mixed bind addresses, batch conflict and retry, scan guidance and mobile layout.');
+  console.log('Browser smoke passed: adaptive waterfall, independent settings and peer saves, draft theme feedback, mobile waterfall, persisted machine descriptions, slider focus and capacity guidance, keyboard host switch, invalid scanner recovery, detail, saved label, all light palettes, saved/system appearance, mixed bind addresses, batch conflict and retry, scan guidance, Doctor checks and sanitized report.');
 } finally {
   if (browser) await browser.close();
   await Promise.all(processes.map(async child => {

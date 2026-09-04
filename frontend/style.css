@@ -1309,6 +1309,13 @@ a:focus-visible,
 .field-help { font-size: 0.75rem; color: var(--text-dim); }
 .setting-control { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .origin-hint { font-size: 0.68rem; color: var(--text-dim); cursor: help; }
+.setting-meta { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.setting-reset {
+  padding: 0; border: 0; background: transparent; color: var(--accent);
+  font: inherit; font-size: 0.7rem; cursor: pointer;
+}
+.setting-reset:hover { text-decoration: underline; }
+.setting-reset:focus-visible { outline: none; box-shadow: var(--focus); }
 
 .scanner-setting { margin: 0; min-width: 0; border-right: 0; border-bottom: 0; border-left: 0; }
 .scanner-setting legend { padding: 0; }
@@ -1448,6 +1455,45 @@ a:focus-visible,
 #settings-status:empty::before { display: none; }
 #settings-status.is-error { color: var(--danger); }
 #settings-status.is-ok { color: var(--free); }
+.action-status { min-height: 1.2em; margin-top: 10px; font-size: 0.76rem; color: var(--text-dim); }
+.action-status:empty { display: none; }
+.action-status.is-error { color: var(--danger); }
+.action-status.is-ok { color: var(--free); }
+
+.doctor-page { max-width: 920px; margin: 0 auto; padding: 32px 24px 72px; }
+.doctor-page:focus { outline: none; }
+.doctor-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 4px; }
+.doctor-actions a { text-decoration: none; }
+.doctor-summary {
+  margin: 18px 0 14px; padding: 16px 18px; border: 1px solid var(--border);
+  border-left: 4px solid var(--free); border-radius: 12px; background: var(--card);
+}
+.doctor-summary.is-attention { border-left-color: var(--configured); }
+.doctor-summary h2 { font-size: 0.98rem; }
+.doctor-summary p { margin-top: 4px; color: var(--text-dim); font-size: 0.8rem; }
+.doctor-checks { display: grid; gap: 8px; }
+.doctor-check {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 18px;
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+}
+.doctor-check-main { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+.doctor-check-main h2 { font-size: 0.88rem; }
+.doctor-check-main p { margin-top: 3px; color: var(--text-dim); font-size: 0.78rem; }
+.doctor-check-main .doctor-remediation { margin-top: 7px; color: var(--text); }
+.doctor-dot { width: 9px; height: 9px; margin-top: 5px; flex: 0 0 auto; border-radius: 50%; background: var(--text-dim); }
+.doctor-check.is-pass .doctor-dot { background: var(--free); }
+.doctor-check.is-warning .doctor-dot { background: var(--configured); }
+.doctor-check.is-fail .doctor-dot { background: var(--danger); }
+.doctor-badge {
+  flex: 0 0 auto; padding: 3px 7px; border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text-dim); font-size: 0.68rem;
+}
+.doctor-report-preview { margin-top: 16px; }
+.doctor-report-preview summary { cursor: pointer; color: var(--text-dim); font-size: 0.78rem; }
+.doctor-report-preview pre {
+  max-height: 360px; margin-top: 8px; padding: 12px; overflow: auto; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--elevated); font-size: 0.72rem; white-space: pre-wrap; word-break: break-word;
+}
 
 /* ── Automation panel + lease badges ──── */
 

@@ -4,6 +4,26 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.8.0 — 2026-09-04
+
+### Added
+
+- Setup / Doctor checks settings storage, snapshot freshness, host-listener trust, Docker access, Compose discovery completeness, and recent degraded events.
+- Doctor reports can be copied or downloaded as JSON. Reports use an aggregate allowlist and omit machine identity, peer details, ports, paths, credentials, environment values, and degradation scopes.
+
+### Changed
+
+- Settings writes now contain only changed fields. Saved overrides can be removed to restore their environment or default value.
+- Settings and peer edits use independent save queues and status messages. The settings page keeps drafts, confirmed values, and in-flight revisions separate.
+- Settings page event handling and save coordination now live behind a mounted page controller.
+
+### Fixed
+
+- Older settings or peer responses no longer replace edits made while a request is in flight.
+- Reverting a setting to its confirmed value clears its pending state, and switching Settings categories returns the page to the top.
+- Custom palette save, import, and delete failures are reported in the palette editor instead of the general autosave status.
+- Doctor prioritizes current Docker and Compose access failures over older scan results, and report copying falls back when the Clipboard API is unavailable.
+
 ## 0.7.9 — 2026-09-04
 
 ### Changed

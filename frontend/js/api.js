@@ -1,7 +1,7 @@
 /* HTTP requests and conditional occupancy fetches. */
 
-import { S } from './state.js?v=89';
-import { occupancyUrl } from './hosts.js?v=89';
+import { S } from './state.js?v=90';
+import { occupancyUrl } from './hosts.js?v=90';
 
   export function apiHeaders(extra) {
     const headers = Object.assign({}, extra || {});
@@ -25,6 +25,7 @@ import { occupancyUrl } from './hosts.js?v=89';
   }
   export function fetchMeta() { return fetchJson('/api/meta'); }
   export function fetchSettings() { return fetchJson('/api/settings'); }
+  export function fetchDoctor() { return fetchJson('/api/doctor'); }
   export function fetchHostHealth(hostId) {
     return fetchJson(hostId === 'local' ? '/api/health' : '/api/hosts/' + encodeURIComponent(hostId) + '/health');
   }

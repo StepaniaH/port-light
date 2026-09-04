@@ -9,7 +9,52 @@
     "showHidden": "Afficher les ports masqués",
     "hiddenVisible": "Ports masqués visibles",
     "settings": "Réglages",
+    "doctor": "Diagnostic de l’installation",
     "findFree": "Trouver des ports libres"
+  },
+  "doctor": {
+    "title": "Setup / Doctor",
+    "lead": "Vérifiez le déploiement et créez un rapport de diagnostic nettoyé.",
+    "refresh": "Lancer les contrôles", "copy": "Copier le rapport nettoyé", "download": "Télécharger le rapport",
+    "running": "Contrôles en cours…", "failed": "Impossible de charger le diagnostic.",
+    "copied": "Rapport nettoyé copié.", "copyFailed": "Impossible de copier le rapport.",
+    "preview": "Aperçu du rapport nettoyé",
+    "summary": "{pass} réussis · {warning} avertissements · {fail} échecs",
+    "status": { "pass": "Réussi", "warning": "Avertissement", "fail": "Échec", "info": "Info" },
+    "overall": { "healthy": "L’installation semble saine", "attention": "L’installation requiert une intervention" },
+    "check": {
+      "settings_store": "Stockage des réglages", "snapshot": "Instantané d’occupation",
+      "listen": "Écouteurs de l’hôte", "docker": "Docker", "compose": "Découverte Compose",
+      "degradations": "Dégradations récentes"
+    },
+    "detail": {
+      "readonly": "Les réglages sont volontairement gérés par l’environnement.",
+      "writable": "Le répertoire de données est accessible en écriture.", "not_writable": "Le répertoire de données n’est pas accessible en écriture.",
+      "not_initialized": "La première analyse d’occupation n’est pas terminée.",
+      "stale": "Le dernier instantané d’occupation est périmé.", "ready": "L’instantané d’occupation est complet et à jour.",
+      "incomplete": "Le résultat de l’analyse est incomplet.", "disabled": "Cette source est désactivée.",
+      "ok": "La dernière analyse de cette source a réussi.", "failed": "La dernière analyse de cette source a échoué.",
+      "access_failed": "Le socket ou le répertoire requis n’est pas accessible.",
+      "checking": "Cette source n’a pas encore fourni de résultat.", "untrusted": "La table d’écoute disponible peut ne pas représenter l’hôte.",
+      "recent": "Des événements dégradés récents ont été enregistrés.", "none": "Aucun événement dégradé récent."
+    },
+    "evidence": {
+      "age": "Âge de l’instantané : {value} s", "listen": "Source sélectionnée : {source}",
+      "docker": "Transport : {transport}", "compose": "Fichiers Compose analysés : {count}",
+      "events": "Événements récents : {count}", "settings": "Source des réglages : {source}"
+    },
+    "remediation": {
+      "settings_store": "Vérifiez le montage du volume de données et les droits d’écriture de l’utilisateur du conteneur.",
+      "snapshot": "Attendez la prochaine actualisation ; si le problème persiste, corrigez la source en échec et consultez les journaux.",
+      "listen": "Vérifiez le montage en lecture seule de /host/proc ou le réseau hôte, ainsi que la disponibilité de ss ou lsof.",
+      "docker": "Vérifiez le montage du socket Docker et attribuez son GID à l’utilisateur du conteneur.",
+      "compose": "Vérifiez le montage Compose, les droits de lecture, la profondeur, la limite de fichiers, les exclusions et les erreurs d’analyse.",
+      "degradations": "Consultez les contrôles en échec et les journaux, puis relancez Doctor."
+    },
+    "transport": {
+      "configured": "point d’accès configuré", "socket_readable": "socket accessible",
+      "socket_denied": "accès au socket refusé", "socket_missing": "socket introuvable"
+    }
   },
   "legend": {
     "inUse": "occupé",
@@ -146,6 +191,7 @@
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
     "incomplete": "Saisissez un nom et une URL pour chaque machine. Les entrées complètes sont enregistrées automatiquement.",
+    "saveFailed": "Impossible d’enregistrer les machines. Modifiez une machine pour réessayer.",
     "description": "Description courte (facultative)",
     "descriptionPlaceholder": "Ex. : Tailscale 100.64.0.12 · Serveur maison",
     "max": "Jusqu’à {count} autres machines.",
@@ -200,8 +246,13 @@
       "new": "Nouvelle palette personnalisée",
       "save": "Enregistrer",
       "export": "Exporter",
+      "exported": "Fichier de palette exporté.",
+      "exportFailed": "Impossible d’exporter le fichier de palette.",
       "import": "Importer",
       "invalid": "Corrigez les valeurs de couleur signalées et donnez un nom à la palette.",
+      "saveFailed": "Impossible d’enregistrer la palette.",
+      "importFailed": "Impossible d’importer le fichier de palette.",
+      "deleteFailed": "Impossible de supprimer la palette.",
       "vars": {
         "bg": "Arrière-plan", "elevated": "Surfaces surélevées", "card": "Cartes",
         "cardHover": "Survol des cartes", "border": "Bordures", "text": "Texte",
@@ -263,7 +314,8 @@
     },
     "origin": {
       "saved": "Enregistré",
-      "env": "Environnement"
+      "env": "Environnement",
+      "restore": "Restaurer la valeur héritée"
     },
     "source": {
       "auto": "Auto",

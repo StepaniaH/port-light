@@ -9,7 +9,52 @@
     "showHidden": "显示隐藏端口",
     "hiddenVisible": "正在显示隐藏端口",
     "settings": "设置",
+    "doctor": "安装诊断",
     "findFree": "查找空闲端口"
+  },
+  "doctor": {
+    "title": "Setup / Doctor",
+    "lead": "检查部署与扫描状态，并生成不含敏感信息的诊断报告。",
+    "refresh": "重新诊断", "copy": "复制脱敏报告", "download": "下载报告",
+    "running": "正在诊断…", "failed": "无法读取诊断结果。",
+    "copied": "已复制脱敏报告。", "copyFailed": "无法复制报告。",
+    "preview": "预览脱敏报告",
+    "summary": "{pass} 项通过 · {warning} 项警告 · {fail} 项失败",
+    "status": { "pass": "通过", "warning": "警告", "fail": "失败", "info": "信息" },
+    "overall": { "healthy": "当前部署状态正常", "attention": "当前部署需要处理" },
+    "check": {
+      "settings_store": "设置存储", "snapshot": "占用快照",
+      "listen": "主机监听端口", "docker": "Docker", "compose": "Compose 发现",
+      "degradations": "近期降级事件"
+    },
+    "detail": {
+      "readonly": "设置已按预期由环境变量统一管理。",
+      "writable": "数据目录可写。", "not_writable": "数据目录不可写。",
+      "not_initialized": "首次占用扫描尚未完成。",
+      "stale": "最近一次占用快照已经过期。", "ready": "占用快照完整且为最新状态。",
+      "incomplete": "扫描结果不完整。", "disabled": "此数据源已关闭。",
+      "ok": "此数据源最近一次扫描成功。", "failed": "此数据源最近一次扫描失败。",
+      "access_failed": "无法访问所需的 Socket 或目录。",
+      "checking": "此数据源尚未返回结果。", "untrusted": "当前监听表可能不是主机的完整状态。",
+      "recent": "系统记录了近期降级事件。", "none": "近期没有降级事件。"
+    },
+    "evidence": {
+      "age": "快照距今：{value} 秒", "listen": "当前来源：{source}",
+      "docker": "连接方式：{transport}", "compose": "已扫描 Compose 文件：{count}",
+      "events": "近期事件：{count}", "settings": "设置来源：{source}"
+    },
+    "remediation": {
+      "settings_store": "检查数据卷挂载，以及容器用户对目录的写入权限。",
+      "snapshot": "等待下一次刷新；若持续出现，请先处理下方失败的数据源并检查日志。",
+      "listen": "检查 /host/proc 只读挂载或 host 网络权限，以及 ss 或 lsof 是否可用。",
+      "docker": "检查 Docker Socket 挂载，并把 Socket 所属 GID 授予容器用户。",
+      "compose": "检查 Compose 扫描目录挂载、读取权限、深度、文件上限、排除项及日志中的解析错误。",
+      "degradations": "查看失败项与容器日志，处理后重新运行 Doctor。"
+    },
+    "transport": {
+      "configured": "已配置连接端点", "socket_readable": "Socket 可访问",
+      "socket_denied": "Socket 权限不足", "socket_missing": "未找到 Socket"
+    }
   },
   "legend": {
     "inUse": "占用中",
@@ -146,6 +191,7 @@
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
     "incomplete": "请为每台机器填写名称和 URL，填写完整后会自动保存。",
+    "saveFailed": "无法保存机器修改。再次编辑机器即可重试。",
     "description": "短描述（可选）",
     "descriptionPlaceholder": "例如：Tailscale 100.64.0.12 · 家庭服务器",
     "max": "最多可添加 {count} 台其他机器。",
@@ -200,8 +246,13 @@
       "new": "新建自定义色板",
       "save": "保存",
       "export": "导出",
+      "exported": "色板文件已导出。",
+      "exportFailed": "无法导出色板文件。",
       "import": "导入",
       "invalid": "修正标红的颜色值并填写名称。",
+      "saveFailed": "无法保存色板。",
+      "importFailed": "无法导入色板文件。",
+      "deleteFailed": "无法删除色板。",
       "vars": {
         "bg": "背景", "elevated": "浮层表面", "card": "卡片",
         "cardHover": "卡片悬停", "border": "边框", "text": "文本",
@@ -263,7 +314,8 @@
     },
     "origin": {
       "saved": "已保存",
-      "env": "环境变量"
+      "env": "环境变量",
+      "restore": "恢复继承值"
     },
     "source": {
       "auto": "自动",

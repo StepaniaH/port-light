@@ -352,8 +352,25 @@ def resolve() -> tuple[dict[str, Any], dict[str, Origin]]:
     return values, origins
 
 
+def inherited_values() -> tuple[dict[str, Any], dict[str, Origin]]:
+    """Resolve the value below a saved-file override for every setting."""
+    values: dict[str, Any] = {}
+    origins: dict[str, Origin] = {}
+    for spec in FIELDS:
+        env_val = _parse_env(spec)
+        if env_val is not None:
+            values[spec.key], origins[spec.key] = env_val, "env"
+        else:
+            values[spec.key], origins[spec.key] = _default_value(spec), "default"
+    start, end = values["port_range_start"], values["port_range_end"]
+    if end < start:
+        values["port_range_end"] = start
+    return values, origins
+
+
 def snapshot() -> dict[str, Any]:
     values, origins = resolve()
+    inherited, inherited_origins = inherited_values()
     readonly = settings_readonly()
     fields = []
     for spec in FIELDS:
@@ -369,6 +386,9 @@ def snapshot() -> dict[str, Any]:
             "max": spec.max,
             "max_length": spec.max_length if spec.kind == "str" else None,
             "origin": origins[spec.key],
+            "inherited_value": inherited[spec.key],
+            "inherited_origin": inherited_origins[spec.key],
+            "can_reset": origins[spec.key] == "file" and not readonly,
             "locked": readonly,
         })
     return {

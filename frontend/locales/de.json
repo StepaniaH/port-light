@@ -9,7 +9,52 @@
     "showHidden": "Verborgene Ports anzeigen",
     "hiddenVisible": "Verborgene Ports sichtbar",
     "settings": "Einstellungen",
+    "doctor": "Einrichtungsdiagnose",
     "findFree": "Freie Ports finden"
+  },
+  "doctor": {
+    "title": "Setup / Doctor",
+    "lead": "Prüft die Einrichtung und erstellt einen bereinigten Diagnosebericht.",
+    "refresh": "Prüfungen starten", "copy": "Bereinigten Bericht kopieren", "download": "Bericht herunterladen",
+    "running": "Prüfungen laufen…", "failed": "Diagnose konnte nicht geladen werden.",
+    "copied": "Bereinigter Bericht kopiert.", "copyFailed": "Bericht konnte nicht kopiert werden.",
+    "preview": "Vorschau des bereinigten Berichts",
+    "summary": "{pass} bestanden · {warning} Warnungen · {fail} fehlgeschlagen",
+    "status": { "pass": "Bestanden", "warning": "Warnung", "fail": "Fehler", "info": "Info" },
+    "overall": { "healthy": "Die Einrichtung sieht gut aus", "attention": "Die Einrichtung benötigt Aufmerksamkeit" },
+    "check": {
+      "settings_store": "Einstellungsspeicher", "snapshot": "Belegungsabbild",
+      "listen": "Host-Listener", "docker": "Docker", "compose": "Compose-Erkennung",
+      "degradations": "Letzte Einschränkungen"
+    },
+    "detail": {
+      "readonly": "Einstellungen werden absichtlich über die Umgebung verwaltet.",
+      "writable": "Das Datenverzeichnis ist beschreibbar.", "not_writable": "Das Datenverzeichnis ist nicht beschreibbar.",
+      "not_initialized": "Der erste Belegungsscan ist noch nicht abgeschlossen.",
+      "stale": "Das letzte Belegungsabbild ist veraltet.", "ready": "Das Belegungsabbild ist vollständig und aktuell.",
+      "incomplete": "Das Scanergebnis ist unvollständig.", "disabled": "Diese Quelle ist deaktiviert.",
+      "ok": "Der letzte Scan dieser Quelle war erfolgreich.", "failed": "Der letzte Scan dieser Quelle ist fehlgeschlagen.",
+      "access_failed": "Der erforderliche Socket oder das Verzeichnis ist nicht zugänglich.",
+      "checking": "Diese Quelle hat noch kein Ergebnis gemeldet.", "untrusted": "Die verfügbare Listener-Tabelle bildet den Host möglicherweise nicht ab.",
+      "recent": "Es wurden kürzlich Einschränkungen erfasst.", "none": "Keine kürzlichen Einschränkungen erfasst."
+    },
+    "evidence": {
+      "age": "Alter des Abbilds: {value} s", "listen": "Gewählte Quelle: {source}",
+      "docker": "Transport: {transport}", "compose": "Gescannte Compose-Dateien: {count}",
+      "events": "Letzte Ereignisse: {count}", "settings": "Einstellungsquelle: {source}"
+    },
+    "remediation": {
+      "settings_store": "Prüfen Sie die Daten-Volume-Einbindung und die Schreibrechte des Container-Benutzers.",
+      "snapshot": "Warten Sie auf die nächste Aktualisierung; bleibt das Problem bestehen, beheben Sie die fehlerhafte Quelle und prüfen Sie die Logs.",
+      "listen": "Prüfen Sie die schreibgeschützte /host/proc-Einbindung oder den Host-Netzwerkzugriff sowie ss oder lsof.",
+      "docker": "Prüfen Sie die Docker-Socket-Einbindung und geben Sie dem Container-Benutzer die Socket-GID.",
+      "compose": "Prüfen Sie Compose-Einbindung, Leserechte, Tiefe, Dateilimit, Ausschlüsse und Parse-Fehler in den Logs.",
+      "degradations": "Prüfen Sie fehlgeschlagene Kontrollen und Logs und führen Sie Doctor erneut aus."
+    },
+    "transport": {
+      "configured": "konfigurierter Endpunkt", "socket_readable": "Socket erreichbar",
+      "socket_denied": "Socket-Zugriff verweigert", "socket_missing": "Socket nicht gefunden"
+    }
   },
   "legend": {
     "inUse": "belegt",
@@ -146,6 +191,7 @@
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
     "incomplete": "Gib für jeden Rechner einen Namen und eine URL ein. Vollständige Einträge werden automatisch gespeichert.",
+    "saveFailed": "Rechneränderungen konnten nicht gespeichert werden. Bearbeiten Sie einen Rechner, um es erneut zu versuchen.",
     "description": "Kurzbeschreibung (optional)",
     "descriptionPlaceholder": "Z. B. Tailscale 100.64.0.12 · Heimserver",
     "max": "Bis zu {count} weitere Rechner.",
@@ -200,8 +246,13 @@
       "new": "Neue eigene Palette",
       "save": "Speichern",
       "export": "Exportieren",
+      "exported": "Palettendatei exportiert.",
+      "exportFailed": "Die Palettendatei konnte nicht exportiert werden.",
       "import": "Importieren",
       "invalid": "Korrigieren Sie die markierten Farbwerte und geben Sie der Palette einen Namen.",
+      "saveFailed": "Die Palette konnte nicht gespeichert werden.",
+      "importFailed": "Die Palettendatei konnte nicht importiert werden.",
+      "deleteFailed": "Die Palette konnte nicht entfernt werden.",
       "vars": {
         "bg": "Hintergrund", "elevated": "Erhabene Flächen", "card": "Karten",
         "cardHover": "Karten-Hover", "border": "Rahmen", "text": "Text",
@@ -263,7 +314,8 @@
     },
     "origin": {
       "saved": "Gespeichert",
-      "env": "Umgebung"
+      "env": "Umgebung",
+      "restore": "Geerbten Wert wiederherstellen"
     },
     "source": {
       "auto": "Auto",

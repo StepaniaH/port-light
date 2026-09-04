@@ -307,9 +307,20 @@ class OccupancyMonitor:
             snap = self._latest
         age = max(0.0, time.monotonic() - snap["at"]) if snap else None
         ready = bool(snap and complete(snap) and not self._failed and age <= snap["max_age"])
-        return {"ready": ready, "initialized": snap is not None,
-                "scan_age_seconds": round(age, 1) if age is not None else None,
-                "sources": dict(snap.get("sources", {})) if snap else {}}
+        compose = snap.get("compose_scan") if snap else None
+        stale = bool(snap and (
+            snap.get("stale") or self._failed or age is None or age > snap["max_age"]
+        ))
+        return {
+            "ready": ready,
+            "initialized": snap is not None,
+            "stale": stale,
+            "scan_age_seconds": round(age, 1) if age is not None else None,
+            "sources": dict(snap.get("sources", {})) if snap else {},
+            "compose_files_scanned": compose.files_scanned if compose else 0,
+            "compose_incomplete": bool(compose and compose.incomplete),
+            "compose_truncated": bool(compose and compose.truncated),
+        }
 
     def latest(self, values: dict | None = None) -> dict:
         """Return a completed snapshot; HTTP never scans during lifespan."""

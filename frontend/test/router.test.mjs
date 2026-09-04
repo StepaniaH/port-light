@@ -48,6 +48,10 @@ test('known settings panels pass through, unknown ones reset to appearance', () 
   assert.deepEqual(parseHash('#/settings'), { name: 'settings', section: 'appearance' });
 });
 
+test('doctor has a standalone route', () => {
+  assert.deepEqual(parseHash('#/doctor'), { name: 'doctor' });
+});
+
 const PEER = 'abcdef123456';
 
 test('peer host routes keep validated host ids', () => {
