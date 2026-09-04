@@ -1,11 +1,10 @@
 /* Hash router: #/, #/settings/:panel, #/port/:n, #/h/:host(/port/:n). */
 
 import { S, SETTINGS_PANELS } from './state.js?v=89';
-import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=89';
+import { doctorBtn, settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=89';
 import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=89';
 import { applyPendingGridFocus } from './grid.js?v=89';
 import { closeDetail, showPortDetail } from './detail.js?v=89';
-import { loadSettingsPage, showSettingsPanel } from './settings.js?v=89';
 
 
   export function parseHash(hash) {
@@ -18,6 +17,7 @@ import { loadSettingsPage, showSettingsPanel } from './settings.js?v=89';
       }
       return { name: 'settings', section: section };
     }
+    if (parts[0] === 'doctor') return { name: 'doctor' };
     let hostId = 'local';
     let rest = parts;
     if (parts[0] === 'h' && parts[1]) {
@@ -36,17 +36,22 @@ import { loadSettingsPage, showSettingsPanel } from './settings.js?v=89';
     return parseHash(location.hash);
   }
 
-  export function applyRoute({ render, refresh }) {
+  export function applyRoute({ render, refresh, settingsPage, doctorPage }) {
     const next = parseRoute();
     const prev = S.route.name;
     const previousHostId = S.focusHostId;
     S.route = next;
     const onSettings = S.route.name === 'settings';
-    document.getElementById('view-grid').classList.toggle('hidden', onSettings);
+    const onDoctor = S.route.name === 'doctor';
+    const onWorkspace = onSettings || onDoctor;
+    document.getElementById('view-grid').classList.toggle('hidden', onWorkspace);
     document.getElementById('view-settings').classList.toggle('hidden', !onSettings);
-    appEl.classList.toggle('page-settings', onSettings);
+    document.getElementById('view-doctor').classList.toggle('hidden', !onDoctor);
+    appEl.classList.toggle('page-settings', onWorkspace);
     settingsBtn.classList.toggle('active', onSettings);
     settingsBtn.setAttribute('aria-current', onSettings ? 'page' : 'false');
+    doctorBtn.classList.toggle('active', onDoctor);
+    doctorBtn.setAttribute('aria-current', onDoctor ? 'page' : 'false');
     syncHeaderHeight();
     if (onSettings) {
       S.pendingGridFocus = null;
@@ -55,13 +60,19 @@ import { loadSettingsPage, showSettingsPanel } from './settings.js?v=89';
       const want = '#/settings/' + S.settingsPanel;
       if ((location.hash || '') !== want) history.replaceState(null, '', want);
       if (prev === 'settings') {
-        showSettingsPanel(S.settingsPanel);
+        settingsPage.show(S.settingsPanel);
         return;
       }
-      loadSettingsPage();
+      settingsPage.open(S.settingsPanel);
       return;
     }
-    if (prev === 'settings') refresh();
+    if (onDoctor) {
+      S.pendingGridFocus = null;
+      closeDetail(true);
+      if (prev !== 'doctor') doctorPage.open();
+      return;
+    }
+    if (prev === 'settings' || prev === 'doctor') refresh();
     if (S.route.hostId && hostById(S.route.hostId)) S.focusHostId = S.route.hostId;
     else if (S.route.name !== 'settings') S.focusHostId = 'local';
     if (usesFocusedHostView() && S.focusHostId !== previousHostId) refresh();

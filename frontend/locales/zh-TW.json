@@ -9,7 +9,51 @@
     "showHidden": "顯示隱藏的連接埠",
     "hiddenVisible": "正在顯示隱藏的連接埠",
     "settings": "設定",
+    "doctor": "安裝診斷",
     "findFree": "尋找空閒連接埠"
+  },
+  "doctor": {
+    "title": "Setup / Doctor",
+    "lead": "檢查部署與掃描狀態，並產生不含敏感資訊的診斷報告。",
+    "refresh": "重新診斷", "copy": "複製去識別報告", "download": "下載報告",
+    "running": "正在診斷…", "failed": "無法讀取診斷結果。",
+    "copied": "已複製去識別報告。", "copyFailed": "無法複製報告。",
+    "preview": "預覽去識別報告",
+    "summary": "{pass} 項通過 · {warning} 項警告 · {fail} 項失敗",
+    "status": { "pass": "通過", "warning": "警告", "fail": "失敗", "info": "資訊" },
+    "overall": { "healthy": "目前部署狀態正常", "attention": "目前部署需要處理" },
+    "check": {
+      "settings_store": "設定儲存", "snapshot": "占用快照",
+      "listen": "主機監聽連接埠", "docker": "Docker", "compose": "Compose 探索",
+      "degradations": "近期降級事件"
+    },
+    "detail": {
+      "readonly": "設定已按預期由環境變數統一管理。",
+      "writable": "資料目錄可寫入。", "not_writable": "資料目錄無法寫入。",
+      "not_initialized": "首次占用掃描尚未完成。",
+      "stale": "最近一次占用快照已過期。", "ready": "占用快照完整且為最新狀態。",
+      "incomplete": "掃描結果不完整。", "disabled": "此資料來源已關閉。",
+      "ok": "此資料來源最近一次掃描成功。", "failed": "此資料來源最近一次掃描失敗。",
+      "checking": "此資料來源尚未回報結果。", "untrusted": "目前監聽表可能不是主機的完整狀態。",
+      "recent": "系統記錄了近期降級事件。", "none": "近期沒有降級事件。"
+    },
+    "evidence": {
+      "age": "快照距今：{value} 秒", "listen": "目前來源：{source}",
+      "docker": "連線方式：{transport}", "compose": "已掃描 Compose 檔案：{count}",
+      "events": "近期事件：{count}", "settings": "設定來源：{source}"
+    },
+    "remediation": {
+      "settings_store": "檢查資料卷掛載，以及容器使用者對目錄的寫入權限。",
+      "snapshot": "等待下一次重新整理；若持續出現，請先處理下方失敗的資料來源並檢查日誌。",
+      "listen": "檢查 /host/proc 唯讀掛載或 host 網路權限，以及 ss 或 lsof 是否可用。",
+      "docker": "檢查 Docker Socket 掛載，並把 Socket 所屬 GID 授予容器使用者。",
+      "compose": "檢查 Compose 掃描目錄掛載、讀取權限、深度、檔案上限、排除項目及日誌中的解析錯誤。",
+      "degradations": "查看失敗項目與容器日誌，處理後重新執行 Doctor。"
+    },
+    "transport": {
+      "configured": "已設定連線端點", "socket_readable": "Socket 可存取",
+      "socket_denied": "Socket 權限不足", "socket_missing": "找不到 Socket"
+    }
   },
   "legend": {
     "inUse": "使用中",
@@ -146,6 +190,7 @@
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
     "incomplete": "請為每台機器填寫名稱和 URL，填寫完整後會自動儲存。",
+    "saveFailed": "無法儲存機器修改。再次編輯機器即可重試。",
     "description": "簡短描述（選填）",
     "descriptionPlaceholder": "例如：Tailscale 100.64.0.12 · 家用伺服器",
     "max": "最多可新增 {count} 台其他機器。",
@@ -202,6 +247,9 @@
       "export": "匯出",
       "import": "匯入",
       "invalid": "修正標紅的顏色值並填寫名稱。",
+      "saveFailed": "無法儲存色板。",
+      "importFailed": "無法匯入色板檔案。",
+      "deleteFailed": "無法移除色板。",
       "vars": {
         "bg": "背景", "elevated": "浮層表面", "card": "卡片",
         "cardHover": "卡片懸停", "border": "邊框", "text": "文字",
@@ -263,7 +311,8 @@
     },
     "origin": {
       "saved": "已儲存",
-      "env": "環境變數"
+      "env": "環境變數",
+      "restore": "恢復繼承值"
     },
     "source": {
       "auto": "自動",

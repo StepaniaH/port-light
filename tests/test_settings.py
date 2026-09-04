@@ -34,6 +34,26 @@ def test_settings_file_overrides_env(tmp_path, monkeypatch):
     assert body["values"]["refresh_ms"] == 8000
 
 
+def test_saved_setting_can_restore_environment_inheritance(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("THEME_MODE", "dark")
+    monkeypatch.delenv("PORT_LIGHT_SETTINGS_SOURCE", raising=False)
+    client = TestClient(app)
+
+    saved = client.put("/api/settings", json={"theme_mode": "light"}).json()
+    field = next(row for row in saved["fields"] if row["key"] == "theme_mode")
+    assert field["origin"] == "file"
+    assert field["inherited_value"] == "dark"
+    assert field["inherited_origin"] == "env"
+    assert field["can_reset"] is True
+
+    restored = client.put("/api/settings", json={"theme_mode": None}).json()
+    field = next(row for row in restored["fields"] if row["key"] == "theme_mode")
+    assert restored["values"]["theme_mode"] == "dark"
+    assert field["origin"] == "env"
+    assert field["can_reset"] is False
+
+
 def test_settings_source_env_locks_ui(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("PORT_LIGHT_SETTINGS_SOURCE", "env")

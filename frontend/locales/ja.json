@@ -9,7 +9,51 @@
     "showHidden": "非表示ポートを表示",
     "hiddenVisible": "非表示ポートを表示中",
     "settings": "設定",
+    "doctor": "セットアップ診断",
     "findFree": "空きポートを検索"
+  },
+  "doctor": {
+    "title": "Setup / Doctor",
+    "lead": "セットアップとスキャン状態を確認し、機密情報を除いた診断レポートを作成します。",
+    "refresh": "診断を実行", "copy": "匿名化レポートをコピー", "download": "レポートをダウンロード",
+    "running": "診断中…", "failed": "診断結果を読み込めませんでした。",
+    "copied": "匿名化レポートをコピーしました。", "copyFailed": "レポートをコピーできませんでした。",
+    "preview": "匿名化レポートをプレビュー",
+    "summary": "成功 {pass} 件 · 警告 {warning} 件 · 失敗 {fail} 件",
+    "status": { "pass": "成功", "warning": "警告", "fail": "失敗", "info": "情報" },
+    "overall": { "healthy": "セットアップは正常です", "attention": "セットアップの確認が必要です" },
+    "check": {
+      "settings_store": "設定ストレージ", "snapshot": "占有状況スナップショット",
+      "listen": "ホストのリスナー", "docker": "Docker", "compose": "Compose 検出",
+      "degradations": "最近の縮退イベント"
+    },
+    "detail": {
+      "readonly": "設定は意図どおり環境変数で管理されています。",
+      "writable": "データディレクトリに書き込めます。", "not_writable": "データディレクトリに書き込めません。",
+      "not_initialized": "最初の占有状況スキャンがまだ完了していません。",
+      "stale": "最新の占有状況スナップショットが古くなっています。", "ready": "占有状況スナップショットは完全で最新です。",
+      "incomplete": "スキャン結果が不完全です。", "disabled": "このソースは無効です。",
+      "ok": "このソースの最新スキャンは成功しました。", "failed": "このソースの最新スキャンは失敗しました。",
+      "checking": "このソースはまだ結果を返していません。", "untrusted": "利用可能なリスナーテーブルがホストを表していない可能性があります。",
+      "recent": "最近の縮退イベントが記録されています。", "none": "最近の縮退イベントはありません。"
+    },
+    "evidence": {
+      "age": "スナップショット経過時間: {value} 秒", "listen": "選択中のソース: {source}",
+      "docker": "接続方式: {transport}", "compose": "スキャンした Compose ファイル: {count}",
+      "events": "最近のイベント: {count}", "settings": "設定ソース: {source}"
+    },
+    "remediation": {
+      "settings_store": "データボリュームのマウントとコンテナユーザーの書き込み権限を確認してください。",
+      "snapshot": "次の更新を待ち、続く場合は下の失敗したソースを直してログを確認してください。",
+      "listen": "/host/proc の読み取り専用マウントまたはホストネットワーク権限と、ss または lsof を確認してください。",
+      "docker": "Docker Socket のマウントを確認し、その GID をコンテナユーザーに付与してください。",
+      "compose": "Compose のマウント、読み取り権限、深さ、ファイル上限、除外設定、ログの解析エラーを確認してください。",
+      "degradations": "失敗した項目とコンテナログを確認し、Doctor を再実行してください。"
+    },
+    "transport": {
+      "configured": "設定済みエンドポイント", "socket_readable": "Socket にアクセス可能",
+      "socket_denied": "Socket の権限不足", "socket_missing": "Socket が見つかりません"
+    }
   },
   "legend": {
     "inUse": "使用中",
@@ -146,6 +190,7 @@
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
     "incomplete": "各マシンの名前と URL を入力してください。入力が揃うと自動保存されます。",
+    "saveFailed": "マシンの変更を保存できませんでした。マシンを編集すると再試行します。",
     "description": "短い説明（任意）",
     "descriptionPlaceholder": "例：Tailscale 100.64.0.12 · 自宅サーバー",
     "max": "ほかのマシンを最大 {count} 台追加できます。",
@@ -202,6 +247,9 @@
       "export": "エクスポート",
       "import": "インポート",
       "invalid": "強調された色の値を修正し、名前を入力してください。",
+      "saveFailed": "パレットを保存できませんでした。",
+      "importFailed": "パレットファイルをインポートできませんでした。",
+      "deleteFailed": "パレットを削除できませんでした。",
       "vars": {
         "bg": "背景", "elevated": "浮き上がり面", "card": "カード",
         "cardHover": "カードホバー", "border": "境界線", "text": "テキスト",
@@ -263,7 +311,8 @@
     },
     "origin": {
       "saved": "保存済み",
-      "env": "環境変数"
+      "env": "環境変数",
+      "restore": "継承値に戻す"
     },
     "source": {
       "auto": "自動",

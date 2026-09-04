@@ -34,7 +34,7 @@ import { api } from './api.js?v=89';
   }
 
   export function applyPendingGridFocus() {
-    if (S.route.name === 'settings') {
+    if (S.route.name === 'settings' || S.route.name === 'doctor') {
       S.pendingGridFocus = null;
       return;
     }

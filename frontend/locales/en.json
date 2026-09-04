@@ -9,7 +9,51 @@
     "showHidden": "Show hidden ports",
     "hiddenVisible": "Hidden ports visible",
     "settings": "Settings",
+    "doctor": "Setup diagnostics",
     "findFree": "Find free ports"
+  },
+  "doctor": {
+    "title": "Setup / Doctor",
+    "lead": "Check setup health and create a sanitized diagnostic report.",
+    "refresh": "Run checks", "copy": "Copy sanitized report", "download": "Download report",
+    "running": "Running checks…", "failed": "Diagnostics could not be loaded.",
+    "copied": "Sanitized report copied.", "copyFailed": "The report could not be copied.",
+    "preview": "Preview sanitized report",
+    "summary": "{pass} passed · {warning} warnings · {fail} failed",
+    "status": { "pass": "Pass", "warning": "Warning", "fail": "Fail", "info": "Info" },
+    "overall": { "healthy": "Setup looks healthy", "attention": "Setup needs attention" },
+    "check": {
+      "settings_store": "Settings storage", "snapshot": "Occupancy snapshot",
+      "listen": "Host listeners", "docker": "Docker", "compose": "Compose discovery",
+      "degradations": "Recent degradations"
+    },
+    "detail": {
+      "readonly": "Settings are intentionally controlled by the environment.",
+      "writable": "The data directory is writable.", "not_writable": "The data directory is not writable.",
+      "not_initialized": "The first occupancy scan has not completed yet.",
+      "stale": "The latest occupancy snapshot is stale.", "ready": "The occupancy snapshot is current and complete.",
+      "incomplete": "The scan result is incomplete.", "disabled": "This source is disabled.",
+      "ok": "This source completed successfully.", "failed": "This source failed in the latest scan.",
+      "checking": "This source has not reported a result yet.", "untrusted": "The available listen table may not represent the host.",
+      "recent": "Recent degraded events were recorded.", "none": "No recent degraded events were recorded."
+    },
+    "evidence": {
+      "age": "Snapshot age: {value}s", "listen": "Selected source: {source}",
+      "docker": "Transport: {transport}", "compose": "Compose files scanned: {count}",
+      "events": "Recent events: {count}", "settings": "Settings source: {source}"
+    },
+    "remediation": {
+      "settings_store": "Check the data-volume mount and the container user’s write permissions.",
+      "snapshot": "Wait for the next refresh; if this persists, resolve the failing source below and check the logs.",
+      "listen": "Check the /host/proc read-only mount or host-network access, and the availability of ss or lsof.",
+      "docker": "Check the Docker socket mount and grant the container user the socket group’s GID.",
+      "compose": "Check the Compose scan mount, read permissions, depth, file cap, exclusions, and parse errors in logs.",
+      "degradations": "Review the failing checks and container logs, then run Doctor again."
+    },
+    "transport": {
+      "configured": "configured endpoint", "socket_readable": "socket accessible",
+      "socket_denied": "socket permission denied", "socket_missing": "socket not found"
+    }
   },
   "legend": {
     "inUse": "in use",
@@ -146,6 +190,7 @@
     "urlPlaceholder": "http://100.x.x.x:2100",
     "namePlaceholder": "NAS",
     "incomplete": "Enter a name and URL for each machine. Complete entries save automatically.",
+    "saveFailed": "Could not save machine changes. Edit a machine to retry.",
     "description": "Short description (optional)",
     "descriptionPlaceholder": "e.g. Tailscale 100.64.0.12 · Home lab",
     "max": "Up to {count} other machines.",
@@ -202,6 +247,9 @@
       "export": "Export",
       "import": "Import",
       "invalid": "Fix the highlighted color values and give the palette a name.",
+      "saveFailed": "The palette could not be saved.",
+      "importFailed": "The palette file could not be imported.",
+      "deleteFailed": "The palette could not be removed.",
       "vars": {
         "bg": "Background", "elevated": "Elevated surfaces", "card": "Cards",
         "cardHover": "Card hover", "border": "Borders", "text": "Text",
@@ -263,7 +311,8 @@
     },
     "origin": {
       "saved": "Saved",
-      "env": "Environment"
+      "env": "Environment",
+      "restore": "Restore inherited value"
     },
     "source": {
       "auto": "Auto",

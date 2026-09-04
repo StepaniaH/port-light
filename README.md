@@ -52,6 +52,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - One UI can pull occupancy maps from up to 32 other Port-Light instances (LAN / Tailscale). A waterfall shows all machines by default; Settings → Appearance → Cards can switch to tabs. Optional notes below machine names can record IPs or other context. Each host still scans itself.
 - Settings save automatically after each change. Appearance controls keep their live preview: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. All ten palette families include light and dark variants. UI language (English, Français, Deutsch, Español, 简体中文, 繁體中文, 日本語). Also via Compose env.
 - Custom palettes, import/export, and Loose / Standard / Compact card-density presets
+- Setup / Doctor checks settings storage, snapshot freshness, host-listener trust, Docker access, Compose discovery, and recent degraded events; its copy/download report excludes names, URLs, ports, paths, credentials, environment values, and event scopes
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with atomic batch reservation
@@ -147,7 +148,7 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
 | `AGENT_TOKEN` | unset | When set, `GET /api/ports/suggest` requires a matching `X-Agent-Token` header. Env-only. |
 
-Most options (except timeout, paths, and secrets) can also be changed on **Settings** in the UI. This includes the local machine name, scanner selection, Compose discovery options, and peers. Changes save automatically into `/data/port_light.json`. OpenAPI is at `/docs`.
+Most options (except timeout, paths, and secrets) can also be changed on **Settings** in the UI. This includes the local machine name, scanner selection, Compose discovery options, and peers. Changes save automatically into `/data/port_light.json`; only changed fields are submitted, and a saved override can be restored to its inherited environment/default value. OpenAPI is at `/docs`.
 
 The status line reports pending, saved, or failed changes. Complete each machine's name and URL before leaving the page. Creating, importing, or deleting a custom palette remains an explicit action in the palette editor.
 
@@ -164,6 +165,7 @@ If an existing `port_light.json` is unreadable, malformed, or contains invalid r
 - Scan data is stored locally and served to dashboard and API clients. Configured hubs receive their peers' occupancy responses. Enable authentication to restrict who can read this data.
 - Bind addresses are already present in the API and port details. Enabling card summaries makes them more visible in screenshots; review screenshots before sharing them.
 - Machine descriptions are plain text visible to anyone with dashboard or API access and may appear in screenshots. Do not include passwords, tokens, or other secrets in them.
+- Doctor reports are generated from an explicit aggregate allowlist. They include statuses, counts, safe source enums, and known failure reasons, but omit machine identity, peer details, bind addresses, ports, filesystem paths, environment values, credentials, and degradation scopes. Unknown event sources and reasons are redacted.
 - Sibling `.env` files next to Compose stacks are read locally for `${VAR}` substitution and are never uploaded.
 - Manual labels, port history, agent-call labels, and peer settings stay in the data volume. Saved peer passwords are stored in `port_light.json`; protect the data volume as you would any other credentials file.
 

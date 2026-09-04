@@ -25,6 +25,7 @@ import { occupancyUrl } from './hosts.js?v=89';
   }
   export function fetchMeta() { return fetchJson('/api/meta'); }
   export function fetchSettings() { return fetchJson('/api/settings'); }
+  export function fetchDoctor() { return fetchJson('/api/doctor'); }
   export function fetchHostHealth(hostId) {
     return fetchJson(hostId === 'local' ? '/api/health' : '/api/hosts/' + encodeURIComponent(hostId) + '/health');
   }

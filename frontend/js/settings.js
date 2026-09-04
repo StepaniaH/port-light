@@ -1,6 +1,6 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=89';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=89';
 import { t, tx, escapeHtml, errorText } from './text.js?v=89';
 import { rangeStartInput, rangeEndInput } from './dom.js?v=89';
 import { moveChipFocus } from './a11y.js?v=89';
@@ -11,6 +11,88 @@ import { bindAddressView } from './grid.js?v=89';
 import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=89';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
+const statusTimers = {};
+
+function setPageStatus(id, key, className, clearAfter) {
+  const status = document.getElementById(id);
+  if (!status) return;
+  if (statusTimers[id]) clearTimeout(statusTimers[id]);
+  statusTimers[id] = null;
+  status.className = className || '';
+  status.textContent = key ? t(key) : '';
+  if (key && clearAfter) {
+    const timer = setTimeout(function () {
+      if (status.textContent === t(key)) {
+        status.className = '';
+        status.textContent = '';
+      }
+      statusTimers[id] = null;
+    }, clearAfter);
+    if (timer && typeof timer.unref === 'function') timer.unref();
+    statusTimers[id] = timer;
+  }
+}
+
+function syncDirtyFlag() {
+  S.settingsDirty = !!((S.settingsDirtyKeys && S.settingsDirtyKeys.size) || S.peersDirty);
+  return S.settingsDirty;
+}
+
+function resetDraftState(doc) {
+  S.settingsConfirmed = Object.assign({}, doc.values || {});
+  S.settingsDraft = Object.assign({}, doc.values || {});
+  if (S.rangeFromView) {
+    S.settingsDraft.port_range_start = S.rangeStart;
+    S.settingsDraft.port_range_end = S.rangeEnd;
+  }
+  S.settingsDirtyKeys = new Set();
+  S.settingsResetKeys = new Set();
+  S.settingsSubmittingKeys = new Set();
+  S.settingsKeyRevisions = {};
+  S.peersDirty = false;
+  S.peersSubmitting = false;
+  syncDirtyFlag();
+}
+
+function fieldByKey(key) {
+  return (S.settingsDoc && S.settingsDoc.fields || []).find(function (field) {
+    return field.key === key;
+  }) || null;
+}
+
+function settingKeyForInput(input) {
+  if (!input) return '';
+  if (input.matches && input.matches('[data-refresh-slider]')) return 'refresh_ms';
+  return fieldByKey(input.name) ? input.name : '';
+}
+
+function readFieldValue(field) {
+  const form = document.getElementById('settings-form');
+  if (!form || !field) return undefined;
+  const el = form.elements[field.key];
+  if (field.type === 'multi_choice') {
+    return Array.prototype.slice.call(form.querySelectorAll('input[name="' + field.key + '"]:checked'))
+      .map(function (input) { return input.value; });
+  }
+  if (!el) return undefined;
+  if (field.type === 'string_list') {
+    return String(el.value || '').split('\n').map(function (line) { return line.trim(); }).filter(Boolean);
+  }
+  if (field.type === 'bool') return !!el.checked;
+  if (field.type === 'int') {
+    const n = parseInt(el.value, 10);
+    return isNaN(n) ? NaN : n;
+  }
+  return el.value;
+}
+
+function updateDraftForInput(input) {
+  const key = settingKeyForInput(input);
+  const field = fieldByKey(key);
+  if (!field) return '';
+  S.settingsDraft[key] = readFieldValue(field);
+  return key;
+}
 
   export function loadSettingsPage() {
     if (S.settingsDirty) {
@@ -198,13 +280,28 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     }
   }
 
-  export function markDirty() {
+  export function markDirty(input) {
     if (S.settingsDoc && S.settingsDoc.readonly) return;
-    S.settingsDirty = true;
+    const key = updateDraftForInput(input);
     S.settingsRevision += 1;
-    const status = document.getElementById('settings-status');
-    status.className = '';
-    status.textContent = t('settings.unsaved');
+    if (key) {
+      S.settingsDirtyKeys.add(key);
+      S.settingsResetKeys.delete(key);
+      S.settingsKeyRevisions[key] = S.settingsRevision;
+      syncDirtyFlag();
+    } else {
+      S.settingsDirty = true;
+    }
+    setPageStatus('settings-status', 'settings.unsaved', '', 0);
+  }
+
+  export function markPeersDirty() {
+    if ((S.settingsDoc && S.settingsDoc.readonly) || (S.hostCatalog && S.hostCatalog.readonly)) return;
+    S.peersDirty = true;
+    S.peersRevision += 1;
+    S.settingsRevision += 1;
+    syncDirtyFlag();
+    setPageStatus('peers-status', 'settings.unsaved', 'action-status', 0);
   }
 
   export function isAutosavedSetting(input) {
@@ -218,6 +315,8 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
   export function applyServerSettings(doc) {
     S.settingsDoc = doc;
     S.settings = Object.assign({}, S.settings, doc.values || {});
+    S.settingsConfirmed = Object.assign({}, doc.values || {});
+    S.settingsDraft = Object.assign({}, doc.values || {});
     S.customThemes = Array.isArray(doc.custom_themes) ? doc.custom_themes : [];
     if (!S.rangeFromView) {
       S.rangeStart = S.settings.port_range_start;
@@ -237,10 +336,22 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       escapeHtml(t(labelKey)) + '</span>' + val + '</div>';
   }
 
+  function originMetaContents(f) {
+    const sourceKey = f.origin === 'file' ? 'settings.origin.saved'
+      : f.origin === 'env' ? 'settings.origin.env' : '';
+    const source = sourceKey
+      ? '<span class="origin-hint" data-i18n="' + sourceKey + '" title="' + escapeHtml(f.env || '') + '">' + escapeHtml(t(sourceKey)) + '</span>'
+      : '';
+    const reset = f.can_reset
+      ? '<button type="button" class="setting-reset" data-reset-setting="' + escapeHtml(f.key) +
+        '" data-i18n="settings.origin.restore">' + escapeHtml(t('settings.origin.restore')) + '</button>'
+      : '';
+    return source + reset;
+  }
+
   export function originHint(f) {
-    if (!f.origin || f.origin === 'default') return '';
-    const key = f.origin === 'file' ? 'settings.origin.saved' : 'settings.origin.env';
-    return '<span class="origin-hint" data-i18n="' + key + '" title="' + escapeHtml(f.env) + '">' + escapeHtml(t(key)) + '</span>';
+    const contents = originMetaContents(f);
+    return contents ? '<span class="setting-meta">' + contents + '</span>' : '';
   }
 
   export function syncSettingsMetadata(doc) {
@@ -248,20 +359,18 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       if (field.key === 'show_bind_addresses' || BIND_FAMILY_KEYS.includes(field.key)) return;
       const row = document.querySelector('[data-setting="' + field.key + '"]');
       if (!row) return;
-      let hint = row.querySelector('.origin-hint');
-      if (!field.origin || field.origin === 'default') {
-        if (hint) hint.remove();
+      let meta = row.querySelector('.setting-meta');
+      const contents = originMetaContents(field);
+      if (!contents) {
+        if (meta) meta.remove();
         return;
       }
-      if (!hint) {
-        hint = document.createElement('span');
-        hint.className = 'origin-hint';
-        (row.querySelector('.setting-control') || row).appendChild(hint);
+      if (!meta) {
+        meta = document.createElement('span');
+        meta.className = 'setting-meta';
+        (row.querySelector('.setting-control') || row).appendChild(meta);
       }
-      const key = field.origin === 'file' ? 'settings.origin.saved' : 'settings.origin.env';
-      hint.setAttribute('data-i18n', key);
-      hint.setAttribute('title', field.env || '');
-      hint.textContent = t(key);
+      meta.innerHTML = contents;
     });
     document.querySelectorAll('.scanner-option').forEach(function (option) {
       const input = option.querySelector('input');
@@ -513,7 +622,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       escapeHtml(t('settings.editor.import')) + '</button>' +
       '<button type="button" class="btn-primary" data-editor-save' + dis + '>' +
       escapeHtml(t('settings.editor.save')) + '</button>' +
-      '</div>' + rows + '</details>';
+      '</div><p id="theme-editor-status" class="action-status" role="status" aria-live="polite"></p>' + rows + '</details>';
   }
 
   function rgbToHex(raw) {
@@ -592,28 +701,32 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
   }
 
   async function saveEditorTheme(btn) {
-    const status = document.getElementById('settings-status');
     const colors = collectEditorColors();
     const name = ((document.getElementById('editor-name') || {}).value || '').trim();
     const target = (document.getElementById('editor-target') || {}).value || '';
     if (!colors || !name) {
-      if (status) { status.className = 'is-error'; status.textContent = t('settings.editor.invalid'); }
+      setPageStatus('theme-editor-status', 'settings.editor.invalid', 'action-status is-error', 0);
       return;
     }
     const payload = { name: name, basedOn: '', mode: currentMode(), colors: colors };
     const url = target ? '/api/custom-themes/' + encodeURIComponent(target) : '/api/custom-themes';
-    const res = await api(url, {
-      method: target ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const body = await res.json().catch(function () { return {}; });
-    if (!res.ok) {
-      if (status) { status.className = 'is-error'; status.textContent = errorText(body, res.status); }
-      return;
+    try {
+      const res = await api(url, {
+        method: target ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        const status = document.getElementById('theme-editor-status');
+        if (status) { status.className = 'action-status is-error'; status.textContent = errorText(body, res.status); }
+        return;
+      }
+      await refreshThemeChoices();
+      setPageStatus('theme-editor-status', 'settings.saved', 'action-status is-ok', 1800);
+    } catch (err) {
+      setPageStatus('theme-editor-status', 'settings.editor.saveFailed', 'action-status is-error', 0);
     }
-    await refreshThemeChoices();
-    if (status && !S.settingsDirty) { status.className = 'is-ok'; status.textContent = t('settings.saved'); }
   }
 
   function exportEditorTheme() {
@@ -645,7 +758,10 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       });
       if (!res.ok) throw new Error(String(res.status));
       await refreshThemeChoices();
-    } catch (err) { /* status line shows nothing on cancel; invalid files are rejected server-side */ }
+      setPageStatus('theme-editor-status', 'settings.saved', 'action-status is-ok', 1800);
+    } catch (err) {
+      setPageStatus('theme-editor-status', 'settings.editor.importFailed', 'action-status is-error', 0);
+    }
   }
 
   function scannerRuntime(doc, scanner) {
@@ -767,6 +883,60 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
       '</span></span><span class="setting-control">' + control + sourceHint +
       '</span></' + tag + '>';
+  }
+
+  function setFieldControlValue(field, value) {
+    const form = document.getElementById('settings-form');
+    if (!form || !field) return;
+    if (field.type === 'multi_choice') {
+      form.querySelectorAll('input[name="' + field.key + '"]').forEach(function (input) {
+        input.checked = Array.isArray(value) && value.indexOf(input.value) >= 0;
+      });
+      return;
+    }
+    if (field.type === 'choice') {
+      form.querySelectorAll('input[type="radio"][name="' + field.key + '"]').forEach(function (input) {
+        input.checked = input.value === value;
+      });
+    }
+    const el = form.elements[field.key];
+    if (!el) return;
+    if (field.type === 'bool') el.checked = !!value;
+    else if (field.type === 'string_list') el.value = Array.isArray(value) ? value.join('\n') : '';
+    else el.value = value == null ? '' : String(value);
+    if (field.key === 'refresh_ms') {
+      const hidden = document.querySelector('[data-refresh-hidden]');
+      const slider = document.querySelector('[data-refresh-slider]');
+      if (hidden) hidden.value = String(value);
+      if (slider) {
+        const choices = String(slider.getAttribute('data-refresh-values') || '').split(',').map(Number);
+        const index = choices.indexOf(Number(value));
+        if (index >= 0) {
+          slider.value = String(index);
+          updateRefreshSlider(slider);
+        }
+      }
+    }
+  }
+
+  export function restoreInheritedSetting(key) {
+    const field = fieldByKey(key);
+    if (!field || !field.can_reset || (S.settingsDoc && S.settingsDoc.readonly)) return false;
+    setFieldControlValue(field, field.inherited_value);
+    S.settingsRevision += 1;
+    S.settingsDraft[key] = field.inherited_value;
+    S.settingsDirtyKeys.add(key);
+    S.settingsResetKeys.add(key);
+    S.settingsKeyRevisions[key] = S.settingsRevision;
+    if (LIVE_APPLY_KEYS.indexOf(key) >= 0) {
+      S.settings[key] = field.inherited_value;
+      applyAppearance();
+      if (key === 'theme_mode') syncPaletteAvailability();
+    }
+    syncDirtyFlag();
+    syncDependentSettings();
+    setPageStatus('settings-status', 'settings.unsaved', '', 0);
+    return true;
   }
 
   export function renderPeersEditor(readonly) {
@@ -1062,9 +1232,17 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       const btn = e.target.closest('[data-delete-theme]');
       if (!btn) return;
       const id = btn.getAttribute('data-delete-theme');
-      const res = await api('/api/custom-themes/' + id, { method: 'DELETE' });
-      if (!res.ok) return;
-      await refreshThemeChoices(id);
+      try {
+        const res = await api('/api/custom-themes/' + id, { method: 'DELETE' });
+        if (!res.ok) {
+          setPageStatus('theme-editor-status', 'settings.editor.deleteFailed', 'action-status is-error', 0);
+          return;
+        }
+        await refreshThemeChoices(id);
+        setPageStatus('theme-editor-status', 'settings.saved', 'action-status is-ok', 1800);
+      } catch (err) {
+        setPageStatus('theme-editor-status', 'settings.editor.deleteFailed', 'action-status is-error', 0);
+      }
     });
     /* The file input and hex rows are rebuilt on every renderSettingsForm, so
        these two are wired as document-level delegates rather than bound to
@@ -1146,16 +1324,12 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
   }
 
   export function renderSettingsForm(doc) {
-    const values = Object.assign({}, doc.values || {});
-    if (S.rangeFromView) {
-      values.port_range_start = S.rangeStart;
-      values.port_range_end = S.rangeEnd;
-    }
+    resetDraftState(doc);
+    const values = Object.assign({}, S.settingsDraft);
     const fields = doc.fields || [];
     const host = document.getElementById('settings-fields');
     const lead = document.getElementById('settings-lead');
     const status = document.getElementById('settings-status');
-    S.settingsDirty = false;
     status.className = '';
     status.textContent = doc.readonly ? '' : t('settings.autosave');
     lead.textContent = t(doc.readonly ? 'settings.leadReadonly' : 'settings.lead');
@@ -1211,7 +1385,7 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
         settingsCard('settings.groups.local.title', 'settings.groups.local.blurb', rowsFor(byGroup.local || [])) +
         settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
         settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
-        settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div>')) +
+        settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div><p id="peers-status" class="action-status" role="status" aria-live="polite"></p>')) +
       settingsPanelHtml('automation', automationCardsHtml(S.meta && S.meta.automation ? S.meta.automation : {})) +
       settingsPanelHtml('advanced',
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
@@ -1241,48 +1415,99 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
     renderPeersEditor(!!doc.readonly || !!S.hostCatalog.readonly);
   }
 
-  export async function saveSettingsPage() {
-    if (S.settingsDoc && S.settingsDoc.readonly) return false;
-    const status = document.getElementById('settings-status');
-    const form = document.getElementById('settings-form');
-    const saveRevision = S.settingsRevision;
-    const themesAtStart = S.customThemes;
-    const peers = S.hostCatalog && S.hostCatalog.readonly ? null : peersPayload();
-    if (peers && peers.some(function (peer) { return !peer.name || !peer.url; })) {
-      status.className = 'is-error';
-      status.textContent = t('hosts.incomplete');
-      return false;
-    }
+  function currentDirtySettingKeys() {
+    return Array.from(S.settingsDirtyKeys || []).filter(function (key) { return !!fieldByKey(key); });
+  }
+
+  function collectSettingsPatch(keys) {
     const patch = {};
-    const fields = S.settingsDoc && S.settingsDoc.fields ? S.settingsDoc.fields : [];
-    for (let i = 0; i < fields.length; i++) {
-      const f = fields[i];
-      const el = form.elements[f.key];
-      if (!el || el.disabled) continue;
-      if (f.type === 'multi_choice') {
-        patch[f.key] = Array.prototype.slice.call(
-          form.querySelectorAll('input[name="' + f.key + '"]:checked'))
-          .map(function (input) { return input.value; });
-        if (!patch[f.key].length) {
+    for (const key of keys) {
+      const field = fieldByKey(key);
+      if (!field) continue;
+      if (S.settingsResetKeys.has(key)) {
+        patch[key] = null;
+        continue;
+      }
+      const value = readFieldValue(field);
+      S.settingsDraft[key] = value;
+      if (field.type === 'multi_choice' && !value.length) {
+        setPageStatus('settings-status', 'settings.scanners.required', 'is-error', 0);
+        return null;
+      }
+      if (field.type === 'int' && Number.isNaN(value)) {
+        const status = document.getElementById('settings-status');
+        if (status) {
           status.className = 'is-error';
-          status.textContent = t('settings.scanners.required');
-          return false;
+          status.textContent = t('settings.mustBeNumber', { label: fieldLabel(field) });
         }
-      } else if (f.type === 'string_list') {
-        patch[f.key] = String(el.value || '').split('\n').map(function (line) { return line.trim(); }).filter(Boolean);
-      } else if (f.type === 'bool') patch[f.key] = el.checked;
-      else if (f.type === 'int') {
-        const n = parseInt(el.value, 10);
-        if (isNaN(n)) {
-          status.className = 'is-error';
-          status.textContent = t('settings.mustBeNumber', { label: fieldLabel(f) });
-          return false;
-        }
-        patch[f.key] = n;
-      } else patch[f.key] = el.value;
+        return null;
+      }
+      patch[key] = value;
     }
-    status.className = '';
-    status.textContent = t('settings.saving');
+    return patch;
+  }
+
+  function acceptSettingsResponse(body, keys, revisions, themesAtStart) {
+    if (S.customThemes !== themesAtStart) {
+      body.custom_themes = S.customThemes;
+      const oldPalette = fieldByKey('theme_palette');
+      if (oldPalette) {
+        (body.fields || []).forEach(function (field) {
+          if (field.key === 'theme_palette') field.choices = oldPalette.choices;
+        });
+      }
+    }
+    S.settingsDoc = body;
+    S.settingsConfirmed = Object.assign({}, body.values || {});
+    S.customThemes = Array.isArray(body.custom_themes) ? body.custom_themes : [];
+    keys.forEach(function (key) {
+      S.settingsSubmittingKeys.delete(key);
+      if (S.settingsKeyRevisions[key] === revisions[key]) {
+        S.settingsDirtyKeys.delete(key);
+        S.settingsResetKeys.delete(key);
+        S.settingsDraft[key] = body.values[key];
+      }
+    });
+    Object.keys(body.values || {}).forEach(function (key) {
+      if (!S.settingsDirtyKeys.has(key)) S.settingsDraft[key] = body.values[key];
+    });
+    S.settings = Object.assign({}, S.settings, body.values || {});
+    LIVE_APPLY_KEYS.forEach(function (key) {
+      if (S.settingsDirtyKeys.has(key)) S.settings[key] = S.settingsDraft[key];
+    });
+    if (keys.includes('port_range_start') || keys.includes('port_range_end')) {
+      if (!S.settingsDirtyKeys.has('port_range_start') && !S.settingsDirtyKeys.has('port_range_end')) {
+        S.rangeStart = body.values.port_range_start;
+        S.rangeEnd = body.values.port_range_end;
+        S.rangeFromView = false;
+        rangeStartInput.value = S.rangeStart;
+        rangeEndInput.value = S.rangeEnd;
+        saveView();
+      }
+    }
+    applyAppearance();
+    persistAppearance();
+    syncSettingsMetadata(body);
+    if (body.values && body.values.local_scanners && body.values.local_scanners.length) {
+      const repair = document.querySelector('[data-i18n="settings.scanners.invalid"]');
+      if (repair) repair.remove();
+    }
+    syncDirtyFlag();
+  }
+
+  export async function saveSettingsFields() {
+    if (S.settingsDoc && S.settingsDoc.readonly) return false;
+    const keys = currentDirtySettingKeys();
+    if (!keys.length) return false;
+    const patch = collectSettingsPatch(keys);
+    if (!patch) return false;
+    const revisions = {};
+    keys.forEach(function (key) {
+      revisions[key] = S.settingsKeyRevisions[key];
+      S.settingsSubmittingKeys.add(key);
+    });
+    const themesAtStart = S.customThemes;
+    setPageStatus('settings-status', 'settings.saving', '', 0);
     let res;
     let body;
     try {
@@ -1293,79 +1518,280 @@ const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
       });
       body = await res.json().catch(function () { return {}; });
     } catch (err) {
-      status.className = 'is-error';
-      status.textContent = t('settings.saveFailed');
+      keys.forEach(function (key) { S.settingsSubmittingKeys.delete(key); });
+      setPageStatus('settings-status', 'settings.saveFailed', 'is-error', 0);
       return false;
     }
     if (!res.ok) {
-      status.className = 'is-error';
-      status.textContent = errorText(body, res.status);
+      keys.forEach(function (key) { S.settingsSubmittingKeys.delete(key); });
+      const status = document.getElementById('settings-status');
+      if (status) { status.className = 'is-error'; status.textContent = errorText(body, res.status); }
       return false;
     }
-    // Theme changes use a separate endpoint and may finish during this save.
-    if (S.customThemes !== themesAtStart) {
-      body.custom_themes = S.customThemes;
-      const paletteField = (S.settingsDoc.fields || []).find(function (field) { return field.key === 'theme_palette'; });
-      if (paletteField) {
-        (body.fields || []).forEach(function (field) {
-          if (field.key === 'theme_palette') field.choices = paletteField.choices;
-        });
-      }
-    }
-    const saved = S.settingsDoc && S.settingsDoc.values ? S.settingsDoc.values : S.settings;
-    const rangeEdited = patch.port_range_start !== saved.port_range_start
-      || patch.port_range_end !== saved.port_range_end;
-    const settingsResponseIsCurrent = saveRevision === S.settingsRevision;
-    if (settingsResponseIsCurrent) {
-      if (rangeEdited) S.rangeFromView = false;
-      applyServerSettings(body);
-      S.rangeFromView = true;
-      saveView();
-    } else {
-      /* Keep newer live previews intact while recording the server snapshot
-         that the next queued save will replace. */
-      S.settingsDoc = body;
-      S.customThemes = Array.isArray(body.custom_themes) ? body.custom_themes : [];
-    }
-    if (!(S.hostCatalog && S.hostCatalog.readonly)) {
-      let hostRes;
-      let hostBody;
-      try {
-        hostRes = await api('/api/hosts', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ peers: peers }),
-        });
-        hostBody = await hostRes.json().catch(function () { return {}; });
-      } catch (err) {
-        status.className = 'is-error';
-        status.textContent = t('settings.saveFailed');
-        return false;
-      }
-      if (!hostRes.ok) {
-        status.className = 'is-error';
-        status.textContent = errorText(hostBody, hostRes.status);
-        return false;
-      }
-      S.hostCatalog = {
-        local: hostBody.local || S.hostCatalog.local,
-        peers: Array.isArray(hostBody.peers) ? hostBody.peers : [],
-        readonly: !!hostBody.readonly,
-        max_peers: Number(hostBody.max_peers) || Number(S.hostCatalog.max_peers) || 32,
-      };
-      if (saveRevision === S.settingsRevision) {
-        S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
-        syncSavedPeerRows();
-      }
-    }
-    if (patch.local_scanners && patch.local_scanners.length) {
-      const scannerRepair = document.querySelector('[data-i18n="settings.scanners.invalid"]');
-      if (scannerRepair) scannerRepair.remove();
-    }
-    const saveIsCurrent = saveRevision === S.settingsRevision;
-    if (saveIsCurrent) syncSettingsMetadata(body);
-    S.settingsDirty = !saveIsCurrent;
-    status.className = saveIsCurrent ? 'is-ok' : '';
-    status.textContent = t(saveIsCurrent ? 'settings.saved' : 'settings.unsaved');
+    acceptSettingsResponse(body, keys, revisions, themesAtStart);
+    if (S.settingsDirtyKeys.size) setPageStatus('settings-status', 'settings.unsaved', '', 0);
+    else setPageStatus('settings-status', 'settings.saved', 'is-ok', 1800);
     return true;
+  }
+
+  export async function savePeersPage() {
+    if (!S.peersDirty || (S.hostCatalog && S.hostCatalog.readonly)) return false;
+    const revision = S.peersRevision;
+    const peers = peersPayload();
+    if (peers.some(function (peer) { return !peer.name || !peer.url; })) {
+      setPageStatus('peers-status', 'hosts.incomplete', 'action-status is-error', 0);
+      return false;
+    }
+    S.peersSubmitting = true;
+    setPageStatus('peers-status', 'settings.saving', 'action-status', 0);
+    let res;
+    let body;
+    try {
+      res = await api('/api/hosts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ peers: peers }),
+      });
+      body = await res.json().catch(function () { return {}; });
+    } catch (err) {
+      S.peersSubmitting = false;
+      setPageStatus('peers-status', 'hosts.saveFailed', 'action-status is-error', 0);
+      return false;
+    }
+    S.peersSubmitting = false;
+    if (!res.ok) {
+      const status = document.getElementById('peers-status');
+      if (status) { status.className = 'action-status is-error'; status.textContent = errorText(body, res.status); }
+      return false;
+    }
+    S.hostCatalog = {
+      local: body.local || S.hostCatalog.local,
+      peers: Array.isArray(body.peers) ? body.peers : [],
+      readonly: !!body.readonly,
+      max_peers: Number(body.max_peers) || Number(S.hostCatalog.max_peers) || 32,
+    };
+    if (revision === S.peersRevision) {
+      S.peersDirty = false;
+      S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
+      syncSavedPeerRows();
+      setPageStatus('peers-status', 'settings.saved', 'action-status is-ok', 1800);
+    } else {
+      setPageStatus('peers-status', 'settings.unsaved', 'action-status', 0);
+    }
+    syncDirtyFlag();
+    syncRefreshCapacity();
+    return true;
+  }
+
+  export async function saveSettingsPage() {
+    const results = await Promise.all([saveSettingsFields(), savePeersPage()]);
+    return results.some(Boolean);
+  }
+
+  export function mountSettingsPage(root, options) {
+    options = options || {};
+    if (!root) throw new Error('settings root is required');
+    const nav = document.getElementById('settings-nav');
+    const fields = document.getElementById('settings-fields');
+    let settingsTimer = null;
+    let peersTimer = null;
+    let settingsQueue = Promise.resolve(false);
+    let peersQueue = Promise.resolve(false);
+
+    function afterSave(saved, kind) {
+      if (saved && options.onSaved) options.onSaved(kind);
+      return saved;
+    }
+    function runSettingsSave() {
+      settingsQueue = settingsQueue.catch(function () { return false; }).then(saveSettingsFields)
+        .then(function (saved) { return afterSave(saved, 'settings'); });
+      return settingsQueue;
+    }
+    function runPeersSave() {
+      peersQueue = peersQueue.catch(function () { return false; }).then(savePeersPage)
+        .then(function (saved) { return afterSave(saved, 'peers'); });
+      return peersQueue;
+    }
+    function scheduleSettings(delay) {
+      if (S.settingsDoc && S.settingsDoc.readonly) return;
+      if (settingsTimer) clearTimeout(settingsTimer);
+      settingsTimer = setTimeout(function () { settingsTimer = null; runSettingsSave(); }, Math.max(0, Number(delay) || 0));
+    }
+    function schedulePeers(delay) {
+      if (S.hostCatalog && S.hostCatalog.readonly) return;
+      if (peersTimer) clearTimeout(peersTimer);
+      peersTimer = setTimeout(function () { peersTimer = null; runPeersSave(); }, Math.max(0, Number(delay) || 0));
+    }
+    function applyLocale() {
+      if (!window.PortLightI18n) return Promise.resolve();
+      return PortLightI18n.load(S.settings.locale).then(function () {
+        PortLightI18n.applyDom();
+        syncLocaleTrigger();
+        syncRefreshCapacity();
+        if (S.settingsDoc) {
+          const lead = document.getElementById('settings-lead');
+          if (lead) lead.textContent = t(S.settingsDoc.readonly ? 'settings.leadReadonly' : 'settings.lead');
+        }
+        if (options.onLocaleApplied) options.onLocaleApplied();
+      });
+    }
+
+    root.addEventListener('submit', function (event) { event.preventDefault(); controller.flush(); });
+    nav.addEventListener('click', function (event) {
+      const button = event.target.closest('[role="tab"][data-settings-panel]');
+      if (!button) return;
+      event.preventDefault();
+      goSettingsPanel(button.getAttribute('data-settings-panel'));
+    });
+    nav.addEventListener('keydown', function (event) {
+      const button = event.target.closest('[role="tab"][data-settings-panel]');
+      if (!button) return;
+      let index = SETTINGS_PANELS.indexOf(button.getAttribute('data-settings-panel'));
+      if (index < 0) return;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') index = (index + 1) % SETTINGS_PANELS.length;
+      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') index = (index - 1 + SETTINGS_PANELS.length) % SETTINGS_PANELS.length;
+      else if (event.key === 'Home') index = 0;
+      else if (event.key === 'End') index = SETTINGS_PANELS.length - 1;
+      else return;
+      event.preventDefault();
+      goSettingsPanel(SETTINGS_PANELS[index]);
+      const next = document.getElementById('settings-tab-' + SETTINGS_PANELS[index]);
+      if (next) next.focus();
+    });
+    fields.addEventListener('change', function (event) {
+      if (!isAutosavedSetting(event.target)) return;
+      if (event.target.matches('[data-peer-field]')) {
+        readPeersDraftFromForm();
+        markPeersDirty();
+        schedulePeers(180);
+        return;
+      }
+      const key = settingKeyForInput(event.target);
+      if (LIVE_APPLY_KEYS.indexOf(key) >= 0) {
+        S.settings[key] = event.target.value;
+        applyAppearance();
+        if (key === 'theme_mode') syncPaletteAvailability();
+        if (key === 'locale') applyLocale();
+      }
+      markDirty(event.target);
+      syncDependentSettings();
+      scheduleSettings(180);
+    });
+    fields.addEventListener('input', function (event) {
+      if (!isAutosavedSetting(event.target)) return;
+      if (event.target.matches('[data-peer-field]')) {
+        readPeersDraftFromForm();
+        markPeersDirty();
+        schedulePeers(700);
+        return;
+      }
+      updateRefreshSlider(event.target);
+      markDirty(event.target);
+      scheduleSettings(700);
+    });
+    fields.addEventListener('click', function (event) {
+      const reset = event.target.closest('[data-reset-setting]');
+      if (reset) {
+        event.preventDefault();
+        const key = reset.getAttribute('data-reset-setting');
+        if (!restoreInheritedSetting(key)) return;
+        if (key === 'locale') applyLocale();
+        if (CARD_FIELD_KEYS[key]) updateDisplayPreview();
+        scheduleSettings(0);
+        return;
+      }
+      const add = event.target.closest('#peer-add');
+      if (add) {
+        event.preventDefault();
+        if (S.hostCatalog.readonly || (S.settingsDoc && S.settingsDoc.readonly)) return;
+        readPeersDraftFromForm();
+        if (S.peersDraft.length >= (Number(S.hostCatalog.max_peers) || 32)) return;
+        S.peersDraft.push({ id: '', name: '', description: '', url: '', username: '', password: '', has_auth: false, clear_auth: false });
+        renderPeersEditor(false);
+        markPeersDirty();
+        return;
+      }
+      const row = event.target.closest('.peer-row');
+      if (row && event.target.closest('[data-peer-remove]')) {
+        event.preventDefault();
+        readPeersDraftFromForm();
+        const index = parseInt(row.getAttribute('data-peer-index'), 10);
+        if (!isNaN(index)) S.peersDraft.splice(index, 1);
+        renderPeersEditor(!!(S.settingsDoc && S.settingsDoc.readonly) || !!S.hostCatalog.readonly);
+        markPeersDirty();
+        schedulePeers(180);
+        return;
+      }
+      if (row && event.target.closest('[data-peer-clear-auth]')) {
+        event.preventDefault();
+        readPeersDraftFromForm();
+        const index = parseInt(row.getAttribute('data-peer-index'), 10);
+        if (!isNaN(index) && S.peersDraft[index]) {
+          S.peersDraft[index].clear_auth = true;
+          S.peersDraft[index].has_auth = false;
+          S.peersDraft[index].username = '';
+          S.peersDraft[index].password = '';
+        }
+        renderPeersEditor(false);
+        markPeersDirty();
+        schedulePeers(180);
+        return;
+      }
+      const trigger = event.target.closest('.locale-trigger');
+      if (trigger) {
+        event.preventDefault();
+        const drop = trigger.closest('.locale-dropdown');
+        const open = !drop.classList.contains('is-open');
+        closeLocaleMenu();
+        if (open) {
+          drop.classList.add('is-open');
+          trigger.setAttribute('aria-expanded', 'true');
+          const selected = drop.querySelector('.locale-row.is-selected') || drop.querySelector('.locale-row');
+          if (selected) selected.focus({ preventScroll: true });
+        }
+        return;
+      }
+      const localeRow = event.target.closest('.locale-row');
+      if (!localeRow) return;
+      event.preventDefault();
+      const drop = localeRow.closest('.locale-dropdown');
+      const input = drop.querySelector('input[name="locale"]');
+      const value = localeRow.getAttribute('data-value');
+      if (input.value === value) {
+        closeLocaleMenu({ focusTrigger: true });
+        return;
+      }
+      input.value = value;
+      drop.querySelectorAll('.locale-row').forEach(function (rowEl) {
+        const on = rowEl === localeRow;
+        rowEl.classList.toggle('is-selected', on);
+        rowEl.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      syncLocaleTrigger();
+      closeLocaleMenu({ focusTrigger: true });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    document.addEventListener('click', function (event) {
+      if (!event.target.closest('.locale-dropdown')) closeLocaleMenu();
+    });
+
+    const controller = {
+      open(section) {
+        S.settingsPanel = SETTINGS_PANELS.includes(section) ? section : 'appearance';
+        return loadSettingsPage();
+      },
+      show(section) { showSettingsPanel(section); },
+      syncPaletteAvailability,
+      closeTransient(opts) { return closeLocaleMenu(opts); },
+      hasPending() {
+        return syncDirtyFlag() || !!settingsTimer || !!peersTimer ||
+          !!S.peersSubmitting || !!(S.settingsSubmittingKeys && S.settingsSubmittingKeys.size);
+      },
+      flush() {
+        if (settingsTimer) { clearTimeout(settingsTimer); settingsTimer = null; }
+        if (peersTimer) { clearTimeout(peersTimer); peersTimer = null; }
+        return Promise.all([runSettingsSave(), runPeersSave()]);
+      },
+    };
+    return controller;
   }

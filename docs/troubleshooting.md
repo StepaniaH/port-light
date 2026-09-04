@@ -1,5 +1,11 @@
 # Troubleshooting
 
+## Run Setup / Doctor first
+
+Open the pulse icon in the header (`#/doctor`). It reads the current monitor state without launching another scan and checks settings storage, snapshot freshness, host-listener trust, Docker access, Compose discovery completeness, and recent degraded events. Each warning includes a concrete setup direction.
+
+The page can copy or download a diagnostic report for an issue. The report is built from an aggregate allowlist: it excludes machine and peer names, URLs, ports, bind addresses, paths, credentials, raw environment values, timestamps from degraded events, and degradation scopes. Unknown event sources or reasons are written as `unknown` / `redacted`. Review any report before sharing it, as you would any diagnostic artifact.
+
 ## Occupancy scan warning
 
 The warning “Occupancy data is incomplete or stale; free ports cannot be confirmed” means that at least one enabled scanner failed, returned incomplete data, or did not refresh in time. Port-Light keeps known occupied ports visible but does not treat missing observations as proof that a port is free.
