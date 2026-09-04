@@ -1,14 +1,14 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=89';
-import { t, tx, escapeHtml, errorText } from './text.js?v=89';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=89';
-import { moveChipFocus } from './a11y.js?v=89';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=89';
-import { api, fetchHosts, fetchSettings } from './api.js?v=89';
-import { hasPeers, hostById, hostName } from './hosts.js?v=89';
-import { bindAddressView } from './grid.js?v=89';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=89';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=90';
+import { t, tx, escapeHtml, errorText } from './text.js?v=90';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=90';
+import { moveChipFocus } from './a11y.js?v=90';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=90';
+import { api, fetchHosts, fetchSettings } from './api.js?v=90';
+import { hasPeers, hostById, hostName } from './hosts.js?v=90';
+import { bindAddressView } from './grid.js?v=90';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=90';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -92,6 +92,13 @@ function updateDraftForInput(input) {
   if (!field) return '';
   S.settingsDraft[key] = readFieldValue(field);
   return key;
+}
+
+function settingValuesEqual(left, right) {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && JSON.stringify(left) === JSON.stringify(right);
+  }
+  return left === right;
 }
 
   export function loadSettingsPage() {
@@ -228,7 +235,7 @@ function updateDraftForInput(input) {
       '" aria-labelledby="settings-tab-' + id + '">' + inner + '</div>';
   }
 
-  export function showSettingsPanel(id) {
+  export function showSettingsPanel(id, resetScroll) {
     if (SETTINGS_PANELS.indexOf(id) < 0) id = 'appearance';
     S.settingsPanel = id;
     document.querySelectorAll('#settings-nav [role="tab"]').forEach(function (btn) {
@@ -239,11 +246,12 @@ function updateDraftForInput(input) {
     document.querySelectorAll('#settings-fields .settings-panel').forEach(function (panel) {
       panel.hidden = panel.getAttribute('data-settings-panel') !== id;
     });
+    if (resetScroll) window.scrollTo(0, 0);
   }
 
   export function goSettingsPanel(id) {
     if (SETTINGS_PANELS.indexOf(id) < 0) return;
-    showSettingsPanel(id);
+    showSettingsPanel(id, true);
     const next = '#/settings/' + id;
     if ((location.hash || '') !== next) location.hash = next;
   }
@@ -285,14 +293,20 @@ function updateDraftForInput(input) {
     const key = updateDraftForInput(input);
     S.settingsRevision += 1;
     if (key) {
-      S.settingsDirtyKeys.add(key);
       S.settingsResetKeys.delete(key);
-      S.settingsKeyRevisions[key] = S.settingsRevision;
+      const matchesConfirmed = settingValuesEqual(S.settingsDraft[key], S.settingsConfirmed[key]);
+      if (matchesConfirmed && !S.settingsSubmittingKeys.has(key)) {
+        S.settingsDirtyKeys.delete(key);
+        delete S.settingsKeyRevisions[key];
+      } else {
+        S.settingsDirtyKeys.add(key);
+        S.settingsKeyRevisions[key] = S.settingsRevision;
+      }
       syncDirtyFlag();
     } else {
       S.settingsDirty = true;
     }
-    setPageStatus('settings-status', 'settings.unsaved', '', 0);
+    setPageStatus('settings-status', key && !S.settingsDirtyKeys.size ? '' : 'settings.unsaved', '', 0);
   }
 
   export function markPeersDirty() {
@@ -622,7 +636,7 @@ function updateDraftForInput(input) {
       escapeHtml(t('settings.editor.import')) + '</button>' +
       '<button type="button" class="btn-primary" data-editor-save' + dis + '>' +
       escapeHtml(t('settings.editor.save')) + '</button>' +
-      '</div><p id="theme-editor-status" class="action-status" role="status" aria-live="polite"></p>' + rows + '</details>';
+      '</div>' + rows + '</details><p id="theme-editor-status" class="action-status" role="status" aria-live="polite"></p>';
   }
 
   function rgbToHex(raw) {
@@ -1222,7 +1236,15 @@ function updateDraftForInput(input) {
       const saveBtn = e.target.closest('[data-editor-save]');
       if (saveBtn) { saveEditorTheme(saveBtn); return; }
       const exportBtn = e.target.closest('[data-editor-export]');
-      if (exportBtn) { exportEditorTheme(); return; }
+      if (exportBtn) {
+        try {
+          exportEditorTheme();
+          setPageStatus('theme-editor-status', 'settings.editor.exported', 'action-status is-ok', 1800);
+        } catch (err) {
+          setPageStatus('theme-editor-status', 'settings.editor.exportFailed', 'action-status is-error', 0);
+        }
+        return;
+      }
       const importBtn = e.target.closest('[data-editor-import]');
       if (importBtn) {
         const file = document.getElementById('editor-file');
@@ -1780,7 +1802,7 @@ function updateDraftForInput(input) {
         S.settingsPanel = SETTINGS_PANELS.includes(section) ? section : 'appearance';
         return loadSettingsPage();
       },
-      show(section) { showSettingsPanel(section); },
+      show(section) { showSettingsPanel(section, true); },
       syncPaletteAvailability,
       closeTransient(opts) { return closeLocaleMenu(opts); },
       hasPending() {

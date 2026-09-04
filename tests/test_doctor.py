@@ -65,6 +65,20 @@ def test_doctor_report_is_allowlisted_and_excludes_scopes():
     assert '"source": "unknown"' in redacted
     assert '"reason": "redacted"' in redacted
 
+    facts = _facts()
+    facts["settings_source"] = "secret-settings-source"
+    facts["listen_source"] = "secret-listen-source"
+    facts["docker_transport"] = "secret-docker-endpoint"
+    facts["monitor"]["sources"]["docker"] = "secret-scanner-state"
+    redacted = doctor.report_text(doctor.build_diagnostics(
+        facts, generated_at="2026-09-04T00:00:00+00:00",
+    ))
+    assert "secret-" not in redacted
+    assert '"settings_source": "auto"' in redacted
+    assert '"source": "none"' in redacted
+    assert '"transport": "socket_missing"' in redacted
+    assert '"observed": "checking"' in redacted
+
 
 def test_doctor_api_never_exposes_environment_values_or_peer_details(tmp_path, monkeypatch):
     secret = "never-copy-this-secret"
@@ -83,6 +97,8 @@ def test_doctor_api_never_exposes_environment_values_or_peer_details(tmp_path, m
     degradations.report("compose", str(private_path), "invalid compose file")
     try:
         client = TestClient(app)
+        assert client.get("/api/doctor").status_code == 401
+        assert client.get("/api/doctor/report").status_code == 401
         response = client.get("/api/doctor", auth=("private-user", secret))
         assert response.status_code == 200
         body = response.json()
@@ -113,3 +129,19 @@ def test_doctor_marks_disabled_scanners_as_information():
     checks = {row["id"]: row for row in document["checks"]}
     assert checks["docker"]["status"] == "info"
     assert checks["compose"]["status"] == "info"
+
+
+def test_doctor_current_access_failures_override_an_older_successful_scan():
+    facts = _facts()
+    facts["monitor"]["sources"] = {"listen": "ok", "docker": "ok", "compose": "ok"}
+    facts["docker_transport"] = "socket_denied"
+    facts["compose_root_available"] = False
+    facts["compose_root_readable"] = False
+    facts["degradations"] = []
+
+    document = doctor.build_diagnostics(facts, generated_at="2026-09-04T00:00:00+00:00")
+    checks = {row["id"]: row for row in document["checks"]}
+    assert checks["docker"]["status"] == "fail"
+    assert checks["docker"]["detail"] == "access_failed"
+    assert checks["compose"]["status"] == "fail"
+    assert checks["compose"]["detail"] == "access_failed"

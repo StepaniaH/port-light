@@ -50,7 +50,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Copy the port number on click
 - Optional card bind-address summaries, with separate IPv4/IPv6 controls, compact IPv6 rendering, and repetitive wildcard binds omitted
 - One UI can pull occupancy maps from up to 32 other Port-Light instances (LAN / Tailscale). A waterfall shows all machines by default; Settings → Appearance → Cards can switch to tabs. Optional notes below machine names can record IPs or other context. Each host still scans itself.
-- Settings save automatically after each change. Appearance controls keep their live preview: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. All ten palette families include light and dark variants. UI language (English, Français, Deutsch, Español, 简体中文, 繁體中文, 日本語). Also via Compose env.
+- Settings save automatically after each change. Appearance controls keep their live preview: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. All ten palette families include light and dark variants. The UI supports English, Français, Deutsch, Español, 简体中文, 繁體中文, and 日本語; language can also be set through Compose environment variables.
 - Custom palettes, import/export, and Loose / Standard / Compact card-density presets
 - Setup / Doctor checks settings storage, snapshot freshness, host-listener trust, Docker access, Compose discovery, and recent degraded events; its copy/download report excludes names, URLs, ports, paths, credentials, environment values, and event scopes
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
@@ -82,7 +82,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.9
+    image: stepaniah/port-light:v0.8.0
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -103,7 +103,7 @@ docker compose up -d
 
 Open `http://localhost:2100`.
 
-`/var/run/docker.sock` is powerful, even mounted read-only. Prefer a [socket proxy](docs/deployment.md#docker-socket-proxy) if the UI might be reachable by anyone you do not fully trust. More install options (Unraid template, Podman, reverse proxy, build from source): [docs/deployment.md](docs/deployment.md).
+Mounting `/var/run/docker.sock` grants broad Docker API access; a read-only mount does not restrict API operations. Prefer a [socket proxy](docs/deployment.md#docker-socket-proxy) if the UI might be reachable by anyone you do not fully trust. More install options (Unraid template, Podman, reverse proxy, build from source): [docs/deployment.md](docs/deployment.md).
 
 `NET_ADMIN` is **not required** in the usual bridge setup. It only helps the `ss` fallback on bare metal.
 

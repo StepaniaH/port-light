@@ -52,6 +52,7 @@
 - 一个界面可以拉取最多 32 个其他 Port-Light 实例的占用图（局域网 / Tailscale）。默认以瀑布流展示全部机器，也可在「设置 → 外观 → 卡片」中选择分 Tab；机器名称下方可填写 IP 等简短备注。每台机器仍自己扫描。
 - 设置修改后会自动保存。外观仍会实时预览：深色 / 浅色 / 跟随系统，以及 Gruvbox、Catppuccin、Nord 等 10 套配色，每套都支持深色和浅色；界面语言（English / Français / Deutsch / Español / 简体中文 / 繁體中文 / 日本語）：设置页可改，也可以写在 Compose 环境变量里
 - 自定义色板、JSON 导入导出，以及宽松 / 标准 / 紧凑三种卡片密度
+- Setup / Doctor 检查设置存储、快照新鲜度、本机监听来源可信度、Docker 访问、Compose 发现完整性和近期降级事件；复制或下载的报告不包含机器名称、URL、端口、路径、凭据、环境变量值或事件范围
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
 - 查找空闲端口：工具栏按钮（或 `GET /api/free-runs?count=N`）返回范围内最大的连续空闲段，可一键预留
@@ -81,7 +82,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.7.9
+    image: stepaniah/port-light:v0.8.0
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -102,7 +103,7 @@ docker compose up -d
 
 打开 `http://localhost:2100`。
 
-`/var/run/docker.sock` 即使只读也权限很高。如果 UI 可能被不完全信任的人访问，请用 [socket proxy](docs/deployment.md#docker-socket-proxy)。更多安装方式（Unraid 模板、Podman、反向代理、从源码构建）见 [docs/deployment.md](docs/deployment.md)。
+挂载 `/var/run/docker.sock` 会授予广泛的 Docker API 访问权限；只读挂载不会限制 API 操作。如果 UI 可能被不完全信任的人访问，请用 [socket proxy](docs/deployment.md#docker-socket-proxy)。更多安装方式（Unraid 模板、Podman、反向代理、从源码构建）见 [docs/deployment.md](docs/deployment.md)。
 
 常规桥接网络**不需要** `NET_ADMIN`。它只对裸机上的 `ss` 回退路径有帮助。
 
@@ -147,7 +148,7 @@ docker compose up -d
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
 | `AGENT_TOKEN` | 未设置 | 设置后，`GET /api/ports/suggest` 需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
 
-上表里除超时、路径和密钥外，也可以在 Web UI 的**设置**中修改，包括本机名称、扫描来源、Compose 发现范围和其他机器。修改会自动写入 `/data/port_light.json`。OpenAPI 在 `/docs`。
+上表里除超时、路径和密钥外，也可以在 Web UI 的**设置**中修改，包括本机名称、扫描来源、Compose 发现范围和其他机器。修改会自动写入 `/data/port_light.json`；请求只提交实际改动的字段，也可以移除已保存的覆盖值，恢复继承环境变量或默认值。OpenAPI 在 `/docs`。
 
 状态栏会显示待保存、已保存或保存失败。离开页面前，请补全每台机器的名称和 URL。创建、导入或删除自定义色板仍需在色板编辑器中手动操作。
 
@@ -164,6 +165,7 @@ docker compose up -d
 - 扫描数据存储在本机，并提供给页面和 API 客户端；Hub 会接收已配置实例返回的占用数据。启用身份验证可限制读取权限。
 - API 和端口详情原本就包含绑定地址；开启卡片摘要后，截图会更容易包含这些地址，分享前请检查截图内容。
 - 机器短描述是纯文本，拥有页面或 API 访问权限的人均可读取，也可能出现在截图中。请勿填写密码、令牌或其他秘密信息。
+- Doctor 报告由聚合数据白名单生成，只包含状态、数量、安全的来源枚举和已知失败原因；不包含机器身份、其他机器详情、绑定地址、端口、文件路径、环境变量值、凭据或降级事件范围。未知来源和原因会被替换为 `unknown` / `redacted`。
 - Compose 旁边的 `.env` 只用于本地 `${VAR}` 替换，不会上传。
 - 手动标签、端口历史、自动化调用标签和 peer 设置都保存在数据卷中。peer 密码保存在 `port_light.json`；应像保护其他凭据文件一样保护该数据卷。
 

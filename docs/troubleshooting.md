@@ -4,7 +4,7 @@
 
 Open the pulse icon in the header (`#/doctor`). It reads the current monitor state without launching another scan and checks settings storage, snapshot freshness, host-listener trust, Docker access, Compose discovery completeness, and recent degraded events. Each warning includes a concrete setup direction.
 
-The page can copy or download a diagnostic report for an issue. The report is built from an aggregate allowlist: it excludes machine and peer names, URLs, ports, bind addresses, paths, credentials, raw environment values, timestamps from degraded events, and degradation scopes. Unknown event sources or reasons are written as `unknown` / `redacted`. Review any report before sharing it, as you would any diagnostic artifact.
+The page can copy or download a diagnostic report for an issue. The report is built from an aggregate allowlist: it excludes machine and peer names, URLs, ports, bind addresses, paths, credentials, raw environment values, timestamps from degraded events, and degradation scopes. Unknown event sources or reasons are written as `unknown` / `redacted`. Review the report before sharing it.
 
 ## Occupancy scan warning
 
@@ -12,13 +12,11 @@ The warning “Occupancy data is incomplete or stale; free ports cannot be confi
 
 Hover over the information icon, or focus or click the warning, to see guidance based on the current scan. Press Escape to close the disclosure. Remote-machine warnings describe that machine; the hub's local settings do not modify a peer. The guidance does not include raw log messages, private paths, or environment values.
 
-### Upgrading to v0.7.9
+### Upgrading to v0.8.0
 
-No configuration migration is required. Existing peers and saved settings are preserved. Settings changes now save automatically, and one- or two-machine waterfall layouts expand across the available desktop width. Choose tabs under Settings → Appearance → Cards if preferred.
+No configuration migration is required. Existing peers and saved settings are preserved. Settings now sends only changed fields, supports restoring an environment/default value, and reports settings and peer saves independently. Setup / Doctor is available from the pulse icon in the header.
 
-For deployments upgrading from v0.7.6, the scanner fixes introduced in v0.7.7 prevent discovery beyond the selected depth and repeated interleaved degradation logs. These fixes do not grant access to unreadable directories or Docker sockets.
-
-If your enabled scanners already work, updating the image and recreating the container is enough. Change a pinned image tag to `v0.7.9` before running these commands; pulling an older version tag does not upgrade it. Deployments using `latest` can retain that tag:
+If your enabled scanners already work, updating the image and recreating the container is enough. Change a pinned image tag to `v0.8.0` before running these commands; pulling an older version tag does not upgrade it. Deployments using `latest` can retain that tag:
 
 ```bash
 docker compose pull port-light
@@ -67,6 +65,6 @@ For example, if each stack has its Compose file directly under a common parent a
 
 Disable a scanner only if that source is intentionally outside your occupancy checks. Disabling Compose omits declarations for services that are not running. Disabling Docker omits information that only the Docker API supplies. A successful scan is complete only for the sources and discovery scope you selected.
 
-Saved settings normally override environment defaults. If `PORT_LIGHT_SETTINGS_SOURCE=env` or `SETTINGS_READONLY=1` is set, edit the deployment configuration instead; the settings page remains read-only. For v0.7.6 instances that do not yet expose scanner selection in the UI, use `PORT_LIGHT_SCANNERS` in Compose, then recreate the container. Do not assume that upgrading the hub upgrades its peers.
+Saved settings normally override environment defaults. If `PORT_LIGHT_SETTINGS_SOURCE=env` or `SETTINGS_READONLY=1` is set, edit the deployment configuration instead; the settings page remains read-only. Upgrading the hub does not upgrade its peers.
 
 An invalid or empty scanner selection blocks occupancy checks instead of silently enabling all sources. The settings page remains available: select at least one valid source and let the change save automatically, or correct `PORT_LIGHT_SCANNERS` in the deployment if settings are locked. Valid names are `listen`, `docker`, and `compose`.

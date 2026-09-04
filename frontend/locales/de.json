@@ -34,6 +34,7 @@
       "stale": "Das letzte Belegungsabbild ist veraltet.", "ready": "Das Belegungsabbild ist vollständig und aktuell.",
       "incomplete": "Das Scanergebnis ist unvollständig.", "disabled": "Diese Quelle ist deaktiviert.",
       "ok": "Der letzte Scan dieser Quelle war erfolgreich.", "failed": "Der letzte Scan dieser Quelle ist fehlgeschlagen.",
+      "access_failed": "Der erforderliche Socket oder das Verzeichnis ist nicht zugänglich.",
       "checking": "Diese Quelle hat noch kein Ergebnis gemeldet.", "untrusted": "Die verfügbare Listener-Tabelle bildet den Host möglicherweise nicht ab.",
       "recent": "Es wurden kürzlich Einschränkungen erfasst.", "none": "Keine kürzlichen Einschränkungen erfasst."
     },
@@ -245,6 +246,8 @@
       "new": "Neue eigene Palette",
       "save": "Speichern",
       "export": "Exportieren",
+      "exported": "Palettendatei exportiert.",
+      "exportFailed": "Die Palettendatei konnte nicht exportiert werden.",
       "import": "Importieren",
       "invalid": "Korrigieren Sie die markierten Farbwerte und geben Sie der Palette einen Namen.",
       "saveFailed": "Die Palette konnte nicht gespeichert werden.",

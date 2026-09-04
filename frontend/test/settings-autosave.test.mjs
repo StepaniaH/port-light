@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
-const { isAutosavedSetting, loadSettingsPage, markDirty, markPeersDirty, peersPayload, refreshThemeChoices,
+const { goSettingsPanel, isAutosavedSetting, loadSettingsPage, markDirty, markPeersDirty, peersPayload, refreshThemeChoices,
   renderPeersEditor, restoreInheritedSetting, savePeersPage, saveSettingsFields, saveSettingsPage,
   syncSavedPeerRows, syncSettingsMetadata } =
   await import('../js/settings.js?v=' + version);
@@ -120,6 +120,61 @@ test('ordinary settings saves send only the dirty field', async () => {
     assert.equal(await saveSettingsFields(), true);
     assert.deepEqual(submitted, { host_name: 'Renamed host' });
     assert.equal(S.settingsDirtyKeys.size, 0);
+  });
+});
+
+test('changing a setting back to its confirmed value clears the dirty key', async () => {
+  await withSettingsState(async form => {
+    const field = { key: 'host_name', type: 'str', origin: 'default' };
+    form.elements = { host_name: { name: 'host_name', value: 'Old host' } };
+    S.settingsDoc = { readonly: false, fields: [field], values: { host_name: 'Old host' }, custom_themes: [] };
+    S.settingsConfirmed = { host_name: 'Old host' };
+    S.settingsDraft = { host_name: 'Old host' };
+    S.settingsDirtyKeys = new Set();
+    S.settingsResetKeys = new Set();
+    S.settingsSubmittingKeys = new Set();
+    S.settingsKeyRevisions = {};
+
+    form.elements.host_name.value = 'New host';
+    markDirty(form.elements.host_name);
+    assert.deepEqual(Array.from(S.settingsDirtyKeys), ['host_name']);
+    form.elements.host_name.value = 'Old host';
+    markDirty(form.elements.host_name);
+    assert.equal(S.settingsDirtyKeys.size, 0);
+    assert.equal(document.getElementById('settings-status').textContent, '');
+    assert.equal(await saveSettingsFields(), false);
+  });
+});
+
+test('reverting while the same key is in flight remains dirty for a follow-up save', async () => {
+  await withSettingsState(async form => {
+    const field = { key: 'host_name', type: 'str', origin: 'default' };
+    form.elements = { host_name: { name: 'host_name', value: 'Old host' } };
+    S.settingsDoc = { readonly: false, fields: [field], values: { host_name: 'Old host' }, custom_themes: [] };
+    S.settingsConfirmed = { host_name: 'Old host' };
+    S.settingsDraft = { host_name: 'New host' };
+    S.settingsDirtyKeys = new Set(['host_name']);
+    S.settingsResetKeys = new Set();
+    S.settingsSubmittingKeys = new Set(['host_name']);
+    S.settingsKeyRevisions = { host_name: 10 };
+    S.settingsRevision = 10;
+    markDirty(form.elements.host_name);
+    assert.deepEqual(Array.from(S.settingsDirtyKeys), ['host_name']);
+    assert.ok(S.settingsKeyRevisions.host_name > 10);
+  });
+});
+
+test('switching settings panels resets the page scroll position', async () => {
+  await withSettingsState(async () => {
+    const savedScroll = window.scrollTo;
+    const calls = [];
+    window.scrollTo = (...args) => calls.push(args);
+    try {
+      goSettingsPanel('occupancy');
+      assert.deepEqual(calls, [[0, 0]]);
+    } finally {
+      window.scrollTo = savedScroll;
+    }
   });
 });
 

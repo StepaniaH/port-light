@@ -34,6 +34,7 @@
       "stale": "Le dernier instantané d’occupation est périmé.", "ready": "L’instantané d’occupation est complet et à jour.",
       "incomplete": "Le résultat de l’analyse est incomplet.", "disabled": "Cette source est désactivée.",
       "ok": "La dernière analyse de cette source a réussi.", "failed": "La dernière analyse de cette source a échoué.",
+      "access_failed": "Le socket ou le répertoire requis n’est pas accessible.",
       "checking": "Cette source n’a pas encore fourni de résultat.", "untrusted": "La table d’écoute disponible peut ne pas représenter l’hôte.",
       "recent": "Des événements dégradés récents ont été enregistrés.", "none": "Aucun événement dégradé récent."
     },
@@ -245,6 +246,8 @@
       "new": "Nouvelle palette personnalisée",
       "save": "Enregistrer",
       "export": "Exporter",
+      "exported": "Fichier de palette exporté.",
+      "exportFailed": "Impossible d’exporter le fichier de palette.",
       "import": "Importer",
       "invalid": "Corrigez les valeurs de couleur signalées et donnez un nom à la palette.",
       "saveFailed": "Impossible d’enregistrer la palette.",

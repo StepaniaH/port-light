@@ -1,7 +1,7 @@
 /* Setup diagnostics page. Rendering is fed only the sanitized Doctor API. */
 
-import { fetchDoctor } from './api.js?v=89';
-import { escapeHtml, t } from './text.js?v=89';
+import { fetchDoctor } from './api.js?v=90';
+import { escapeHtml, t } from './text.js?v=90';
 
 function statusLabel(status) {
   return t('doctor.status.' + status);
@@ -53,6 +53,30 @@ export function renderDoctor(document) {
     '</summary><pre>' + escapeHtml(document.report || '') + '</pre></details>';
 }
 
+export async function copyReportText(report) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(report);
+      return;
+    } catch {}
+  }
+  const area = window.document.createElement('textarea');
+  area.value = report;
+  area.setAttribute('readonly', '');
+  area.setAttribute('aria-hidden', 'true');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  window.document.body.appendChild(area);
+  if (typeof area.select === 'function') area.select();
+  let copied = false;
+  try {
+    copied = typeof window.document.execCommand === 'function' && window.document.execCommand('copy');
+  } finally {
+    area.remove();
+  }
+  if (!copied) throw new Error('Copy is unavailable');
+}
+
 export function mountDoctorPage(root) {
   if (!root) throw new Error('doctor root is required');
   let report = '';
@@ -81,13 +105,14 @@ export function mountDoctorPage(root) {
   }
 
   window.document.getElementById('doctor-refresh').addEventListener('click', load);
-  copy.addEventListener('click', function () {
+  copy.addEventListener('click', async function () {
     if (!report) return;
-    navigator.clipboard.writeText(report).then(function () {
+    try {
+      await copyReportText(report);
       if (status) { status.className = 'action-status is-ok'; status.textContent = t('doctor.copied'); }
-    }).catch(function () {
+    } catch (err) {
       if (status) { status.className = 'action-status is-error'; status.textContent = t('doctor.copyFailed'); }
-    });
+    }
   });
 
   return { open: load };

@@ -12,10 +12,23 @@ from datetime import datetime, timezone
 from typing import Any
 
 _STATUSES = ("pass", "warning", "fail", "info")
+_SAFE_SETTINGS_SOURCES = frozenset({"auto", "env", "file"})
+_SAFE_SCANNER_STATES = frozenset({"checking", "disabled", "failed", "ok"})
+_SAFE_LISTEN_SOURCES = frozenset({"host_proc", "lsof", "none", "proc", "ss"})
+_SAFE_DOCKER_TRANSPORTS = frozenset({
+    "configured", "socket_denied", "socket_missing", "socket_readable",
+})
 _SAFE_SOURCES = frozenset({
     "compose", "docker", "history", "listen", "monitor", "settings",
     "store", "suggest", "themes", "webhook",
 })
+
+
+def _safe_enum(value: Any, allowed: frozenset[str], fallback: str) -> str:
+    text = str(value or "")
+    return text if text in allowed else fallback
+
+
 _SAFE_REASONS = frozenset({
     "corrupt file quarantined",
     "could not record allocation event",
@@ -57,14 +70,16 @@ def build_diagnostics(facts: dict[str, Any], *, generated_at: str | None = None)
     if facts["settings_readonly"]:
         checks.append(_check(
             "settings_store", "info", "readonly",
-            source=facts["settings_source"], writable=False,
+            source=_safe_enum(facts["settings_source"], _SAFE_SETTINGS_SOURCES, "auto"),
+            writable=False,
         ))
     else:
         writable = bool(facts["data_dir_writable"])
         checks.append(_check(
             "settings_store", "pass" if writable else "fail",
             "writable" if writable else "not_writable",
-            source=facts["settings_source"], writable=writable,
+            source=_safe_enum(facts["settings_source"], _SAFE_SETTINGS_SOURCES, "auto"),
+            writable=writable,
         ))
 
     if not monitor.get("initialized"):
@@ -86,19 +101,26 @@ def build_diagnostics(facts: dict[str, Any], *, generated_at: str | None = None)
         if scanner not in enabled:
             checks.append(_check(scanner, "info", "disabled", enabled=False))
             continue
-        observed = sources.get(scanner, "checking")
+        observed = _safe_enum(sources.get(scanner), _SAFE_SCANNER_STATES, "checking")
         status = "pass" if observed == "ok" else "fail" if observed == "failed" else "warning"
         detail = observed if observed in ("ok", "failed") else "checking"
         evidence: dict[str, Any] = {"enabled": True, "observed": observed}
         if scanner == "listen":
-            evidence.update(source=facts["listen_source"], trusted=bool(facts["listen_trusted"]))
+            evidence.update(
+                source=_safe_enum(facts["listen_source"], _SAFE_LISTEN_SOURCES, "none"),
+                trusted=bool(facts["listen_trusted"]),
+            )
             if observed == "ok" and not facts["listen_trusted"]:
                 status, detail = "warning", "untrusted"
         elif scanner == "docker":
             evidence.update(
                 library_available=bool(facts["docker_library_available"]),
-                transport=facts["docker_transport"],
+                transport=_safe_enum(
+                    facts["docker_transport"], _SAFE_DOCKER_TRANSPORTS, "socket_missing",
+                ),
             )
+            if not evidence["library_available"] or evidence["transport"] in ("socket_denied", "socket_missing"):
+                status, detail = "fail", "access_failed"
         else:
             evidence.update(
                 root_available=bool(facts["compose_root_available"]),
@@ -107,7 +129,9 @@ def build_diagnostics(facts: dict[str, Any], *, generated_at: str | None = None)
                 incomplete=bool(monitor.get("compose_incomplete")),
                 truncated=bool(monitor.get("compose_truncated")),
             )
-            if evidence["incomplete"] or evidence["truncated"]:
+            if not evidence["root_available"] or not evidence["root_readable"]:
+                status, detail = "fail", "access_failed"
+            elif evidence["incomplete"] or evidence["truncated"]:
                 status, detail = "fail", "incomplete"
         checks.append(_check(scanner, status, detail, **evidence))
 
@@ -138,7 +162,7 @@ def build_diagnostics(facts: dict[str, Any], *, generated_at: str | None = None)
         "counts": counts,
         "context": {
             "version": facts["version"],
-            "settings_source": facts["settings_source"],
+            "settings_source": _safe_enum(facts["settings_source"], _SAFE_SETTINGS_SOURCES, "auto"),
             "settings_readonly": bool(facts["settings_readonly"]),
             "peer_count": int(facts["peer_count"]),
             "auth_required": bool(facts["auth_required"]),

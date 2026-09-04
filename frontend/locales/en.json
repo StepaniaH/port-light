@@ -34,6 +34,7 @@
       "stale": "The latest occupancy snapshot is stale.", "ready": "The occupancy snapshot is current and complete.",
       "incomplete": "The scan result is incomplete.", "disabled": "This source is disabled.",
       "ok": "This source completed successfully.", "failed": "This source failed in the latest scan.",
+      "access_failed": "The required socket or directory is not accessible.",
       "checking": "This source has not reported a result yet.", "untrusted": "The available listen table may not represent the host.",
       "recent": "Recent degraded events were recorded.", "none": "No recent degraded events were recorded."
     },
@@ -245,6 +246,8 @@
       "new": "New custom palette",
       "save": "Save",
       "export": "Export",
+      "exported": "Palette file exported.",
+      "exportFailed": "The palette file could not be exported.",
       "import": "Import",
       "invalid": "Fix the highlighted color values and give the palette a name.",
       "saveFailed": "The palette could not be saved.",

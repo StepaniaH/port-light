@@ -185,6 +185,20 @@ try {
   });
   await expect(page.locator('[data-refresh-hidden]')).toHaveValue('15000');
   await expect(page.locator('#refresh-capacity')).toContainText('Recommended up to 18');
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  assert.ok(await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight));
+  await page.evaluate(() => { document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight; });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  await page.evaluate(() => { document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight; });
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await page.evaluate(() => { location.hash = '#/settings/advanced'; });
+  await expect(page.getByRole('tab', { name: 'Advanced', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   const layoutChoice = page.locator('[data-setting="host_layout"]');
   await expect(layoutChoice).toBeVisible();
@@ -234,6 +248,10 @@ try {
   await expect(page.locator('#theme-editor-status')).toHaveClass(/is-error/);
   await page.locator('#editor-name').fill('Draft palette');
   await page.locator('[data-editor-hex="bg"]').fill('#223344');
+  const exportDownload = page.waitForEvent('download');
+  await page.locator('[data-editor-export]').click();
+  await exportDownload;
+  await expect(page.locator('#theme-editor-status')).toHaveClass(/is-ok/);
   await delay(900); // Longer than the general settings debounce.
   assert.equal(editorSettingsWrites, 0);
   assert.equal(await page.locator('html').evaluate(el => el.style.getPropertyValue('--bg')), '#223344');
