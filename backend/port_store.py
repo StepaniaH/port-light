@@ -263,7 +263,8 @@ def occupancy_user_state() -> tuple[list[dict], list[int]]:
 
 
 def allocate_ports(taken: set[int], start: int, end: int, count: int,
-                   label: str, ttl: int | None, reserve: bool) -> tuple[list[int], list[dict]]:
+                   label: str, ttl: int | None, reserve: bool,
+                   require_count: bool = False) -> tuple[list[int], list[dict]]:
     """Select and persist a batch under the same lock as all manual writes.
 
     Scanner/peer observations are advisory; this transaction serializes claims
@@ -279,6 +280,8 @@ def allocate_ports(taken: set[int], start: int, end: int, count: int,
                 picks.append(port)
                 if len(picks) == count:
                     break
+        if require_count and len(picks) != count:
+            return [], []
         reservations = []
         if reserve and picks:
             expires_at = _now() + ttl if ttl is not None else None

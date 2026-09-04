@@ -20,10 +20,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 COPY mcp/ ./mcp/
+COPY port_light_client/ ./port_light_client/
 COPY skills/ ./skills/
+COPY scripts/port-light /usr/local/bin/port-light
 
 # Ensure files are readable by non-root users (e.g. when container runs with --user 1000:1000)
-RUN chmod -R a+r /app
+RUN chmod -R a+r /app && chmod 755 /usr/local/bin/port-light
 
 ENV COMPOSE_SCAN_DIR=/compose
 ENV COMPOSE_SCAN_DEPTH=4

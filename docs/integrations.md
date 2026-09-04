@@ -7,6 +7,10 @@ surfaces for scripts, monitoring stacks, and coding agents.
 All examples assume an instance on `http://127.0.0.1:2100`. When Basic Auth
 is configured, add `-u user:password` (curl) or the `Authorization` header.
 
+For an operator-friendly wrapper around the check, reserve, release, and
+diagnostic APIs, see the [command-line client guide](cli.md). The CLI and MCP
+server share one dependency-free HTTP client and error model.
+
 ## HTTP API
 
 ### Suggest free ports
@@ -41,6 +45,9 @@ curl -s "http://127.0.0.1:2100/api/ports/suggest?count=2&reserve=true&label=prev
   request returns `503` and reserves nothing. A successful response reports
   `"scope": "all:<reachable>/<total>"`.
 - `count` is capped at 64.
+- `require_count=true` makes the selection all-or-none: if the requested count
+  does not fit, the response contains no ports and nothing is reserved. The CLI
+  uses this mode so concurrent automation never receives a silent partial set.
 - A local failed, incomplete, or stale scan returns `503`. Peer summaries must explicitly report `scan_complete: true`; older peers need an upgrade before `scope=all` can allocate ports.
 - Allocation coordinates this Port-Light process only. It does not bind OS sockets; another process can still claim a port after a scan.
 
@@ -182,8 +189,8 @@ above instead of guessing ports. The published image includes it at
 
 ### MCP server (experimental)
 
-`mcp/server.py` is a dependency-free MCP stdio server wrapping the same
-endpoints as six tools: `suggest_ports`, `check_port`, `list_occupancy`,
+`mcp/server.py` is a dependency-free MCP stdio adapter over the same shared
+client as the CLI. It exposes six tools: `suggest_ports`, `check_port`, `list_occupancy`,
 `port_history`, `list_degradations`, `release_port`.
 
 The published image ships the server at `/app/mcp/server.py`, so Docker
@@ -224,3 +231,5 @@ Client registration (Claude Code and MCP-compatible clients):
 Point `PORT_LIGHT_URL` at a peer to query another machine; add
 `PORT_LIGHT_AUTH=user:password` when that instance uses Basic Auth, and add
 `PORT_LIGHT_AGENT_TOKEN=<token>` when it sets `AGENT_TOKEN`.
+`PORT_LIGHT_TIMEOUT=<seconds>` and `PORT_LIGHT_CA_FILE=/path/to/ca.pem` apply
+to the shared MCP/CLI HTTP client.

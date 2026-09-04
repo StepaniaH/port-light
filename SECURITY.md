@@ -20,6 +20,7 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Data volume | Local JSON and SQLite under `/data`. Saved peer passwords are stored in `port_light.json`; file writes use owner-only permissions. Configured hubs can read peer snapshots, and opt-in webhooks send event names and port numbers. |
 | Peer URLs | `PUT /api/hosts` stores origins + optional Basic Auth. The hub fetches occupancy, detail, history, and health from those origins. Redirects and environment proxies are disabled. Every resolved address must pass the private-address policy; see the DNS limits below. |
 | Doctor report | Auth follows the rest of the UI/API. The report contains aggregate statuses, counts, safe enums, and allowlisted failure reasons; it omits identities, peer details, ports, paths, credentials, environment values, and degradation scopes. |
+| CLI | A pure HTTP client; it has no direct Docker, `/proc`, or Compose access. Basic Auth and agent tokens come from environment variables. Per-port release tokens are saved in owner-only local state unless `--no-save` is explicitly used with JSON output. |
 
 Without auth, anyone who can reach port 2100 can read the port map (names, images, bind addresses, Compose paths), machine descriptions, and peer connection settings other than passwords. They can also change manual/hidden entries and editable settings.
 
@@ -35,6 +36,9 @@ Without auth, anyone who can reach port 2100 can read the port map (names, image
 8. Protect backups and mounts of `/data`; they can contain peer credentials, manual labels, and local history.
 9. Treat machine descriptions as public to dashboard/API users. Do not store passwords, tokens, or other secrets in these notes.
 10. Review a Doctor report before attaching it to a public issue, as with any diagnostic output.
+11. Keep CLI JSON reservation output and `PORT_LIGHT_STATE_DIR` private. JSON
+    includes release tokens; labels are visible in the dashboard and must not
+    contain secrets.
 
 ## Peer DNS validation
 

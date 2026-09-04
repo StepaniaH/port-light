@@ -91,6 +91,35 @@ Hidden ports are omitted from the payload unless `include_hidden=true` **and** t
 
 Guessed access URLs: loopback binds use `127.0.0.1`; a LAN-only bind uses that address; `0.0.0.0` / `::` uses `URL_HOST` or `localhost`. `URL_HOST` always wins when set (except loopback). Link-local (`169.254/16`, `fe80::`) and the default Docker bridge (`172.17.0.0/16`) are `link`, not LAN, and are not used as guessed hosts.
 
+## Automation clients
+
+`port_light_client/client.py` is the deep client module for non-browser
+integrations. It owns URL validation, authentication headers, TLS and timeout
+handling, redirect refusal, response validation, compact port rows, named
+capability checks, and normalized failures. Its narrow transport interface is
+the test seam. `port_light_client/cli.py` and `mcp/server.py` are adapters over
+that module; neither duplicates HTTP behavior or scans the machine itself.
+
+The CLI has four task-level commands: `doctor`, `check`, `reserve`, and
+`release`. Human output hides release tokens. Machine output uses a versioned
+JSON envelope and exit statuses distinguish success, valid negative results,
+input/state errors, and operational failures. Reservation tokens are stored by
+normalized server URL and port in owner-only local state, outside the server's
+data volume. This client-side token store is not an occupancy database; the
+Port-Light server remains authoritative.
+
+`GET /api/meta.capabilities` maps feature names to integer interface versions,
+so clients negotiate behavior rather than compare a monolithic product
+version. A missing capability map identifies a legacy server and permits a
+conservative operation probe. Reservation responses are still rejected unless
+they contain one release token per selected port.
+
+`GET /api/ports/suggest?require_count=true` makes allocation all-or-none under
+the existing port-store lock. The CLI always requests it. New servers either
+persist the entire requested count or persist nothing; an older server that
+ignores the parameter may return a partial reservation, which the CLI preserves
+and reports as a negative result so its release tokens are not lost.
+
 ## Persistence
 
 `POST /api/manual-ports/batch` accepts `{start, end, label}` for 1–64 contiguous ports. It rechecks fresh scanner data, then checks manual claims and hidden ports under the same store lock as agent allocations. It saves the whole selection once or returns `409` without claiming any of it. The UI keeps the dialog open on failure. Ordinary single-port manual entries remain annotations and may describe an occupied port.

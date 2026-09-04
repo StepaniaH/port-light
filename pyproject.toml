@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "port-light-cli"
+dynamic = ["version"]
+description = "Command-line client for a running Port-Light instance"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "StepaniaH"}]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: System :: Networking",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/StepaniaH/port-light"
+Issues = "https://github.com/StepaniaH/port-light/issues"
+
+[project.scripts]
+port-light = "port_light_client.cli:main"
+
+[tool.setuptools]
+packages = ["port_light_client"]
+
+[tool.setuptools.dynamic]
+version = {attr = "port_light_client.__version__"}

@@ -4,6 +4,28 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Added
+
+- A dependency-free `port-light` command-line client with `doctor`, `check`,
+  atomic `reserve`, and token-authenticated `release` commands. It supports
+  human or versioned JSON output, stable exit categories, Basic Auth, agent
+  tokens, custom CA bundles, one-hour leases by default, explicit persistent
+  reservations, and `self` or all-peer checks.
+- Private local reservation-token storage partitioned by server and port, with
+  stateless JSON/stdin/environment alternatives for automation. The published
+  container includes the `port-light` command, and the Python package installs
+  with `pipx` or `uv tool`; releases attach a matching wheel to the same tag.
+- `/api/meta` now advertises named client capabilities. Port suggestions accept
+  `require_count=true` for an all-or-none requested count.
+
+### Changed
+
+- The MCP stdio server and CLI now share one tested HTTP client, response
+  validator, and error model. Direct `python /path/to/mcp/server.py` startup
+  remains supported from outside the repository.
+- CI lints and tests the command-line package alongside the server, including a
+  live server round trip for diagnose, check, reserve, and release.
+
 ## 0.8.0 — 2026-09-04
 
 ### Added

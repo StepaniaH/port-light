@@ -56,7 +56,7 @@
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
 - 查找空闲端口：工具栏按钮（或 `GET /api/free-runs?count=N`）返回范围内最大的连续空闲段，可一键预留
-- 自动化 API：`GET /api/ports/suggest` 返回最近一次扫描中可用的端口，支持预留或到期释放的租约；同时提供 MCP stdio 服务器和智能体集成
+- 自动化 API：`GET /api/ports/suggest` 返回最近一次扫描中可用的端口，支持预留或到期释放的租约；同时提供无第三方依赖的 `port-light` CLI、MCP stdio 服务器和智能体集成
 - 本地历史：端口状态变化写入数据卷内的 `history.db`（默认保留 7 天，`HISTORY_RETENTION_DAYS=0` 关闭）；详情抽屉显示最近变动，也可用 `GET /api/ports/{n}/history`
 - 可选 Webhook：设置 `WEBHOOK_URL` 与 `WEBHOOK_EVENTS=new_listener,conflict` 后，端口开始被占用或两个栈冲突时 POST JSON 通知
 - 后台扫描：无需打开浏览器即可更新历史和 webhook；界面通过 `GET /api/events`（SSE）接收占用变化，并保留 ETag 轮询以处理重连和其他主机
@@ -71,7 +71,7 @@
 - 挂了 `/host/proc` 时（镜像默认如此），监听端口可以从 inode 对上进程名。没挂则只能看到 Docker 的容器名。`ss -tlnp` 的进程名仍需要 host network 或裸机。
 - `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
 
-后续计划与架构：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。API 与 MCP 集成：[docs/integrations.md](docs/integrations.md)。
+后续计划与架构：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。命令行客户端：[docs/cli.md](docs/cli.md)。API 与 MCP 集成：[docs/integrations.md](docs/integrations.md)。
 
 升级后若仍出现占用警告，可将鼠标移至信息图标，或聚焦、点击警告查看对应扫描器的排查建议。镜像升级不能自动处理的权限与配置问题，见 [升级与故障排查（英文）](docs/troubleshooting.md#occupancy-scan-warning)。
 

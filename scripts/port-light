@@ -1,0 +1,3 @@
+#!/bin/sh
+export PYTHONPATH=/app
+exec python -m port_light_client "$@"

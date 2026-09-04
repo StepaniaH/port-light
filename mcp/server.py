@@ -22,19 +22,25 @@ initialize, notifications/initialized, ping, tools/list, tools/call.
 
 from __future__ import annotations
 
-import base64
 import json
 import os
+import pathlib
 import sys
-import urllib.error
-import urllib.request
+
+# Keep the documented `python /path/to/mcp/server.py` entry point working even
+# when the caller's current directory is outside the repository.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+from port_light_client import PortLightClient, PortLightError, __version__
 
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "port-light", "version": "0.1.0"}
+SERVER_INFO = {"name": "port-light", "version": __version__}
 
 BASE_URL = os.environ.get("PORT_LIGHT_URL", "http://127.0.0.1:2100").rstrip("/")
 BASIC_AUTH = os.environ.get("PORT_LIGHT_AUTH", "")
 AGENT_TOKEN = os.environ.get("PORT_LIGHT_AGENT_TOKEN", "") or os.environ.get("AGENT_TOKEN", "")
+CA_FILE = os.environ.get("PORT_LIGHT_CA_FILE", "") or None
 
 TOOLS = [
     {
@@ -122,94 +128,63 @@ TOOLS = [
 ]
 
 
-class ApiError(Exception):
-    def __init__(self, status: int, message: str):
-        super().__init__(message)
-        self.status = status
-
-
-def api_request(path: str, method: str = "GET", headers: dict | None = None) -> dict:
-    req = urllib.request.Request(BASE_URL + path, method=method, headers=headers or {})
-    if BASIC_AUTH:
-        token = base64.b64encode(BASIC_AUTH.encode()).decode()
-        req.add_header("Authorization", "Basic " + token)
-    if AGENT_TOKEN:
-        req.add_header("X-Agent-Token", AGENT_TOKEN)
+def client() -> PortLightClient:
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
-            body = resp.read(4 * 1024 * 1024)
-            return json.loads(body) if body else {}
-    except urllib.error.HTTPError as exc:
-        raise ApiError(exc.code, f"Port-Light returned HTTP {exc.code}") from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise ApiError(502, f"cannot reach Port-Light at {BASE_URL}") from exc
-
-
-def api_get(path: str) -> dict:
-    return api_request(path)
-
-
-def api_delete(path: str, token: str) -> None:
-    api_request(path, "DELETE", {"X-Reservation-Token": token})
-
-
-def trim_row(row: dict) -> dict:
-    names = [c.get("name") for c in row.get("containers") or [] if c.get("name")]
-    known = row.get("known_service") or {}
-    return {
-        "port": row.get("port"),
-        "status": row.get("status"),
-        "protocol": row.get("protocol"),
-        "bind_scope": row.get("bind_scope"),
-        "names": names or ([known["name"]] if known.get("name") else []),
-    }
+        timeout = float(os.environ.get("PORT_LIGHT_TIMEOUT", "5"))
+    except ValueError as exc:
+        raise PortLightError(
+            "invalid_timeout",
+            "PORT_LIGHT_TIMEOUT must be a number greater than zero",
+        ) from exc
+    return PortLightClient(
+        BASE_URL,
+        basic_auth=BASIC_AUTH,
+        agent_token=AGENT_TOKEN,
+        timeout=timeout,
+        ca_file=CA_FILE,
+    )
 
 
 def run_tool(name: str, args: dict) -> dict:
+    port_light = client()
     if name == "suggest_ports":
-        from urllib.parse import quote
-        qs = [f"count={int(args.get('count', 1))}"]
-        if args.get("start") is not None:
-            qs.append(f"start={int(args['start'])}")
-        if args.get("end") is not None:
-            qs.append(f"end={int(args['end'])}")
-        if args.get("reserve"):
-            qs.append("reserve=true")
-        if args.get("ttl") is not None:
-            qs.append(f"ttl={int(args['ttl'])}")
-        scope = args.get("scope")
-        if scope in ("self", "all"):
-            qs.append(f"scope={scope}")
-        label = str(args.get("label", ""))
-        if label:
-            qs.append("label=" + quote(label))
-        return api_get("/api/ports/suggest?" + "&".join(qs))
+        return port_light.suggest_ports(
+            count=int(args.get("count", 1)),
+            start=int(args["start"]) if args.get("start") is not None else None,
+            end=int(args["end"]) if args.get("end") is not None else None,
+            reserve=bool(args.get("reserve")),
+            ttl=int(args["ttl"]) if args.get("ttl") is not None else None,
+            scope=str(args.get("scope", "self")),
+            label=str(args.get("label", "")),
+        )
 
     if name == "check_port":
-        row = api_get(f"/api/ports/{int(args['port'])}?include_hidden=false")
-        return trim_row(row)
+        return port_light.check_port(int(args["port"]))
 
     if name == "list_occupancy":
-        start = int(args.get("start", 1))
-        end = int(args.get("end", 9999))
-        limit = int(args.get("limit", 200))
-        data = api_get(f"/api/ports?range_start={start}&range_end={end}&include_hidden=false")
-        rows = [trim_row(r) for r in data.get("ports", [])[:limit]]
-        return {"summary": data.get("summary"), "ports": rows}
+        return port_light.list_occupancy(
+            start=int(args.get("start", 1)),
+            end=int(args.get("end", 9999)),
+            limit=int(args.get("limit", 200)),
+        )
 
     if name == "port_history":
-        hours = int(args.get("hours", 24))
-        return api_get(f"/api/ports/{int(args['port'])}/history?hours={hours}")
+        return port_light.port_history(
+            int(args["port"]),
+            hours=int(args.get("hours", 24)),
+        )
 
     if name == "list_degradations":
-        return {"degradations": api_get("/api/health").get("degradations", [])}
+        return {"degradations": port_light.health().get("degradations", [])}
 
     if name == "release_port":
         token = str(args.get("token") or "")
         if not token:
-            raise ApiError(400, "release_port requires the reservation token returned by suggest_ports")
-        api_delete(f"/api/reservations/{int(args['port'])}", token)
-        return {"released": int(args["port"])}
+            raise PortLightError(
+                "reservation_token_missing",
+                "release_port requires the reservation token returned by suggest_ports",
+            )
+        return port_light.release_port(int(args["port"]), token)
 
     raise KeyError(name)
 
@@ -249,7 +224,7 @@ def handle_request(msg: dict) -> dict | None:
         except KeyError:
             return {"jsonrpc": "2.0", "id": msg_id,
                     "error": {"code": -32602, "message": f"unknown tool: {name}"}}
-        except ApiError as exc:
+        except PortLightError as exc:
             return {"jsonrpc": "2.0", "id": msg_id,
                     "result": {"content": [{"type": "text", "text": str(exc)}],
                                "isError": True}}

@@ -30,7 +30,10 @@ jobs:
         run: pip freeze
       - name: Lint
         if: matrix.python-version == '3.13'
-        run: ruff check backend tests mcp scripts/check_release_ci.py
+        run: ruff check backend tests mcp port_light_client scripts/check_release_ci.py
+      - name: Build CLI wheel
+        if: matrix.python-version == '3.13'
+        run: python -m build --wheel
       - name: Test
         run: |
           set -o pipefail

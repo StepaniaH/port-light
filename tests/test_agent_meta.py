@@ -54,6 +54,18 @@ def test_meta_listen_port_none_when_unset(monkeypatch):
     assert body["automation"]["listen_port"] is None
 
 
+def test_meta_advertises_client_capabilities():
+    body = TestClient(app).get("/api/meta").json()
+    assert body["capabilities"] == {
+        "doctor": 1,
+        "port_check": 1,
+        "reservations": 1,
+        "exact_reservations": 1,
+        "reservation_release": 1,
+        "scope_all": 1,
+    }
+
+
 def test_active_leases_listed_with_rows():
     from backend import port_store
 

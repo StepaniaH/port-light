@@ -183,6 +183,14 @@ def meta(request: Request) -> dict:
         }
     return {
         "version": VERSION,
+        "capabilities": {
+            "doctor": 1,
+            "port_check": 1,
+            "reservations": 1,
+            "exact_reservations": 1,
+            "reservation_release": 1,
+            "scope_all": 1,
+        },
         "auth_required": auth_configured(),
         "hidden_unlock_required": hidden_unlock_configured(),
         "hidden_ports_withheld": hidden_ports_withheld(),
@@ -647,6 +655,7 @@ async def suggest_ports(
     label: str = Query(default=""),
     ttl: int | None = Query(default=None, ge=60, le=604800),
     scope: str = Query(default="self", pattern="^(self|all)$"),
+    require_count: bool = Query(default=False),
 ) -> dict:
     """Suggest free ports, optionally reserving them as manual entries.
 
@@ -703,7 +712,16 @@ async def suggest_ports(
     values = _values()
     taken.update(_scanned_ports(_allocation_snapshot(values), values, lo, hi))
     picks, reservations = await asyncio.to_thread(
-        port_store.allocate_ports, taken, lo, hi, count, label, ttl, reserve or ttl is not None)
+        port_store.allocate_ports,
+        taken,
+        lo,
+        hi,
+        count,
+        label,
+        ttl,
+        reserve or ttl is not None,
+        require_count,
+    )
     if reservations:
         await asyncio.to_thread(_monitor.state_changed)
     reserved = [entry["port"] for entry in reservations]

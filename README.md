@@ -56,7 +56,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with atomic batch reservation
-- Automation API: `GET /api/ports/suggest` returns ports available in the latest scan, with optional reservations or expiring leases. An MCP stdio server and an agent integration are included.
+- Automation API: `GET /api/ports/suggest` returns ports available in the latest scan, with optional reservations or expiring leases. A dependency-free `port-light` CLI, MCP stdio server, and agent integration are included.
 - Local history: port state transitions land in `history.db` inside your data volume (default 7 days; `HISTORY_RETENTION_DAYS=0` disables) — the detail drawer shows recent changes and `GET /api/ports/{n}/history` exposes them
 - Optional webhooks: `WEBHOOK_URL` + `WEBHOOK_EVENTS=new_listener,conflict` POST JSON when a port starts being used or two stacks collide
 - Background scanning updates history and webhooks without an open browser. Open UIs receive occupancy changes through `GET /api/events` (SSE), with periodic ETag polling for reconnects and peers
@@ -71,7 +71,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Process names come from `/host/proc` (inode → `comm`) when that mount is present — the usual image. Without it, the grid shows Docker container names. `ss -tlnp` names still need a host-network / bare-metal path.
 - Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
 
-Roadmap and architecture: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md). API and MCP integrations: [docs/integrations.md](docs/integrations.md).
+Roadmap and architecture: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md). Command line: [docs/cli.md](docs/cli.md). API and MCP integrations: [docs/integrations.md](docs/integrations.md).
 
 If an occupancy warning persists after upgrading, hover over its information icon, or focus or select the warning, for scanner-specific guidance. See the [troubleshooting and upgrade guide](docs/troubleshooting.md#occupancy-scan-warning) for configuration changes that an image update cannot apply.
 

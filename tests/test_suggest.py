@@ -56,6 +56,28 @@ def test_suggest_reserve_roundtrip():
     assert again["ports"] == [6002, 6003]
 
 
+def test_suggest_can_require_the_whole_count_without_partial_reservation():
+    from backend import port_store
+
+    port_store.add_manual_port(6001, "occupied", "localhost")
+    client = TestClient(app)
+    res = client.get(
+        "/api/ports/suggest",
+        params={
+            "count": 2,
+            "start": 6000,
+            "end": 6001,
+            "reserve": "true",
+            "require_count": "true",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["ports"] == []
+    assert port_store.get_manual_ports() == [
+        {"port": 6001, "label": "occupied", "machine": "localhost"},
+    ]
+
+
 def test_suggest_validates_count():
     client = TestClient(app)
     assert client.get("/api/ports/suggest", params={"count": 65}).status_code == 422

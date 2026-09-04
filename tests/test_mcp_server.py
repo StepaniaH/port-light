@@ -3,10 +3,12 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import subprocess
 import sys
-import urllib.error
 
 import pytest
+
+from port_light_client import PortLightError
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -16,153 +18,188 @@ sys.modules["mcp_server"] = mcp
 SPEC.loader.exec_module(mcp)
 
 
+class FakeClient:
+    def __init__(self):
+        self.calls = []
+
+    def suggest_ports(self, **kwargs):
+        self.calls.append(("suggest_ports", kwargs))
+        return {"ports": [8000]}
+
+    def check_port(self, port):
+        self.calls.append(("check_port", port))
+        return {
+            "port": port,
+            "status": "free",
+            "protocol": "tcp",
+            "bind_scope": "unknown",
+            "names": ["HTTP Alt"],
+        }
+
+    def list_occupancy(self, **kwargs):
+        self.calls.append(("list_occupancy", kwargs))
+        return {"summary": {"scan_complete": True}, "ports": []}
+
+    def port_history(self, port, *, hours):
+        self.calls.append(("port_history", port, hours))
+        return {"port": port, "events": []}
+
+    def health(self):
+        self.calls.append(("health",))
+        return {"degradations": [{"source": "docker"}]}
+
+    def release_port(self, port, token):
+        self.calls.append(("release_port", port, token))
+        return {"released": port}
+
+
+@pytest.fixture
+def fake_client(monkeypatch):
+    value = FakeClient()
+    monkeypatch.setattr(mcp, "client", lambda: value)
+    return value
+
+
+def call_tool(name, arguments=None):
+    return mcp.handle_request({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {"name": name, "arguments": arguments or {}},
+    })
+
+
+def tool_data(reply):
+    return json.loads(reply["result"]["content"][0]["text"])
+
+
 def test_initialize_negotiates_protocol_version():
     reply = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
         "params": {"protocolVersion": "2025-03-26"},
     })
     assert reply["result"]["protocolVersion"] == "2025-03-26"
     assert reply["result"]["serverInfo"]["name"] == "port-light"
 
 
+def test_direct_script_entry_point_works_outside_repository(tmp_path):
+    request = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {"protocolVersion": "2024-11-05"},
+    })
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "mcp" / "server.py")],
+        cwd=tmp_path,
+        input=f"{request}\n",
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    reply = json.loads(result.stdout)
+    assert reply["result"]["serverInfo"]["name"] == "port-light"
+
+
+def test_client_factory_reports_invalid_timeout(monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_TIMEOUT", "later")
+    with pytest.raises(PortLightError) as caught:
+        mcp.client()
+    assert caught.value.code == "invalid_timeout"
+
+
 def test_tools_list_exposes_all_tools():
     reply = mcp.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-    names = {t["name"] for t in reply["result"]["tools"]}
-    assert {"suggest_ports", "check_port", "list_occupancy",
-            "port_history", "list_degradations", "release_port"} == names
+    names = {tool["name"] for tool in reply["result"]["tools"]}
+    assert names == {
+        "suggest_ports",
+        "check_port",
+        "list_occupancy",
+        "port_history",
+        "list_degradations",
+        "release_port",
+    }
 
 
 def test_notification_returns_nothing():
     assert mcp.handle_request(
-        {"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+    ) is None
 
 
-def test_check_port_maps_to_api_and_trims(monkeypatch):
-    seen = {}
-
-    def fake_get(path):
-        seen["path"] = path
-        return {"port": 8080, "status": "free", "source_type": "unknown",
-                "protocol": "tcp", "containers": [],
-                "known_service": {"name": "HTTP Alt"}}
-
-    monkeypatch.setattr(mcp, "api_get", fake_get)
-    reply = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 3, "method": "tools/call",
-        "params": {"name": "check_port", "arguments": {"port": 8080}},
-    })
-    assert seen["path"].startswith("/api/ports/8080")
-    data = json.loads(reply["result"]["content"][0]["text"])
+def test_check_port_uses_shared_client(fake_client):
+    data = tool_data(call_tool("check_port", {"port": 8080}))
     assert data["names"] == ["HTTP Alt"]
+    assert fake_client.calls == [("check_port", 8080)]
 
 
-def test_suggest_passes_reserve_and_label(monkeypatch):
-    seen = {}
-    monkeypatch.setattr(mcp, "api_get", lambda path: seen.update(path=path) or {})
-    from urllib.parse import quote
-    mcp.handle_request({
-        "jsonrpc": "2.0", "id": 4, "method": "tools/call",
-        "params": {"name": "suggest_ports",
-                   "arguments": {"count": 2, "reserve": True,
-                                 "label": "my preview", "start": 3000}},
-    })
-    assert "/api/ports/suggest?" in seen["path"]
-    assert "count=2" in seen["path"]
-    assert "reserve=true" in seen["path"]
-    assert f"label={quote('my preview')}" in seen["path"]
+def test_suggest_maps_all_options_to_shared_client(fake_client):
+    data = tool_data(call_tool("suggest_ports", {
+        "count": 2,
+        "reserve": True,
+        "label": "my preview",
+        "start": 3000,
+        "end": 4000,
+        "ttl": 3600,
+        "scope": "all",
+    }))
+    assert data == {"ports": [8000]}
+    assert fake_client.calls == [("suggest_ports", {
+        "count": 2,
+        "start": 3000,
+        "end": 4000,
+        "reserve": True,
+        "ttl": 3600,
+        "scope": "all",
+        "label": "my preview",
+    })]
+
+
+def test_list_history_and_degradations_use_shared_client(fake_client):
+    occupancy = tool_data(call_tool("list_occupancy", {
+        "start": 1000,
+        "end": 2000,
+        "limit": 10,
+    }))
+    history = tool_data(call_tool("port_history", {"port": 1234, "hours": 48}))
+    degradations = tool_data(call_tool("list_degradations"))
+    assert occupancy["summary"]["scan_complete"] is True
+    assert history == {"port": 1234, "events": []}
+    assert degradations["degradations"][0]["source"] == "docker"
+    assert fake_client.calls == [
+        ("list_occupancy", {"start": 1000, "end": 2000, "limit": 10}),
+        ("port_history", 1234, 48),
+        ("health",),
+    ]
+
+
+def test_release_requires_and_passes_reservation_token(fake_client):
+    data = tool_data(call_tool(
+        "release_port",
+        {"port": 45000, "token": "my-reservation"},
+    ))
+    assert data == {"released": 45000}
+    assert fake_client.calls == [("release_port", 45000, "my-reservation")]
+
+    reply = call_tool("release_port", {"port": 45000})
+    assert reply["result"]["isError"] is True
+    assert "reservation token" in reply["result"]["content"][0]["text"]
 
 
 def test_tool_failure_reports_iserror(monkeypatch):
-    def boom(path):
-        raise mcp.ApiError(502, "cannot reach Port-Light")
+    class FailingClient(FakeClient):
+        def check_port(self, port):
+            raise PortLightError("unreachable", "cannot reach Port-Light")
 
-    monkeypatch.setattr(mcp, "api_get", boom)
-    reply = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 5, "method": "tools/call",
-        "params": {"name": "check_port", "arguments": {"port": 1}},
-    })
+    monkeypatch.setattr(mcp, "client", FailingClient)
+    reply = call_tool("check_port", {"port": 1})
     assert reply["result"]["isError"] is True
 
 
-def test_unknown_method_is_protocol_error():
+def test_unknown_method_and_tool_are_protocol_errors():
     reply = mcp.handle_request({"jsonrpc": "2.0", "id": 6, "method": "nope"})
     assert reply["error"]["code"] == -32601
-
-
-def test_suggest_passes_ttl_and_scope(monkeypatch):
-    seen = {}
-    monkeypatch.setattr(mcp, "api_get", lambda path: seen.update(path=path) or {})
-    mcp.handle_request({
-        "jsonrpc": "2.0", "id": 7, "method": "tools/call",
-        "params": {"name": "suggest_ports",
-                   "arguments": {"count": 2, "ttl": 3600, "scope": "all",
-                                 "reserve": True}},
-    })
-    assert "ttl=3600" in seen["path"]
-    assert "scope=all" in seen["path"]
-    assert "reserve=true" in seen["path"]
-
-
-def test_list_degradations_reads_health(monkeypatch):
-    monkeypatch.setattr(mcp, "api_get",
-                        lambda path: {"degradations": [{"source": "docker"}]}
-                        if path == "/api/health" else (_ for _ in ()).throw(AssertionError(path)))
-    reply = mcp.handle_request({
-        "jsonrpc": "2.0", "id": 8, "method": "tools/call",
-        "params": {"name": "list_degradations", "arguments": {}},
-    })
-    data = json.loads(reply["result"]["content"][0]["text"])
-    assert data["degradations"][0]["source"] == "docker"
-
-
-def test_tools_list_includes_new_tool():
-    reply = mcp.handle_request({"jsonrpc": "2.0", "id": 9, "method": "tools/list"})
-    names = {t["name"] for t in reply["result"]["tools"]}
-    assert "list_degradations" in names
-
-
-def test_http_requests_send_both_auth_headers_and_release_token(monkeypatch):
-    seen = []
-
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            pass
-
-        def read(self, size):
-            return b'{}'
-
-    def open_request(req, timeout):
-        seen.append(req)
-        return Response()
-
-    monkeypatch.setattr(mcp, "BASIC_AUTH", "user:pass")
-    monkeypatch.setattr(mcp, "AGENT_TOKEN", "agent-token")
-    monkeypatch.setattr(mcp.urllib.request, "urlopen", open_request)
-    mcp.api_get("/api/ports/suggest")
-    mcp.run_tool("release_port", {"port": 45000, "token": "my-reservation"})
-    assert all(req.get_header("X-agent-token") == "agent-token" for req in seen)
-    assert all(req.get_header("Authorization") == "Basic dXNlcjpwYXNz" for req in seen)
-    assert seen[1].method == "DELETE"
-    assert seen[1].full_url.endswith("/api/reservations/45000")
-    assert seen[1].get_header("X-reservation-token") == "my-reservation"
-
-
-def test_release_requires_token_before_making_request(monkeypatch):
-    def unexpected(*args):
-        pytest.fail("release without a token must not call the API")
-
-    monkeypatch.setattr(mcp, "api_delete", unexpected)
-    with pytest.raises(mcp.ApiError, match="reservation token"):
-        mcp.run_tool("release_port", {"port": 45000})
-
-
-def test_release_http_errors_use_same_api_error_handling(monkeypatch):
-    def denied(*args, **kwargs):
-        raise urllib.error.HTTPError("http://localhost", 409, "conflict", {}, None)
-
-    monkeypatch.setattr(mcp.urllib.request, "urlopen", denied)
-    with pytest.raises(mcp.ApiError, match="409"):
-        mcp.api_delete("/api/reservations/45000", "old-token")
+    reply = call_tool("unknown")
+    assert reply["error"]["code"] == -32602

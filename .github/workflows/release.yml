@@ -40,6 +40,41 @@ jobs:
           RELEASE_SHA: ${{ steps.source.outputs.sha }}
         run: python3 scripts/check_release_ci.py "$GITHUB_REPOSITORY" "$RELEASE_SHA"
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Build matching CLI wheel
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import ast, os, pathlib, re
+          version = os.environ["TAG"].removeprefix("v")
+          client_tree = ast.parse(pathlib.Path("port_light_client/__init__.py").read_text())
+          client_version = next(
+              ast.literal_eval(node.value)
+              for node in client_tree.body
+              if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "__version__"
+                      for target in node.targets)
+          )
+          backend_text = pathlib.Path("backend/main.py").read_text()
+          backend_version = re.search(r'^VERSION = "([^"]+)"$', backend_text, re.M).group(1)
+          if client_version != version or backend_version != version:
+              raise SystemExit(
+                  f"tag {version}, CLI {client_version}, backend {backend_version} must match"
+              )
+          PY
+          python -m pip install build
+          python -m build --wheel
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: port-light-cli-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
 
@@ -82,6 +117,11 @@ jobs:
           ref: ${{ needs.build-and-push.outputs.sha }}
           persist-credentials: false
 
+      - uses: actions/download-artifact@v7
+        with:
+          name: port-light-cli-wheel
+          path: dist
+
       - name: Notes from CHANGELOG
         env:
           TAG: ${{ github.ref_name }}
@@ -103,3 +143,4 @@ jobs:
           name: ${{ github.ref_name }}
           body_path: release-notes.md
           generate_release_notes: false
+          files: dist/*.whl

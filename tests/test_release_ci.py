@@ -137,6 +137,17 @@ def test_release_requires_ci_before_publishing_and_pins_release_source():
     assert "git rev-parse HEAD" in source["run"]
     assert "git merge-base --is-ancestor" in source["run"]
     assert build["permissions"]["actions"] == "read"
+    assert any("python -m build --wheel" in step.get("run", "") for step in steps)
+    assert any(step.get("uses", "").startswith("actions/upload-artifact@") for step in steps)
     publish = release["jobs"]["github-release"]
     assert publish["needs"] == "build-and-push"
     assert publish["steps"][0]["with"]["ref"] == "${{ needs.build-and-push.outputs.sha }}"
+    assert any(
+        step.get("uses", "").startswith("actions/download-artifact@")
+        for step in publish["steps"]
+    )
+    release_step = next(
+        step for step in publish["steps"]
+        if step.get("uses", "").startswith("softprops/action-gh-release@")
+    )
+    assert release_step["with"]["files"] == "dist/*.whl"
