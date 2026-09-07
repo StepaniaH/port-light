@@ -4,6 +4,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.8.1 — 2026-09-07
+
 ### Added
 
 - A dependency-free `port-light` command-line client with `doctor`, `check`,
@@ -31,6 +33,17 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
   live server round trip for doctor, check, reserve, and release. It installs
   the built wheel in an isolated environment and builds the image to smoke-test
   both the CLI and MCP entry points.
+
+### Fixed
+
+- CLI and MCP responses now reject mismatched ports, invalid diagnostic data,
+  malformed occupancy data, and unverified reservation scopes. Exact CLI
+  reservations require the server capability that guarantees all-or-none
+  allocation, preventing an older server from silently creating a partial
+  reservation.
+- CLI and MCP environment configuration now uses one shared client factory.
+  Local token-directory creation failures use the documented error category,
+  and unexpected MCP failures no longer expose internal exception details.
 
 ## 0.8.0 — 2026-09-04
 

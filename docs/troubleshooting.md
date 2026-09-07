@@ -12,11 +12,11 @@ The warning “Occupancy data is incomplete or stale; free ports cannot be confi
 
 Hover over the information icon, or focus or click the warning, to see guidance based on the current scan. Press Escape to close the disclosure. Remote-machine warnings describe that machine; the hub's local settings do not modify a peer. The guidance does not include raw log messages, private paths, or environment values.
 
-### Upgrading to v0.8.0
+### Upgrading to v0.8.0 or later
 
 No configuration migration is required. Existing peers and saved settings are preserved. Settings now sends only changed fields, supports restoring an environment/default value, and reports settings and peer saves independently. Setup / Doctor is available from the pulse icon in the header.
 
-If your enabled scanners already work, updating the image and recreating the container is enough. Change a pinned image tag to `v0.8.0` before running these commands; pulling an older version tag does not upgrade it. Deployments using `latest` can retain that tag:
+If your enabled scanners already work, updating the image and recreating the container is enough. Change a pinned image tag to the current release, such as `v0.8.1`, before running these commands; pulling an older version tag does not upgrade it. Deployments using `latest` can retain that tag:
 
 ```bash
 docker compose pull port-light
