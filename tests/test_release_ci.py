@@ -121,7 +121,16 @@ def test_ci_triggers_and_coverage():
     assert backend["strategy"]["matrix"]["python-version"] == ["3.11", "3.12", "3.13"]
     lint = next(step for step in backend["steps"] if "ruff check" in step.get("run", ""))
     assert lint["if"] == "matrix.python-version == '3.13'"
+    wheel = next(step for step in backend["steps"] if "python -m build --wheel" in step.get("run", ""))
+    assert "port-light-cli-smoke/bin/port-light" in wheel["run"]
     assert any("npm run smoke:browser" in step.get("run", "") for step in ci["jobs"]["frontend"]["steps"])
+    container = ci["jobs"]["container"]
+    assert any("docker build -t port-light:ci" in step.get("run", "") for step in container["steps"])
+    assert any(
+        "--entrypoint port-light" in step.get("run", "")
+        and "mcp/server.py" in step.get("run", "")
+        for step in container["steps"]
+    )
 
 
 def test_release_requires_ci_before_publishing_and_pins_release_source():
@@ -138,12 +147,12 @@ def test_release_requires_ci_before_publishing_and_pins_release_source():
     assert "git merge-base --is-ancestor" in source["run"]
     assert build["permissions"]["actions"] == "read"
     assert any("python -m build --wheel" in step.get("run", "") for step in steps)
-    assert any(step.get("uses", "").startswith("actions/upload-artifact@") for step in steps)
+    assert any(step.get("uses") == "actions/upload-artifact@v7" for step in steps)
     publish = release["jobs"]["github-release"]
     assert publish["needs"] == "build-and-push"
     assert publish["steps"][0]["with"]["ref"] == "${{ needs.build-and-push.outputs.sha }}"
     assert any(
-        step.get("uses", "").startswith("actions/download-artifact@")
+        step.get("uses") == "actions/download-artifact@v8"
         for step in publish["steps"]
     )
     release_step = next(

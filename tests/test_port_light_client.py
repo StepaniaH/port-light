@@ -51,6 +51,7 @@ def test_check_port_uses_client_interface_and_compacts_row():
         "names": ["web"],
     }
     assert transport.requests == [
+        ("GET", "/api/meta", None),
         ("GET", "/api/ports/8080?include_hidden=false", None),
     ]
 
@@ -69,7 +70,8 @@ def test_reserve_encodes_options_and_sends_agent_token():
         ttl=3600,
         scope="all",
     ) == response
-    method, path, headers = transport.requests[0]
+    assert transport.requests[0] == ("GET", "/api/meta", None)
+    method, path, headers = transport.requests[1]
     assert method == "GET"
     assert path.startswith("/api/ports/suggest?")
     assert "reserve=true" in path
@@ -110,12 +112,30 @@ def test_reserve_requires_tokens_but_allows_an_explicit_partial_result():
         "ports": [8000],
         "reservations": [{"port": 8001, "token": "one"}],
     },
+    {
+        "ports": [1],
+        "reservations": [{"port": True, "token": "one"}],
+    },
+    {
+        "ports": [8000],
+        "reservations": [{"port": 8000, "token": "one", "expires_at": "later"}],
+    },
 ])
 def test_reserve_rejects_invalid_port_token_mappings(response):
     client = PortLightClient(transport=FakeTransport(response))
     with pytest.raises(PortLightError) as caught:
         client.reserve_ports()
     assert caught.value.code == "invalid_response"
+
+
+def test_reserve_rejects_non_string_tokens():
+    client = PortLightClient(transport=FakeTransport({
+        "ports": [8000],
+        "reservations": [{"port": 8000, "token": 123}],
+    }))
+    with pytest.raises(PortLightError) as caught:
+        client.reserve_ports()
+    assert caught.value.code == "unsupported_server"
 
 
 def test_doctor_drops_the_duplicate_report_string():
@@ -129,16 +149,27 @@ def test_doctor_drops_the_duplicate_report_string():
 def test_capability_checks_are_cached_and_legacy_servers_are_probed():
     transport = FakeTransport({"capabilities": {"doctor": 1}})
     client = PortLightClient(transport=transport)
-    client.require_capability("doctor")
-    client.require_capability("doctor")
-    assert len(transport.requests) == 1
+    client.doctor()
+    client.doctor()
+    assert transport.requests == [
+        ("GET", "/api/meta", None),
+        ("GET", "/api/doctor", None),
+        ("GET", "/api/doctor", None),
+    ]
 
     with pytest.raises(PortLightError) as caught:
-        client.require_capability("reservations")
+        client.reserve_ports()
     assert caught.value.code == "unsupported_server"
+    assert all("/api/ports/suggest" not in path for _, path, _ in transport.requests)
 
-    legacy = PortLightClient(transport=FakeTransport({"version": "0.8.0"}))
-    legacy.require_capability("reservations")
+    legacy_transport = FakeTransport({
+        "ports": [8000],
+        "reservations": [{"port": 8000, "token": "legacy-token", "expires_at": 123}],
+    })
+    legacy = PortLightClient(transport=legacy_transport)
+    assert legacy.reserve_ports()["ports"] == [8000]
+    assert legacy_transport.requests[0] == ("GET", "/api/meta", None)
+    assert legacy_transport.requests[1][1].startswith("/api/ports/suggest?")
 
 
 class Response:
@@ -234,3 +265,4 @@ def test_reservation_store_drops_expired_token(tmp_path, monkeypatch):
         "expires_at": 999,
     })
     assert store.load("http://nas.lan:2100", 8123) is None
+    assert list((tmp_path / "state").rglob("8123.json")) == []

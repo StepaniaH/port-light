@@ -15,6 +15,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
   stateless JSON/stdin/environment alternatives for automation. The published
   container includes the `port-light` command, and the Python package installs
   with `pipx` or `uv tool`; releases attach a matching wheel to the same tag.
+  Container-side tokens default to persistent `/data/cli-state` storage.
 - `/api/meta` now advertises named client capabilities. Port suggestions accept
   `require_count=true` for an all-or-none requested count.
 
@@ -23,8 +24,13 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - The MCP stdio server and CLI now share one tested HTTP client, response
   validator, and error model. Direct `python /path/to/mcp/server.py` startup
   remains supported from outside the repository.
+- The backend, MCP server, CLI, Python package, and release gate now read one
+  product version. JSON mode also covers argument-parser failures, and long
+  options no longer accept unstable abbreviations.
 - CI lints and tests the command-line package alongside the server, including a
-  live server round trip for diagnose, check, reserve, and release.
+  live server round trip for doctor, check, reserve, and release. It installs
+  the built wheel in an isolated environment and builds the image to smoke-test
+  both the CLI and MCP entry points.
 
 ## 0.8.0 — 2026-09-04
 

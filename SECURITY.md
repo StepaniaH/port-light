@@ -17,7 +17,7 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Docker socket | Often mounted into the container. Read-only is not the same as safe. |
 | `/host/proc` | Read-only view of host network tables (and other `/proc` data for PID 1). |
 | Compose mount | Read-only view of the bind you set, including sibling `.env` files. |
-| Data volume | Local JSON and SQLite under `/data`. Saved peer passwords are stored in `port_light.json`; file writes use owner-only permissions. Configured hubs can read peer snapshots, and opt-in webhooks send event names and port numbers. |
+| Data volume | Local JSON and SQLite under `/data`. Saved peer passwords are stored in `port_light.json`; Docker-side CLI release tokens use `/data/cli-state`; file writes use owner-only permissions. Configured hubs can read peer snapshots, and opt-in webhooks send event names and port numbers. |
 | Peer URLs | `PUT /api/hosts` stores origins + optional Basic Auth. The hub fetches occupancy, detail, history, and health from those origins. Redirects and environment proxies are disabled. Every resolved address must pass the private-address policy; see the DNS limits below. |
 | Doctor report | Auth follows the rest of the UI/API. The report contains aggregate statuses, counts, safe enums, and allowlisted failure reasons; it omits identities, peer details, ports, paths, credentials, environment values, and degradation scopes. |
 | CLI | A pure HTTP client; it has no direct Docker, `/proc`, or Compose access. Basic Auth and agent tokens come from environment variables. Per-port release tokens are saved in owner-only local state unless `--no-save` is explicitly used with JSON output. |
@@ -33,7 +33,8 @@ Without auth, anyone who can reach port 2100 can read the port map (names, image
 5. Run as a non-root `user:` when the `/data` mount allows it.
 6. Do not point `COMPOSE_SCAN_DIR` at trees that contain secrets you would not put in a screenshot.
 7. Bind addresses appear in port details and can optionally appear on cards. Review screenshots before sharing them.
-8. Protect backups and mounts of `/data`; they can contain peer credentials, manual labels, and local history.
+8. Protect backups and mounts of `/data`; they can contain peer credentials,
+   Docker-side CLI release tokens, manual labels, and local history.
 9. Treat machine descriptions as public to dashboard/API users. Do not store passwords, tokens, or other secrets in these notes.
 10. Review a Doctor report before attaching it to a public issue, as with any diagnostic output.
 11. Keep CLI JSON reservation output and `PORT_LIGHT_STATE_DIR` private. JSON

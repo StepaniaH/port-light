@@ -49,7 +49,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           python3 - <<'PY'
-          import ast, os, pathlib, re
+          import ast, os, pathlib
           version = os.environ["TAG"].removeprefix("v")
           client_tree = ast.parse(pathlib.Path("port_light_client/__init__.py").read_text())
           client_version = next(
@@ -59,17 +59,13 @@ jobs:
               and any(isinstance(target, ast.Name) and target.id == "__version__"
                       for target in node.targets)
           )
-          backend_text = pathlib.Path("backend/main.py").read_text()
-          backend_version = re.search(r'^VERSION = "([^"]+)"$', backend_text, re.M).group(1)
-          if client_version != version or backend_version != version:
-              raise SystemExit(
-                  f"tag {version}, CLI {client_version}, backend {backend_version} must match"
-              )
+          if client_version != version:
+              raise SystemExit(f"tag {version} and product version {client_version} must match")
           PY
           python -m pip install build
           python -m build --wheel
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: port-light-cli-wheel
           path: dist/*.whl
@@ -117,7 +113,7 @@ jobs:
           ref: ${{ needs.build-and-push.outputs.sha }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: port-light-cli-wheel
           path: dist

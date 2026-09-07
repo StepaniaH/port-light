@@ -31,6 +31,9 @@ needed when Port-Light is already running in Docker:
 docker exec port-light port-light doctor
 ```
 
+When the standard `/data` volume is mounted, container-side reservation tokens
+are kept under `/data/cli-state` and survive container recreation.
+
 Use the server URL that is reachable from where the command runs. Inside the
 Port-Light container the default `http://127.0.0.1:2100` is normally correct;
 from the host, use its published port or reverse-proxy URL.
@@ -47,7 +50,7 @@ Command options take precedence over environment variables.
 | Reservation scope | `PORT_LIGHT_SCOPE=self|all` | `self` |
 | Request timeout | `PORT_LIGHT_TIMEOUT` | `5` seconds |
 | HTTPS CA bundle | `PORT_LIGHT_CA_FILE` | system trust store |
-| Local token directory | `PORT_LIGHT_STATE_DIR` | platform state directory |
+| Local token directory | `PORT_LIGHT_STATE_DIR` | platform state directory; `/data/cli-state` in the image |
 | One release token | `PORT_LIGHT_RESERVATION_TOKEN` | saved token |
 
 `PORT_LIGHT_AUTH` authenticates the whole UI/API when the server has Basic
@@ -113,6 +116,8 @@ put secrets in them.
 check every configured peer, then saves the reservation on the selected server.
 It fails closed if a peer cannot provide a complete occupancy map. If peers are
 configured and the scope was left at its default, the CLI prints a warning.
+For shared automation, configure every caller with the same hub URL; otherwise
+each Port-Light instance owns an independent reservation set.
 
 By default, release tokens are saved locally and are not printed in human
 output. On Unix-like systems they live under
@@ -150,10 +155,10 @@ printf '%s\n' "$TOKEN" | port-light release 8000 --token-stdin
 
 ## Output and exit status
 
-Human-readable output is the default. For a parsed command, `--json` emits one
-JSON object; its top-level `schema_version` is currently `1`. Argument-parser
-usage errors, `--help`, and `--version` remain ordinary terminal text. The flag
-may appear before or after the command.
+Human-readable output is the default. `--json` emits one JSON object for both
+successful commands and failures, including invalid arguments; its top-level
+`schema_version` is currently `1`. `--help` and `--version` remain ordinary
+terminal text. The flag may appear before or after the command.
 
 | Exit | Meaning |
 |------|---------|

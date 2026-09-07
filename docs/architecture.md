@@ -104,9 +104,11 @@ The CLI has four task-level commands: `doctor`, `check`, `reserve`, and
 `release`. Human output hides release tokens. Machine output uses a versioned
 JSON envelope and exit statuses distinguish success, valid negative results,
 input/state errors, and operational failures. Reservation tokens are stored by
-normalized server URL and port in owner-only local state, outside the server's
-data volume. This client-side token store is not an occupancy database; the
-Port-Light server remains authoritative.
+normalized server URL and port in owner-only local state. Host installations use
+the platform state directory; the Docker adapter uses `/data/cli-state` so tokens
+survive container replacement with the mounted data volume. This client-side
+token store is not an occupancy database; the Port-Light server remains
+authoritative.
 
 `GET /api/meta.capabilities` maps feature names to integer interface versions,
 so clients negotiate behavior rather than compare a monolithic product

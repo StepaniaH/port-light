@@ -225,7 +225,7 @@ class PortLightClient:
             self._meta_cache = self._transport.request("GET", "/api/meta")
         return dict(self._meta_cache)
 
-    def require_capability(self, name: str, version: int = 1) -> None:
+    def _require_capability(self, name: str, version: int = 1) -> None:
         capabilities = self.meta().get("capabilities")
         if capabilities is None:
             # Legacy servers are probed through the requested operation. The
@@ -238,12 +238,14 @@ class PortLightClient:
             )
 
     def doctor(self) -> dict[str, Any]:
+        self._require_capability("doctor")
         document = self._transport.request("GET", "/api/doctor")
         document.pop("report", None)
         return document
 
     def check_port(self, port: int) -> dict[str, Any]:
         _validate_port(port)
+        self._require_capability("port_check")
         row = self._transport.request(
             "GET", f"/api/ports/{port}?include_hidden=false",
         )
@@ -271,6 +273,12 @@ class PortLightClient:
             raise PortLightError("invalid_request", "ttl must be between 60 and 604800 seconds")
         if scope not in ("self", "all"):
             raise PortLightError("invalid_request", "scope must be self or all")
+        if reserve:
+            self._require_capability("reservations")
+        if require_count:
+            self._require_capability("exact_reservations")
+        if scope == "all":
+            self._require_capability("scope_all")
         params: list[tuple[str, str]] = [("count", str(count)), ("scope", scope)]
         if start is not None:
             params.append(("start", str(start)))
@@ -332,12 +340,29 @@ class PortLightClient:
                 "Port-Light returned invalid reserved port numbers",
             )
         for reservation in reservations:
-            if not isinstance(reservation, dict) or not reservation.get("token"):
+            if (
+                not isinstance(reservation, dict)
+                or not isinstance(reservation.get("token"), str)
+                or not reservation["token"]
+            ):
                 raise PortLightError(
                     "unsupported_server",
                     "Port-Light did not return secure reservation tokens; upgrade the server",
                 )
-        if [reservation.get("port") for reservation in reservations] != ports:
+            expires_at = reservation.get("expires_at")
+            if expires_at is not None and (
+                type(expires_at) not in (int, float)
+                or not math.isfinite(expires_at)
+                or expires_at <= 0
+            ):
+                raise PortLightError(
+                    "invalid_response",
+                    "Port-Light returned an invalid reservation expiry",
+                )
+        if (
+            any(type(reservation.get("port")) is not int for reservation in reservations)
+            or [reservation["port"] for reservation in reservations] != ports
+        ):
             raise PortLightError(
                 "invalid_response",
                 "Port-Light returned reservation tokens for different ports",
@@ -350,6 +375,7 @@ class PortLightClient:
         _validate_port(port)
         if not token:
             raise PortLightError("reservation_token_missing", "reservation token is required")
+        self._require_capability("reservation_release")
         self._transport.request(
             "DELETE",
             f"/api/reservations/{port}",

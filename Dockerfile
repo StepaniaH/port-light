@@ -33,6 +33,7 @@ ENV COMPOSE_SCAN_MAX_FILES=400
 ENV PORT_RANGE_START=1
 ENV PORT_RANGE_END=9999
 ENV PORT_LIGHT_DATA_DIR=/data
+ENV PORT_LIGHT_STATE_DIR=/data/cli-state
 ENV CUSTOM_PORTS_FILE=/data/custom_ports.json
 # Port uvicorn listens on inside the container; /api/meta exposes it so the
 # Automation panel can render copy-paste MCP snippets without hardcoding.

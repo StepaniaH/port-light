@@ -19,6 +19,17 @@ DEFAULT_URL = "http://127.0.0.1:2100"
 DEFAULT_TTL = 3600
 
 
+class _ArgumentParser(argparse.ArgumentParser):
+    """Turn usage mistakes into data the CLI adapter can format consistently."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        kwargs.setdefault("allow_abbrev", False)
+        super().__init__(*args, **kwargs)
+
+    def error(self, message: str) -> None:
+        raise PortLightError("invalid_arguments", message)
+
+
 def _bounded_int(minimum: int, maximum: int):
     def parse(value: str) -> int:
         try:
@@ -48,13 +59,13 @@ def parse_duration(value: str) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    common = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
+    common = _ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
     common.add_argument("--url", help="Port-Light base URL (default: PORT_LIGHT_URL or localhost)")
     common.add_argument("--timeout", type=float, help="request timeout in seconds (default: 5)")
     common.add_argument("--ca-file", help="custom CA bundle for HTTPS verification")
     common.add_argument("--json", action="store_true", help="emit one machine-readable JSON object")
 
-    parser = argparse.ArgumentParser(
+    parser = _ArgumentParser(
         prog="port-light",
         description="Check and reserve ports through a running Port-Light instance.",
         parents=[common],
@@ -173,7 +184,6 @@ def _doctor(
     json_output: bool,
     stdout: TextIO,
 ) -> int:
-    client.require_capability("doctor")
     document = client.doctor()
     healthy = document.get("overall") == "healthy"
     if json_output:
@@ -208,7 +218,6 @@ def _check(
     json_output: bool,
     stdout: TextIO,
 ) -> int:
-    client.require_capability("port_check")
     row = client.check_port(port)
     free = row.get("status") == "free"
     if json_output:
@@ -261,10 +270,6 @@ def _reserve(
     ttl = None if args.no_expiry else (args.ttl if args.ttl is not None else DEFAULT_TTL)
     if not args.no_save:
         store.ensure_writable()
-    client.require_capability("reservations")
-    client.require_capability("exact_reservations")
-    if scope == "all":
-        client.require_capability("scope_all")
     result = client.reserve_ports(
         count=args.count,
         start=args.start,
@@ -282,7 +287,10 @@ def _reserve(
             recovery = _error_document("reserve", exc)
             recovery["reservations"] = reservations
             recovery["recovery_required"] = True
-            stderr.write("Reservation succeeded, but token storage failed; save the recovery JSON.\n")
+            if not json_output:
+                stderr.write(
+                    "Reservation succeeded, but token storage failed; save the recovery JSON.\n"
+                )
             _json_write(stdout, recovery)
             return 3
     warnings = []
@@ -345,7 +353,6 @@ def _release(
             "reservation_token_missing",
             "no saved token; use PORT_LIGHT_RESERVATION_TOKEN or --token-stdin",
         )
-    client.require_capability("reservation_release")
     result = client.release_port(port, token)
     try:
         store.delete(client.base_url, port)
@@ -384,12 +391,25 @@ def main(
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
 ) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
     environ = environ if environ is not None else os.environ
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     stderr = stderr or sys.stderr
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    parser = build_parser()
+    try:
+        args = parser.parse_args(raw_argv)
+    except PortLightError as exc:
+        if "--json" in raw_argv:
+            command = next(
+                (value for value in raw_argv if value in ("doctor", "check", "reserve", "release")),
+                None,
+            )
+            _json_write(stdout, _error_document(command, exc))
+        else:
+            parser.print_usage(stderr)
+            stderr.write(f"port-light: error: {exc}\n")
+        return 2
     json_output = bool(getattr(args, "json", False))
     try:
         active_client = client or _client_from_environment(args, environ)
@@ -427,3 +447,13 @@ def main(
         else:
             stderr.write(f"port-light: {exc}\n")
         return _error_exit(exc)
+    except Exception:  # noqa: BLE001 — keep terminal/JSON output stable without leaking details
+        error = PortLightError(
+            "internal_error",
+            "the command failed unexpectedly; retry with a current Port-Light CLI",
+        )
+        if json_output:
+            _json_write(stdout, _error_document(args.command, error))
+        else:
+            stderr.write(f"port-light: {error}\n")
+        return 3

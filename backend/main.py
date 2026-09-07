@@ -15,6 +15,7 @@ from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from port_light_client import __version__
 
 from . import agent_events, degradations, doctor, history, hosts, port_store, themes
 from . import settings as app_settings
@@ -38,7 +39,7 @@ from .port_scanner import (
     scan_listening_ports,
 )
 
-VERSION = "0.8.0"
+VERSION = __version__
 
 _log_level = os.environ.get("PORT_LIGHT_LOG_LEVEL", "").strip().upper()
 if not logging.getLogger("port-light").handlers and not logging.getLogger().handlers:

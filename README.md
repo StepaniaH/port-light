@@ -167,7 +167,7 @@ If an existing `port_light.json` is unreadable, malformed, or contains invalid r
 - Machine descriptions are plain text visible to anyone with dashboard or API access and may appear in screenshots. Do not include passwords, tokens, or other secrets in them.
 - Doctor reports are generated from an explicit aggregate allowlist. They include statuses, counts, safe source enums, and known failure reasons, but omit machine identity, peer details, bind addresses, ports, filesystem paths, environment values, credentials, and degradation scopes. Unknown event sources and reasons are redacted.
 - Sibling `.env` files next to Compose stacks are read locally for `${VAR}` substitution and are never uploaded.
-- Manual labels, port history, agent-call labels, and peer settings stay in the data volume. Saved peer passwords are stored in `port_light.json`; protect the data volume as you would any other credentials file.
+- Manual labels, port history, agent-call labels, peer settings, and Docker-side CLI release tokens stay in the data volume. Saved peer passwords are stored in `port_light.json`, while CLI tokens use `/data/cli-state`; protect the data volume as you would any other credentials store.
 
 ## Tech stack
 

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import io
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from port_light_client import PortLightError
-from port_light_client.cli import main, parse_duration
+from port_light_client.cli import _client_from_environment, main, parse_duration
 
 
 DOCTOR = {
@@ -37,9 +38,6 @@ class FakeClient:
             "range": {"start": 1, "end": 9999},
         }
         self.meta_result = {"automation": {"suggest_peers": False}}
-
-    def require_capability(self, name, version=1):
-        self.calls.append(("require_capability", name, version))
 
     def doctor(self):
         self.calls.append(("doctor",))
@@ -114,6 +112,54 @@ def test_duration_parser_rejects_invalid_values(value):
         parse_duration(value)
 
 
+def test_client_configuration_precedence_is_option_then_environment(monkeypatch):
+    captured = {}
+
+    def make_client(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return object()
+
+    monkeypatch.setattr("port_light_client.cli.PortLightClient", make_client)
+    args = SimpleNamespace(
+        url="https://option.example",
+        timeout=9,
+        ca_file="/option/ca.pem",
+    )
+    _client_from_environment(args, {
+        "PORT_LIGHT_URL": "https://environment.example",
+        "PORT_LIGHT_TIMEOUT": "4",
+        "PORT_LIGHT_CA_FILE": "/environment/ca.pem",
+        "PORT_LIGHT_AUTH": "operator:secret",
+        "PORT_LIGHT_AGENT_TOKEN": "specific-agent-token",
+        "AGENT_TOKEN": "fallback-agent-token",
+    })
+    assert captured == {
+        "url": "https://option.example",
+        "timeout": 9.0,
+        "ca_file": "/option/ca.pem",
+        "basic_auth": "operator:secret",
+        "agent_token": "specific-agent-token",
+    }
+
+
+def test_client_configuration_uses_environment_then_defaults(monkeypatch):
+    captured = []
+
+    def make_client(url, **kwargs):
+        captured.append({"url": url, **kwargs})
+        return object()
+
+    monkeypatch.setattr("port_light_client.cli.PortLightClient", make_client)
+    _client_from_environment(SimpleNamespace(), {"AGENT_TOKEN": "fallback"})
+    assert captured == [{
+        "url": "http://127.0.0.1:2100",
+        "timeout": 5.0,
+        "ca_file": None,
+        "basic_auth": "",
+        "agent_token": "fallback",
+    }]
+
+
 def test_doctor_human_and_json_exit_on_health():
     code, output, error = invoke(["doctor"])
     assert code == 0
@@ -167,8 +213,6 @@ def test_reserve_defaults_to_one_hour_self_scope_and_saves_token():
     call = next(call for call in client.calls if call[0] == "reserve_ports")
     assert call[1]["ttl"] == 3600
     assert call[1]["scope"] == "self"
-    assert ("require_capability", "reservations", 1) in client.calls
-    assert ("require_capability", "exact_reservations", 1) in client.calls
 
 
 def test_reserve_json_supports_no_expiry_and_stateless_tokens():
@@ -187,7 +231,6 @@ def test_reserve_json_supports_no_expiry_and_stateless_tokens():
     call = next(call for call in client.calls if call[0] == "reserve_ports")
     assert call[1]["ttl"] is None
     assert call[1]["scope"] == "all"
-    assert ("require_capability", "scope_all", 1) in client.calls
 
 
 def test_reserve_default_scope_warns_when_peers_exist():
@@ -204,6 +247,27 @@ def test_reserve_default_scope_warns_when_peers_exist():
     assert ("meta",) not in client.calls
 
 
+def test_reserve_scope_environment_is_explicit_and_validated():
+    client = FakeClient()
+    code, _, error = invoke(
+        ["reserve"],
+        client=client,
+        environ={"PORT_LIGHT_SCOPE": "all"},
+    )
+    assert code == 0
+    assert error == ""
+    call = next(call for call in client.calls if call[0] == "reserve_ports")
+    assert call[1]["scope"] == "all"
+
+    code, _, error = invoke(
+        ["reserve"],
+        client=FakeClient(),
+        environ={"PORT_LIGHT_SCOPE": "fleet"},
+    )
+    assert code == 2
+    assert "must be self or all" in error
+
+
 def test_partial_reservation_is_preserved_but_returns_one():
     client = FakeClient()
     code, output, error = invoke(["reserve", "--count", "2"], client=client)
@@ -218,6 +282,34 @@ def test_no_save_requires_json_before_contacting_server():
     assert code == 2
     assert "requires --json" in error
     assert client.calls == []
+
+
+def test_argument_errors_are_json_when_requested_and_never_contact_server():
+    client = FakeClient()
+    code, output, error = invoke(
+        ["reserve", "--json", "--ttl", "30s"],
+        client=client,
+    )
+    payload = json.loads(output)
+    assert code == 2
+    assert error == ""
+    assert payload == {
+        "schema_version": 1,
+        "ok": False,
+        "command": "reserve",
+        "error": {
+            "code": "invalid_arguments",
+            "message": "argument --ttl: must be between 60 seconds and 7 days",
+        },
+    }
+    assert client.calls == []
+
+
+def test_long_options_are_not_silently_abbreviated():
+    code, output, error = invoke(["--js", "doctor"])
+    assert code == 2
+    assert output == ""
+    assert "unrecognized arguments: --js" in error
 
 
 def test_release_prefers_environment_then_deletes_local_record():
@@ -293,6 +385,21 @@ def test_errors_use_stable_json_and_exit_category():
     }
 
 
+def test_unexpected_failures_keep_json_stable_without_leaking_details():
+    client = FakeClient()
+
+    def broken(_port):
+        raise RuntimeError("sensitive implementation detail")
+
+    client.check_port = broken
+    code, output, error = invoke(["check", "5432", "--json"], client=client)
+    payload = json.loads(output)
+    assert code == 3
+    assert error == ""
+    assert payload["error"]["code"] == "internal_error"
+    assert "sensitive" not in output
+
+
 def test_storage_failure_after_remote_reservation_returns_recovery_tokens():
     client = FakeClient()
     store = FakeStore()
@@ -307,3 +414,8 @@ def test_storage_failure_after_remote_reservation_returns_recovery_tokens():
     assert payload["recovery_required"] is True
     assert payload["reservations"][0]["token"] == "release-me"
     assert "save the recovery JSON" in error
+
+    code, output, error = invoke(["reserve", "--json"], client=client, store=store)
+    assert code == 3
+    assert json.loads(output)["recovery_required"] is True
+    assert error == ""

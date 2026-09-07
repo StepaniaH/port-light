@@ -33,7 +33,12 @@ jobs:
         run: ruff check backend tests mcp port_light_client scripts/check_release_ci.py
       - name: Build CLI wheel
         if: matrix.python-version == '3.13'
-        run: python -m build --wheel
+        run: |
+          python -m build --wheel
+          python -m venv "$RUNNER_TEMP/port-light-cli-smoke"
+          "$RUNNER_TEMP/port-light-cli-smoke/bin/pip" install --no-index dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/port-light-cli-smoke/bin/port-light" --version
       - name: Test
         run: |
           set -o pipefail
@@ -68,3 +73,15 @@ jobs:
           pip install -r requirements.txt
           npx playwright install --with-deps chromium
           npm run smoke:browser
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build -t port-light:ci .
+      - name: Smoke CLI and MCP entry points
+        run: |
+          docker run --rm --entrypoint port-light port-light:ci --version
+          docker run --rm --entrypoint python port-light:ci mcp/server.py
