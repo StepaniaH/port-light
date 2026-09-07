@@ -42,7 +42,7 @@ class ReservationStore:
         except OSError as exc:
             raise PortLightError(
                 "state_write_failed",
-                f"could not write reservation tokens in {self.root}",
+                "could not write reservation-token state",
             ) from exc
 
     def save(self, base_url: str, reservation: dict[str, Any]) -> None:
@@ -54,11 +54,6 @@ class ReservationStore:
                 "Port-Light returned an invalid reservation",
             )
         target = self._path(base_url, port)
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        try:
-            os.chmod(target.parent, 0o700)
-        except OSError:
-            pass
         payload = {
             "schema_version": 1,
             "url": normalize_base_url(base_url),
@@ -69,6 +64,11 @@ class ReservationStore:
         handle = None
         temp_path = None
         try:
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            try:
+                os.chmod(target.parent, 0o700)
+            except OSError:
+                pass
             handle = tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",
@@ -91,7 +91,7 @@ class ReservationStore:
         except OSError as exc:
             raise PortLightError(
                 "state_write_failed",
-                f"could not save reservation token in {self.root}",
+                "could not save reservation-token state",
             ) from exc
         finally:
             if handle is not None:

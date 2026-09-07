@@ -198,6 +198,19 @@ def test_tool_failure_reports_iserror(monkeypatch):
     assert reply["result"]["isError"] is True
 
 
+def test_unexpected_tool_failure_does_not_expose_internal_details(monkeypatch):
+    class FailingClient(FakeClient):
+        def check_port(self, port):
+            raise RuntimeError("private implementation path")
+
+    monkeypatch.setattr(mcp, "client", FailingClient)
+    reply = call_tool("check_port", {"port": 1})
+    text = reply["result"]["content"][0]["text"]
+    assert reply["result"]["isError"] is True
+    assert text == "Port-Light MCP request failed unexpectedly"
+    assert "private" not in text
+
+
 def test_unknown_method_and_tool_are_protocol_errors():
     reply = mcp.handle_request({"jsonrpc": "2.0", "id": 6, "method": "nope"})
     assert reply["error"]["code"] == -32601

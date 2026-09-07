@@ -115,11 +115,11 @@ def test_duration_parser_rejects_invalid_values(value):
 def test_client_configuration_precedence_is_option_then_environment(monkeypatch):
     captured = {}
 
-    def make_client(url, **kwargs):
-        captured.update(url=url, **kwargs)
+    def make_client(environ, **kwargs):
+        captured.update(environ=environ, **kwargs)
         return object()
 
-    monkeypatch.setattr("port_light_client.cli.PortLightClient", make_client)
+    monkeypatch.setattr("port_light_client.cli.create_client", make_client)
     args = SimpleNamespace(
         url="https://option.example",
         timeout=9,
@@ -134,29 +134,34 @@ def test_client_configuration_precedence_is_option_then_environment(monkeypatch)
         "AGENT_TOKEN": "fallback-agent-token",
     })
     assert captured == {
-        "url": "https://option.example",
-        "timeout": 9.0,
+        "environ": {
+            "PORT_LIGHT_URL": "https://environment.example",
+            "PORT_LIGHT_TIMEOUT": "4",
+            "PORT_LIGHT_CA_FILE": "/environment/ca.pem",
+            "PORT_LIGHT_AUTH": "operator:secret",
+            "PORT_LIGHT_AGENT_TOKEN": "specific-agent-token",
+            "AGENT_TOKEN": "fallback-agent-token",
+        },
+        "base_url": "https://option.example",
+        "timeout": 9,
         "ca_file": "/option/ca.pem",
-        "basic_auth": "operator:secret",
-        "agent_token": "specific-agent-token",
     }
 
 
 def test_client_configuration_uses_environment_then_defaults(monkeypatch):
     captured = []
 
-    def make_client(url, **kwargs):
-        captured.append({"url": url, **kwargs})
+    def make_client(environ, **kwargs):
+        captured.append({"environ": environ, **kwargs})
         return object()
 
-    monkeypatch.setattr("port_light_client.cli.PortLightClient", make_client)
+    monkeypatch.setattr("port_light_client.cli.create_client", make_client)
     _client_from_environment(SimpleNamespace(), {"AGENT_TOKEN": "fallback"})
     assert captured == [{
-        "url": "http://127.0.0.1:2100",
-        "timeout": 5.0,
+        "environ": {"AGENT_TOKEN": "fallback"},
+        "base_url": None,
+        "timeout": None,
         "ca_file": None,
-        "basic_auth": "",
-        "agent_token": "fallback",
     }]
 
 
@@ -268,12 +273,12 @@ def test_reserve_scope_environment_is_explicit_and_validated():
     assert "must be self or all" in error
 
 
-def test_partial_reservation_is_preserved_but_returns_one():
+def test_partial_reservation_is_preserved_but_returns_operational_failure():
     client = FakeClient()
     code, output, error = invoke(["reserve", "--count", "2"], client=client)
-    assert code == 1
+    assert code == 3
     assert "Reserved 1 port" in output
-    assert "Only 1 of 2" in error
+    assert "only 1 of 2" in error
 
 
 def test_no_save_requires_json_before_contacting_server():

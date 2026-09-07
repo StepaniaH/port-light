@@ -11,18 +11,59 @@ from port_light_client.client import (
     HttpTransport,
     PortLightClient,
     PortLightError,
+    create_client,
     normalize_base_url,
 )
 from port_light_client.state import ReservationStore
 
 
+CAPABILITIES = {
+    "doctor": 1,
+    "port_check": 1,
+    "reservations": 1,
+    "exact_reservations": 1,
+    "reservation_release": 1,
+    "scope_all": 1,
+}
+
+DOCTOR_RESPONSE = {
+    "schema_version": 1,
+    "overall": "healthy",
+    "counts": {"pass": 1, "warning": 0, "fail": 0, "info": 0},
+    "context": {"version": "0.8.1"},
+    "checks": [{"id": "snapshot", "status": "pass", "detail": "current"}],
+}
+
+
+def suggestion_response(
+    *,
+    ports=None,
+    reservations=None,
+    start=1,
+    end=9999,
+    scope="self",
+):
+    return {
+        "ports": ports if ports is not None else [8000],
+        "reservations": reservations if reservations is not None else [],
+        "range": {"start": start, "end": end},
+        "scope": scope,
+    }
+
+
 class FakeTransport:
-    def __init__(self, response=None):
+    def __init__(self, response=None, *, meta_response=None):
         self.response = response or {}
+        self.meta_response = (
+            {"capabilities": CAPABILITIES}
+            if meta_response is None else meta_response
+        )
         self.requests = []
 
     def request(self, method, path, *, headers=None):
         self.requests.append((method, path, headers))
+        if path == "/api/meta":
+            return dict(self.meta_response)
         return dict(self.response)
 
 
@@ -57,10 +98,12 @@ def test_check_port_uses_client_interface_and_compacts_row():
 
 
 def test_reserve_encodes_options_and_sends_agent_token():
-    response = {
-        "ports": [8000],
-        "reservations": [{"port": 8000, "token": "release-me", "expires_at": 123}],
-    }
+    response = suggestion_response(
+        reservations=[{"port": 8000, "token": "release-me", "expires_at": 123}],
+        start=8000,
+        end=8100,
+        scope="all:0/0",
+    )
     transport = FakeTransport(response)
     client = PortLightClient(agent_token="agent-secret", transport=transport)
     assert client.reserve_ports(
@@ -82,19 +125,18 @@ def test_reserve_encodes_options_and_sends_agent_token():
     assert headers == {"X-Agent-Token": "agent-secret"}
 
 
-def test_reserve_requires_tokens_but_allows_an_explicit_partial_result():
-    partial = FakeTransport({
-        "ports": [8000],
-        "reservations": [{"port": 8000, "token": "one", "expires_at": 123}],
-    })
+def test_reserve_requires_tokens_but_preserves_a_partial_result_for_recovery():
+    partial = FakeTransport(suggestion_response(
+        reservations=[{"port": 8000, "token": "one", "expires_at": 123}],
+    ))
     client = PortLightClient(transport=partial)
     assert len(client.reserve_ports(count=2)["reservations"]) == 1
 
-    missing = PortLightClient(transport=FakeTransport({"ports": [8000], "reservations": []}))
+    missing = PortLightClient(transport=FakeTransport(suggestion_response()))
     with pytest.raises(PortLightError, match="one reservation token"):
         missing.reserve_ports()
 
-    empty = PortLightClient(transport=FakeTransport({"ports": [], "reservations": []}))
+    empty = PortLightClient(transport=FakeTransport(suggestion_response(ports=[])))
     with pytest.raises(PortLightError) as caught:
         empty.reserve_ports()
     assert caught.value.code == "no_capacity"
@@ -122,17 +164,16 @@ def test_reserve_requires_tokens_but_allows_an_explicit_partial_result():
     },
 ])
 def test_reserve_rejects_invalid_port_token_mappings(response):
-    client = PortLightClient(transport=FakeTransport(response))
+    client = PortLightClient(transport=FakeTransport(suggestion_response(**response)))
     with pytest.raises(PortLightError) as caught:
         client.reserve_ports()
     assert caught.value.code == "invalid_response"
 
 
 def test_reserve_rejects_non_string_tokens():
-    client = PortLightClient(transport=FakeTransport({
-        "ports": [8000],
-        "reservations": [{"port": 8000, "token": 123}],
-    }))
+    client = PortLightClient(transport=FakeTransport(suggestion_response(
+        reservations=[{"port": 8000, "token": 123}],
+    )))
     with pytest.raises(PortLightError) as caught:
         client.reserve_ports()
     assert caught.value.code == "unsupported_server"
@@ -140,14 +181,17 @@ def test_reserve_rejects_non_string_tokens():
 
 def test_doctor_drops_the_duplicate_report_string():
     client = PortLightClient(transport=FakeTransport({
-        "overall": "healthy",
+        **DOCTOR_RESPONSE,
         "report": "large duplicate",
     }))
-    assert client.doctor() == {"overall": "healthy"}
+    assert client.doctor() == DOCTOR_RESPONSE
 
 
 def test_capability_checks_are_cached_and_legacy_servers_are_probed():
-    transport = FakeTransport({"capabilities": {"doctor": 1}})
+    transport = FakeTransport(
+        DOCTOR_RESPONSE,
+        meta_response={"capabilities": {"doctor": 1}},
+    )
     client = PortLightClient(transport=transport)
     client.doctor()
     client.doctor()
@@ -162,14 +206,81 @@ def test_capability_checks_are_cached_and_legacy_servers_are_probed():
     assert caught.value.code == "unsupported_server"
     assert all("/api/ports/suggest" not in path for _, path, _ in transport.requests)
 
-    legacy_transport = FakeTransport({
-        "ports": [8000],
-        "reservations": [{"port": 8000, "token": "legacy-token", "expires_at": 123}],
-    })
+    legacy_transport = FakeTransport(DOCTOR_RESPONSE, meta_response={})
     legacy = PortLightClient(transport=legacy_transport)
-    assert legacy.reserve_ports()["ports"] == [8000]
+    assert legacy.doctor()["overall"] == "healthy"
+    with pytest.raises(PortLightError) as caught:
+        legacy.reserve_ports()
+    assert caught.value.code == "unsupported_server"
     assert legacy_transport.requests[0] == ("GET", "/api/meta", None)
-    assert legacy_transport.requests[1][1].startswith("/api/ports/suggest?")
+    assert all("/api/ports/suggest" not in path for _, path, _ in legacy_transport.requests)
+
+
+def test_capability_versions_must_be_integers():
+    client = PortLightClient(transport=FakeTransport(
+        DOCTOR_RESPONSE,
+        meta_response={"capabilities": {"doctor": "1"}},
+    ))
+    with pytest.raises(PortLightError) as caught:
+        client.doctor()
+    assert caught.value.code == "unsupported_server"
+
+
+@pytest.mark.parametrize("response", [
+    {},
+    {"port": 9999, "status": "free"},
+    {"port": 8080, "status": "unknown"},
+])
+def test_check_rejects_untrustworthy_port_responses(response):
+    client = PortLightClient(transport=FakeTransport(response))
+    with pytest.raises(PortLightError) as caught:
+        client.check_port(8080)
+    assert caught.value.code == "invalid_response"
+
+
+def test_doctor_rejects_untrustworthy_response():
+    client = PortLightClient(transport=FakeTransport({"overall": "healthy"}))
+    with pytest.raises(PortLightError) as caught:
+        client.doctor()
+    assert caught.value.code == "invalid_response"
+
+
+def test_suggestion_requires_the_actual_scope_and_range():
+    client = PortLightClient(transport=FakeTransport(suggestion_response(scope="self")))
+    with pytest.raises(PortLightError) as caught:
+        client.suggest_ports(scope="all")
+    assert caught.value.code == "invalid_response"
+
+
+def test_shared_client_factory_applies_environment_and_overrides(monkeypatch):
+    captured = {}
+
+    def make_client(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return object()
+
+    monkeypatch.setattr("port_light_client.client.PortLightClient", make_client)
+    created = create_client(
+        {
+            "PORT_LIGHT_URL": "https://environment.example",
+            "PORT_LIGHT_TIMEOUT": "4",
+            "PORT_LIGHT_CA_FILE": "/environment/ca.pem",
+            "PORT_LIGHT_AUTH": "operator:secret",
+            "PORT_LIGHT_AGENT_TOKEN": "specific-agent-token",
+            "AGENT_TOKEN": "fallback-agent-token",
+        },
+        base_url="https://option.example",
+        timeout=9,
+        ca_file="/option/ca.pem",
+    )
+    assert created is not None
+    assert captured == {
+        "url": "https://option.example",
+        "timeout": 9.0,
+        "ca_file": "/option/ca.pem",
+        "basic_auth": "operator:secret",
+        "agent_token": "specific-agent-token",
+    }
 
 
 class Response:
@@ -266,3 +377,16 @@ def test_reservation_store_drops_expired_token(tmp_path, monkeypatch):
     })
     assert store.load("http://nas.lan:2100", 8123) is None
     assert list((tmp_path / "state").rglob("8123.json")) == []
+
+
+def test_reservation_store_normalizes_directory_creation_failure(tmp_path, monkeypatch):
+    store = ReservationStore(tmp_path / "state")
+
+    def fail(*_args, **_kwargs):
+        raise PermissionError("private path detail")
+
+    monkeypatch.setattr("port_light_client.state.Path.mkdir", fail)
+    with pytest.raises(PortLightError) as caught:
+        store.save("http://nas.lan:2100", {"port": 8123, "token": "secret"})
+    assert caught.value.code == "state_write_failed"
+    assert str(tmp_path) not in str(caught.value)

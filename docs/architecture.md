@@ -93,14 +93,14 @@ Guessed access URLs: loopback binds use `127.0.0.1`; a LAN-only bind uses that a
 
 ## Automation clients
 
-`port_light_client/client.py` is the deep client module for non-browser
+`port_light_client/client.py` is the shared client module for non-browser
 integrations. It owns URL validation, authentication headers, TLS and timeout
 handling, redirect refusal, response validation, compact port rows, named
 capability checks, and normalized failures. Its narrow transport interface is
 the test seam. `port_light_client/cli.py` and `mcp/server.py` are adapters over
 that module; neither duplicates HTTP behavior or scans the machine itself.
 
-The CLI has four task-level commands: `doctor`, `check`, `reserve`, and
+The CLI provides four commands: `doctor`, `check`, `reserve`, and
 `release`. Human output hides release tokens. Machine output uses a versioned
 JSON envelope and exit statuses distinguish success, valid negative results,
 input/state errors, and operational failures. Reservation tokens are stored by
@@ -112,15 +112,18 @@ authoritative.
 
 `GET /api/meta.capabilities` maps feature names to integer interface versions,
 so clients negotiate behavior rather than compare a monolithic product
-version. A missing capability map identifies a legacy server and permits a
-conservative operation probe. Reservation responses are still rejected unless
-they contain one release token per selected port.
+version. A missing capability map identifies a legacy server. Read-only
+operations may proceed only when their responses pass local validation; exact
+reservations fail before changing server state unless the server advertises the
+all-or-none capability. Reservation responses are also rejected unless they
+contain one release token per selected port and report the scope actually used.
 
 `GET /api/ports/suggest?require_count=true` makes allocation all-or-none under
-the existing port-store lock. The CLI always requests it. New servers either
-persist the entire requested count or persist nothing; an older server that
-ignores the parameter may return a partial reservation, which the CLI preserves
-and reports as a negative result so its release tokens are not lost.
+the existing port-store lock. The CLI always requests it and verifies the named
+capability first. A server either persists the entire requested count or
+persists nothing. If a server advertises that capability but returns a partial
+result, the CLI preserves the release tokens for recovery and returns an
+operational failure.
 
 ## Persistence
 

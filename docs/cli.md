@@ -56,9 +56,9 @@ Command options take precedence over environment variables.
 `PORT_LIGHT_AUTH` authenticates the whole UI/API when the server has Basic
 Auth enabled. `PORT_LIGHT_AGENT_TOKEN` is a separate server-side gate for port
 suggestions and reservations. A reservation token is a third, one-time secret
-returned for a particular port and required to release it. These credentials
-are deliberately not accepted as command-line arguments, where process lists
-and shell history can expose them.
+returned for a particular port and required to release it. Credentials are not
+accepted as command-line arguments because process lists and shell history can
+expose them.
 
 Examples:
 
@@ -170,9 +170,10 @@ terminal text. The flag may appear before or after the command.
 The client verifies HTTPS with the system trust store unless `--ca-file` or
 `PORT_LIGHT_CA_FILE` selects a private CA bundle. URLs containing credentials,
 query strings, or fragments are rejected, as are HTTP redirects. The CLI
-negotiates named capabilities through `/api/meta`; it can conservatively probe
-older servers, but secure reservation responses must include one release token
-per reserved port.
+negotiates named capabilities through `/api/meta`. Read-only checks can validate
+responses from older servers, but reservation commands require the advertised
+all-or-none allocation capability before changing server state. Install the CLI
+and server from the same release when reservation support is required.
 
 Run `port-light --help` or `port-light COMMAND --help` for the complete option
 reference.

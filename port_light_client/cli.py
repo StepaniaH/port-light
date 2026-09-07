@@ -11,16 +11,15 @@ from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from . import __version__
-from .client import PortLightClient, PortLightError
+from .client import PortLightClient, PortLightError, create_client
 from .state import ReservationStore
 
 SCHEMA_VERSION = 1
-DEFAULT_URL = "http://127.0.0.1:2100"
 DEFAULT_TTL = 3600
 
 
 class _ArgumentParser(argparse.ArgumentParser):
-    """Turn usage mistakes into data the CLI adapter can format consistently."""
+    """Raise structured errors for invalid command-line arguments."""
 
     def __init__(self, *args: Any, **kwargs: Any):
         kwargs.setdefault("allow_abbrev", False)
@@ -120,20 +119,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _client_from_environment(args: argparse.Namespace, environ: Mapping[str, str]) -> PortLightClient:
-    timeout_value: float | str = getattr(args, "timeout", environ.get("PORT_LIGHT_TIMEOUT", "5"))
-    try:
-        timeout = float(timeout_value)
-    except ValueError as exc:
-        raise PortLightError(
-            "invalid_timeout",
-            "PORT_LIGHT_TIMEOUT must be a number greater than zero",
-        ) from exc
-    return PortLightClient(
-        getattr(args, "url", environ.get("PORT_LIGHT_URL", DEFAULT_URL)),
-        basic_auth=environ.get("PORT_LIGHT_AUTH", ""),
-        agent_token=environ.get("PORT_LIGHT_AGENT_TOKEN", "") or environ.get("AGENT_TOKEN", ""),
-        timeout=timeout,
-        ca_file=getattr(args, "ca_file", environ.get("PORT_LIGHT_CA_FILE") or None),
+    return create_client(
+        environ,
+        base_url=getattr(args, "url", None),
+        timeout=getattr(args, "timeout", None),
+        ca_file=getattr(args, "ca_file", None),
     )
 
 
@@ -300,7 +290,8 @@ def _reserve(
     complete = len(reservations) == args.count
     if not complete:
         warnings.append(
-            f"Only {len(reservations)} of {args.count} requested ports were available and reserved."
+            f"Port-Light returned only {len(reservations)} of {args.count} "
+            "ports despite advertising exact reservations."
         )
     if json_output:
         _json_write(stdout, {
@@ -309,7 +300,7 @@ def _reserve(
             "command": "reserve",
             "ports": result.get("ports", []),
             "reservations": reservations,
-            "scope": result.get("scope", scope),
+            "scope": result["scope"],
             "range": result.get("range"),
             "warnings": warnings,
             "tokens_saved": not args.no_save,
@@ -317,7 +308,7 @@ def _reserve(
     else:
         noun = "port" if len(reservations) == 1 else "ports"
         stdout.write(
-            f"Reserved {len(reservations)} {noun} with scope {result.get('scope', scope)}.\n"
+            f"Reserved {len(reservations)} {noun} with scope {result['scope']}.\n"
         )
         for reservation in reservations:
             stdout.write(
@@ -327,7 +318,7 @@ def _reserve(
             stdout.write(f"Reservation tokens saved under {store.root}.\n")
         for message in warnings:
             stderr.write("Warning: " + message + "\n")
-    return 0 if complete else 1
+    return 0 if complete else 3
 
 
 def _release(

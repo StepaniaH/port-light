@@ -11,9 +11,8 @@ These items depend on user feedback and are not scheduled:
 - Declarative port ranges and policy checks
 - Additional read-only collectors such as Podman or TrueNAS
 - Community Applications packaging for Unraid
-- A lower-chrome Settings information-architecture redesign. The current
-  four-panel Settings flow is reliable and remains in place while CLI usage
-  feedback has higher priority.
+- Review the Settings page information architecture after collecting CLI usage
+  feedback. The current four-panel layout remains supported.
 
 ## Out of scope
 

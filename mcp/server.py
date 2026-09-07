@@ -33,14 +33,10 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from port_light_client import PortLightClient, PortLightError, __version__
+from port_light_client.client import create_client
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "port-light", "version": __version__}
-
-BASE_URL = os.environ.get("PORT_LIGHT_URL", "http://127.0.0.1:2100").rstrip("/")
-BASIC_AUTH = os.environ.get("PORT_LIGHT_AUTH", "")
-AGENT_TOKEN = os.environ.get("PORT_LIGHT_AGENT_TOKEN", "") or os.environ.get("AGENT_TOKEN", "")
-CA_FILE = os.environ.get("PORT_LIGHT_CA_FILE", "") or None
 
 TOOLS = [
     {
@@ -129,20 +125,7 @@ TOOLS = [
 
 
 def client() -> PortLightClient:
-    try:
-        timeout = float(os.environ.get("PORT_LIGHT_TIMEOUT", "5"))
-    except ValueError as exc:
-        raise PortLightError(
-            "invalid_timeout",
-            "PORT_LIGHT_TIMEOUT must be a number greater than zero",
-        ) from exc
-    return PortLightClient(
-        BASE_URL,
-        basic_auth=BASIC_AUTH,
-        agent_token=AGENT_TOKEN,
-        timeout=timeout,
-        ca_file=CA_FILE,
-    )
+    return create_client(os.environ)
 
 
 def run_tool(name: str, args: dict) -> dict:
@@ -228,9 +211,10 @@ def handle_request(msg: dict) -> dict | None:
             return {"jsonrpc": "2.0", "id": msg_id,
                     "result": {"content": [{"type": "text", "text": str(exc)}],
                                "isError": True}}
-        except Exception as exc:  # noqa: BLE001 — report, never crash the loop
+        except Exception:  # noqa: BLE001 — keep the loop alive without exposing internals
             return {"jsonrpc": "2.0", "id": msg_id,
-                    "result": {"content": [{"type": "text", "text": f"{type(exc).__name__}: {exc}"}],
+                    "result": {"content": [{"type": "text",
+                                             "text": "Port-Light MCP request failed unexpectedly"}],
                                "isError": True}}
 
     if method in ("notifications/initialized", "initialized"):
