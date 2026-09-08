@@ -61,7 +61,9 @@ def test_parse_short_port_basic():
 
 def test_port_range_expansion():
     assert expand_port_range("3000-3002") == [3000, 3001, 3002]
-    assert len(expand_port_range("1000-2000")) == 128
+    assert len(expand_port_range("1000-1127")) == 128
+    with pytest.raises(ComposeWouldFail, match="expansion limit"):
+        expand_port_range("1000-5096")
     hosts = parse_short_port("6000-6002:80")
     assert [p["host_port"] for p in hosts] == [6000, 6001, 6002]
     long = parse_port_entry({"published": "9000-9001", "target": 80, "protocol": "tcp"})
@@ -1844,3 +1846,42 @@ def test_listen_scan_source_lsof_on_macos(monkeypatch):
     monkeypatch.setattr(ps.os.path, "exists", lambda path: False)
     assert listen_scan_source() == "lsof"
     assert ps.host_listen_trusted() is True
+
+
+@pytest.mark.parametrize('entry', ['20000-20255:30000-30255', {'published': '20000-20255', 'target': 80}])
+def test_large_port_ranges_are_complete(entry):
+    rows = parse_port_entry(entry)
+    assert len(rows) == 256
+    assert [r['host_port'] for r in rows] == list(range(20000, 20256))
+    if isinstance(entry, str):
+        assert rows[-1]['container_port'] == 30255
+
+
+def test_scan_expansion_budget_includes_all_files(tmp_path, monkeypatch):
+    import backend.compose_scanner as scanner
+    monkeypatch.setattr(scanner, '_MAX_SCAN_PORTS', 300)
+    for name in ['a', 'b']:
+        folder = tmp_path / name
+        folder.mkdir()
+        (folder / 'compose.yaml').write_text('services:\n  demo:\n    ports: ["20000-20255:80"]\n')
+    scan = scan_compose_tree(str(tmp_path))
+    assert scan.incomplete
+    assert len(scan.ports) <= 300
+    assert scan.diagnostics[-1]['code'] == 'port_budget'
+    assert scan.diagnostics[-1]['limit'] == 300
+
+
+def test_large_range_boundaries_and_scan_budget_reset(tmp_path, monkeypatch):
+    import backend.compose_scanner as scanner
+    assert len(expand_port_range('61440-65535')) == 4096
+    rows = parse_expose_entry('20000-20255/udp')
+    assert len(rows) == 256 and rows[-1]['container_port'] == 20255
+    with pytest.raises(ComposeWouldFail):
+        parse_short_port('20000-20255:30000-30001')
+    target = tmp_path / 'compose.yaml'
+    target.write_text('services:\n  demo:\n    ports: ["20000-20255:80"]\n')
+    monkeypatch.setattr(scanner, '_MAX_SCAN_PORTS', 255)
+    assert scan_compose_tree(str(tmp_path)).incomplete
+    monkeypatch.setattr(scanner, '_MAX_SCAN_PORTS', 256)
+    assert len(scan_compose_tree(str(tmp_path)).ports) == 256
+    assert len(scan_compose_tree(str(tmp_path)).ports) == 256

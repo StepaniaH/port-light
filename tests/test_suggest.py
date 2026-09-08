@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -42,9 +44,8 @@ def test_suggest_reserve_roundtrip():
     from backend import port_store
 
     client = TestClient(app)
-    res = client.get("/api/ports/suggest",
-                     params={"count": 2, "start": 6000, "end": 6010,
-                             "reserve": "true", "label": "preview"})
+    res = client.post("/api/reservations", json={"require_count": False, **{"count": 2, "start": 6000, "end": 6010,
+                             "label": "preview"}}, headers={"Idempotency-Key": secrets.token_urlsafe(32)})
     body = res.json()
     assert body["reserved"] == [6000, 6001]
     stored = {m["port"]: m for m in port_store.get_manual_ports()}
@@ -61,16 +62,12 @@ def test_suggest_can_require_the_whole_count_without_partial_reservation():
 
     port_store.add_manual_port(6001, "occupied", "localhost")
     client = TestClient(app)
-    res = client.get(
-        "/api/ports/suggest",
-        params={
+    res = client.post("/api/reservations", json={"require_count": False, **{
             "count": 2,
             "start": 6000,
             "end": 6001,
-            "reserve": "true",
             "require_count": "true",
-        },
-    )
+        }}, headers={"Idempotency-Key": secrets.token_urlsafe(32)})
     assert res.status_code == 200
     assert res.json()["ports"] == []
     assert port_store.get_manual_ports() == [
@@ -202,9 +199,8 @@ def test_suggest_records_lease_and_label(monkeypatch):
     from backend import agent_events
 
     client = TestClient(app)
-    client.get("/api/ports/suggest",
-               params={"count": 1, "start": 7100, "end": 7109,
-                       "reserve": True, "ttl": 3600, "label": "job"})
+    client.post("/api/reservations", json={"require_count": False, **{"count": 1, "start": 7100, "end": 7109,
+                       "ttl": 3600, "label": "job"}}, headers={"Idempotency-Key": secrets.token_urlsafe(32)})
     row = agent_events.recent()[0]
     assert row["leased"] is True
     assert row["label"] == "job"

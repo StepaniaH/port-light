@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 import io
 import json
 from types import SimpleNamespace
@@ -66,6 +67,9 @@ class FakeStore:
     def __init__(self):
         self.tokens = {}
         self.writable_checks = 0
+
+    def pending_request(self, *args):
+        return nullcontext("k" * 43)
 
     def ensure_writable(self):
         self.writable_checks += 1
@@ -225,6 +229,7 @@ def test_reserve_json_supports_no_expiry_and_stateless_tokens():
     store = FakeStore()
     code, output, _ = invoke(
         ["reserve", "--json", "--no-expiry", "--no-save", "--scope", "all"],
+        environ={"PORT_LIGHT_REQUEST_KEY": "k" * 43},
         client=client,
         store=store,
     )
@@ -418,7 +423,7 @@ def test_storage_failure_after_remote_reservation_returns_recovery_tokens():
     assert code == 3
     assert payload["recovery_required"] is True
     assert payload["reservations"][0]["token"] == "release-me"
-    assert "save the recovery JSON" in error
+    assert "retry the same command" in error
 
     code, output, error = invoke(["reserve", "--json"], client=client, store=store)
     assert code == 3

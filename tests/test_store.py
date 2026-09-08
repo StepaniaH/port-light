@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 import errno
 import json
 import tempfile
@@ -96,7 +98,7 @@ def test_malformed_rows_are_preserved_and_block_all_scope_allocation(empty_scan,
     original = json.dumps(data)
     stored.write_text(original)
     with TestClient(main.app) as client:
-        assert client.get("/api/ports/suggest?scope=all&reserve=true").status_code == 503
+        assert client.post("/api/reservations", json={"require_count": False, **{'scope': 'all'}}, headers={"Idempotency-Key": secrets.token_urlsafe(32)}).status_code == 503
         assert client.post("/api/manual-ports", json={"port": 42000}).status_code == 503
     assert stored.read_text() == original
 

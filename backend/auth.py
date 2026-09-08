@@ -14,14 +14,20 @@ import secrets
 from base64 import b64decode
 
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 
 HEALTH_PATHS = frozenset({"/api/health"})
 
 
 def auth_configured() -> bool:
-    return bool(os.environ.get("AUTH_USER") and os.environ.get("AUTH_PASSWORD"))
+    """An explicit but incomplete configuration must never disable the gate."""
+    return "AUTH_USER" in os.environ or "AUTH_PASSWORD" in os.environ
+
+
+def auth_configuration_valid() -> bool:
+    return not auth_configured() or all(
+        os.environ.get(key, "").strip() for key in ("AUTH_USER", "AUTH_PASSWORD"))
 
 
 def hidden_unlock_configured() -> bool:
@@ -36,9 +42,10 @@ def hidden_ports_withheld() -> bool:
 def _equal(left: str, right: str) -> bool:
     if not isinstance(left, str) or not isinstance(right, str):
         return False
-    if len(left) != len(right):
+    try:
+        return secrets.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
+    except UnicodeError:
         return False
-    return secrets.compare_digest(left, right)
 
 
 def valid_basic_header(authorization: str) -> bool:
@@ -80,10 +87,16 @@ def request_may_see_hidden(request: Request) -> bool:
 async def basic_auth_middleware(request: Request, call_next):
     if not auth_configured() or request.url.path in HEALTH_PATHS:
         return await call_next(request)
+    if not auth_configuration_valid():
+        return JSONResponse(status_code=503, content={
+            "code": "authentication_misconfigured",
+            "detail": "AUTH_USER and AUTH_PASSWORD must both be non-empty; "
+                      "unset both variables to disable authentication",
+        })
     if valid_basic_header(request.headers.get("authorization") or ""):
         return await call_next(request)
     return Response(
         "Unauthorized",
         status_code=401,
-        headers={"WWW-Authenticate": 'Basic realm="Port-Light"'},
+        headers={"WWW-Authenticate": 'Basic realm="Port-Light", charset="UTF-8"'},
     )

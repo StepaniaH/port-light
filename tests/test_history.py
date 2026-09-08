@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -171,7 +173,7 @@ def test_partial_scan_keeps_history_baseline_and_refuses_reservation(monkeypatch
         setattr(scan, flag, True)
         main._monitor.refresh()
         assert history.query(42000) == []
-        assert client.get("/api/ports/suggest?reserve=true&start=42000&end=42000").status_code == 503
+        assert client.post("/api/reservations", json={"require_count": False, **{'start': '42000', 'end': '42000'}}, headers={"Idempotency-Key": secrets.token_urlsafe(32)}).status_code == 503
         assert port_store.get_manual_ports() == []
         setattr(scan, flag, False)
         main._monitor.refresh()

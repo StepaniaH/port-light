@@ -83,7 +83,7 @@ def test_failed_listen_scan_preserves_rows_and_observer_baselines(empty_scan, mo
             assert client.get("/api/ports/42002?include_hidden=true").status_code == 503
             assert payload["summary"]["free"] is None
             assert {"port": 42002, "status": "unknown"} in payload["summary"]["hidden_occupancy"]
-            for path in ("/api/ports/suggest?start=42000&end=42000&reserve=true", "/api/free-runs"):
+            for path in ("/api/ports/suggest?start=42000&end=42000", "/api/free-runs"):
                 assert client.get(path).status_code == 503
             assert client.post("/api/manual-ports/batch", json={"start": 42000, "end": 42001}).status_code == 503
             assert port_store.get_manual_ports() == []

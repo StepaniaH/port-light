@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import base64
-import json
+import json as jsonlib
 import math
+import re
 import ssl
 import urllib.error
 import urllib.parse
@@ -34,6 +35,7 @@ class Transport(Protocol):
         path: str,
         *,
         headers: Mapping[str, str] | None = None,
+        json: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -63,8 +65,12 @@ def normalize_base_url(value: str) -> str:
     return text
 
 
-def _http_error(code: int, detail: str) -> PortLightError:
-    if code in (401, 403):
+def _http_error(code: int, detail: str, server_code: str = "") -> PortLightError:
+    if code == 503 and server_code == "authentication_misconfigured":
+        kind = "authentication_misconfigured"
+    elif code == 405:
+        kind = "upgrade_required"
+    elif code in (401, 403):
         kind = "authentication_failed"
     elif code == 404:
         kind = "not_found"
@@ -122,11 +128,16 @@ class HttpTransport:
         path: str,
         *,
         headers: Mapping[str, str] | None = None,
+        json: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not path.startswith("/"):
             raise PortLightError("invalid_request", "request path must start with /")
         request_headers = dict(headers or {})
         request_headers.setdefault("Accept", "application/json")
+        data = None
+        if json is not None:
+            data = jsonlib.dumps(json).encode("utf-8")
+            request_headers["Content-Type"] = "application/json"
         if self._basic_auth:
             token = base64.b64encode(self._basic_auth.encode()).decode()
             request_headers["Authorization"] = "Basic " + token
@@ -134,6 +145,7 @@ class HttpTransport:
             self.base_url + path,
             method=method,
             headers=request_headers,
+            data=data,
         )
         try:
             with self._opener.open(request, timeout=self.timeout) as response:
@@ -141,13 +153,15 @@ class HttpTransport:
         except urllib.error.HTTPError as exc:
             raw = exc.read(256 * 1024)
             detail = ""
+            server_code = ""
             try:
-                payload = json.loads(raw) if raw else {}
+                payload = jsonlib.loads(raw) if raw else {}
                 if isinstance(payload, dict):
                     detail = str(payload.get("detail") or "")
-            except (UnicodeDecodeError, json.JSONDecodeError):
+                    server_code = str(payload.get("code") or "")
+            except (UnicodeDecodeError, jsonlib.JSONDecodeError):
                 pass
-            raise _http_error(exc.code, detail) from exc
+            raise _http_error(exc.code, detail, server_code) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             reason = getattr(exc, "reason", exc)
             if isinstance(reason, ssl.SSLError):
@@ -168,8 +182,8 @@ class HttpTransport:
         if not body:
             return {}
         try:
-            payload = json.loads(body)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            payload = jsonlib.loads(body)
+        except (UnicodeDecodeError, jsonlib.JSONDecodeError) as exc:
             raise PortLightError(
                 "invalid_response",
                 "Port-Light returned a response that was not valid JSON",
@@ -180,6 +194,12 @@ class HttpTransport:
                 "Port-Light returned an unexpected JSON value",
             )
         return payload
+
+
+def validate_request_key(key: str) -> str:
+    if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43,128}", key):
+        raise PortLightError("invalid_request", "retain a random URL-safe request key of 43–128 characters before reserving")
+    return key
 
 
 def compact_port(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -314,6 +334,7 @@ class PortLightClient:
         ttl: int | None = None,
         scope: str = "self",
         require_count: bool = False,
+        request_key: str | None = None,
     ) -> dict[str, Any]:
         if type(count) is not int or not 1 <= count <= 64:
             raise PortLightError("invalid_request", "count must be between 1 and 64")
@@ -351,12 +372,17 @@ class PortLightClient:
             params.append(("ttl", str(ttl)))
         if require_count:
             params.append(("require_count", "true"))
-        headers = {"X-Agent-Token": self._agent_token} if self._agent_token else None
-        result = self._transport.request(
-            "GET",
-            "/api/ports/suggest?" + urllib.parse.urlencode(params),
-            headers=headers,
-        )
+        headers = {"X-Agent-Token": self._agent_token} if self._agent_token else {}
+        if reservation_expected:
+            self._require_capability("idempotent_reservations", allow_legacy=False)
+            headers["Idempotency-Key"] = validate_request_key(request_key)
+            result = self._transport.request("POST", "/api/reservations", headers=headers, json={
+                "count": count, "start": start, "end": end, "label": label,
+                "ttl": ttl, "scope": scope, "require_count": require_count,
+            })
+        else:
+            result = self._transport.request(
+                "GET", "/api/ports/suggest?" + urllib.parse.urlencode(params), headers=headers or None)
         _validate_suggestion(
             result,
             count=count,
@@ -377,6 +403,7 @@ class PortLightClient:
         label: str = "",
         ttl: int | None = 3600,
         scope: str = "self",
+        request_key: str | None = None,
     ) -> dict[str, Any]:
         result = self.suggest_ports(
             count=count,
@@ -387,10 +414,23 @@ class PortLightClient:
             ttl=ttl,
             scope=scope,
             require_count=True,
+            request_key=request_key,
         )
         reservations = result["reservations"]
         if not reservations:
             raise PortLightError("no_capacity", "no free ports were available in the requested range")
+        return result
+
+    def recover_reservation(self, request_key: str, parameters: dict) -> dict[str, Any]:
+        self._require_capability("idempotent_reservations", allow_legacy=False)
+        headers = {"Idempotency-Key": validate_request_key(request_key)}
+        if self._agent_token:
+            headers["X-Agent-Token"] = self._agent_token
+        result = self._transport.request("GET", "/api/reservations/request", headers=headers)
+        _validate_suggestion(result, count=parameters.get("count", 1),
+                             start=parameters.get("start"), end=parameters.get("end"),
+                             scope=parameters.get("scope", "self"), reservation_expected=True,
+                             ttl=parameters.get("ttl"))
         return result
 
     def release_port(self, port: int, token: str) -> dict[str, Any]:

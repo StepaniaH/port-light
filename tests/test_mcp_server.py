@@ -19,6 +19,7 @@ SPEC.loader.exec_module(mcp)
 
 
 class FakeClient:
+    base_url = "http://localhost:2100"
     def __init__(self):
         self.calls = []
 
@@ -54,7 +55,8 @@ class FakeClient:
 
 
 @pytest.fixture
-def fake_client(monkeypatch):
+def fake_client(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_STATE_DIR", str(tmp_path))
     value = FakeClient()
     monkeypatch.setattr(mcp, "client", lambda: value)
     return value
@@ -146,6 +148,7 @@ def test_suggest_maps_all_options_to_shared_client(fake_client):
         "scope": "all",
     }))
     assert data == {"ports": [8000]}
+    assert len(fake_client.calls[0][1].pop("request_key")) == 43
     assert fake_client.calls == [("suggest_ports", {
         "count": 2,
         "start": 3000,
@@ -216,3 +219,17 @@ def test_unknown_method_and_tool_are_protocol_errors():
     assert reply["error"]["code"] == -32601
     reply = call_tool("unknown")
     assert reply["error"]["code"] == -32602
+
+
+def test_mcp_retry_preserves_pending_request_key(fake_client, monkeypatch):
+    keys = []
+    def uncertain(**kwargs):
+        keys.append(kwargs["request_key"])
+        if len(keys) == 1:
+            raise PortLightError("unreachable", "response lost")
+        return {"ports": [8000], "reservations": []}
+    monkeypatch.setattr(fake_client, "suggest_ports", uncertain)
+    args = {"reserve": True, "label": "retry"}
+    assert call_tool("suggest_ports", args)["result"]["isError"] is True
+    assert tool_data(call_tool("suggest_ports", args))["ports"] == [8000]
+    assert keys[0] == keys[1]

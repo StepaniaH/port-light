@@ -24,6 +24,7 @@ from __future__ import annotations
 import errno
 import copy
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -35,6 +36,8 @@ from pathlib import Path
 from . import degradations
 
 MAX_PEER_DESCRIPTION = 120
+REQUEST_RETENTION_S = 7 * 86400
+MAX_RESERVATION_REQUESTS = 4096
 
 
 class StoreReadError(Exception):
@@ -105,7 +108,8 @@ def _load() -> dict:
     if not isinstance(data, dict) or any(
         key in data and not isinstance(data[key], expected)
         for key, expected in (("manual_ports", list), ("hidden_ports", list),
-                              ("peers", list), ("machines", list), ("settings", dict))
+                              ("peers", list), ("machines", list), ("settings", dict),
+                              ("reservation_requests", dict))
     ):
         raise _read_error()
     if any(_entry_port(entry) is None for entry in data.get("manual_ports", [])):
@@ -118,6 +122,9 @@ def _load() -> dict:
         raise _read_error()
     if any(len(str(peer.get("description") or "").strip()) > MAX_PEER_DESCRIPTION
            for peer in data.get("peers", [])):
+        raise _read_error()
+    if any(not _valid_request_record(key, value)
+           for key, value in data.get("reservation_requests", {}).items()):
         raise _read_error()
     _FILE_MEMO[str(f)] = (token, data)
     return copy.deepcopy(data)
@@ -296,6 +303,116 @@ def allocate_ports(taken: set[int], start: int, end: int, count: int,
                 reservations.append({"port": port, "token": token, "expires_at": expires_at})
             _save(data)
         return picks, reservations
+
+
+def _valid_request_record(key: str, record) -> bool:
+    if not isinstance(record, dict) or len(key) != 64 or any(c not in "0123456789abcdef" for c in key):
+        return False
+    result = record.get("result")
+    parameters = record.get("parameters")
+    if not isinstance(result, dict) or not isinstance(parameters, dict):
+        return False
+    ports, bounds = result.get("ports"), result.get("range")
+    if not isinstance(ports, list) or not isinstance(bounds, dict):
+        return False
+    return (
+        type(record.get("created_at")) is int
+        and type(parameters.get("count")) is int and 1 <= parameters["count"] <= 64
+        and len(ports) <= parameters["count"]
+        and all(type(port) is int and 1 <= port <= 65535 for port in ports)
+        and len(set(ports)) == len(ports)
+        and result.get("reserved") == ports and result.get("failed") == []
+        and type(bounds.get("start")) is int and type(bounds.get("end")) is int
+        and 1 <= bounds["start"] <= bounds["end"] <= 65535
+        and all(bounds["start"] <= port <= bounds["end"] for port in ports)
+        and isinstance(result.get("scope"), str)
+        and "expires_at" in result
+        and (result["expires_at"] is None or type(result["expires_at"]) is int)
+    )
+
+
+def _request_hash(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def _request_token(key: str, port: int) -> str:
+    # The client retains the secret key. Neither it nor release tokens are
+    # stored in plaintext on the server; retries can reconstruct identical tokens.
+    return hmac.new(key.encode(), f"port-light-reservation-v1:{port}".encode(), "sha256").hexdigest()
+
+
+def _request_result(data: dict, key: str, parameters: dict | None = None, *, allow_partial: bool = False) -> dict | None:
+    record = data.get("reservation_requests", {}).get(_request_hash(key))
+    if record is None:
+        return None
+    if parameters is not None and record["parameters"] != parameters:
+        raise ReservationConflict("idempotency key was already used with different parameters")
+    result = copy.deepcopy(record["result"])
+    current = {entry["port"]: entry for entry in _manuals_from(data)
+               if _entry_machine(entry) == "localhost"}
+    hashes = {int(entry["port"]): entry.get("reservation_hash")
+              for entry in data.get("manual_ports", []) if _entry_machine(entry) == "localhost"}
+    reservations = []
+    inactive = []
+    for port in result["ports"]:
+        token = _request_token(key, port)
+        entry = current.get(port, {})
+        if (hashes.get(port) != hashlib.sha256(token.encode()).hexdigest()
+                or (entry.get("expires_at") is not None and entry["expires_at"] <= _now())):
+            if not allow_partial:
+                raise ReservationConflict("reservation request is no longer fully active; use port-light recover to retrieve any remaining claims")
+            inactive.append(port)
+            continue
+        reservations.append({"port": port, "token": token, "expires_at": result["expires_at"]})
+    if inactive:
+        if not reservations:
+            raise ReservationConflict("reservation request has no active ports; no new ports were allocated")
+        result["ports"] = result["reserved"] = [entry["port"] for entry in reservations]
+        result["inactive_ports"] = inactive
+    result["reservations"] = reservations
+    return result
+
+
+def reservation_request(key: str, parameters: dict | None = None) -> dict | None:
+    with _LOCK:
+        return _request_result(_load(), key, parameters, allow_partial=parameters is None)
+
+
+def allocate_reservation(taken: set[int], start: int, end: int, parameters: dict,
+                         key: str, scope: str) -> tuple[dict, bool]:
+    """Commit the receipt and the entire claim in the same atomic replacement."""
+    with _LOCK:
+        data = _load()
+        existing = _request_result(data, key, parameters)
+        if existing is not None:
+            return existing, False
+        _drop_expired_locked(data)
+        records = data.setdefault("reservation_requests", {})
+        active = {entry.get("request_hash") for entry in data.get("manual_ports", [])}
+        for digest, record in list(records.items()):
+            if digest not in active and record["created_at"] < _now() - REQUEST_RETENTION_S:
+                del records[digest]
+        if len(records) >= MAX_RESERVATION_REQUESTS:
+            raise ReservationConflict("reservation recovery capacity reached; release unused reservations and wait until inactive receipts are seven days old")
+        occupied = _occupied(data, taken)
+        picks = [port for port in range(start, end + 1) if port not in occupied][:parameters["count"]]
+        if parameters["require_count"] and len(picks) != parameters["count"]:
+            picks = []
+        ttl = parameters["ttl"]
+        expires_at = _now() + ttl if ttl is not None and picks else None
+        digest = _request_hash(key)
+        for port in picks:
+            entry = {"port": port, "label": parameters["label"], "machine": "localhost",
+                     "request_hash": digest,
+                     "reservation_hash": hashlib.sha256(_request_token(key, port).encode()).hexdigest()}
+            if expires_at is not None:
+                entry["expires_at"] = expires_at
+            data.setdefault("manual_ports", []).append(entry)
+        result = {"ports": picks, "reserved": picks, "failed": [], "expires_at": expires_at,
+                  "scope": scope, "range": {"start": start, "end": end}}
+        records[digest] = {"parameters": parameters, "result": result, "created_at": _now()}
+        _save(data)
+        return _request_result(data, key), True
 
 
 def _occupied(data: dict, taken: set[int]) -> set[int]:

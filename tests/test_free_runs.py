@@ -107,7 +107,7 @@ def test_planner_and_agent_share_one_claim_lock(monkeypatch):
     from backend import port_store
 
     barrier = threading.Barrier(2)
-    for name in ("reserve_manual_range", "allocate_ports"):
+    for name in ("reserve_manual_range", "allocate_reservation"):
         original = getattr(port_store, name)
         def together(*args, original=original):
             barrier.wait(timeout=2)
@@ -115,7 +115,7 @@ def test_planner_and_agent_share_one_claim_lock(monkeypatch):
         monkeypatch.setattr(port_store, name, together)
     with TestClient(app) as client, ThreadPoolExecutor(max_workers=2) as pool:
         batch = pool.submit(client.post, "/api/manual-ports/batch", json={"start": 42000, "end": 42001})
-        agent = pool.submit(client.get, "/api/ports/suggest?start=42000&end=42001&count=2&reserve=true")
+        agent = pool.submit(client.post, "/api/reservations", json={"start": 42000, "end": 42001, "count": 2}, headers={"Idempotency-Key": "k" * 43})
         b, a = batch.result(timeout=3), agent.result(timeout=3)
         assert a.status_code == 200
         assert (b.status_code, a.json()["reserved"]) in [(200, []), (409, [42000, 42001])]

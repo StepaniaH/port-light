@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 import time
 
 import pytest
@@ -24,9 +26,8 @@ def _env(monkeypatch, tmp_path):
 
 def test_suggest_with_ttl_creates_expiring_lease():
     client = TestClient(app)
-    res = client.get("/api/ports/suggest",
-                     params={"count": 2, "start": 7000, "end": 7010,
-                             "ttl": 120, "label": "agent"})
+    res = client.post("/api/reservations", json={"require_count": False, **{"count": 2, "start": 7000, "end": 7010,
+                             "ttl": 120, "label": "agent"}}, headers={"Idempotency-Key": secrets.token_urlsafe(32)})
     body = res.json()
     assert body["reserved"] == [7000, 7001]
     assert abs(body["expires_at"] - (time.time() + 120)) < 5
@@ -62,5 +63,5 @@ def test_manual_post_accepts_ttl_validation():
 
 def test_ttl_bounds_on_suggest():
     client = TestClient(app)
-    low = client.get("/api/ports/suggest", params={"count": 1, "ttl": 30})
+    low = client.post("/api/reservations", json={"require_count": False, **{"count": 1, "ttl": 30}}, headers={"Idempotency-Key": secrets.token_urlsafe(32)})
     assert low.status_code == 422

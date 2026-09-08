@@ -22,6 +22,7 @@ CAPABILITIES = {
     "port_check": 1,
     "reservations": 1,
     "exact_reservations": 1,
+        "idempotent_reservations": 1,
     "reservation_release": 1,
     "scope_all": 1,
 }
@@ -60,8 +61,9 @@ class FakeTransport:
         )
         self.requests = []
 
-    def request(self, method, path, *, headers=None):
+    def request(self, method, path, *, headers=None, json=None):
         self.requests.append((method, path, headers))
+        self.body = json
         if path == "/api/meta":
             return dict(self.meta_response)
         return dict(self.response)
@@ -106,7 +108,7 @@ def test_reserve_encodes_options_and_sends_agent_token():
     )
     transport = FakeTransport(response)
     client = PortLightClient(agent_token="agent-secret", transport=transport)
-    assert client.reserve_ports(
+    assert client.reserve_ports(request_key="k" * 43,
         start=8000,
         end=8100,
         label="preview app",
@@ -115,14 +117,11 @@ def test_reserve_encodes_options_and_sends_agent_token():
     ) == response
     assert transport.requests[0] == ("GET", "/api/meta", None)
     method, path, headers = transport.requests[1]
-    assert method == "GET"
-    assert path.startswith("/api/ports/suggest?")
-    assert "reserve=true" in path
-    assert "label=preview+app" in path
-    assert "ttl=3600" in path
-    assert "scope=all" in path
-    assert "require_count=true" in path
-    assert headers == {"X-Agent-Token": "agent-secret"}
+    assert method == "POST"
+    assert path == "/api/reservations"
+    assert transport.body == dict(count=1, start=8000, end=8100, label="preview app",
+                                  ttl=3600, scope="all", require_count=True)
+    assert headers == {"X-Agent-Token": "agent-secret", "Idempotency-Key": "k" * 43}
 
 
 def test_reserve_requires_tokens_but_preserves_a_partial_result_for_recovery():
@@ -130,15 +129,15 @@ def test_reserve_requires_tokens_but_preserves_a_partial_result_for_recovery():
         reservations=[{"port": 8000, "token": "one", "expires_at": 123}],
     ))
     client = PortLightClient(transport=partial)
-    assert len(client.reserve_ports(count=2)["reservations"]) == 1
+    assert len(client.reserve_ports(request_key="k" * 43, count=2)["reservations"]) == 1
 
     missing = PortLightClient(transport=FakeTransport(suggestion_response()))
     with pytest.raises(PortLightError, match="one reservation token"):
-        missing.reserve_ports()
+        missing.reserve_ports(request_key="k" * 43, )
 
     empty = PortLightClient(transport=FakeTransport(suggestion_response(ports=[])))
     with pytest.raises(PortLightError) as caught:
-        empty.reserve_ports()
+        empty.reserve_ports(request_key="k" * 43, )
     assert caught.value.code == "no_capacity"
 
 
@@ -166,7 +165,7 @@ def test_reserve_requires_tokens_but_preserves_a_partial_result_for_recovery():
 def test_reserve_rejects_invalid_port_token_mappings(response):
     client = PortLightClient(transport=FakeTransport(suggestion_response(**response)))
     with pytest.raises(PortLightError) as caught:
-        client.reserve_ports()
+        client.reserve_ports(request_key="k" * 43, )
     assert caught.value.code == "invalid_response"
 
 
@@ -175,7 +174,7 @@ def test_reserve_rejects_non_string_tokens():
         reservations=[{"port": 8000, "token": 123}],
     )))
     with pytest.raises(PortLightError) as caught:
-        client.reserve_ports()
+        client.reserve_ports(request_key="k" * 43, )
     assert caught.value.code == "unsupported_server"
 
 
@@ -202,7 +201,7 @@ def test_capability_checks_are_cached_and_legacy_servers_are_probed():
     ]
 
     with pytest.raises(PortLightError) as caught:
-        client.reserve_ports()
+        client.reserve_ports(request_key="k" * 43, )
     assert caught.value.code == "unsupported_server"
     assert all("/api/ports/suggest" not in path for _, path, _ in transport.requests)
 
@@ -210,7 +209,7 @@ def test_capability_checks_are_cached_and_legacy_servers_are_probed():
     legacy = PortLightClient(transport=legacy_transport)
     assert legacy.doctor()["overall"] == "healthy"
     with pytest.raises(PortLightError) as caught:
-        legacy.reserve_ports()
+        legacy.reserve_ports(request_key="k" * 43, )
     assert caught.value.code == "unsupported_server"
     assert legacy_transport.requests[0] == ("GET", "/api/meta", None)
     assert all("/api/ports/suggest" not in path for _, path, _ in legacy_transport.requests)
@@ -390,3 +389,17 @@ def test_reservation_store_normalizes_directory_creation_failure(tmp_path, monke
         store.save("http://nas.lan:2100", {"port": 8123, "token": "secret"})
     assert caught.value.code == "state_write_failed"
     assert str(tmp_path) not in str(caught.value)
+
+
+@pytest.mark.parametrize(('status', 'server_code', 'expected'), [
+    (503, 'authentication_misconfigured', 'authentication_misconfigured'),
+    (503, '', 'occupancy_unavailable'),
+    (405, '', 'upgrade_required'),
+])
+def test_transport_distinguishes_actionable_failures(status, server_code, expected):
+    error = urllib.error.HTTPError('http://localhost:2100/api/meta', status, 'failed', {},
+                                  io.BytesIO(json.dumps({'code': server_code, 'detail': 'repair required'}).encode()))
+    transport = HttpTransport('http://localhost:2100', opener=CapturingOpener(error=error))
+    with pytest.raises(PortLightError) as caught:
+        transport.request('GET', '/api/meta')
+    assert caught.value.code == expected

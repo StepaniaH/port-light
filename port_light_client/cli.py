@@ -13,6 +13,8 @@ from typing import Any, TextIO
 from . import __version__
 from .client import PortLightClient, PortLightError, create_client
 from .state import ReservationStore
+from .client import validate_request_key
+from contextlib import nullcontext
 
 SCHEMA_VERSION = 1
 DEFAULT_TTL = 3600
@@ -101,7 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     reserve.add_argument(
         "--no-save",
         action="store_true",
-        help="do not save tokens locally; requires --json",
+        help="do not save tokens locally; requires --json and PORT_LIGHT_REQUEST_KEY",
     )
 
     release = commands.add_parser(
@@ -115,6 +117,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="read the reservation token from standard input",
     )
+    commands.add_parser("requests", help="list local pending requests without exposing secrets", parents=[common])
+    recover = commands.add_parser("recover", help="recover a pending reservation without allocating", parents=[common])
+    recover.add_argument("request_id", help="ID returned by port-light requests")
     return parser
 
 
@@ -260,29 +265,31 @@ def _reserve(
     ttl = None if args.no_expiry else (args.ttl if args.ttl is not None else DEFAULT_TTL)
     if not args.no_save:
         store.ensure_writable()
-    result = client.reserve_ports(
-        count=args.count,
-        start=args.start,
-        end=args.end,
-        label=args.label,
-        ttl=ttl,
-        scope=scope,
-    )
-    reservations = result["reservations"]
-    if not args.no_save:
-        try:
-            for reservation in reservations:
-                store.save(client.base_url, reservation)
-        except PortLightError as exc:
-            recovery = _error_document("reserve", exc)
-            recovery["reservations"] = reservations
-            recovery["recovery_required"] = True
-            if not json_output:
-                stderr.write(
-                    "Reservation succeeded, but token storage failed; save the recovery JSON.\n"
-                )
-            _json_write(stdout, recovery)
-            return 3
+    parameters = dict(count=args.count, start=args.start, end=args.end,
+                      label=args.label, ttl=ttl, scope=scope, require_count=True)
+    pending = (nullcontext(validate_request_key(environ.get("PORT_LIGHT_REQUEST_KEY")))
+               if args.no_save else store.pending_request(client.base_url, parameters))
+    reservations = []
+    try:
+        with pending as request_key:
+            result = client.reserve_ports(
+                count=args.count, start=args.start, end=args.end, label=args.label,
+                ttl=ttl, scope=scope, request_key=request_key,
+            )
+            reservations = result["reservations"]
+            if not args.no_save:
+                for reservation in reservations:
+                    store.save(client.base_url, reservation)
+    except PortLightError as exc:
+        if not reservations:
+            raise
+        recovery = _error_document("reserve", exc)
+        recovery["reservations"] = reservations
+        recovery["recovery_required"] = True
+        if not json_output:
+            stderr.write("Reservation succeeded, but token storage failed; retry the same command to recover.\n")
+        _json_write(stdout, recovery)
+        return 3
     warnings = []
     warning = _peer_warning(client, scope_was_default)
     if warning:
@@ -393,7 +400,7 @@ def main(
     except PortLightError as exc:
         if "--json" in raw_argv:
             command = next(
-                (value for value in raw_argv if value in ("doctor", "check", "reserve", "release")),
+                (value for value in raw_argv if value in ("doctor", "check", "reserve", "release", "requests", "recover")),
                 None,
             )
             _json_write(stdout, _error_document(command, exc))
@@ -419,6 +426,28 @@ def main(
                 stdout=stdout,
                 stderr=stderr,
             )
+        if args.command == "requests":
+            rows = active_store.pending_requests(active_client.base_url)
+            if json_output:
+                _json_write(stdout, {"schema_version": SCHEMA_VERSION, "ok": True,
+                                     "command": "requests", "requests": rows})
+            else:
+                for row in rows:
+                    stdout.write(f"{row['id']}  {json.dumps(row['parameters'], ensure_ascii=False)}\n")
+                if not rows:
+                    stdout.write("No pending requests for this server.\n")
+            return 0
+        if args.command == "recover":
+            with active_store.recovery_request(active_client.base_url, args.request_id) as (key, parameters):
+                result = active_client.recover_reservation(key, parameters)
+                for reservation in result["reservations"]:
+                    active_store.save(active_client.base_url, reservation)
+            if json_output:
+                _json_write(stdout, {"schema_version": SCHEMA_VERSION, "ok": True,
+                                     "command": "recover", **result, "tokens_saved": True})
+            else:
+                stdout.write(f"Recovered ports {result['ports']}; release tokens saved.\n")
+            return 0
         if args.command == "release":
             return _release(
                 active_client,

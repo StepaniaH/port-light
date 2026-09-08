@@ -1,11 +1,57 @@
 from __future__ import annotations
 
 import json
+import base64
+
+import pytest
 
 from fastapi.testclient import TestClient
 
 from backend.main import app
 from backend import port_store
+
+
+@pytest.mark.parametrize("credentials", [
+    {"AUTH_USER": "admin"}, {"AUTH_PASSWORD": "secret"},
+    {"AUTH_USER": "admin", "AUTH_PASSWORD": ""},
+    {"AUTH_USER": "", "AUTH_PASSWORD": "secret"},
+    {"AUTH_USER": "", "AUTH_PASSWORD": ""},
+])
+def test_incomplete_auth_fails_closed(monkeypatch, credentials):
+    for key in ("AUTH_USER", "AUTH_PASSWORD"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in credentials.items():
+        monkeypatch.setenv(key, value)
+    client = TestClient(app)
+    for method, path, body in (
+        ("GET", "/", None), ("GET", "/api/meta", None),
+        ("GET", "/openapi.json", None),
+        ("POST", "/api/manual-ports", {"port": 45000}),
+    ):
+        response = client.request(method, path, json=body)
+        assert response.status_code == 503
+        assert "AUTH_USER" in response.text
+    health = client.get("/api/health")
+    assert health.status_code == 200
+    assert health.json()["auth_required"] is True
+    assert health.json()["status"] == "degraded"
+
+
+@pytest.mark.parametrize("user,password,given_user,given_password,status", [
+    ("admin", "密码测试", "admin", "密码测试", 200),
+    ("管理员", "密码测试", "管理员", "密码测试", 200),
+    ("admin", "secret", "管理用户甲", "secret", 401),
+    ("admin", "secret", "admin", "密码输入错误", 401),
+])
+def test_unicode_basic_auth(monkeypatch, user, password, given_user, given_password, status):
+    monkeypatch.setenv("AUTH_USER", user)
+    monkeypatch.setenv("AUTH_PASSWORD", password)
+    token = base64.b64encode(f"{given_user}:{given_password}".encode()).decode()
+    response = TestClient(app, raise_server_exceptions=False).get(
+        "/", headers={"Authorization": "Basic " + token})
+    assert response.status_code == status
+    if status == 401:
+        assert 'charset="UTF-8"' in response.headers["www-authenticate"]
 
 
 def test_health_unauthenticated(monkeypatch):

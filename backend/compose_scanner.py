@@ -6,6 +6,7 @@ import glob as _glob
 import os
 import re
 from dataclasses import dataclass, field
+from contextvars import ContextVar
 from pathlib import Path
 
 import yaml
@@ -18,7 +19,8 @@ _SKIP_DIRS = frozenset({
     ".git", ".svn", ".hg", "node_modules", ".venv", "venv",
     "__pycache__", ".pytest_cache",
 })
-_MAX_RANGE = 128
+_MAX_RANGE = 4096
+_MAX_SCAN_PORTS = 65536
 
 _COMPOSE_PREFIXES = ("compose.", "docker-compose.")
 _COMPOSE_SUFFIXES = (".yml", ".yaml")
@@ -87,6 +89,41 @@ _AUTO_OVERRIDE_NAMES = frozenset({
 
 class ComposeWouldFail(Exception):
     """Compose would refuse this project (required interp / env_file / include)."""
+
+
+class ComposePortLimit(ComposeWouldFail):
+    """A bounded, non-secret diagnostic suitable for display to operators."""
+    def __init__(self, code: str, limit: int, spec: str = "", filepath: str = ""):
+        super().__init__(f"port expansion limit ({limit}); reduce the scan scope or split the range")
+        self.code, self.limit, self.spec, self.filepath = code, limit, spec, filepath
+
+
+@dataclass
+class _PortBudget:
+    expanded: int = 0
+    emitted: int = 0
+
+
+_port_budget: ContextVar[_PortBudget | None] = ContextVar("compose_port_budget", default=None)
+
+
+def _consume_ports(count: int, *, emitted: bool = False, filepath: str = "") -> None:
+    budget = _port_budget.get()
+    if budget is None:
+        return
+    attribute = "emitted" if emitted else "expanded"
+    total = getattr(budget, attribute) + count
+    if total > _MAX_SCAN_PORTS:
+        raise ComposePortLimit("port_budget", _MAX_SCAN_PORTS, filepath=filepath)
+    setattr(budget, attribute, total)
+
+
+def _parse_entry(entry, parser, filepath: str):
+    try:
+        return parser(entry)
+    except ComposePortLimit as exc:
+        exc.filepath = filepath
+        raise
 
 
 def _load_yaml(text: str):
@@ -295,6 +332,9 @@ class ComposePort:
     network_mode: str | None = None
     project_name: str | None = None
 
+    def __post_init__(self):
+        _consume_ports(1, emitted=True, filepath=self.compose_file)
+
 
 @dataclass
 class ComposeScan:
@@ -302,6 +342,7 @@ class ComposeScan:
     truncated: bool = False
     incomplete: bool = False
     files_scanned: int = 0
+    diagnostics: list[dict] = field(default_factory=list)
 
 
 def scan_compose_files(
@@ -315,7 +356,17 @@ def scan_compose_files(
     ).ports
 
 
-def scan_compose_tree(
+def scan_compose_tree(scan_dir: str, max_depth: int | None = None,
+                      max_files: int | None = None,
+                      exclude_dirs: tuple[str, ...] | list[str] | None = None) -> ComposeScan:
+    token = _port_budget.set(_PortBudget())
+    try:
+        return _scan_compose_tree(scan_dir, max_depth, max_files, exclude_dirs)
+    finally:
+        _port_budget.reset(token)
+
+
+def _scan_compose_tree(
     scan_dir: str,
     max_depth: int | None = None,
     max_files: int | None = None,
@@ -345,6 +396,7 @@ def scan_compose_tree(
             incomplete = True
             degradations.report("compose", _degradation_scope(scan_dir, exc), "invalid compose file")
     ports: list[ComposePort] = []
+    diagnostics: list[dict] = []
     seen_walk: set[str] = set()
     for filepath in files:
         real = os.path.realpath(filepath)
@@ -355,12 +407,22 @@ def scan_compose_tree(
             ports.extend(_parse_compose_file(filepath, scan_dir, frozenset(), cache=cache))
         except ComposeWouldFail as exc:
             incomplete = True
-            degradations.report("compose", _degradation_scope(scan_dir, exc), "invalid compose file")
+            path = exc.filepath if isinstance(exc, ComposePortLimit) and exc.filepath else filepath
+            relative = os.path.relpath(path, scan_dir) if os.path.isabs(path) else path
+            if len(diagnostics) < 8:
+                diagnostics.append({"code": exc.code if isinstance(exc, ComposePortLimit) else "invalid_file",
+                                    "file": relative,
+                                    "range": exc.spec if isinstance(exc, ComposePortLimit) else "",
+                                    "limit": exc.limit if isinstance(exc, ComposePortLimit) else None})
+            degradations.report("compose", relative, "port expansion limit" if isinstance(exc, ComposePortLimit) else "invalid compose file")
+            if isinstance(exc, ComposePortLimit) and exc.code == "port_budget":
+                break
     return ComposeScan(
         ports=ports,
         truncated=truncated,
         incomplete=incomplete,
         files_scanned=len(seen_walk),
+        diagnostics=diagnostics,
     )
 
 
@@ -685,7 +747,7 @@ def _parse_compose_data(
             if isinstance(deploy, dict):
                 entries.extend(_port_entries(deploy.get("ports")))
         for entry in entries:
-            for p in parse_port_entry(entry):
+            for p in _parse_entry(entry, parse_port_entry, filepath):
                 ports.append(ComposePort(
                     port=p["host_port"],
                     compose_file=rel_path,
@@ -699,7 +761,7 @@ def _parse_compose_data(
                 ))
         if _is_host_network(net):
             for entry in _port_entries(svc_cfg.get("expose")):
-                for p in parse_expose_entry(entry):
+                for p in _parse_entry(entry, parse_expose_entry, filepath):
                     ports.append(ComposePort(
                         port=p["host_port"],
                         compose_file=rel_path,
@@ -717,9 +779,9 @@ def _parse_compose_data(
             continue
         lan_rows: list[dict] = []
         for entry in _port_entries(svc_cfg.get("expose")):
-            lan_rows.extend(parse_expose_entry(entry))
+            lan_rows.extend(_parse_entry(entry, parse_expose_entry, filepath))
         for entry in entries:
-            parsed = parse_port_entry(entry)
+            parsed = _parse_entry(entry, parse_port_entry, filepath)
             if parsed:
                 for p in parsed:
                     cp = p.get("container_port")
@@ -732,7 +794,7 @@ def _parse_compose_data(
                         })
                 continue
             if isinstance(entry, dict) and entry.get("target") is not None:
-                extra = parse_expose_entry(entry.get("target"))
+                extra = _parse_entry(entry.get("target"), parse_expose_entry, filepath)
                 proto = entry.get("protocol")
                 if proto:
                     for row in extra:
@@ -1234,17 +1296,17 @@ def parse_port_entry(entry) -> list[dict]:
                 proto = _norm_proto(slash_proto)
         try:
             host_ports = expand_port_range(host_s)
-            container_port = int(str(target).split("-")[0]) if target is not None else None
+            container_ports = _target_ports(target, len(host_ports))
         except (ValueError, TypeError):
             return []
         return [
             {
                 "host_port": hp,
-                "container_port": container_port,
+                "container_port": cp,
                 "protocol": proto,
                 "host_ip": host_ip,
             }
-            for hp in host_ports
+            for hp, cp in zip(host_ports, container_ports, strict=True)
             if 1 <= hp <= 65535
         ]
     return []
@@ -1259,6 +1321,7 @@ def parse_expose_entry(entry) -> list[dict]:
             return []
         entry = int(entry)
         if 1 <= entry <= 65535:
+            _consume_ports(1)
             return [{
                 "host_port": entry,
                 "container_port": entry,
@@ -1326,32 +1389,48 @@ def parse_short_port(entry: str) -> list[dict]:
         host_spec, container_spec = parts[-2], parts[-1]
     try:
         host_ports = expand_port_range(host_spec)
-        container_port = int(container_spec.split("-")[0])
+        container_ports = _target_ports(container_spec, len(host_ports))
     except ValueError:
         return []
     return [
         {
             "host_port": hp,
-            "container_port": container_port,
+            "container_port": cp,
             "protocol": protocol,
             "host_ip": host_ip,
         }
-        for hp in host_ports
+        for hp, cp in zip(host_ports, container_ports, strict=True)
         if 1 <= hp <= 65535
     ]
 
 
-def expand_port_range(spec: str, cap: int = _MAX_RANGE) -> list[int]:
+def _port_interval(spec: str, cap: int = _MAX_RANGE) -> range:
     spec = spec.strip()
     if "-" not in spec:
-        return [int(spec)]
-    left, right = spec.split("-", 1)
-    start, end = int(left), int(right)
-    if end < start:
-        start, end = end, start
+        start = end = int(spec)
+    else:
+        left, right = spec.split("-", 1)
+        start, end = sorted((int(left), int(right)))
     if end - start + 1 > cap:
-        end = start + cap - 1
-    return list(range(start, end + 1))
+        raise ComposePortLimit("port_range", cap, f"{start}-{end}")
+    return range(start, end + 1)
+
+
+def expand_port_range(spec: str, cap: int = _MAX_RANGE) -> list[int]:
+    ports = _port_interval(spec, cap)
+    _consume_ports(len(ports))
+    return list(ports)
+
+
+def _target_ports(spec, count: int) -> range | list:
+    if spec is None:
+        return [None] * count
+    ports = _port_interval(str(spec))
+    if len(ports) == 1:
+        return [ports.start] * count
+    if len(ports) != count:
+        raise ComposeWouldFail("published and target ranges must have equal lengths")
+    return ports
 
 
 def _published_unset(host) -> bool:

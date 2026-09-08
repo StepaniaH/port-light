@@ -6,6 +6,7 @@ import asyncio
 import sqlite3
 import logging
 import os
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -20,6 +21,7 @@ from port_light_client import __version__
 from . import agent_events, degradations, doctor, history, hosts, port_store, themes
 from . import settings as app_settings
 from .auth import (
+    auth_configuration_valid,
     auth_configured,
     basic_auth_middleware,
     hidden_ports_withheld,
@@ -129,6 +131,17 @@ class ManualPortUpdate(BaseModel):
     machine: str = "localhost"
 
 
+class ReservationCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+    count: int = Field(default=1, ge=1, le=64)
+    start: int | None = Field(default=None, ge=1, le=65535)
+    end: int | None = Field(default=None, ge=1, le=65535)
+    label: str = Field(default="", max_length=256)
+    ttl: int | None = Field(default=None, ge=60, le=604800)
+    scope: str = Field(default="self", pattern="^(self|all)$")
+    require_count: bool = True
+
+
 def _compose_dir() -> str:
     return os.environ.get("COMPOSE_SCAN_DIR", "/compose")
 
@@ -189,6 +202,7 @@ def meta(request: Request) -> dict:
             "port_check": 1,
             "reservations": 1,
             "exact_reservations": 1,
+            "idempotent_reservations": 1,
             "reservation_release": 1,
             "scope_all": 1,
         },
@@ -211,7 +225,7 @@ def health(request: Request) -> dict:
             for event in recent
         ]
     return {
-        "status": "ok" if monitor["ready"] else "degraded",
+        "status": "ok" if monitor["ready"] and auth_configuration_valid() else "degraded",
         "version": VERSION,
         "auth_required": auth_configured(),
         "occupancy": monitor,
@@ -382,7 +396,7 @@ def _build_snapshot(values: dict) -> dict:
 def _allocation_snapshot(values: dict) -> dict:
     snap = _monitor.latest(values)
     if not complete(snap):
-        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
+        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; inspect the scan warning or run port-light doctor, repair the enabled source, then retry")
     return snap
 
 
@@ -408,6 +422,8 @@ def _classify_snapshot(snap: dict, values: dict, start: int, end: int,
         options=values,
     )
 
+    if not hidden_locked:
+        result["summary"]["compose_diagnostics"] = snap["compose_scan"].diagnostics
     if not complete(snap):
         result["summary"]["free"] = None
         for row in result["ports"] + result["summary"].get("hidden_occupancy", []):
@@ -658,14 +674,45 @@ async def suggest_ports(
     scope: str = Query(default="self", pattern="^(self|all)$"),
     require_count: bool = Query(default=False),
 ) -> dict:
-    """Suggest free ports, optionally reserving them as manual entries.
-
-    Reserved ports turn amber (configured) on every map and are excluded
-    from future suggestions. Each returned reservation carries the capability
-    token required by ``DELETE /api/reservations/{n}``.
-    ``ttl`` seconds turns the reservation into a lease that expires on its own.
-    """
+    """Read-only planning; mutations require the recoverable POST interface."""
     _require_agent_token(request)
+    if reserve or ttl is not None:
+        raise HTTPException(status_code=405, detail="use POST /api/reservations with an Idempotency-Key; upgrade CLI/MCP clients")
+    return await _suggest(count, start, end, label, ttl, scope, require_count)
+
+
+def _reservation_key(request: Request) -> str:
+    key = request.headers.get("idempotency-key", "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43,128}", key):
+        raise HTTPException(status_code=400, detail="Idempotency-Key must be a retained random URL-safe secret of 43–128 characters")
+    return key
+
+
+@app.post("/api/reservations")
+async def create_reservation(body: ReservationCreate, request: Request) -> dict:
+    _require_agent_token(request)
+    if body.start is not None and body.end is not None and body.start > body.end:
+        raise HTTPException(status_code=400, detail="end must be greater than or equal to start")
+    key = _reservation_key(request)
+    parameters = body.model_dump()
+    existing = await asyncio.to_thread(port_store.reservation_request, key, parameters)
+    if existing is not None:
+        return existing
+    return await _suggest(**parameters, request_key=key)
+
+
+@app.get("/api/reservations/request")
+def recover_reservation(request: Request) -> dict:
+    _require_agent_token(request)
+    result = port_store.reservation_request(_reservation_key(request))
+    if result is None:
+        raise HTTPException(status_code=404, detail="reservation request not found")
+    return result
+
+
+async def _suggest(count: int, start: int | None, end: int | None, label: str,
+                   ttl: int | None, scope: str, require_count: bool,
+                   request_key: str | None = None) -> dict:
     values = _values()
     lo = start if start is not None else values["port_range_start"]
     hi = end if end is not None else values["port_range_end"]
@@ -712,17 +759,17 @@ async def suggest_ports(
     # Peer I/O may outlast the local snapshot. Revalidate it before claiming.
     values = _values()
     taken.update(_scanned_ports(_allocation_snapshot(values), values, lo, hi))
-    picks, reservations = await asyncio.to_thread(
-        port_store.allocate_ports,
-        taken,
-        lo,
-        hi,
-        count,
-        label,
-        ttl,
-        reserve or ttl is not None,
-        require_count,
-    )
+    if request_key is not None:
+        parameters = {"count": count, "start": start, "end": end, "label": label,
+                      "ttl": ttl, "scope": scope, "require_count": require_count}
+        result, created = await asyncio.to_thread(
+            port_store.allocate_reservation, taken, lo, hi, parameters, request_key, scope_label)
+        if not created:
+            return result
+        picks, reservations = result["ports"], result["reservations"]
+    else:
+        picks, reservations = await asyncio.to_thread(
+            port_store.allocate_ports, taken, lo, hi, count, label, None, False, require_count)
     if reservations:
         await asyncio.to_thread(_monitor.state_changed)
     reserved = [entry["port"] for entry in reservations]
@@ -779,7 +826,7 @@ def get_port(
     for row in payload["ports"]:
         if row["port"] == port:
             if row["status"] == "unknown":
-                raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
+                raise HTTPException(status_code=503, detail="occupancy scan is incomplete; inspect the scan warning or run port-light doctor, repair the enabled source, then retry")
             return row
     hidden: set[int] = set()
     for raw in snap["user_state"][1]:
@@ -797,10 +844,10 @@ def get_port(
             if row["port"] == port:
                 return row
         if not complete(snap):
-            raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
+            raise HTTPException(status_code=503, detail="occupancy scan is incomplete; inspect the scan warning or run port-light doctor, repair the enabled source, then retry")
         return free_port_payload(port, hidden=True)
     if not complete(snap):
-        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; retry later")
+        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; inspect the scan warning or run port-light doctor, repair the enabled source, then retry")
     return free_port_payload(port, hidden=False)
 
 

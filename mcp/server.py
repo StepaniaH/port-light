@@ -131,7 +131,7 @@ def client() -> PortLightClient:
 def run_tool(name: str, args: dict) -> dict:
     port_light = client()
     if name == "suggest_ports":
-        return port_light.suggest_ports(
+        parameters = dict(
             count=int(args.get("count", 1)),
             start=int(args["start"]) if args.get("start") is not None else None,
             end=int(args["end"]) if args.get("end") is not None else None,
@@ -140,6 +140,16 @@ def run_tool(name: str, args: dict) -> dict:
             scope=str(args.get("scope", "self")),
             label=str(args.get("label", "")),
         )
+        if parameters["reserve"] or parameters["ttl"] is not None:
+            from port_light_client.state import ReservationStore
+            store = ReservationStore()
+            store.ensure_writable()
+            with store.pending_request(port_light.base_url, parameters) as key:
+                result = port_light.suggest_ports(**parameters, request_key=key)
+                for reservation in result.get("reservations", []):
+                    store.save(port_light.base_url, reservation)
+                return result
+        return port_light.suggest_ports(**parameters)
 
     if name == "check_port":
         return port_light.check_port(int(args["port"]))

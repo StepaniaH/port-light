@@ -41,3 +41,9 @@ def test_hidden_unlock(monkeypatch):
     assert hidden_ports_withheld() is True
     assert request_may_see_hidden(_Req({})) is False
     assert request_may_see_hidden(_Req({"x-hidden-unlock": "unlock-me"})) is True
+
+
+def test_unicode_hidden_unlock(monkeypatch):
+    monkeypatch.setenv("HIDDEN_UNLOCK_PASSWORD", "解锁密码")
+    assert valid_hidden_unlock("解锁密码") is True
+    assert valid_hidden_unlock("错误密码") is False
