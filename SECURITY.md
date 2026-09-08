@@ -12,7 +12,7 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 
 | Surface | Behavior |
 |---------|----------|
-| HTTP API | Unauthenticated unless `AUTH_USER` and `AUTH_PASSWORD` are set. `/api/health` is always open. |
+| HTTP API | Unauthenticated only when both `AUTH_USER` and `AUTH_PASSWORD` are absent. Invalid partial configuration returns 503. `/api/health` is always open. |
 | Hidden ports | Display filter by default. With `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD`, rows are withheld until Basic Auth or `X-Hidden-Unlock` succeeds. |
 | Docker socket | Often mounted into the container. Read-only is not the same as safe. |
 | `/host/proc` | Read-only view of host network tables (and other `/proc` data for PID 1). |
@@ -20,9 +20,24 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Data volume | Local JSON and SQLite under `/data`. Saved peer passwords are stored in `port_light.json`; Docker-side CLI release tokens use `/data/cli-state`; file writes use owner-only permissions. Configured hubs can read peer snapshots, and opt-in webhooks send event names and port numbers. |
 | Peer URLs | `PUT /api/hosts` stores origins + optional Basic Auth. The hub fetches occupancy, detail, history, and health from those origins. Redirects and environment proxies are disabled. Every resolved address must pass the private-address policy; see the DNS limits below. |
 | Doctor report | Auth follows the rest of the UI/API. The report contains aggregate statuses, counts, safe enums, and allowlisted failure reasons; it omits identities, peer details, ports, paths, credentials, environment values, and degradation scopes. |
-| CLI | A pure HTTP client; it has no direct Docker, `/proc`, or Compose access. Basic Auth and agent tokens come from environment variables. Per-port release tokens are saved in owner-only local state unless `--no-save` is explicitly used with JSON output. |
+| CLI | An HTTP client; it has no direct Docker, `/proc`, or Compose access. Basic Auth and agent tokens come from environment variables. Per-port release tokens are saved in owner-only local state unless `--no-save` is explicitly used with JSON output. |
 
 Without auth, anyone who can reach port 2100 can read the port map (names, images, bind addresses, Compose paths), machine descriptions, and peer connection settings other than passwords. They can also change manual/hidden entries and editable settings.
+
+## Authentication and recovery credentials
+
+Basic Auth is disabled only when both `AUTH_USER` and `AUTH_PASSWORD` are absent.
+If either is present but the pair is incomplete or blank, protected routes return
+503 and the public health endpoint reports `degraded`. Credentials are compared
+as UTF-8 bytes. Health responses omit diagnostic scopes until the configured
+Basic Auth and hidden-data gates permit disclosure.
+
+Reservation request keys grant access to release credentials. CLI/MCP save them
+in private local files before sending a reservation request. Server state stores
+hashes, not plaintext request keys or release tokens. Keep the client state
+directory persistent and private; exclude `Idempotency-Key` headers and JSON
+reservation/recovery output from shared logs. Stateless CLI use requires a
+caller-retained `PORT_LIGHT_REQUEST_KEY` as well as `--no-save --json`.
 
 ## Recommendations
 
@@ -58,12 +73,3 @@ Hide-from-grid only reduces what shows up in the UI (and, when secrets are set, 
 ## Supply chain
 
 Images are built on GitHub Actions and pushed to Docker Hub (`stepaniah/port-light`) and GHCR (`ghcr.io/stepaniah/port-light`). Pin a `v*` tag or digest.
-
-Basic Auth fails closed if either AUTH_USER or AUTH_PASSWORD is present but the
-pair is incomplete or blank. Unset both to disable it. The public health endpoint
-reports degraded for invalid authentication configuration. Unicode credentials
-are compared as UTF-8 bytes.
-
-Reservation request keys are recovery credentials. CLI/MCP persist them privately
-before sending; server state contains only hashes. Keep the client state directory
-persistent and private, and never log Idempotency-Key headers.

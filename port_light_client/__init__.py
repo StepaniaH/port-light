@@ -3,4 +3,4 @@
 from .client import PortLightClient, PortLightError, compact_port
 
 __all__ = ["PortLightClient", "PortLightError", "compact_port"]
-__version__ = "0.8.1"
+__version__ = "0.8.2"

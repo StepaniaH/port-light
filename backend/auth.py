@@ -51,7 +51,7 @@ def _equal(left: str, right: str) -> bool:
 def valid_basic_header(authorization: str) -> bool:
     user = os.environ.get("AUTH_USER") or ""
     password = os.environ.get("AUTH_PASSWORD") or ""
-    if not user or not password:
+    if not auth_configuration_valid() or not user or not password:
         return False
     if not authorization.lower().startswith("basic "):
         return False

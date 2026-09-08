@@ -219,7 +219,8 @@ def health(request: Request) -> dict:
     monitor = _monitor.status()
     sources = monitor["sources"]
     recent = degradations.recent(5)
-    if auth_configured() and not valid_basic_header(request.headers.get("authorization") or ""):
+    if ((auth_configured() and not valid_basic_header(request.headers.get("authorization") or ""))
+            or not request_may_see_hidden(request)):
         recent = [
             {key: value for key, value in event.items() if key != "scope"}
             for event in recent

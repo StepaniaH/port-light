@@ -395,3 +395,28 @@ def test_monitor_picks_up_store_hand_edit(monkeypatch, tmp_path):
         }))
         main._monitor.refresh()
         assert client.get("/api/ports/45000").json()["status"] == "configured"
+
+
+@pytest.mark.parametrize('auth', [False, True])
+def test_health_hides_scopes_until_configured_gate_is_unlocked(monkeypatch, auth):
+    from backend import degradations
+    for name in ('AUTH_USER', 'AUTH_PASSWORD', 'HIDDEN_UNLOCK_PASSWORD'):
+        monkeypatch.delenv(name, raising=False)
+    if auth:
+        monkeypatch.setenv('AUTH_USER', 'preview')
+        monkeypatch.setenv('AUTH_PASSWORD', '   ')
+        headers = {'Authorization': 'Basic ' + base64.b64encode(b'preview:   ').decode()}
+    else:
+        monkeypatch.setenv('HIDDEN_UNLOCK_PASSWORD', 'secret')
+        headers = {}
+    degradations.reset()
+    try:
+        degradations.report('compose', 'private/project/compose.yaml', 'port expansion limit')
+        client = TestClient(app)
+        body = client.get('/api/health', headers=headers).json()
+        assert all('scope' not in row for row in body['degradations'])
+        if not auth:
+            opened = client.get('/api/health', headers={'X-Hidden-Unlock': 'secret'}).json()
+            assert opened['degradations'][0]['scope'] == 'private/project/compose.yaml'
+    finally:
+        degradations.reset()

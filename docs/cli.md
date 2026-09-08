@@ -1,6 +1,6 @@
 # Command-line client
 
-`port-light` is a pure HTTP client for a running Port-Light instance. It does
+`port-light` is an HTTP client for a running Port-Light instance. It does
 not inspect local sockets, Docker, or Compose files itself, and a reservation
 does not bind an operating-system socket. The server remains the source of
 truth for occupancy.
@@ -46,11 +46,12 @@ Command options take precedence over environment variables.
 |---------|----------------------|---------|
 | Server URL | `PORT_LIGHT_URL` | `http://127.0.0.1:2100` |
 | HTTP Basic Auth | `PORT_LIGHT_AUTH=user:password` | unset |
-| Suggestion API token | `PORT_LIGHT_AGENT_TOKEN` | `AGENT_TOKEN`, then unset |
+| Suggestion and reservation API token | `PORT_LIGHT_AGENT_TOKEN` | `AGENT_TOKEN`, then unset |
 | Reservation scope | `PORT_LIGHT_SCOPE=self|all` | `self` |
 | Request timeout | `PORT_LIGHT_TIMEOUT` | `5` seconds |
 | HTTPS CA bundle | `PORT_LIGHT_CA_FILE` | system trust store |
-| Local token directory | `PORT_LIGHT_STATE_DIR` | platform state directory; `/data/cli-state` in the image |
+| Local token and recovery directory | `PORT_LIGHT_STATE_DIR` | platform state directory; `/data/cli-state` in the image |
+| Stateless request key | `PORT_LIGHT_REQUEST_KEY` | required with `--no-save` |
 | One release token | `PORT_LIGHT_RESERVATION_TOKEN` | saved token |
 
 `PORT_LIGHT_AUTH` authenticates the whole UI/API when the server has Basic
@@ -136,7 +137,7 @@ export PORT_LIGHT_REQUEST_KEY="$(python -c 'import secrets; print(secrets.token_
 port-light reserve --json --no-save --ttl 10m
 ```
 
-`--no-save` requires `--json` so a release token cannot disappear silently.
+`--no-save` requires both `--json` and a retained `PORT_LIGHT_REQUEST_KEY`.
 JSON reservation output contains secrets and should not be written to public
 logs. If the remote reservation succeeds but local token storage fails, the
 CLI returns exit `3` and emits recovery JSON containing the tokens.
@@ -166,15 +167,15 @@ terminal text. The flag may appear before or after the command.
 |------|---------|
 | `0` | The command succeeded; for `check`, the port is free |
 | `1` | A valid negative result, such as occupied, unhealthy, or no capacity |
-| `2` | Invalid input or missing/unreadable local token state |
-| `3` | Authentication, compatibility, network, TLS, server, or storage failure |
+| `2` | Invalid input, or failure to read/write local state before completion |
+| `3` | Authentication, compatibility, network, TLS or server failure; cleanup/storage failure after a completed reservation or release |
 
 The client verifies HTTPS with the system trust store unless `--ca-file` or
 `PORT_LIGHT_CA_FILE` selects a private CA bundle. URLs containing credentials,
 query strings, or fragments are rejected, as are HTTP redirects. The CLI
 negotiates named capabilities through `/api/meta`. Read-only checks can validate
 responses from older servers, but reservation commands require the advertised
-all-or-none allocation capability before changing server state. Install the CLI
+all-or-none allocation and idempotent reservation capabilities before changing server state. Install the CLI
 and server from the same release when reservation support is required.
 
 Run `port-light --help` or `port-light COMMAND --help` for the complete option

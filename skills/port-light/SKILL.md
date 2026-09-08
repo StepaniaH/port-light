@@ -1,78 +1,70 @@
 ---
 name: port-light
-description: Select ports that are available in Port-Light's latest scan before starting servers, development previews, or writing Docker Compose port mappings. Use when you need to pick a port, check a specific port, or reserve ports for other Port-Light clients.
+description: Check port occupancy and reserve ports before starting servers or writing Docker Compose mappings. Use when selecting a port, investigating a port conflict, or coordinating reservations with other Port-Light clients.
 ---
 
 # Port-Light
 
-Port-Light is an occupancy map for host ports. It merges the OS listen
-table, Docker publishes, Compose declarations, and manual reservations into
-one answer: which ports are actually free.
-
-## When to use
-
-- Before binding a dev server or preview to a port
-- Before writing `ports:` sections in a docker-compose file
-- After a "port already in use" error, to find the nearest alternative
-- Before asking "is X running on port N?"
+Port-Light combines listening sockets, Docker port mappings, Compose declarations,
+and manual entries. Results describe the latest scan; reservations coordinate
+Port-Light clients but do not bind operating-system sockets.
 
 ## Setup
 
-All calls go to a Port-Light instance over HTTP. Point the variable at
-whatever URL you use to open that instance's dashboard in a browser
-(localhost, LAN, or Tailscale):
+Install the CLI from the same release as the server. Configure the URL reachable
+from the environment where the command runs:
 
 ```bash
-export PORT_LIGHT_URL="http://<your-host>:<your-port>"
-# optional, when the instance has Basic Auth:
+export PORT_LIGHT_URL="http://127.0.0.1:2100"
+# Optional authentication configured on the server:
 export PORT_LIGHT_AUTH="user:password"
-# optional, when the instance sets AGENT_TOKEN:
 export PORT_LIGHT_AGENT_TOKEN="agent-token"
 ```
 
-## Pick free ports
+Keep credentials out of command-line arguments and shared logs. Use a persistent,
+private `PORT_LIGHT_STATE_DIR` for release tokens and pending recovery requests.
+
+## Check occupancy
 
 ```bash
-curl -s -H "X-Agent-Token: $PORT_LIGHT_AGENT_TOKEN" \
-  "$PORT_LIGHT_URL/api/ports/suggest?count=1"
+port-light doctor
+port-light check 5432
 ```
 
-```json
-{"ports": [8081], "reserved": [], "reservations": [], "failed": [], "range": {"start": 1, "end": 9999}}
-```
+`check` exits 0 when the port is free and 1 when it is used or configured. An
+incomplete scan returns an error; do not treat that result as a free port.
 
-Use `port-light reserve --label my-preview` to atomically claim ports with durable retry recovery. Reserved ports are recorded as configured,
-so repeated suggestions never hand out the same ports again. Save each
-reservation token: it is required to release that claim. Retry identical CLI
-arguments after a lost response to recover it from the pending request.
-For explicit recovery, use `port-light requests` then `port-light recover <ID>`
-with the same URL and state directory. Recovery never creates new claims.
-
-Parameters: `count` 1–64 (default 1), `start` / `end` narrow the search
-window, `label` annotates the reservation.
-
-## Check one port
+## Reserve ports
 
 ```bash
-curl -s "$PORT_LIGHT_URL/api/ports/5432?include_hidden=false" | jq '.status,.process'
+port-light reserve --count 1 --start 8000 --end 8999 --label my-preview
 ```
 
-Status is `used`, `configured` (declared but not listening) or `free`.
+Reservations default to one hour. Use `--ttl 10m` for a different duration or
+`--no-expiry` for a persistent reservation. `--scope all` checks configured peers
+and refuses allocation if any peer cannot supply a complete, unlocked map.
+Reservations are stored only on the selected server.
 
-## Release a reservation
+The CLI saves release tokens locally. Use `--json` when structured output is
+needed, and treat the output as secret because it contains release tokens.
+Labels appear in the dashboard and must not contain credentials.
+
+## Recover or release
+
+After a timeout, retry the same reservation arguments with the same URL and
+state directory. To inspect pending requests or recover without allocating:
 
 ```bash
-curl -s -X DELETE -H "X-Reservation-Token: <returned-token>" \
-  "$PORT_LIGHT_URL/api/reservations/8081"
+port-light requests
+port-light recover <request-id>
+port-light release 8000
 ```
 
-## Notes
+Explicit recovery can retrieve still-active claims after the automatic retry
+window. It never creates new claims or extends leases. Release uses the saved
+per-port token. Bind promptly after reserving: another process can still claim
+the operating-system port between the scan and the bind.
 
-- A port reported free can still be claimed by something else between the
-  call and your bind. A reservation serializes Port-Light agents but does not
-  bind an operating-system socket; bind promptly.
-- `scope=all` fails without reserving if any configured peer cannot provide a
-  complete, unlocked occupancy map.
-- Hidden ports are excluded from suggestions and withheld by the server
-  unless the request carries the unlock header.
-- Full API reference: `docs/integrations.md` in the Port-Light repository.
+For stateless automation, `--no-save --json` requires a caller-retained
+`PORT_LIGHT_REQUEST_KEY`; reuse that secret key after uncertain failures.
+See `docs/cli.md` and `docs/integrations.md` for the full command and HTTP APIs.

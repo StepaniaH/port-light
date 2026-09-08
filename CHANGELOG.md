@@ -4,12 +4,23 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.8.2 — 2026-09-08
+
+### Upgrade notes
+
+Upgrade the server and CLI/MCP together. Reservation creation now requires
+`POST /api/reservations` with an `Idempotency-Key`; legacy GET mutations return
+405. Stateless CLI reservations also require `PORT_LIGHT_REQUEST_KEY`.
+Both Basic Auth variables must be nonempty, or both must be unset.
+
 ### Fixed
 
 - Compose ranges support up to 4096 ports per declaration, with a 65536-mapping
   scan budget shared across files/includes. Exceeding either limit marks the scan
   incomplete instead of silently advertising dropped ports as free. Paired
   short-syntax ranges preserve corresponding container ports.
+- Health responses omit diagnostic file paths while Basic Auth or hidden-port
+  access is locked, including invalid authentication configurations.
 - Partial or explicitly empty Basic Auth configuration fails closed with 503;
   Unicode credentials and hidden-unlock passwords compare safely as UTF-8.
 - Reservations now atomically persist an idempotent receipt with the claim.

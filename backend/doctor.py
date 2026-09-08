@@ -43,6 +43,7 @@ _SAFE_REASONS = frozenset({
     "occupancy refresh failed or timed out",
     "occupancy source unavailable or incomplete",
     "peer occupancy unavailable or incomplete",
+    "port expansion limit",
     "queue full; intermediate changes omitted",
     "scan failed",
     "unknown value reset",
