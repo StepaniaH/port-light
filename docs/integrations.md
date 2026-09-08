@@ -16,7 +16,12 @@ server share one dependency-free HTTP client and error model.
 ### Suggest free ports
 
 ```bash
-curl -s "http://127.0.0.1:2100/api/ports/suggest?count=2&reserve=true&label=preview"
+# Generate once, securely retain, and reuse this key for retries of this request.
+export PORT_LIGHT_REQUEST_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+curl -s -X POST "http://127.0.0.1:2100/api/reservations" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $PORT_LIGHT_REQUEST_KEY" \
+  -d '{"count":2,"label":"preview","ttl":3600}'
 ```
 
 ```json
@@ -34,9 +39,9 @@ curl -s "http://127.0.0.1:2100/api/ports/suggest?count=2&reserve=true&label=prev
 
 - Skips anything listening, published by Docker, declared in Compose,
   reserved manually, or hidden.
-- `reserve=true` atomically records the returned ports as reservations
-  (configured / amber on every map). Save each token: it is returned once and
-  stored only as a hash. Release its port with `DELETE /api/reservations/{port}`
+- POST atomically records the returned ports as reservations
+  (configured / amber on every map). Save each token: the server stores only its hash and can reconstruct it
+  when you retry with the same secret request key. Release its port with `DELETE /api/reservations/{port}`
   and `X-Reservation-Token: <token>`. Manual entries use the manual-port API.
 - `ttl=<seconds>` (60–604800) turns reservations into leases: they disappear
   on their own once expired. The response carries `expires_at`.
@@ -54,6 +59,26 @@ curl -s "http://127.0.0.1:2100/api/ports/suggest?count=2&reserve=true&label=prev
 `scope` controls which hosts are checked. Even with `scope=all`, reservations
 are saved only on the instance receiving the request; peer data is used as an
 observation. Independent hubs can therefore select the same port.
+
+### Reservation recovery
+
+GET `/api/ports/suggest` only plans; `reserve=true` or `ttl` on that endpoint
+returns 405. Upgrade older CLI/MCP clients together with the server.
+POST `/api/reservations` accepts the options above as JSON (without `reserve`)
+and defaults to `require_count=true`. `Idempotency-Key` must contain 43–128
+URL-safe characters; generate it randomly and keep it secret like a release token.
+The same key and parameters return the original active claim without rescanning;
+different parameters or partially/fully inactive claims return 409 and never reallocate.
+GET `/api/reservations/request` with that header recovers still-active claims
+without creating anything (404 if absent, 409 if all original ports are inactive).
+For a partially released batch it returns the active subset and `inactive_ports`. Both endpoints enforce Basic Auth and the
+configured agent token. Neither recovery nor retries extend the original TTL.
+
+Active receipts are retained for the reservation lifetime; inactive receipts may
+be removed after seven days from creation. Never resubmit an old key after that
+window: use the recovery GET instead. The ledger permits at most 4096 receipts;
+when full it rejects new reservations instead of discarding active recovery data.
+Existing reservations created before this change cannot gain lost credentials.
 
 ### Scanner selection and peer compatibility
 
@@ -90,8 +115,8 @@ running instances or published images.
 ### Agent token
 
 Set `AGENT_TOKEN` to require an `X-Agent-Token` header on
-`/api/ports/suggest`. Basic Auth credentials continue to work alongside it;
-every other endpoint is unaffected.
+`/api/ports/suggest`, POST `/api/reservations`, and GET
+`/api/reservations/request`. Basic Auth credentials continue to work alongside it.
 
 ### Largest contiguous runs
 
@@ -107,7 +132,7 @@ curl -s -X POST http://127.0.0.1:2100/api/manual-ports/batch \
   -d '{"start":3000,"end":3007,"label":"Preview services"}'
 ```
 
-A successful response contains `{"status":"ok","ports":[3000,3001,3002,3003,3004,3005,3006,3007]}`. Ranges must contain 1–64 ports. If any selected port is occupied, reserved, or hidden at the recheck, the response is `409` and no selected port is added. Storage failures return `500` for writes or `503` for unreadable/invalid data. These entries use ordinary manual-port editing and deletion; the agent-token gate continues to apply only to `/api/ports/suggest`.
+A successful response contains `{"status":"ok","ports":[3000,3001,3002,3003,3004,3005,3006,3007]}`. Ranges must contain 1–64 ports. If any selected port is occupied, reserved, or hidden at the recheck, the response is `409` and no selected port is added. Storage failures return `500` for writes or `503` for unreadable/invalid data. These entries use ordinary manual-port editing and deletion; the agent-token gate continues to apply to suggestions and reservation creation/recovery.
 
 ### Check one port
 

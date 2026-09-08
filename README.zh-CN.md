@@ -56,7 +56,7 @@
 - 可选 HTTP Basic Auth（`AUTH_USER` / `AUTH_PASSWORD`）
 - 支持用标签给端口命名：`port-light.port.<端口>.name` / `.category`
 - 查找空闲端口：工具栏按钮（或 `GET /api/free-runs?count=N`）返回范围内最大的连续空闲段，可一键预留
-- 自动化 API：`GET /api/ports/suggest` 返回最近一次扫描中可用的端口，支持预留或到期释放的租约；同时提供无第三方依赖的 `port-light` CLI、MCP stdio 服务器和智能体集成
+- 自动化 API：`GET /api/ports/suggest` 返回最近一次扫描中可用的端口，`POST /api/reservations` 创建可恢复的预留或到期释放的租约；同时提供无第三方依赖的 `port-light` CLI、MCP stdio 服务器和智能体集成
 - 本地历史：端口状态变化写入数据卷内的 `history.db`（默认保留 7 天，`HISTORY_RETENTION_DAYS=0` 关闭）；详情抽屉显示最近变动，也可用 `GET /api/ports/{n}/history`
 - 可选 Webhook：设置 `WEBHOOK_URL` 与 `WEBHOOK_EVENTS=new_listener,conflict` 后，端口开始被占用或两个栈冲突时 POST JSON 通知
 - 后台扫描：无需打开浏览器即可更新历史和 webhook；界面通过 `GET /api/events`（SSE）接收占用变化，并保留 ETag 轮询以处理重连和其他主机
@@ -135,7 +135,7 @@ docker compose up -d
 | `PORT_LIGHT_HOST_LAYOUT` | `waterfall` | 默认以响应式瀑布流展示全部机器；`tabs` 为逐台切换。桌面和移动端均遵循此选择。 |
 | `URL_HOST` | 空 | 猜测链接里用的主机名 |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
-| `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 |
+| `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 两项都必须非空；缺一项或空值会返回 503。完全取消两项环境变量才会关闭认证。 |
 | `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。只能用环境变量。 |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页的值覆盖 env 默认值。`env`：只认 Compose，设置页只读。 |
 | `PORT_LIGHT_HOST_NAME` | 主机名 | 多机器视图中本机占用图的名称。也可在设置 → 占用图中修改。 |
@@ -146,7 +146,7 @@ docker compose up -d
 | `WEBHOOK_SECRET` | 未设置 | 以 `X-Port-Light-Secret` 头发送。 |
 | `WEBHOOK_EVENTS` | 未设置 | 逗号分隔：`new_listener`、`conflict`。 |
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
-| `AGENT_TOKEN` | 未设置 | 设置后，`GET /api/ports/suggest` 需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
+| `AGENT_TOKEN` | 未设置 | 设置后，端口建议及预留创建、恢复接口需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
 
 上表里除超时、路径和密钥外，也可以在 Web UI 的**设置**中修改，包括本机名称、扫描来源、Compose 发现范围和其他机器。修改会自动写入 `/data/port_light.json`；请求只提交实际改动的字段，也可以移除已保存的覆盖值，恢复继承环境变量或默认值。OpenAPI 在 `/docs`。
 

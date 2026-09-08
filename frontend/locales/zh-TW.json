@@ -86,6 +86,9 @@
   },
   "scanner": {
     "diagnostics": {
+      "port_range": "{file}：範圍 {range} 超過 {limit} 個連接埠，請將此宣告拆成較短的範圍。",
+      "port_budget": "{file}：整次掃描超過 {limit} 筆映射的預算。請減少宣告或縮小掃描目錄；僅拆分範圍無法解決。",
+      "invalid_file": "{file}：Compose 設定無效，請檢查語法、必要變數、include 路徑與環境檔案。",
       "title": "為何無法確認可用連接埠？",
       "listen": "主機監聽掃描失敗。請檢查 /proc 是否掛載至 /host/proc，以及容器使用者的讀取權限。直接部署於主機時，請檢查 ss 或 /proc 是否可用。",
       "docker": "Docker 掃描失敗。請檢查 Docker 是否執行中、socket 是否掛載或 DOCKER_HOST 是否可連線。非 root 容器還需透過 group_add 加入 socket 所屬群組；群組編號以主機為準。",

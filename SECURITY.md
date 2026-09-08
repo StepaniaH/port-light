@@ -49,7 +49,7 @@ The HTTP client resolves again when connecting. Validation does not pin the dest
 
 ## Data file failures
 
-Unreadable or invalid `port_light.json` files block dependent reads and writes with `503`; they are preserved for repair. Error responses do not include file contents or peer credentials. Failed scans retain earlier observations and cannot certify free ports or allocate through `/api/ports/suggest` and `/api/manual-ports/batch`. Disabled scanners are outside that coverage.
+Unreadable or invalid `port_light.json` files block dependent reads and writes with `503`; they are preserved for repair. Error responses do not include file contents or peer credentials. Failed scans retain earlier observations and cannot certify free ports or allocate through `/api/reservations` and `/api/manual-ports/batch`. Disabled scanners are outside that coverage.
 
 ## Hidden ports
 
@@ -58,3 +58,12 @@ Hide-from-grid only reduces what shows up in the UI (and, when secrets are set, 
 ## Supply chain
 
 Images are built on GitHub Actions and pushed to Docker Hub (`stepaniah/port-light`) and GHCR (`ghcr.io/stepaniah/port-light`). Pin a `v*` tag or digest.
+
+Basic Auth fails closed if either AUTH_USER or AUTH_PASSWORD is present but the
+pair is incomplete or blank. Unset both to disable it. The public health endpoint
+reports degraded for invalid authentication configuration. Unicode credentials
+are compared as UTF-8 bytes.
+
+Reservation request keys are recovery credentials. CLI/MCP persist them privately
+before sending; server state contains only hashes. Keep the client state directory
+persistent and private, and never log Idempotency-Key headers.

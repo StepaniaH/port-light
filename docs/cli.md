@@ -55,7 +55,7 @@ Command options take precedence over environment variables.
 
 `PORT_LIGHT_AUTH` authenticates the whole UI/API when the server has Basic
 Auth enabled. `PORT_LIGHT_AGENT_TOKEN` is a separate server-side gate for port
-suggestions and reservations. A reservation token is a third, one-time secret
+suggestions and reservations. A reservation token is a third secret
 returned for a particular port and required to release it. Credentials are not
 accepted as command-line arguments because process lists and shell history can
 expose them.
@@ -131,6 +131,8 @@ For stateless automation, use JSON output together with `--no-save` and capture
 the returned token in a secret store:
 
 ```bash
+# Generate once and retain securely; reuse after a timeout.
+export PORT_LIGHT_REQUEST_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 port-light reserve --json --no-save --ttl 10m
 ```
 
@@ -177,3 +179,47 @@ and server from the same release when reservation support is required.
 
 Run `port-light --help` or `port-light COMMAND --help` for the complete option
 reference.
+
+## Retrying reservations
+
+For normal CLI reservations, a private pending request is saved under
+`<state-dir>/requests` before HTTP mutation. Retry the identical command against
+the same URL and state directory after a timeout or token-save failure: it
+recovers the same ports and release tokens. The pending file is removed only
+when all returned tokens are saved. A later successful command is a new request.
+Identical concurrent commands sharing that state directory are serialized by a
+nonblocking file lock; the second reports an in-progress error. MCP uses the
+same persistent state mechanism for mutating `suggest_ports` calls.
+
+With `--no-save --json`, set `PORT_LIGHT_REQUEST_KEY` to a securely retained,
+random URL-safe secret of 43–128 characters (for example `secrets.token_urlsafe(32)`).
+Reuse it after errors; choose a new key only for a deliberately new reservation.
+There is no local recovery journal in this mode.
+
+Pending files older than seven days refuse automatic resubmission because the
+server may have retired an inactive receipt. Use the explicit recovery commands:
+
+```bash
+port-light --url http://localhost:2100 requests
+port-light --url http://localhost:2100 recover <request-id>
+# Both commands also accept --json.
+```
+
+`requests` reads local state only, filters by normalized server URL, and lists
+request IDs, timestamps and parameters without printing secret keys. `recover`
+locks the selected journal, checks the server's recovery capability, and performs
+GET `/api/reservations/request`. It never creates a new claim or extends a lease.
+After validating the response and saving every active release token, it removes
+the pending file. Network, validation, or token-storage failures preserve it.
+A batch with some ports already released returns the remaining active ports and
+`inactive_ports`; a wholly inactive request reports conflict without allocating.
+Missing receipts return not-found and keep the journal for investigation.
+
+Keep the same URL and state directory when recovering. Older journals without
+metadata need one retry of the original command to attach that metadata without
+changing the secret key. An old request then stops before POST and prints its ID.
+Losing the state folder and the returned credentials also loses recovery access.
+
+CLI/MCP errors now distinguish `authentication_misconfigured` (repair AUTH_USER /
+AUTH_PASSWORD), `occupancy_unavailable` (inspect the scan warning or run Doctor),
+and `upgrade_required` / `unsupported_server` (upgrade the client/server pair).

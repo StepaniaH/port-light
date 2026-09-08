@@ -57,3 +57,21 @@ test('warning opens only from the info icon on pointer hover and dismisses with 
   warning.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault() {}, stopPropagation() {} });
   assert.equal(warning.open, false);
 });
+
+test('structured range diagnostics interpolate safely and disappear on stale snapshots', () => {
+  const previous = window.PortLightI18n;
+  window.PortLightI18n = { t: (key, vars = {}) => key + Object.values(vars).join(' ') };
+  try {
+    const summary = { scan_complete: false, compose_incomplete: true,
+      compose_diagnostics: [{ code: 'port_range', file: '<script>alert(1)</script>.yaml',
+        range: '20000-24096', limit: 4096 }] };
+    const html = scanWarningMarkup(summary, 'local', 'summary');
+    assert.match(html, /scanner\.diagnostics\.port_range/);
+    assert.match(html, /20000-24096 4096/);
+    assert.match(html, /&lt;script&gt;/);
+    assert.doesNotMatch(html, /<script>/);
+    assert.doesNotMatch(scanWarningMarkup({ ...summary, stale: true }, 'local', 'summary'), /20000-24096/);
+  } finally {
+    window.PortLightI18n = previous;
+  }
+});

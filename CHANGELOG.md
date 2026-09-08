@@ -4,6 +4,38 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Fixed
+
+- Compose ranges support up to 4096 ports per declaration, with a 65536-mapping
+  scan budget shared across files/includes. Exceeding either limit marks the scan
+  incomplete instead of silently advertising dropped ports as free. Paired
+  short-syntax ranges preserve corresponding container ports.
+- Partial or explicitly empty Basic Auth configuration fails closed with 503;
+  Unicode credentials and hidden-unlock passwords compare safely as UTF-8.
+- Reservations now atomically persist an idempotent receipt with the claim.
+  CLI/MCP save a private recovery key before sending and recover the same claim
+  and release credentials after a lost response by retrying identical arguments.
+
+### Added
+
+- `port-light requests` lists non-secret pending-request metadata;
+  `port-light recover <ID>` retrieves still-active claims using GET only, even
+  beyond the automatic retry window. Failed recovery/token saves retain the journal.
+- Scan warnings identify the Compose file, range and resource limit with repair
+  guidance in all seven languages. Diagnostics respect the hidden-data gate.
+- Client error codes distinguish authentication misconfiguration, unavailable
+  occupancy, and obsolete mutation interfaces.
+
+### Changed
+
+- Partially released requests can recover their remaining claims through GET;
+  replaying POST still refuses reallocation. Malformed receipts fail closed.
+- Creating reservations requires `POST /api/reservations` with a secret
+  `Idempotency-Key`. Legacy mutating GET suggestions return 405. Upgrade CLI/MCP
+  alongside the server; read-only GET suggestions continue working.
+- Stateless CLI reservations (`--no-save --json`) require a caller-retained
+  `PORT_LIGHT_REQUEST_KEY`. See the CLI guide for recovery and retention limits.
+
 ## 0.8.1 — 2026-09-07
 
 ### Added

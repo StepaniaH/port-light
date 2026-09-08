@@ -56,7 +56,7 @@ This is a **port occupancy map**, not a container manager. It does not start/sto
 - Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
 - Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
 - Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with atomic batch reservation
-- Automation API: `GET /api/ports/suggest` returns ports available in the latest scan, with optional reservations or expiring leases. A dependency-free `port-light` CLI, MCP stdio server, and agent integration are included.
+- Automation API: `GET /api/ports/suggest` returns ports available in the latest scan, while `POST /api/reservations` creates recoverable reservations or expiring leases. A dependency-free `port-light` CLI, MCP stdio server, and agent integration are included.
 - Local history: port state transitions land in `history.db` inside your data volume (default 7 days; `HISTORY_RETENTION_DAYS=0` disables) — the detail drawer shows recent changes and `GET /api/ports/{n}/history` exposes them
 - Optional webhooks: `WEBHOOK_URL` + `WEBHOOK_EVENTS=new_listener,conflict` POST JSON when a port starts being used or two stacks collide
 - Background scanning updates history and webhooks without an open browser. Open UIs receive occupancy changes through `GET /api/events` (SSE), with periodic ETag polling for reconnects and peers
@@ -135,7 +135,7 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 | `PORT_LIGHT_HOST_LAYOUT` | `waterfall` | Responsive waterfall showing all machines, or `tabs` showing one machine at a time. Both desktop and mobile honor this choice. |
 | `URL_HOST` | empty | Hostname used in guessed `http(s)://` links |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
-| `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. Env only. |
+| `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. Env only. Both values must be nonempty; partial/blank configuration returns 503. Unset both to disable. |
 | `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. Env only. |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI values override env defaults. `env`: Compose is the only source and the Settings page is read-only. |
 | `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. Also configurable under Settings → Occupancy. |
@@ -146,7 +146,7 @@ All three scanners are enabled by default. If an enabled source fails, Compose s
 | `WEBHOOK_SECRET` | unset | Sent as `X-Port-Light-Secret`. |
 | `WEBHOOK_EVENTS` | unset | Comma list: `new_listener`, `conflict`. |
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
-| `AGENT_TOKEN` | unset | When set, `GET /api/ports/suggest` requires a matching `X-Agent-Token` header. Env-only. |
+| `AGENT_TOKEN` | unset | When set, suggestions and reservation creation/recovery require a matching `X-Agent-Token` header. Env-only. |
 
 Most options (except timeout, paths, and secrets) can also be changed on **Settings** in the UI. This includes the local machine name, scanner selection, Compose discovery options, and peers. Changes save automatically into `/data/port_light.json`; only changed fields are submitted, and a saved override can be restored to its inherited environment/default value. OpenAPI is at `/docs`.
 

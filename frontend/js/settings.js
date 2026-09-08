@@ -1,14 +1,14 @@
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=90';
-import { t, tx, escapeHtml, errorText } from './text.js?v=90';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=90';
-import { moveChipFocus } from './a11y.js?v=90';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=90';
-import { api, fetchHosts, fetchSettings } from './api.js?v=90';
-import { hasPeers, hostById, hostName } from './hosts.js?v=90';
-import { bindAddressView } from './grid.js?v=90';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=90';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=92';
+import { t, tx, escapeHtml, errorText } from './text.js?v=92';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=92';
+import { moveChipFocus } from './a11y.js?v=92';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=92';
+import { api, fetchHosts, fetchSettings } from './api.js?v=92';
+import { hasPeers, hostById, hostName } from './hosts.js?v=92';
+import { bindAddressView } from './grid.js?v=92';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=92';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -1113,7 +1113,7 @@ function settingValuesEqual(left, right) {
         },
       },
     }, null, 2);
-    let curl = 'curl -s "' + origin + '/api/ports/suggest?count=2&reserve=true&ttl=3600&label=preview"';
+    let curl = 'curl -s "' + origin + '/api/ports/suggest?count=2"';
     if (a.agent_token) curl += ' \\\n  -H "X-Agent-Token: <your-token>"';
 
     const connect =

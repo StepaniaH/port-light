@@ -86,6 +86,9 @@
   },
   "scanner": {
     "diagnostics": {
+      "port_range": "{file}: range {range} exceeds {limit} ports. Split this declaration into smaller ranges.",
+      "port_budget": "{file}: the scan exceeded its {limit}-mapping budget. Reduce declarations or narrow the scan directory; splitting ranges alone will not help.",
+      "invalid_file": "{file}: invalid Compose configuration. Check syntax, required variables, include paths and environment files.",
       "title": "Why can't free ports be confirmed?",
       "listen": "Host listener scanning failed. Check the /proc to /host/proc mount and the container user's read permissions. On a bare-metal deployment, check that ss or /proc is available.",
       "docker": "Docker scanning failed. Check the daemon, socket mount, or DOCKER_HOST connection. A non-root container also needs the socket's host group via group_add; use the GID from that machine.",

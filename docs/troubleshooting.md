@@ -68,3 +68,26 @@ Disable a scanner only if that source is intentionally outside your occupancy ch
 Saved settings normally override environment defaults. If `PORT_LIGHT_SETTINGS_SOURCE=env` or `SETTINGS_READONLY=1` is set, edit the deployment configuration instead; the settings page remains read-only. Upgrading the hub does not upgrade its peers.
 
 An invalid or empty scanner selection blocks occupancy checks instead of silently enabling all sources. The settings page remains available: select at least one valid source and let the change save automatically, or correct `PORT_LIGHT_SCANNERS` in the deployment if settings are locked. Valid names are `listen`, `docker`, and `compose`.
+
+## Compose range and scan limits
+
+Current scan warnings include a relative filename and concrete repair guidance.
+A single range may contain 4096 ports; split a larger declaration. Each scan may
+parse and emit at most 65536 mappings, shared across files and included projects;
+repeated declarations and macvlan copies also consume budget. Reduce declarations
+or narrow `COMPOSE_SCAN_DIR` when that overall budget is exceeded. Splitting
+ranges alone does not reduce the total. An incomplete scan cannot certify that a
+port is free, even when that port has no visible row.
+
+## Authentication configuration and reservation recovery
+
+`authentication_misconfigured` means AUTH_USER or AUTH_PASSWORD is missing or
+blank while the other variable is configured. Set both to nonempty values, or
+unset both to intentionally disable Basic Auth. Health remains public and reports
+`degraded`; protected routes return 503.
+
+After a reservation timeout, retry identical arguments or run `port-light
+requests` followed by `port-light recover <ID>` with the same URL and state
+directory. Explicit recovery only reads server state and can recover active
+claims beyond the seven-day automatic retry window. It never allocates new ports.
+Upgrade CLI/MCP alongside the server if a legacy GET mutation returns 405.

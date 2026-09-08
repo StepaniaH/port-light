@@ -86,6 +86,9 @@
   },
   "scanner": {
     "diagnostics": {
+      "port_range": "{file}: el rango {range} supera {limit} puertos. Divida la declaración en rangos más pequeños.",
+      "port_budget": "{file}: el análisis supera el límite de {limit} asignaciones. Reduzca las declaraciones o el directorio analizado; dividir rangos no basta.",
+      "invalid_file": "{file}: configuración Compose no válida. Revise la sintaxis, las variables obligatorias, las rutas include y los archivos de entorno.",
       "title": "¿Por qué no se pueden confirmar los puertos libres?",
       "listen": "Falló el análisis de los puertos en escucha del host. Revisa el montaje de /proc en /host/proc y los permisos de lectura del usuario del contenedor. En una instalación directa, comprueba que ss o /proc estén disponibles.",
       "docker": "Falló el análisis de Docker. Revisa el daemon, el montaje del socket o la conexión DOCKER_HOST. Un contenedor sin root también necesita el grupo del socket del host mediante group_add; usa el GID de esa máquina.",

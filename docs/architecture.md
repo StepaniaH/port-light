@@ -69,7 +69,7 @@ Supported port syntax:
 - Long: `{ published, target, protocol, host_ip, mode }` (`mode: host` without a usable `published` uses `target` as the host port; published or target may be `"5353/udp"` / `"53/udp"`)
 - Swarm `deploy.ports` (override / extends merge like `ports`, including a child-only `deploy.ports`)
 - `${VAR}` / `$VAR` / `${VAR:-default}` / `${VAR-default}` / `${VAR:+alt}` / `${VAR+alt}` / `${VAR:?err}` / `${VAR?err}` from the sibling `.env` and Compose `env_file` / `include.env_file` (not Port-Light's process environment). Defaults may contain `$FALLBACK` or nested `${INNER}`. Unset/empty `${VAR:?}` / unset `${VAR?}`, a missing **required** `env_file` (`required` defaults to true), a missing `include` path, or a missing `extends.file` skip **that whole Compose project** (Compose would refuse it) and set `summary.compose_incomplete` (Compose pill amber). `required: false` env files may be absent. The implicit sibling `.env` is still optional.
-- Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 128 ports per mapping
+- Ranges expanded (`3000-3002:80` → 3000, 3001, 3002), capped at 4096 ports per mapping, with 65536 parsed/emitted mappings per scan
 - `network_mode: host` (or host `ns:`) plus `expose:` — those container ports are host ports (bridge `expose` is ignored)
 - Compose macvlan/ipvlan `ipv4_address` / `ipv6_address` plus `expose` and/or published `target` — LAN occupancy on that address (bridge static IPs are not host occupancy). The macvlan/ipvlan driver may be declared in an `include:` file or an `extends.file`; child `networks:` overlays the parent. `external: true` (or `{ name: … }`) networks with a static IP are treated the same way when Docker is down. `extends.file` interpolates that file’s sibling `.env` and top-level `env_file` (caller env still overlays `.env`).
 
@@ -87,7 +87,7 @@ For each port in the union of listeners ∪ Docker mappings ∪ Compose ∪ manu
 
 `source_type` is a rough tag for filters (`docker` / `system` / `host` / `manual`). System vs host uses the known-port category, not the OS.
 
-Hidden ports are omitted from the payload unless `include_hidden=true` **and** the request may see them (open LAN, or Basic Auth / `X-Hidden-Unlock`). `GET /api/free-runs?count=N&start=&end=` computes the largest contiguous free runs from the same snapshot (read-only planning; each run contains at least `count` ports). `GET /api/ports/suggest` goes further: with `scope=all` it also subtracts peer occupancy, supports expiring leases (`ttl`), and can be locked to agents via `AGENT_TOKEN`/`X-Agent-Token`. `GET /api/ports/{N}` returns 404 for a hidden port that was omitted — never a free stub. With a complete, current snapshot and hidden ports included, a hide-only cell (no listen / Docker / Compose / manual) is `status: "free"` and `is_hidden: true`. When hidden ports are not locked, `summary.hidden_ports` lists their numbers and `summary.hidden_occupancy` lists `{port, status}` so numeric search can keep hidden styling without painting a used port as configured.
+Hidden ports are omitted from the payload unless `include_hidden=true` **and** the request may see them (open LAN, or Basic Auth / `X-Hidden-Unlock`). `GET /api/free-runs?count=N&start=&end=` computes the largest contiguous free runs from the same snapshot (read-only planning; each run contains at least `count` ports). `GET /api/ports/suggest` goes further: with `scope=all` it also subtracts peer occupancy, can be locked to agents via `AGENT_TOKEN`/`X-Agent-Token`. `GET /api/ports/{N}` returns 404 for a hidden port that was omitted — never a free stub. With a complete, current snapshot and hidden ports included, a hide-only cell (no listen / Docker / Compose / manual) is `status: "free"` and `is_hidden: true`. When hidden ports are not locked, `summary.hidden_ports` lists their numbers and `summary.hidden_occupancy` lists `{port, status}` so numeric search can keep hidden styling without painting a used port as configured.
 
 Guessed access URLs: loopback binds use `127.0.0.1`; a LAN-only bind uses that address; `0.0.0.0` / `::` uses `URL_HOST` or `localhost`. `URL_HOST` always wins when set (except loopback). Link-local (`169.254/16`, `fe80::`) and the default Docker bridge (`172.17.0.0/16`) are `link`, not LAN, and are not used as guessed hosts.
 
@@ -118,7 +118,7 @@ reservations fail before changing server state unless the server advertises the
 all-or-none capability. Reservation responses are also rejected unless they
 contain one release token per selected port and report the scope actually used.
 
-`GET /api/ports/suggest?require_count=true` makes allocation all-or-none under
+`POST /api/reservations` with `require_count=true` makes allocation all-or-none under
 the existing port-store lock. The CLI always requests it and verifies the named
 capability first. A server either persists the entire requested count or
 persists nothing. If a server advertises that capability but returns a partial
@@ -156,3 +156,30 @@ The Nord, Dracula, and Tokyo Night light palettes adapt colors from [Navidrome S
 ## Why not Kubernetes / remote Docker
 
 Remote `DOCKER_HOST`, Swarm, and Kubernetes need a different agent. See [roadmap.md](roadmap.md).
+
+## Allocation and authentication failure boundaries
+
+Compose ranges use constant-space intervals for validation before row expansion.
+Each range permits at most 4096 ports. One scan shares separate 65536-row parsed
+and emitted budgets across files, includes, host-network expose and macvlan
+copies. Duplicated declarations count toward the budget. Crossing a limit stops
+that work, marks the scan incomplete, and blocks free-port certification and
+allocation. Split an overlong single range; reduce declarations or scan scope
+when the whole-scan budget is exceeded. Matching short-syntax host/container
+ranges map corresponding endpoints rather than repeating the first target.
+The existing row-based classification/UI remains unchanged; a full interval
+rewrite would require changing those consumers and is unnecessary for this cap.
+
+`summary.compose_diagnostics` provides at most eight structured diagnostics with
+relative filenames, validated numeric ranges, and limits. It is omitted while
+hidden data is locked. The UI escapes all values and suppresses stale diagnostics.
+
+Reservation POSTs commit a hashed request receipt and the claimed entries in
+one atomic store replacement under the allocation lock. Release tokens are
+HMAC-derived from the caller's secret request key and port; plaintext credentials
+are never written to server state. See integrations.md for retention limits.
+
+Basic Auth is disabled only when both AUTH_USER and AUTH_PASSWORD are absent.
+Setting either variable without a nonempty pair returns 503 on protected routes;
+public health remains reachable and reports degraded. Credentials compare as
+UTF-8 bytes, including Unicode passwords and hidden-unlock credentials.

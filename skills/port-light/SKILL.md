@@ -34,16 +34,19 @@ export PORT_LIGHT_AGENT_TOKEN="agent-token"
 
 ```bash
 curl -s -H "X-Agent-Token: $PORT_LIGHT_AGENT_TOKEN" \
-  "$PORT_LIGHT_URL/api/ports/suggest?count=1&reserve=true&label=my-preview"
+  "$PORT_LIGHT_URL/api/ports/suggest?count=1"
 ```
 
 ```json
-{"ports": [8081], "reserved": [8081], "reservations": [{"port": 8081, "token": "<save-this-token>", "expires_at": null}], "failed": [], "range": {"start": 1, "end": 9999}}
+{"ports": [8081], "reserved": [], "reservations": [], "failed": [], "range": {"start": 1, "end": 9999}}
 ```
 
-Use the returned ports. With `reserve=true` they are recorded as configured,
+Use `port-light reserve --label my-preview` to atomically claim ports with durable retry recovery. Reserved ports are recorded as configured,
 so repeated suggestions never hand out the same ports again. Save each
-reservation token: it is returned once and is required to release that claim.
+reservation token: it is required to release that claim. Retry identical CLI
+arguments after a lost response to recover it from the pending request.
+For explicit recovery, use `port-light requests` then `port-light recover <ID>`
+with the same URL and state directory. Recovery never creates new claims.
 
 Parameters: `count` 1–64 (default 1), `start` / `end` narrow the search
 window, `label` annotates the reservation.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -81,6 +81,27 @@ try {
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await expect(page.locator('[data-i18n="settings.scanners.invalid"]')).toHaveCount(0);
   await expect.poll(async () => (await fetch(peer + '/api/ports/suggest')).status).toBe(200);
+
+  // Resource-limit diagnostics are actionable and clear once a valid larger range is scanned.
+  const composePath = join(temporary, 'Peer', 'compose', 'compose.yaml');
+  const originalCompose = await readFile(composePath, 'utf8');
+  await writeFile(composePath, 'services:\n  large:\n    ports: ["42000-46096:80"]\n');
+  await expect.poll(async () => (await fetch(peer + '/api/ports')).json().then(data =>
+    data.summary.compose_diagnostics?.[0]?.code), { timeout: 20000 }).toBe('port_range');
+  await page.goto(peer);
+  await expect(page.locator('.scan-warning').first()).toBeVisible();
+  await page.locator('.scan-warning summary').first().click();
+  await expect(page.locator('.scan-warning-panel').first()).toContainText('compose.yaml');
+  await expect(page.locator('.scan-warning-panel').first()).toContainText('42000-46096');
+  await expect(page.locator('.scan-warning-panel').first()).toContainText('4096');
+  await writeFile(composePath, 'services:\n  large:\n    ports: ["42000-42255:80"]\n');
+  await expect.poll(async () => (await fetch(peer + '/api/ports/42255')).json().then(data =>
+    data.status), { timeout: 20000 }).toBe('configured');
+  await expect.poll(async () => (await fetch(peer + '/api/ports')).json().then(data =>
+    data.summary.scan_complete), { timeout: 20000 }).toBe(true);
+  await writeFile(composePath, originalCompose);
+  await expect.poll(async () => (await fetch(peer + '/api/ports/42008')).json().then(data =>
+    data.status), { timeout: 20000 }).toBe('configured');
 
   const extraPeers = await Promise.all(Array.from({ length: 6 }, (_, i) => startHost('Peer ' + (i + 2))));
   const peerRows = [peer, ...extraPeers].map((url, i) => ({

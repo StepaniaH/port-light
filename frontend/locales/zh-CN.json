@@ -86,6 +86,9 @@
   },
   "scanner": {
     "diagnostics": {
+      "port_range": "{file}：范围 {range} 超过 {limit} 个端口，请将此声明拆成更短的范围。",
+      "port_budget": "{file}：整次扫描超过 {limit} 条映射的预算。请减少声明或缩小扫描目录；仅拆分范围无法解决。",
+      "invalid_file": "{file}：Compose 配置无效，请检查语法、必需变量、include 路径和环境文件。",
       "title": "为什么无法确认空闲端口？",
       "listen": "主机监听扫描失败。检查 /proc 是否挂载到 /host/proc，以及容器用户的读取权限。裸机部署请检查 ss 或 /proc 是否可用。",
       "docker": "Docker 扫描失败。检查 Docker 是否运行、socket 是否挂载或 DOCKER_HOST 是否可达。非 root 容器还需通过 group_add 加入 socket 所属用户组；组号以宿主机为准。",

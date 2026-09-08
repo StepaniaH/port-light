@@ -86,6 +86,9 @@
   },
   "scanner": {
     "diagnostics": {
+      "port_range": "{file} : la plage {range} dépasse {limit} ports. Divisez cette déclaration en plages plus courtes.",
+      "port_budget": "{file} : le scan dépasse la limite de {limit} correspondances. Réduisez les déclarations ou le répertoire analysé ; diviser les plages ne suffit pas.",
+      "invalid_file": "{file} : configuration Compose invalide. Vérifiez la syntaxe, les variables requises, les chemins include et les fichiers d’environnement.",
       "title": "Pourquoi les ports libres ne peuvent-ils pas être confirmés ?",
       "listen": "Le scan des ports en écoute de l’hôte a échoué. Vérifie le montage de /proc vers /host/proc et les droits de lecture de l’utilisateur du conteneur. Pour une installation directe, vérifie que ss ou /proc est disponible.",
       "docker": "Le scan Docker a échoué. Vérifie le daemon, le montage du socket ou la connexion DOCKER_HOST. Un conteneur non-root doit aussi appartenir au groupe du socket de l’hôte via group_add ; utilise le GID de cette machine.",

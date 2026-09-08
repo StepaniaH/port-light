@@ -1,5 +1,5 @@
 /* Explanations derived from the current occupancy response, including older peers. */
-import { t, escapeHtml } from './text.js?v=90';
+import { t, escapeHtml } from './text.js?v=92';
 
 export function scanDiagnosticKeys(summary = {}) {
   if (summary.scan_complete === true && !summary.stale) return [];
@@ -26,11 +26,19 @@ export function scanWarningMarkup(summary, hostId, context) {
   const needsConfig = keys.some(key => key !== 'stale' && key !== 'unknown');
   const copy = key => escapeHtml(t('scanner.diagnostics.' + key));
   const key = [context, hostId, ...keys].join(':');
+  const diagnostics = !summary.stale && Array.isArray(summary.compose_diagnostics)
+    ? summary.compose_diagnostics.slice(0, 8).filter(row => row &&
+      ['port_range', 'port_budget', 'invalid_file'].includes(row.code)) : [];
+  const details = diagnostics.map(row => '<p>' + escapeHtml(t('scanner.diagnostics.' + row.code, {
+    file: typeof row.file === 'string' ? row.file : '',
+    range: typeof row.range === 'string' ? row.range : '',
+    limit: Number.isInteger(row.limit) ? row.limit : '',
+  })) + '</p>').join('');
   return '<details class="scan-warning" data-scan-warning="' + escapeHtml(key) + '">' +
     '<summary>' + escapeHtml(t('scanner.snapshotUnavailable')) +
     ' <span class="scan-warning-info" aria-hidden="true">ⓘ</span></summary>' +
     '<div class="scan-warning-panel"><strong>' + copy('title') + '</strong>' +
-    keys.map(key => '<p>' + copy(key) + '</p>').join('') +
+    keys.map(key => '<p>' + copy(key) + '</p>').join('') + details +
     (needsConfig ? '<p>' + copy('selection') + '</p><p>' + copy('upgrade') + '</p>' : '') +
     (!local ? '<p>' + copy('remote') + '</p>' : '') +
     '<div class="scan-warning-links">' +
