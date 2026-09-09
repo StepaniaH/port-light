@@ -60,14 +60,18 @@ def main() -> int:
     secret = os.environ.get('DOCKERHUB_TOKEN', '')
     if not username or not secret:
         parser.error('DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are required for publication')
+    phase = 'authentication'
     try:
         token = request('POST', '/v2/auth/token', {'identifier': username, 'secret': secret})['access_token']
+        phase = 'repository update'
         request('PATCH', '/v2/repositories/' + REPOSITORY, {
             'description': 'Host port occupancy from listeners, Docker mappings, and Compose declarations.',
             'full_description': description,
         }, token)
     except urllib.error.HTTPError as exc:
-        print(f'Docker Hub description update failed (HTTP {exc.code}).', file=sys.stderr)
+        print(f'Docker Hub {phase} failed (HTTP {exc.code}).', file=sys.stderr)
+        if exc.code == 403 and phase == 'repository update':
+            print('Repository description updates require a PAT with Read, Write & Delete permission and repository admin access.', file=sys.stderr)
         return 1
     except (OSError, ValueError, KeyError):
         print('Docker Hub description update failed; check connectivity and credentials.', file=sys.stderr)

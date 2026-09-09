@@ -4,6 +4,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Fixed
+
+- Identify Docker Hub authentication and repository-update failures separately and document the token permissions needed to synchronize the description.
+
 ## 0.8.3 — 2026-09-09
 
 ### Added

@@ -27,3 +27,24 @@ def test_unraid_template_and_profile_have_installation_metadata():
     assert fields['/host/proc'].text == '/proc'
     assert fields['AUTH_PASSWORD'].attrib['Mask'] == 'true'
     assert fields['AGENT_TOKEN'].attrib['Mask'] == 'true'
+
+
+def test_dockerhub_reports_permission_failure_without_leaking_response(monkeypatch, capsys):
+    from io import BytesIO
+    import urllib.error
+    from scripts import dockerhub_description as hub
+
+    monkeypatch.setattr('sys.argv', ['dockerhub_description', '--publish'])
+    monkeypatch.setenv('DOCKERHUB_USERNAME', 'example-user')
+    monkeypatch.setenv('DOCKERHUB_TOKEN', 'secret-pat-value')
+    for failed_method, expected_phase in [('POST', 'authentication'), ('PATCH', 'repository update')]:
+        def request(method, path, body, token=''):
+            if method == failed_method:
+                raise urllib.error.HTTPError(path, 403, 'secret-error-detail', {}, BytesIO(b'secret-response-body'))
+            return {'access_token': 'secret-bearer-value'}
+        monkeypatch.setattr(hub, 'request', request)
+        assert hub.main() == 1
+        output = capsys.readouterr()
+        assert f'Docker Hub {expected_phase} failed (HTTP 403)' in output.err
+        assert ('Read, Write & Delete' in output.err) == (failed_method == 'PATCH')
+        assert 'secret-' not in output.err + output.out
