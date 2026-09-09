@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CommunityApplications>
+  <Profile>Port-Light displays host port occupancy from listeners, Docker mappings, and Compose declarations. Source code, documentation, and issue tracking are maintained in this repository.</Profile>
+  <Icon>https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/icon.png</Icon>
+  <WebPage>https://github.com/StepaniaH/port-light</WebPage>
+</CommunityApplications>

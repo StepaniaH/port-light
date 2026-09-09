@@ -403,3 +403,21 @@ def test_transport_distinguishes_actionable_failures(status, server_code, expect
     with pytest.raises(PortLightError) as caught:
         transport.request('GET', '/api/meta')
     assert caught.value.code == expected
+
+
+def test_rule_capability_is_required_before_any_allocation():
+    transport = FakeTransport()
+    client = PortLightClient(transport=transport)
+    with pytest.raises(PortLightError):
+        client.reserve_ports(rule='development', request_key='k' * 43)
+    assert all(path == '/api/meta' for _, path, _ in transport.requests)
+
+
+def test_named_rule_reaches_post_body():
+    response = suggestion_response(ports=[28000], start=28000, end=28010,
+                                   reservations=[{'port': 28000, 'token': 'release-me', 'expires_at': 123}])
+    transport = FakeTransport(response, meta_response={'capabilities': {**CAPABILITIES, 'port_rules': 1}})
+    client = PortLightClient(transport=transport)
+    client.reserve_ports(rule='development', request_key='k' * 43)
+    assert transport.body['rule'] == 'development'
+    assert transport.requests[-1][0:2] == ('POST', '/api/reservations')

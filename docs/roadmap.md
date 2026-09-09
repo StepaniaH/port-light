@@ -8,11 +8,10 @@ Release history belongs in [CHANGELOG.md](../CHANGELOG.md). This page lists plan
 
 These items depend on user feedback and are not scheduled:
 
-- Declarative port ranges and policy checks
 - Additional read-only collectors such as Podman or TrueNAS
-- Community Applications packaging for Unraid
-- Review the Settings page information architecture after collecting CLI usage
-  feedback. The current four-panel layout remains supported.
+- Complete Community Applications validation on an Unraid host and submit the prepared template
+- Extend project grouping to runtime-only containers after collecting usage feedback
+- Add rule selection to contiguous block reservations
 
 ## Out of scope
 

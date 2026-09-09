@@ -145,7 +145,7 @@ Required mappings:
 
 Use a `v*` tag, not `latest`. Do not enable privileged mode. Optional: `AUTH_USER` / `AUTH_PASSWORD` / `HIDDEN_UNLOCK_PASSWORD`.
 
-Community Applications listing is a separate templates repository; this XML is the starting point.
+The repository also includes `ca_profile.xml` for Community Applications submission. The app is not yet listed; see [the template and submission instructions](../deploy/unraid/README.md).
 
 ## Podman
 

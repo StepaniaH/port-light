@@ -1,14 +1,19 @@
+import { automationCardsHtml, ensureAutomationDelegates } from './settings-automation.js?v=93';
+export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=93';
+import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=93';
+export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=93';
+import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=93';
+export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=93';
+import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=93';
+export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=93';
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable, applyAppearance, persistAppearance, saveView } from './state.js?v=92';
-import { t, tx, escapeHtml, errorText } from './text.js?v=92';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=92';
-import { moveChipFocus } from './a11y.js?v=92';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=92';
-import { api, fetchHosts, fetchSettings } from './api.js?v=92';
-import { hasPeers, hostById, hostName } from './hosts.js?v=92';
-import { bindAddressView } from './grid.js?v=92';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=92';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=93';
+import { t, escapeHtml, errorText } from './text.js?v=93';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=93';
+import { api, fetchHosts, fetchSettings } from './api.js?v=93';
+import { bindAddressView } from './grid.js?v=93';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=93';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -140,10 +145,6 @@ function settingValuesEqual(left, right) {
     return t('settings.fields.' + f.key + '.help');
   }
 
-  export function choiceLabel(c) {
-    return t('choice.' + c);
-  }
-
   export function formatRefreshInterval(value) {
     const ms = Math.max(1000, Number(value) || 5000);
     if (ms >= 60000 && ms % 60000 === 0) {
@@ -222,12 +223,6 @@ function settingValuesEqual(left, right) {
     input.setAttribute('aria-valuetext', output.textContent);
     syncRefreshCapacity();
     return true;
-  }
-
-  export function settingsCard(titleKey, blurbKey, rowsHtml) {
-    return '<section class="settings-card"><header class="settings-card-head"><h2 data-i18n="' + titleKey + '">' +
-      escapeHtml(t(titleKey)) + '</h2><p data-i18n="' + blurbKey + '">' +
-      escapeHtml(t(blurbKey)) + '</p></header><div class="settings-card-body">' + rowsHtml + '</div></section>';
   }
 
   export function settingsPanelHtml(id, inner) {
@@ -342,14 +337,6 @@ function settingValuesEqual(left, right) {
     persistAppearance();
   }
 
-  export function kvRow(labelKey, value, valueKey) {
-    const val = valueKey
-      ? '<span class="kv-val" data-i18n="' + valueKey + '">' + escapeHtml(String(value == null ? '' : value)) + '</span>'
-      : '<span class="kv-val">' + escapeHtml(String(value == null ? '' : value)) + '</span>';
-    return '<div class="kv-row"><span class="kv-key" data-i18n="' + labelKey + '">' +
-      escapeHtml(t(labelKey)) + '</span>' + val + '</div>';
-  }
-
   function originMetaContents(f) {
     const sourceKey = f.origin === 'file' ? 'settings.origin.saved'
       : f.origin === 'env' ? 'settings.origin.env' : '';
@@ -407,187 +394,6 @@ function settingValuesEqual(left, right) {
         help.setAttribute('data-i18n', key);
         help.textContent = t(key);
       }
-    });
-  }
-
-  export function localeCopyHtml(c) {
-    var native;
-    var nativeAttr;
-    var localKey;
-    if (c === 'auto') {
-      native = t('choice.auto');
-      nativeAttr = ' data-i18n="choice.auto"';
-      localKey = 'localeName.auto';
-    } else {
-      native = t('localeNative.' + c);
-      nativeAttr = '';
-      localKey = 'localeName.' + c;
-    }
-    return '<span class="locale-copy"><span class="locale-endonym"' + nativeAttr + '>' +
-      escapeHtml(native) + '</span><span class="locale-exonym" data-i18n="' + localKey + '">' +
-      escapeHtml(t(localKey)) + '</span></span>';
-  }
-
-  export function closeLocaleMenu(opts) {
-    const drop = document.querySelector('.locale-dropdown.is-open');
-    if (!drop) return false;
-    drop.classList.remove('is-open');
-    const btn = drop.querySelector('.locale-trigger');
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-    if (opts && opts.focusTrigger && btn) btn.focus();
-    return true;
-  }
-
-  export function moveLocaleHighlight(delta) {
-    const drop = document.querySelector('.locale-dropdown.is-open');
-    if (!drop) return;
-    const rows = Array.prototype.slice.call(drop.querySelectorAll('.locale-row'));
-    if (!rows.length) return;
-    let i = rows.indexOf(document.activeElement);
-    if (delta === 'start') i = 0;
-    else if (delta === 'end') i = rows.length - 1;
-    else if (i < 0) i = 0;
-    else i = (i + delta + rows.length) % rows.length;
-    rows[i].focus();
-  }
-
-  export function syncLocaleTrigger() {
-    const drop = document.querySelector('.locale-dropdown');
-    if (!drop) return;
-    const input = drop.querySelector('input[name="locale"]');
-    const dest = drop.querySelector('.locale-trigger .locale-copy');
-    if (!input || !dest) return;
-    const row = drop.querySelector('.locale-row[data-value="' + input.value + '"] .locale-copy');
-    if (row) dest.innerHTML = row.innerHTML;
-  }
-
-  export function renderLocaleList(choices, value, disabled) {
-    const current = choices.indexOf(value) >= 0 ? value : 'auto';
-    const label = escapeHtml(t('settings.fields.locale.label'));
-    const rows = choices.map(function (c) {
-      const on = c === current;
-      const id = 'locale-opt-' + c;
-      return '<button type="button" class="locale-row' + (on ? ' is-selected' : '') +
-        '" id="' + escapeHtml(id) + '" data-value="' + escapeHtml(c) + '" role="option" aria-selected="' + (on ? 'true' : 'false') + '"' +
-        disabled + '>' + localeCopyHtml(c) + '<span class="locale-check" aria-hidden="true"></span></button>';
-    }).join('');
-    return '<div class="locale-dropdown">' +
-      '<input type="hidden" name="locale" value="' + escapeHtml(current) + '"' + disabled + '>' +
-      '<button type="button" class="locale-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="locale-menu" aria-label="' +
-      label + '"' + disabled + '>' +
-      localeCopyHtml(current) + '<span class="locale-caret" aria-hidden="true"></span></button>' +
-      '<div class="locale-menu" id="locale-menu" role="listbox" aria-label="' + label + '">' + rows + '</div></div>';
-  }
-
-  function modeSwatch(c, current, disabled) {
-    const on = c === current;
-    const preview = c === 'system'
-      ? '<span class="theme-swatch-preview is-system" aria-hidden="true">' +
-        '<span class="theme-swatch-half dark"></span><span class="theme-swatch-half light"></span></span>'
-      : '<span class="theme-swatch-preview" aria-hidden="true"><i class="used"></i><i class="configured"></i><i class="free"></i></span>';
-    return '<label class="theme-swatch" data-theme-preview="' + escapeHtml(c) + '">' +
-      '<input type="radio" name="theme_mode" value="' + escapeHtml(c) + '"' +
-      (on ? ' checked' : '') + disabled + '>' + preview +
-      '<span class="theme-swatch-name" data-i18n="choice.' + c + '">' +
-      escapeHtml(choiceLabel(c)) + '</span></label>';
-  }
-
-  export function renderModePicker(choices, value, disabled) {
-    const current = choices.indexOf(value) >= 0 ? value : 'system';
-    const label = escapeHtml(t('settings.fields.theme_mode.label'));
-    const core = CORE_THEMES.filter(function (c) { return choices.indexOf(c) >= 0; });
-    return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' +
-      '<div class="theme-picker-core">' + core.map(function (c) {
-        return modeSwatch(c, current, disabled);
-      }).join('') + '</div></div>';
-  }
-
-  function currentMode() {
-    let prefersLight = false;
-    try {
-      prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-    } catch (e) {}
-    return resolveMode(S.settings.theme_mode || 'system', prefersLight);
-  }
-
-  export function renderPalettePicker(choices, value, resolvedModeValue, disabled) {
-    const current = choices.indexOf(value) >= 0 ? value : '';
-    const mode = resolvedModeValue || currentMode();
-    const label = escapeHtml(t('settings.fields.theme_palette.label'));
-
-    function previewId(family) {
-      if (mode === 'light' && PALETTE_VARIANTS[family].indexOf('light') >= 0) {
-        return family + '-light';
-      }
-      return family;
-    }
-
-    function entry(family) {
-      const on = family === current;
-      const available = family === '' || paletteAvailable(family, mode);
-      const cls = available ? 'theme-swatch' : 'theme-swatch is-unavailable';
-      const dis = available ? disabled : ' disabled';
-      const previewIdResolved = family === '' ? mode : previewId(family);
-      const preview = '<span class="theme-swatch-preview" aria-hidden="true">' +
-        '<i class="used"></i><i class="configured"></i><i class="free"></i></span>';
-      const nameKey = family === '' ? 'settings.theme.builtin' : 'choice.' + family;
-      const nameText = family === '' ? escapeHtml(t('settings.theme.builtin')) : escapeHtml(choiceLabel(family));
-      return '<label class="' + cls + '" data-theme-preview="' + escapeHtml(previewIdResolved) + '">' +
-        '<input type="radio" name="theme_palette" value="' + escapeHtml(family) + '"' +
-        (on ? ' checked' : '') + dis + '>' + preview +
-        '<span class="theme-swatch-name" data-i18n="' + nameKey + '">' + nameText + '</span></label>';
-    }
-
-    const families = choices.filter(function (c) { return c !== ''; });
-
-    function customEntry(theme) {
-      const sel = CUSTOM_PREFIX + theme.id;
-      const on = sel === current;
-      const available = theme.mode === mode;
-      const cls = available ? 'theme-swatch is-custom' : 'theme-swatch is-custom is-unavailable';
-      const dis = available ? disabled : ' disabled';
-      const dots = ['used', 'configured', 'free'].map(function (kind) {
-        return '<i class="' + kind + '" style="background:' + escapeHtml(theme.colors[kind]) + '"></i>';
-      }).join('');
-      return '<span class="' + cls + '" data-theme-preview="">' +
-        '<label><input type="radio" name="theme_palette" value="' + escapeHtml(sel) + '"' +
-        (on ? ' checked' : '') + dis + '>' +
-        '<span class="theme-swatch-preview" aria-hidden="true">' + dots + '</span>' +
-        '<span class="theme-swatch-name"><span class="custom-name">' + escapeHtml(theme.name) +
-        '</span><em class="theme-badge">' + escapeHtml(t('settings.theme.customBadge')) + '</em></span></label>' +
-        '<button type="button" class="btn-delete" data-delete-theme="' + escapeHtml(theme.id) + '"' +
-        disabled + '>' + escapeHtml(t('hosts.remove')) + '</button></span>';
-    }
-
-    const customs = S.customThemes || [];
-
-    return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' +
-      '<p class="theme-picker-label" data-i18n="settings.theme.palettes">' +
-      escapeHtml(t('settings.theme.palettes')) + '</p>' +
-      '<div class="theme-picker-palettes">' + entry('').concat(families.map(entry).join(''), customs.map(customEntry).join('')) + '</div></div>';
-  }
-
-  export function syncPaletteAvailability() {
-    const mode = currentMode();
-    const readonly = !!(S.settingsDoc && S.settingsDoc.readonly);
-    document.querySelectorAll('.theme-swatch[data-theme-preview]').forEach(function (labelEl) {
-      const input = labelEl.querySelector('input[name="theme_palette"]');
-      if (!input) return;
-      const family = input.value;
-      if (family.indexOf(CUSTOM_PREFIX) === 0) {
-        const id = family.slice(CUSTOM_PREFIX.length);
-        const themeRow = (S.customThemes || []).find(function (x) { return x.id === id; });
-        const ok = !!themeRow && themeRow.mode === mode;
-        input.disabled = readonly || !ok;
-        labelEl.classList.toggle('is-unavailable', !ok);
-        return;
-      }
-      const previewId = family === '' ? mode
-        : (PALETTE_VARIANTS[family].indexOf('light') >= 0 && mode === 'light' ? family + '-light' : family);
-      labelEl.setAttribute('data-theme-preview', previewId);
-      const available = family === '' || paletteAvailable(family, mode);
-      input.disabled = readonly || !available;
-      labelEl.classList.toggle('is-unavailable', !available);
     });
   }
 
@@ -951,279 +757,6 @@ function settingValuesEqual(left, right) {
     syncDependentSettings();
     setPageStatus('settings-status', 'settings.unsaved', '', 0);
     return true;
-  }
-
-  export function renderPeersEditor(readonly) {
-    const host = document.getElementById('settings-peers');
-    if (!host) return;
-    const locked = !!readonly;
-    const rows = (S.peersDraft || []).map(function (row, i) {
-      const disabled = locked ? ' disabled' : '';
-      const keep = row.has_auth && !row.clear_auth
-        ? ' placeholder="' + escapeHtml(t('hosts.passwordKeep')) + '"'
-        : '';
-      const open = row.id ? '' : ' open';
-      return '<details class="peer-row" data-peer-index="' + i + '" data-peer-id="' +
-        escapeHtml(row.id || '') + '" data-has-auth="' + (row.has_auth && !row.clear_auth ? '1' : '0') + '"' + open + '>' +
-        '<summary class="peer-row-summary"><span class="peer-summary-name">' +
-        escapeHtml(row.name || t('hosts.namePlaceholder')) + '</span><span class="peer-summary-url">' +
-        escapeHtml(row.url || t('hosts.urlPlaceholder')) + '</span></summary><div class="peer-row-fields">' +
-        '<label><span data-i18n="hosts.name">' + escapeHtml(t('hosts.name')) + '</span>' +
-        '<input data-peer-field="name" maxlength="40" value="' + escapeHtml(row.name || '') +
-        '" placeholder="' + escapeHtml(t('hosts.namePlaceholder')) + '"' + disabled + '></label>' +
-        '<label><span data-i18n="hosts.url">' + escapeHtml(t('hosts.url')) + '</span>' +
-        '<input data-peer-field="url" value="' + escapeHtml(row.url || '') +
-        '" placeholder="' + escapeHtml(t('hosts.urlPlaceholder')) + '"' + disabled + '></label>' +
-        '<label class="peer-description-field"><span data-i18n="hosts.description">' +
-        escapeHtml(t('hosts.description')) + '</span>' +
-        '<input data-peer-field="description" maxlength="120" value="' + escapeHtml(row.description || '') +
-        '" placeholder="' + escapeHtml(t('hosts.descriptionPlaceholder')) + '"' + disabled + '></label>' +
-        '<label><span data-i18n="hosts.username">' + escapeHtml(t('hosts.username')) + '</span>' +
-        '<input data-peer-field="username" autocomplete="off" value="' + escapeHtml(row.username || '') +
-        '"' + disabled + '></label>' +
-        '<label><span data-i18n="hosts.password">' + escapeHtml(t('hosts.password')) + '</span>' +
-        '<input type="password" data-peer-field="password" autocomplete="new-password" value="' +
-        escapeHtml(row.password || '') + '"' + keep + disabled + '></label>' +
-        '<div class="peer-row-actions">' +
-        (row.has_auth && !row.clear_auth
-          ? '<button type="button" class="btn-secondary" data-peer-clear-auth' + disabled + '>' +
-            escapeHtml(t('hosts.clearAuth')) + '</button>'
-          : '') +
-        '<button type="button" class="btn-secondary" data-peer-remove' + disabled + '>' +
-        escapeHtml(t('hosts.remove')) + '</button></div></div></details>';
-    }).join('');
-    const maxPeers = Number(S.hostCatalog.max_peers) || 32;
-    const canAdd = !locked && S.peersDraft.length < maxPeers;
-    host.innerHTML = '<div class="peer-list">' + rows + '</div>' +
-      '<p class="field-help" data-peer-limit>' + escapeHtml(t('hosts.max', { count: maxPeers })) + '</p>' +
-      '<p class="field-help" data-i18n="hosts.dockerHint">' + escapeHtml(t('hosts.dockerHint')) + '</p>' +
-      '<button type="button" class="btn-secondary" id="peer-add"' + (canAdd ? '' : ' disabled') + '>' +
-      escapeHtml(t('hosts.add')) + '</button>';
-    syncRefreshCapacity();
-  }
-
-  export function readPeersDraftFromForm() {
-    const host = document.getElementById('settings-peers');
-    if (!host) return;
-    const rows = host.querySelectorAll('.peer-row');
-    const next = [];
-    rows.forEach(function (row, i) {
-      const prev = S.peersDraft[i] || {};
-      next.push({
-        id: row.getAttribute('data-peer-id') || prev.id || '',
-        name: ((row.querySelector('[data-peer-field="name"]') || {}).value || ''),
-        description: ((row.querySelector('[data-peer-field="description"]') || {}).value || ''),
-        url: ((row.querySelector('[data-peer-field="url"]') || {}).value || ''),
-        username: ((row.querySelector('[data-peer-field="username"]') || {}).value || ''),
-        password: ((row.querySelector('[data-peer-field="password"]') || {}).value || ''),
-        has_auth: row.getAttribute('data-has-auth') === '1' || !!prev.has_auth,
-        clear_auth: !!prev.clear_auth,
-      });
-    });
-    S.peersDraft = next;
-  }
-
-  export function peersPayload() {
-    readPeersDraftFromForm();
-    const rows = document.getElementById('settings-peers').querySelectorAll('.peer-row');
-    return S.peersDraft.map(function (row, index) {
-      const name = String(row.name || '').trim();
-      const url = String(row.url || '').trim();
-      if (!row.id && name && url) {
-        row.id = Array.from(crypto.getRandomValues(new Uint8Array(4)), function (byte) {
-          return byte.toString(16).padStart(2, '0');
-        }).join('');
-        rows[index].setAttribute('data-peer-id', row.id);
-      }
-      const item = { name: name, url: url };
-      if (row.id) item.id = row.id;
-      item.description = String(row.description || '').trim();
-      if (row.clear_auth) {
-        item.username = '';
-        item.password = '';
-        return item;
-      }
-      if (row.username) item.username = row.username;
-      if (row.password) item.password = row.password;
-      return item;
-    });
-  }
-
-  export function syncSavedPeerRows() {
-    document.getElementById('settings-peers').querySelectorAll('.peer-row').forEach(function (row, index) {
-      const peer = S.peersDraft[index];
-      if (!peer) return;
-      row.setAttribute('data-peer-id', peer.id);
-      row.setAttribute('data-has-auth', peer.has_auth ? '1' : '0');
-      row.querySelector('.peer-summary-name').textContent = peer.name;
-      row.querySelector('.peer-summary-url').textContent = peer.url;
-      const password = row.querySelector('[data-peer-field="password"]');
-      password.setAttribute('placeholder', peer.has_auth ? t('hosts.passwordKeep') : '');
-      // A pause while typing can trigger a save; do not interrupt that input.
-      if (document.activeElement !== password) {
-        password.value = '';
-        password.removeAttribute('value');
-      }
-      const clear = row.querySelector('[data-peer-clear-auth]');
-      if (!peer.has_auth && clear) clear.remove();
-      if (peer.has_auth && !clear) {
-        const button = document.createElement('button');
-        button.setAttribute('type', 'button');
-        button.className = 'btn-secondary';
-        button.setAttribute('data-peer-clear-auth', '');
-        button.setAttribute('data-i18n', 'hosts.clearAuth');
-        button.textContent = t('hosts.clearAuth');
-        row.querySelector('.peer-row-actions').insertBefore(button, row.querySelector('[data-peer-remove]'));
-      }
-    });
-  }
-
-  function snippetBlock(captionKey, id, code) {
-    return '<div class="snippet"><p class="snippet-cap">' + escapeHtml(t(captionKey)) + '</p>' +
-      '<div class="snippet-body"><pre id="' + id + '">' + escapeHtml(code) + '</pre>' +
-      '<button type="button" class="btn-secondary" data-copy="' + id + '" data-label="' +
-      escapeHtml(t('settings.auto.connect.copy')) + '">' +
-      escapeHtml(t('settings.auto.connect.copy')) + '</button></div></div>';
-  }
-
-  export function automationCardsHtml(a) {
-    const origin = location.origin;
-    const port = Number(a.listen_port) > 0 ? String(a.listen_port) : '<port>';
-    const dockerEnv = { PORT_LIGHT_URL: 'http://127.0.0.1:' + port };
-    const sourceEnv = { PORT_LIGHT_URL: origin };
-    if (a.agent_token) {
-      dockerEnv.PORT_LIGHT_AGENT_TOKEN = '<your-token>';
-      sourceEnv.PORT_LIGHT_AGENT_TOKEN = '<your-token>';
-    }
-    const mcpDocker = JSON.stringify({
-      mcpServers: {
-        'port-light': {
-          command: 'docker',
-          args: ['exec', '-i', 'port-light', 'python', 'mcp/server.py'],
-          env: dockerEnv,
-        },
-      },
-    }, null, 2);
-    const mcpSource = JSON.stringify({
-      mcpServers: {
-        'port-light': {
-          command: 'python',
-          args: ['/path/to/port-light/mcp/server.py'],
-          env: sourceEnv,
-        },
-      },
-    }, null, 2);
-    let curl = 'curl -s "' + origin + '/api/ports/suggest?count=2"';
-    if (a.agent_token) curl += ' \\\n  -H "X-Agent-Token: <your-token>"';
-
-    const connect =
-      snippetBlock('settings.auto.connect.mcpDocker', 'al-mcp-docker', mcpDocker) +
-      '<p class="muted">' + escapeHtml(t('settings.auto.connect.dockerHint')) + '</p>' +
-      snippetBlock('settings.auto.connect.mcpSource', 'al-mcp-src', mcpSource) +
-      snippetBlock('settings.auto.connect.skill', 'al-skill',
-        'docker exec port-light cat /app/skills/port-light/SKILL.md' +
-        ' > ~/.claude/skills/port-light/SKILL.md') +
-      '<p class="muted">' + escapeHtml(t('settings.auto.connect.skillHint')) + '</p>' +
-      snippetBlock('settings.auto.connect.curl', 'al-curl', curl) +
-      (a.agent_token ? '<p class="muted">' + escapeHtml(t('settings.auto.connect.curlToken')) + '</p>' : '');
-
-    const statusRows = [
-      kvRow('settings.auto.agentToken',
-        t(a.agent_token ? 'settings.on' : 'settings.off'),
-        a.agent_token ? 'settings.on' : 'settings.off'),
-      kvRow('settings.auto.suggest', t('settings.auto.suggestValue'), 'settings.auto.suggestValue'),
-      kvRow('settings.auto.metrics', t(a.metrics ? 'settings.on' : 'settings.off'), ''),
-      kvRow('settings.auto.webhook', t(a.webhook ? 'settings.on' : 'settings.off'), ''),
-      kvRow('settings.auto.history', a.history_days > 0 ? String(a.history_days) : t('settings.off'), ''),
-      kvRow('settings.auto.events', t(a.events_stream ? 'settings.on' : 'settings.off'), ''),
-    ].join('');
-
-    const ev = a.agent_events || null;
-    const activity = ev
-      ? '<p class="auto-summary" data-auto-summary>' +
-        escapeHtml(t('settings.auto.activity.total')) + ': ' + ev.total + ' · ' +
-        escapeHtml(t('settings.auto.activity.activeLeases')) + ': ' + (ev.active_leases || 0) + ' · ' +
-        escapeHtml(t('settings.auto.activity.lastUsed', {
-          time: ev.last_used_at ? formatAgo(ev.last_used_at) : t('settings.auto.activity.never'),
-        })) + '</p>' +
-        '<table class="auto-table"><thead><tr>' +
-        ['thTime', 'thCount', 'thScope', 'thLabel', 'thLeased']
-          .map(k => '<th>' + escapeHtml(t('settings.auto.activity.' + k)) + '</th>').join('') +
-        '</tr></thead><tbody>' +
-        (ev.recent || []).map(r =>
-          '<tr><td>' + new Date(r.ts * 1000).toLocaleString() + '</td><td>' + r.count +
-          '</td><td>' + escapeHtml(r.scope) + '</td><td>' + escapeHtml(r.label || '—') +
-          '</td><td>' + (r.leased ? '✓' : '—') + '</td></tr>').join('') +
-        '</tbody></table>'
-      : '<p class="muted" data-auto="activity-disabled">' +
-        escapeHtml(t('settings.auto.activity.disabled')) + '</p>';
-
-    const leases = ev && (ev.lease_rows || []).length
-      ? (ev.lease_rows).map(l =>
-        '<div class="lease-row"><span class="lease-port">' + l.port + '</span>' +
-        '<span class="lease-label">' + escapeHtml(l.label || '—') + '</span>' +
-        '<span class="lease-left">' + escapeHtml(t('settings.auto.leases.remaining',
-          { time: fmtRemaining(remainingSeconds(l.expires_at)) })) + '</span>' +
-        '<button type="button" class="btn-delete" data-release-port="' + l.port +
-        '" data-reservation="' + !!l.is_reservation + '">' +
-        escapeHtml(t('settings.auto.leases.release')) + '</button></div>').join('')
-      : '<p class="muted">' + escapeHtml(t('settings.auto.leases.none')) + '</p>';
-
-    return settingsCard('settings.auto.connect.title', 'settings.auto.connect.blurb', connect) +
-      settingsCard('settings.auto.status.title', 'settings.auto.status.blurb', statusRows) +
-      settingsCard('settings.auto.activity.title', 'settings.auto.activity.blurb', activity) +
-      settingsCard('settings.auto.leases.title', 'settings.auto.leases.blurb', leases);
-  }
-
-  export async function releaseLease(port, btn) {
-    const reservation = btn.getAttribute && btn.getAttribute('data-reservation') === 'true';
-    const token = reservation ? window.prompt(t('settings.auto.leases.tokenPrompt')) : '';
-    if (reservation && !token) return;
-    btn.disabled = true;
-    try {
-      const res = await api((reservation ? '/api/reservations/' : '/api/manual-ports/') + port, {
-        method: 'DELETE', headers: reservation ? { 'X-Reservation-Token': token } : {},
-      });
-      if (!res.ok) {
-        btn.disabled = false;
-        return;
-      }
-      const metaRes = await api('/api/meta');
-      if (metaRes.ok) S.meta = await metaRes.json();
-    } catch (err) {
-      btn.disabled = false;
-      return;
-    }
-    rerenderAutomationCards();
-  }
-
-  function rerenderAutomationCards() {
-    const panel = document.getElementById('settings-panel-automation');
-    if (!panel || !S.meta) return;
-    panel.innerHTML = automationCardsHtml(S.meta.automation || {});
-  }
-
-  let _delegated = false;
-  function ensureAutomationDelegates() {
-    if (_delegated) return;
-    _delegated = true;
-    document.addEventListener('click', function (e) {
-      const copyBtn = e.target.closest('[data-copy]');
-      if (copyBtn) {
-        const src = document.getElementById(copyBtn.getAttribute('data-copy'));
-        if (!src) return;
-        navigator.clipboard.writeText(src.textContent.trim()).then(function () {
-          copyBtn.textContent = t('settings.auto.connect.copied');
-          setTimeout(function () {
-            copyBtn.textContent = copyBtn.getAttribute('data-label') ||
-              t('settings.auto.connect.copy');
-          }, 1200);
-        }).catch(function () {});
-        return;
-      }
-      const relBtn = e.target.closest('[data-release-port]');
-      if (relBtn) releaseLease(Number(relBtn.getAttribute('data-release-port')), relBtn);
-    });
   }
 
   let _themeDelegated = false;
@@ -1817,3 +1350,5 @@ function settingValuesEqual(left, right) {
     };
     return controller;
   }
+
+export function renderPeersEditor(readonly) { return renderPeersEditorView(readonly, syncRefreshCapacity); }

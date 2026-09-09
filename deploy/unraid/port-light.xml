@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>port-light</Name>
-  <Repository>stepaniah/port-light:v0.7.0</Repository>
+  <Repository>stepaniah/port-light:v0.8.2</Repository>
   <Registry>https://hub.docker.com/r/stepaniah/port-light/</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -9,8 +9,8 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/StepaniaH/port-light/issues</Support>
   <Project>https://github.com/StepaniaH/port-light</Project>
-  <Overview>Port occupancy map for a Docker host. Merges listen tables, container mappings, and Compose declarations into a traffic-light grid. Can pull occupancy JSON from other Port-Light instances. Not a container manager — no start/stop/logs.</Overview>
-  <Category>Tools:</Category>
+  <Overview>Port occupancy map for a Docker host. Merges listen tables, container mappings, and Compose declarations into a traffic-light grid. Can pull occupancy JSON from other Port-Light instances. Includes a CLI and MCP server for port checks and reservations.</Overview>
+  <Category>Tools:Utilities</Category>
   <WebUI>http://[IP]:[PORT:2100]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/StepaniaH/port-light/main/deploy/unraid/port-light.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/icon.png</Icon>
@@ -20,17 +20,18 @@
   <DateInstalled/>
   <DonateText>Ko-fi</DonateText>
   <DonateLink>https://ko-fi.com/stepaniah</DonateLink>
-  <Requires>Do not enable privileged. Keep docker.sock and /proc read-only. Pin a version tag.</Requires>
+  <Requires>Requires a writable appdata directory. Configure both AUTH_USER and AUTH_PASSWORD to enable Basic Auth.</Requires>
   <Config Name="WebUI" Target="2100" Default="2100" Mode="tcp" Description="Port-Light web UI" Type="Port" Display="always" Required="true" Mask="false">2100</Config>
   <Config Name="Compose stacks" Target="/compose" Default="" Mode="ro" Description="Folder of compose projects (read-only)" Type="Path" Display="always" Required="true" Mask="false"/>
-  <Config Name="Docker socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="ro" Description="Docker socket (read-only)" Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
+  <Config Name="Docker socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="ro" Description="Docker API socket; a read-only mount does not restrict Docker API permissions" Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
   <Config Name="Host proc" Target="/host/proc" Default="/proc" Mode="ro" Description="Host /proc for listen detection (read-only)" Type="Path" Display="always" Required="true" Mask="false">/proc</Config>
-  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/port-light" Mode="rw" Description="JSON store for manual and hidden ports" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/port-light</Config>
-  <Config Name="AUTH_USER" Target="AUTH_USER" Default="" Description="Optional HTTP Basic Auth username" Type="Variable" Display="always" Required="false" Mask="false"/>
-  <Config Name="AUTH_PASSWORD" Target="AUTH_PASSWORD" Default="" Description="Optional HTTP Basic Auth password" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/port-light" Mode="rw" Description="Settings, reservations, manual entries, CLI credentials, and SQLite history" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/port-light</Config>
+  <Config Name="AUTH_USER" Target="AUTH_USER" Default="" Description="HTTP Basic Auth username; configure together with AUTH_PASSWORD" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="AUTH_PASSWORD" Target="AUTH_PASSWORD" Default="" Description="HTTP Basic Auth password; configure together with AUTH_USER" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="HIDDEN_UNLOCK_PASSWORD" Target="HIDDEN_UNLOCK_PASSWORD" Default="" Description="Optional password to reveal hidden ports in the API" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="AGENT_TOKEN" Target="AGENT_TOKEN" Default="" Description="Optional token required for allocation and recovery requests" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="COMPOSE_SCAN_DIR" Target="COMPOSE_SCAN_DIR" Default="/compose" Description="In-container compose scan path" Type="Variable" Display="advanced" Required="false" Mask="false">/compose</Config>
   <Config Name="URL_HOST" Target="URL_HOST" Default="" Description="Hostname for guessed http(s) links (optional)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="THEME" Target="THEME" Default="system" Description="system, dark, light, or a named palette (gruvbox, catppuccin, nord, …)" Type="Variable" Display="advanced" Required="false" Mask="false">system</Config>
-  <Config Name="LOCALE" Target="LOCALE" Default="auto" Description="auto, en, zh-CN, zh-TW, or ja" Type="Variable" Display="advanced" Required="false" Mask="false">auto</Config>
+  <Config Name="LOCALE" Target="LOCALE" Default="auto" Description="auto, en, fr, de, es, zh-CN, zh-TW, or ja" Type="Variable" Display="advanced" Required="false" Mask="false">auto</Config>
 </Container>

@@ -57,6 +57,7 @@ def test_meta_listen_port_none_when_unset(monkeypatch):
 def test_meta_advertises_client_capabilities():
     body = TestClient(app).get("/api/meta").json()
     assert body["capabilities"] == {
+        "port_rules": 1,
         "doctor": 1,
         "port_check": 1,
         "reservations": 1,

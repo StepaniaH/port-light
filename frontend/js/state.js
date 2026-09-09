@@ -65,6 +65,7 @@ export const S = {
   statusFilter: 'all',
   kindFilters: new Set(),
   sortMode: 'port-asc',
+  groupMode: 'none',
   searchTerm: '',
   searchPortNum: null,
   selectedPort: null,
@@ -214,6 +215,7 @@ export function saveView() {
   try {
     localStorage.setItem('port-light-view', JSON.stringify({
       sort: S.sortMode,
+      group: S.groupMode,
       status: S.statusFilter,
       kinds: Array.from(S.kindFilters),
       showHidden: S.showHidden,

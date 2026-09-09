@@ -140,3 +140,20 @@ jobs:
           body_path: release-notes.md
           generate_release_notes: false
           files: dist/*.whl
+
+  dockerhub-description:
+    needs: [build-and-push, github-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build-and-push.outputs.sha }}
+          persist-credentials: false
+      - name: Update Docker Hub description
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/dockerhub_description.py --ref "$RELEASE_TAG" --publish

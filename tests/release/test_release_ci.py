@@ -10,7 +10,7 @@ from scripts import check_release_ci as gate
 
 SHA = "a" * 40
 REPOSITORY = "example/port-light"
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def ci_run(**overrides):

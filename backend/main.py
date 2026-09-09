@@ -2,37 +2,34 @@
 
 from __future__ import annotations
 
+import sys
 import asyncio
 import sqlite3
 import logging
 import os
-import re
 import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
 from port_light_client import __version__
 
-from . import agent_events, degradations, doctor, history, hosts, port_store, themes
+from . import port_rules
+from . import agent_events, degradations, doctor, hosts, port_store, themes
 from . import settings as app_settings
 from .auth import (
-    auth_configuration_valid,
     auth_configured,
     basic_auth_middleware,
     hidden_ports_withheld,
     hidden_unlock_configured,
     request_may_see_hidden,
-    valid_basic_header,
 )
-from .classification import classify, free_port_payload
+from .classification import classify
 from .compose_scanner import ComposeScan, scan_compose_tree
 from .docker_scanner import HAS_DOCKER, scan_containers
-from .known_ports import get_known_port
 from .occupancy_monitor import OccupancyMonitor, SnapshotUnavailable, complete
 from .scan_status import SCANNER_NAMES, ScanUnavailable, enabled_scanners
 from .port_scanner import (
@@ -40,6 +37,9 @@ from .port_scanner import (
     listen_scan_source,
     scan_listening_ports,
 )
+
+from .routes import configuration, claims, occupancy, peers, diagnostics
+from .routes.diagnostics import _event_lines as _event_lines
 
 VERSION = __version__
 
@@ -113,35 +113,6 @@ app.middleware("http")(security_headers_middleware)
 _FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
-class ManualPortCreate(BaseModel):
-    port: int = Field(ge=1, le=65535)
-    label: str = ""
-    machine: str = "localhost"
-    ttl: int | None = Field(default=None, ge=60, le=604800)
-
-
-class ManualPortBatch(BaseModel):
-    start: int = Field(ge=1, le=65535)
-    end: int = Field(ge=1, le=65535)
-    label: str = ""
-
-
-class ManualPortUpdate(BaseModel):
-    label: str = ""
-    machine: str = "localhost"
-
-
-class ReservationCreate(BaseModel):
-    model_config = {"extra": "forbid"}
-    count: int = Field(default=1, ge=1, le=64)
-    start: int | None = Field(default=None, ge=1, le=65535)
-    end: int | None = Field(default=None, ge=1, le=65535)
-    label: str = Field(default="", max_length=256)
-    ttl: int | None = Field(default=None, ge=60, le=604800)
-    scope: str = Field(default="self", pattern="^(self|all)$")
-    require_count: bool = True
-
-
 def _compose_dir() -> str:
     return os.environ.get("COMPOSE_SCAN_DIR", "/compose")
 
@@ -174,70 +145,6 @@ def _listen_port() -> int | None:
         return int(raw) if raw else None
     except ValueError:
         return None
-
-
-@app.get("/api/meta")
-def meta(request: Request) -> dict:
-    automation = {
-        "agent_token": bool(os.environ.get("AGENT_TOKEN", "").strip()),
-        "metrics": os.environ.get("METRICS_ENABLED", "").strip().lower()
-                   in ("1", "true", "yes", "on"),
-        "webhook": bool(os.environ.get("WEBHOOK_URL", "").strip()),
-        "history_days": history.retention_days(),
-        "events_stream": True,
-        "suggest_peers": bool(hosts.list_public_peers()),
-        "listen_port": _listen_port(),
-    }
-    if agent_events.enabled():
-        leases = _active_leases(request)
-        automation["agent_events"] = {
-            **agent_events.summary(),
-            "active_leases": len(leases),
-            "lease_rows": leases,
-        }
-    return {
-        "version": VERSION,
-        "capabilities": {
-            "doctor": 1,
-            "port_check": 1,
-            "reservations": 1,
-            "exact_reservations": 1,
-            "idempotent_reservations": 1,
-            "reservation_release": 1,
-            "scope_all": 1,
-        },
-        "auth_required": auth_configured(),
-        "hidden_unlock_required": hidden_unlock_configured(),
-        "hidden_ports_withheld": hidden_ports_withheld(),
-        "settings_readonly": app_settings.settings_readonly(),
-        "automation": automation,
-    }
-
-
-@app.get("/api/health")
-def health(request: Request) -> dict:
-    monitor = _monitor.status()
-    sources = monitor["sources"]
-    recent = degradations.recent(5)
-    if ((auth_configured() and not valid_basic_header(request.headers.get("authorization") or ""))
-            or not request_may_see_hidden(request)):
-        recent = [
-            {key: value for key, value in event.items() if key != "scope"}
-            for event in recent
-        ]
-    return {
-        "status": "ok" if monitor["ready"] and auth_configuration_valid() else "degraded",
-        "version": VERSION,
-        "auth_required": auth_configured(),
-        "occupancy": monitor,
-        "scanners": {
-            "proc": sources.get("listen") == "ok",
-            "listen_source": listen_scan_source() if sources.get("listen") == "ok" else "none",
-            "docker": sources.get("docker") == "ok",
-            "compose": sources.get("compose") == "ok",
-        },
-        "degradations": recent,
-    }
 
 
 def _path_access(path: Path) -> tuple[bool, bool]:
@@ -293,62 +200,8 @@ def _doctor_document() -> dict:
     })
 
 
-@app.get("/api/doctor")
-def get_doctor() -> dict:
-    document = _doctor_document()
-    return {**document, "report": doctor.report_text(document)}
-
-
-@app.get("/api/doctor/report")
-def get_doctor_report() -> Response:
-    return Response(
-        content=doctor.report_text(_doctor_document()),
-        media_type="application/json",
-        headers={"Content-Disposition": 'attachment; filename="port-light-diagnostics.json"'},
-    )
-
-
 def _metrics_enabled() -> bool:
     return os.environ.get("METRICS_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
-
-
-@app.get("/api/metrics")
-def metrics() -> Response:
-    """Prometheus text exposition over the current occupancy snapshot.
-
-    Disabled unless ``METRICS_ENABLED`` is set. Aggregates only — the
-    endpoint never emits ports, names, or URLs. Hidden rows are included in
-    the aggregates (they are real occupancy) but never identified.
-    """
-    if not _metrics_enabled():
-        raise HTTPException(status_code=404, detail="not found")
-    values = _values()
-    snap = _monitor.latest(values)
-    result = _classify_snapshot(
-        snap, values, values["port_range_start"], values["port_range_end"])
-    summary = result["summary"]
-    lines = [
-        "# TYPE port_light_up gauge",
-        "port_light_up 1",
-        "# TYPE port_light_ready gauge",
-        f"port_light_ready {int(complete(snap))}",
-        "# TYPE port_light_ports gauge",
-        f'port_light_ports{{status="used"}} {summary["used"]}',
-        f'port_light_ports{{status="configured"}} {summary["configured"]}',
-        f'port_light_ports{{status="free"}} {summary["free"] if complete(snap) else "NaN"}',
-        "# TYPE port_light_hidden gauge",
-        f"port_light_hidden {summary['hidden']}",
-        "# TYPE port_light_degradations gauge",
-        f"port_light_degradations {len(degradations.recent(20))}",
-        "# TYPE port_light_compose_files gauge",
-        f"port_light_compose_files {snap['compose_scan'].files_scanned}",
-        "# TYPE port_light_compose_incomplete gauge",
-        f"port_light_compose_incomplete {1 if snap['compose_scan'].incomplete else 0}",
-    ]
-    return Response(
-        content="\n".join(lines) + "\n",
-        media_type="text/plain; version=0.0.4; charset=utf-8",
-    )
 
 
 def _scan_key(values: dict) -> tuple:
@@ -423,6 +276,7 @@ def _classify_snapshot(snap: dict, values: dict, start: int, end: int,
         options=values,
     )
 
+    port_rules.annotate(result["ports"], port_store.get_port_rules())
     if not hidden_locked:
         result["summary"]["compose_diagnostics"] = snap["compose_scan"].diagnostics
     if not complete(snap):
@@ -503,222 +357,19 @@ def _settings_document(body: dict | None = None) -> dict:
     return body
 
 
-@app.get("/api/settings")
-def get_settings() -> dict:
-    return _settings_document()
-
-
-@app.put("/api/settings")
-def put_settings(body: dict = Body(...)) -> dict:
-    try:
-        result = app_settings.apply_patch(body)
-        _monitor.state_changed()
-        return _settings_document(result)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.get("/api/custom-themes")
-def get_custom_themes() -> dict:
-    return {"themes": themes.list_themes()}
-
-
-@app.post("/api/custom-themes")
-def post_custom_theme(body: dict = Body(...)) -> dict:
-    if app_settings.settings_readonly():
-        raise HTTPException(status_code=403,
-                            detail="settings are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY")
-    try:
-        return themes.add_theme(body)
-    except themes.ThemeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.put("/api/custom-themes/{theme_id}")
-def put_custom_theme(theme_id: str, body: dict = Body(...)) -> dict:
-    if app_settings.settings_readonly():
-        raise HTTPException(status_code=403,
-                            detail="settings are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY")
-    try:
-        return themes.update_theme(theme_id, body)
-    except themes.ThemeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.delete("/api/custom-themes/{theme_id}")
-def delete_custom_theme(theme_id: str) -> dict:
-    if app_settings.settings_readonly():
-        raise HTTPException(status_code=403,
-                            detail="settings are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY")
-    if not themes.delete_theme(theme_id):
-        raise HTTPException(status_code=404, detail="no such theme")
-    current, _ = app_settings.resolve()
-    if current.get("theme_palette") == "@custom:" + theme_id:
-        app_settings.apply_patch({"theme_palette": ""})
-    return {"removed": theme_id}
-
-
-@app.get("/api/hosts")
-def get_hosts() -> dict:
-    try:
-        return hosts.catalog()
-    except hosts.HostsError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.put("/api/hosts")
-def put_hosts(body: dict = Body(...)) -> dict:
-    try:
-        hosts.replace_peers(body.get("peers") if isinstance(body, dict) else None)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except hosts.HostsError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _monitor.state_changed()
-    return hosts.catalog()
-
-
-@app.get("/api/hosts/{host_id}/health")
-def get_host_health(host_id: str, request: Request) -> Response:
-    if host_id == hosts.LOCAL_ID:
-        return JSONResponse(health(request))
-    return _proxy_peer(host_id, "/api/health", {})
-
-
-@app.get("/api/hosts/{host_id}/ports")
-def get_host_ports(
-    host_id: str,
-    request: Request,
-    range_start: int | None = Query(default=None, ge=1, le=65535),
-    range_end: int | None = Query(default=None, ge=1, le=65535),
-    include_hidden: bool = Query(default=False),
-) -> Response:
-    if host_id == hosts.LOCAL_ID:
-        return get_ports(request, range_start, range_end, include_hidden)
-    query: dict[str, str] = {"include_hidden": "true" if include_hidden else "false"}
-    if range_start is not None:
-        query["range_start"] = str(range_start)
-    if range_end is not None:
-        query["range_end"] = str(range_end)
-    return _proxy_peer(host_id, "/api/ports", query, request.headers.get("if-none-match"))
-
-
-@app.get("/api/hosts/{host_id}/ports/{port}")
-def get_host_port(
-    host_id: str,
-    port: int,
-    request: Request,
-    include_hidden: bool = Query(default=False),
-) -> Response:
-    if port < 1 or port > 65535:
-        raise HTTPException(status_code=400, detail="port out of range")
-    if host_id == hosts.LOCAL_ID:
-        return JSONResponse(get_port(port, request, include_hidden))
-    query = {"include_hidden": "true" if include_hidden else "false"}
-    return _proxy_peer(host_id, f"/api/ports/{port}", query, not_found_ok=True)
-
-
-def _proxy_peer(
-    host_id: str,
-    path: str,
-    query: dict[str, str],
-    if_none_match: str | None = None,
-    *,
-    not_found_ok: bool = False,
-) -> Response:
-    try:
-        peer = hosts.get_peer(host_id)
-    except hosts.HostsError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not peer:
-        raise HTTPException(status_code=404, detail="unknown host")
-    status, data, etag = hosts.fetch_peer_json(peer, path, query, if_none_match)
-    headers = {}
-    if etag:
-        headers["ETag"] = etag
-    if status == 304:
-        return Response(status_code=304, headers=headers)
-    if status == 200 and data is not None:
-        return JSONResponse(data, headers=headers)
-    if not_found_ok and status == 404:
-        raise HTTPException(status_code=404, detail="not found")
-    if status in (401, 403):
-        raise HTTPException(status_code=502, detail="peer authentication failed")
-    raise HTTPException(status_code=502, detail="peer unreachable")
-
-
-@app.get("/api/ports")
-def get_ports(
-    request: Request,
-    range_start: int | None = Query(default=None, ge=1, le=65535),
-    range_end: int | None = Query(default=None, ge=1, le=65535),
-    include_hidden: bool = Query(default=False),
-) -> Response:
-    _payload, body, etag = _packed_occupancy(request, range_start, range_end, include_hidden)
-    headers = {"ETag": etag}
-    if _etag_matched(request.headers.get("if-none-match"), etag):
-        return Response(status_code=304, headers=headers)
-    return Response(content=body, media_type="application/json", headers=headers)
-
-
-@app.get("/api/ports/suggest")
-async def suggest_ports(
-    request: Request,
-    count: int = Query(default=1, ge=1, le=64),
-    start: int | None = Query(default=None, ge=1, le=65535),
-    end: int | None = Query(default=None, ge=1, le=65535),
-    reserve: bool = Query(default=False),
-    label: str = Query(default=""),
-    ttl: int | None = Query(default=None, ge=60, le=604800),
-    scope: str = Query(default="self", pattern="^(self|all)$"),
-    require_count: bool = Query(default=False),
-) -> dict:
-    """Read-only planning; mutations require the recoverable POST interface."""
-    _require_agent_token(request)
-    if reserve or ttl is not None:
-        raise HTTPException(status_code=405, detail="use POST /api/reservations with an Idempotency-Key; upgrade CLI/MCP clients")
-    return await _suggest(count, start, end, label, ttl, scope, require_count)
-
-
-def _reservation_key(request: Request) -> str:
-    key = request.headers.get("idempotency-key", "")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{43,128}", key):
-        raise HTTPException(status_code=400, detail="Idempotency-Key must be a retained random URL-safe secret of 43–128 characters")
-    return key
-
-
-@app.post("/api/reservations")
-async def create_reservation(body: ReservationCreate, request: Request) -> dict:
-    _require_agent_token(request)
-    if body.start is not None and body.end is not None and body.start > body.end:
-        raise HTTPException(status_code=400, detail="end must be greater than or equal to start")
-    key = _reservation_key(request)
-    parameters = body.model_dump()
-    existing = await asyncio.to_thread(port_store.reservation_request, key, parameters)
-    if existing is not None:
-        return existing
-    return await _suggest(**parameters, request_key=key)
-
-
-@app.get("/api/reservations/request")
-def recover_reservation(request: Request) -> dict:
-    _require_agent_token(request)
-    result = port_store.reservation_request(_reservation_key(request))
-    if result is None:
-        raise HTTPException(status_code=404, detail="reservation request not found")
-    return result
-
-
 async def _suggest(count: int, start: int | None, end: int | None, label: str,
                    ttl: int | None, scope: str, require_count: bool,
-                   request_key: str | None = None) -> dict:
+                   request_key: str | None = None, rule: str | None = None) -> dict:
     values = _values()
     lo = start if start is not None else values["port_range_start"]
     hi = end if end is not None else values["port_range_end"]
     if hi < lo:
         lo, hi = hi, lo
+    if rule is not None:
+        try:
+            lo, hi = port_rules.allocation_range(port_store.get_port_rules(), rule, start, end)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     snap = _allocation_snapshot(values)
     taken = _scanned_ports(snap, values, lo, hi)
     scope_label = "self"
@@ -763,6 +414,8 @@ async def _suggest(count: int, start: int | None, end: int | None, label: str,
     if request_key is not None:
         parameters = {"count": count, "start": start, "end": end, "label": label,
                       "ttl": ttl, "scope": scope, "require_count": require_count}
+        if rule is not None:
+            parameters["rule"] = rule
         result, created = await asyncio.to_thread(
             port_store.allocate_reservation, taken, lo, hi, parameters, request_key, scope_label)
         if not created:
@@ -797,180 +450,9 @@ def _require_agent_token(request: Request) -> None:
         raise HTTPException(status_code=403, detail="valid X-Agent-Token header required")
 
 
-@app.delete("/api/reservations/{port}")
-def release_reservation(port: int, request: Request) -> dict:
-    if not 1 <= port <= 65535:
-        raise HTTPException(status_code=400, detail="port out of range")
-    token = request.headers.get("x-reservation-token", "")
-    if not token:
-        raise HTTPException(status_code=403, detail="X-Reservation-Token header required")
-    if not port_store.release_reservation(port, token):
-        raise HTTPException(status_code=404, detail="reservation not found")
-    _monitor.state_changed()
-    return {"status": "ok"}
-
-
-
-
-@app.get("/api/ports/{port}")
-def get_port(
-    port: int,
-    request: Request,
-    include_hidden: bool = Query(default=False),
-) -> dict:
-    if port < 1 or port > 65535:
-        raise HTTPException(status_code=400, detail="port out of range")
-    may_see = request_may_see_hidden(request)
-    show_hidden = bool(include_hidden and may_see)
-    snap = _monitor.latest(_values())
-    payload, _body, _etag = _packed_occupancy(request, port, port, include_hidden)
-    for row in payload["ports"]:
-        if row["port"] == port:
-            if row["status"] == "unknown":
-                raise HTTPException(status_code=503, detail="occupancy scan is incomplete; inspect the scan warning or run port-light doctor, repair the enabled source, then retry")
-            return row
-    hidden: set[int] = set()
-    for raw in snap["user_state"][1]:
-        try:
-            n = int(raw)
-        except (TypeError, ValueError):
-            continue
-        if 1 <= n <= 65535:
-            hidden.add(n)
-    if port in hidden:
-        if not show_hidden:
-            raise HTTPException(status_code=404, detail="not found")
-        result = _classify_snapshot(snap, _values(), 1, 65535)
-        for row in result["ports"]:
-            if row["port"] == port:
-                return row
-        if not complete(snap):
-            raise HTTPException(status_code=503, detail="occupancy scan is incomplete; inspect the scan warning or run port-light doctor, repair the enabled source, then retry")
-        return free_port_payload(port, hidden=True)
-    if not complete(snap):
-        raise HTTPException(status_code=503, detail="occupancy scan is incomplete; inspect the scan warning or run port-light doctor, repair the enabled source, then retry")
-    return free_port_payload(port, hidden=False)
-
-
-@app.get("/api/ports/{port}/history")
-def port_history(
-    port: int,
-    hours: int = Query(default=24, ge=1, le=720),
-    request: Request = None,
-) -> dict:
-    if port < 1 or port > 65535:
-        raise HTTPException(status_code=400, detail="port out of range")
-    if not history.enabled():
-        raise HTTPException(status_code=404, detail="not found")
-    if port in port_store.get_hidden_ports() and not request_may_see_hidden(request):
-        raise HTTPException(status_code=404, detail="not found")
-    try:
-        events = history.query(port, hours)
-    except sqlite3.Error as exc:
-        degradations.report("history", "history.db", "occupancy history read failed")
-        raise HTTPException(status_code=503, detail="history is temporarily unavailable") from exc
-    return {"port": port, "events": events}
-
-
-@app.get("/api/hosts/{host_id}/ports/{port}/history")
-def host_port_history(host_id: str, port: int, request: Request,
-                      hours: int = Query(default=24, ge=1, le=720)) -> Response:
-    if not 1 <= port <= 65535:
-        raise HTTPException(status_code=400, detail="port out of range")
-    if host_id == "local":
-        return JSONResponse(port_history(port, hours, request))
-    return _proxy_peer(host_id, f"/api/ports/{port}/history", {"hours": str(hours)},
-                       not_found_ok=True)
-
-
 def _require_hidden_write(request: Request, port: int | None = None) -> None:
     if (port is None or port in port_store.get_hidden_ports()) and not request_may_see_hidden(request):
         raise HTTPException(status_code=403, detail="hidden ports require authorization")
-
-
-@app.get("/api/known-ports/{port}")
-def known_port(port: int) -> dict:
-    known = get_known_port(port)
-    if not known:
-        raise HTTPException(status_code=404, detail="unknown port")
-    return {"port": port, **known}
-
-
-@app.get("/api/manual-ports")
-def list_manual_ports(request: Request) -> dict:
-    hidden = set(port_store.get_hidden_ports()) if not request_may_see_hidden(request) else set()
-    return {"manual_ports": [entry for entry in port_store.get_manual_ports()
-                             if entry["port"] not in hidden]}
-
-
-@app.post("/api/manual-ports")
-def add_manual_port(body: ManualPortCreate, request: Request) -> dict:
-    _require_hidden_write(request, body.port)
-    entry = port_store.add_manual_port(body.port, body.label, body.machine, body.ttl)
-    _monitor.state_changed()
-    return {"status": "ok", "entry": entry}
-
-
-@app.post("/api/manual-ports/batch")
-def reserve_manual_range(body: ManualPortBatch) -> dict:
-    if body.end < body.start or body.end - body.start >= 64:
-        raise HTTPException(status_code=422, detail="select between 1 and 64 contiguous ports")
-    values = _values()
-    snap = _allocation_snapshot(values)
-    picks = port_store.reserve_manual_range(
-        _scanned_ports(snap, values, body.start, body.end), body.start, body.end, body.label)
-    _monitor.state_changed()
-    return {"status": "ok", "ports": picks}
-
-
-@app.patch("/api/manual-ports/{port}")
-def patch_manual_port(port: int, body: ManualPortUpdate, request: Request) -> dict:
-    _require_hidden_write(request, port)
-    entry = port_store.update_manual_port(port, body.label, body.machine)
-    if not entry:
-        raise HTTPException(status_code=404, detail="not found")
-    _monitor.state_changed()
-    return {"status": "ok", "entry": entry}
-
-
-@app.delete("/api/manual-ports/{port}")
-def del_manual_port(port: int, request: Request, machine: str = Query(default="localhost")) -> dict:
-    _require_hidden_write(request, port)
-    removed = port_store.remove_manual_port(port, machine)
-    if not removed:
-        raise HTTPException(status_code=404, detail="not found")
-    _monitor.state_changed()
-    return {"status": "ok"}
-
-
-@app.get("/api/hidden")
-def list_hidden(request: Request) -> dict:
-    if hidden_ports_withheld() and not request_may_see_hidden(request):
-        return {"hidden_ports": [], "locked": True}
-    return {"hidden_ports": port_store.get_hidden_ports(), "locked": False}
-
-
-@app.post("/api/hidden/{port}")
-def hide_port(port: int, request: Request) -> dict:
-    _require_hidden_write(request)
-    if port < 1 or port > 65535:
-        raise HTTPException(status_code=400, detail="port out of range")
-    added = port_store.add_hidden_port(port)
-    if added:
-        _monitor.state_changed()
-    return {"status": "ok" if added else "already_hidden"}
-
-
-@app.delete("/api/hidden/{port}")
-def unhide_port(port: int, request: Request) -> dict:
-    _require_hidden_write(request)
-    if not 1 <= port <= 65535:
-        raise HTTPException(status_code=400, detail="port out of range")
-    removed = port_store.remove_hidden_port(port)
-    if not removed:
-        raise HTTPException(status_code=404, detail="not found")
-    _monitor.state_changed()
-    return {"status": "ok"}
 
 
 @app.get("/")
@@ -991,61 +473,8 @@ app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
 
 
 
-async def _event_lines():
-    """Broadcast a refresh hint after the monitor accepts a changed snapshot."""
-    last = _monitor.sequence()
-    yield "retry: 3000\n\n"
-    yield "event: hello\ndata: {}\n\n"
-    while True:
-        sequence, changed = await _monitor.wait_for_change(last, timeout=15.0)
-        if changed:
-            last = sequence
-            yield "event: refresh\ndata: {}\n\n"
-        else:
-            yield ": keepalive\n\n"
 
-
-@app.get("/api/events")
-def events() -> Response:
-    """Server-sent refresh hints for accepted occupancy snapshots."""
-    return StreamingResponse(
-        _event_lines(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
-    )
-
-
-@app.get("/api/free-runs")
-def free_runs(
-    count: int = Query(default=1, ge=1, le=64),
-    start: int | None = Query(default=None, ge=1, le=65535),
-    end: int | None = Query(default=None, ge=1, le=65535),
-) -> dict:
-    """Largest contiguous free-port runs inside a window.
-
-    Read-only planning aid. POST /api/manual-ports/batch claims a selected run
-    atomically after checking the latest occupancy and stored reservations.
-    """
-    values = _values()
-    lo = start if start is not None else values["port_range_start"]
-    hi = end if end is not None else values["port_range_end"]
-    if hi < lo:
-        lo, hi = hi, lo
-    snap = _allocation_snapshot(values)
-    _manuals, hidden = snap["user_state"]
-    result = _classify_snapshot(snap, values, lo, hi)
-    taken = {row["port"] for row in result["ports"]}
-    taken.update(hidden)
-    runs: list[dict] = []
-    cursor = lo
-    while cursor <= hi:
-        if cursor in taken:
-            cursor += 1
-            continue
-        run_start = cursor
-        while cursor <= hi and cursor not in taken:
-            cursor += 1
-        if cursor - run_start >= count:
-            runs.append({"start": run_start, "end": cursor - 1, "size": cursor - run_start})
-    runs.sort(key=lambda r: (-r["size"], r["start"]))
-    return {"count": count, "start": lo, "end": hi, "runs": runs[:10]}
+# Register static allocation paths before the parameterized /api/ports/{port}.
+for domain in (configuration, claims, occupancy, peers, diagnostics):
+    domain.runtime = sys.modules[__name__]
+    app.include_router(domain.router)

@@ -95,6 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     reserve.add_argument("--count", type=_bounded_int(1, 64), default=1)
     reserve.add_argument("--start", type=_bounded_int(1, 65535))
     reserve.add_argument("--end", type=_bounded_int(1, 65535))
+    reserve.add_argument("--rule", help="named allocation range configured on the server")
     reserve.add_argument("--label", default="", help="non-secret label shown in Port-Light")
     reserve.add_argument("--scope", choices=("self", "all"))
     expiry = reserve.add_mutually_exclusive_group()
@@ -267,6 +268,8 @@ def _reserve(
         store.ensure_writable()
     parameters = dict(count=args.count, start=args.start, end=args.end,
                       label=args.label, ttl=ttl, scope=scope, require_count=True)
+    if args.rule is not None:
+        parameters["rule"] = args.rule
     pending = (nullcontext(validate_request_key(environ.get("PORT_LIGHT_REQUEST_KEY")))
                if args.no_save else store.pending_request(client.base_url, parameters))
     reservations = []
@@ -275,6 +278,7 @@ def _reserve(
             result = client.reserve_ports(
                 count=args.count, start=args.start, end=args.end, label=args.label,
                 ttl=ttl, scope=scope, request_key=request_key,
+                **({"rule": args.rule} if args.rule is not None else {}),
             )
             reservations = result["reservations"]
             if not args.no_save:

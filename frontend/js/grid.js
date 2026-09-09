@@ -1,14 +1,17 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { S } from './state.js?v=92';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=92';
-import { KIND_MATCHERS } from './kinds.js?v=92';
-import { isLease } from './leases.js?v=92';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=92';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=92';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=92';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=92';
-import { api } from './api.js?v=92';
+import { groupPorts, portRuns } from './port-groups.js?v=93';
+import { S } from './state.js?v=93';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=93';
+import { KIND_MATCHERS } from './kinds.js?v=93';
+import { isLease } from './leases.js?v=93';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=93';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=93';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=93';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=93';
+import { api } from './api.js?v=93';
+
+const expandedRuns = new Set();
 
 
   export function syncFilterUI() {
@@ -34,7 +37,7 @@ import { api } from './api.js?v=92';
   }
 
   export function applyPendingGridFocus() {
-    if (S.route.name === 'settings' || S.route.name === 'doctor') {
+    if (['settings', 'doctor', 'manage'].includes(S.route.name)) {
       S.pendingGridFocus = null;
       return;
     }
@@ -55,7 +58,7 @@ import { api } from './api.js?v=92';
 
   export function gridCells(root) {
     root = root || gridRootFrom(document.activeElement);
-    return Array.prototype.slice.call(root.querySelectorAll('.port-cell'));
+    return Array.prototype.slice.call(root.querySelectorAll('.port-cell')).filter(cell => !cell.closest('details:not([open])'));
   }
 
   export function cellsByRow(cells) {
@@ -342,7 +345,7 @@ import { api } from './api.js?v=92';
       case 'status':
         return arr.sort(function (a, b) {
           const order = { used: 0, configured: 1, free: 2 };
-          return (order[a.status] || 9) - (order[b.status] || 9) || a.port - b.port;
+          return (order[a.status] ?? 9) - (order[b.status] ?? 9) || a.port - b.port;
         });
       default: return arr.sort(function (a, b) { return a.port - b.port; });
     }
@@ -627,7 +630,7 @@ import { api } from './api.js?v=92';
       return;
     }
 
-    rootEl.innerHTML = displayPorts.map(function (p) {
+    const renderCell = function (p) {
       const lockedHit = !!(p._locked && p._synthetic);
       let cls = p._unavailable || p.status === 'unknown' || lockedHit ? 'locked'
         : p.status === 'used' ? 'used' : p.status === 'configured' ? 'configured' : 'free';
@@ -647,6 +650,7 @@ import { api } from './api.js?v=92';
         ? '<span class="access-badge">' + escapeHtml(t('grid.web')) + '</span>' : '';
       const protoBadge = S.settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp'
         ? '<span class="proto-badge">' + escapeHtml(p.protocol) + '</span>' : '';
+      const ruleBadge = p.rule_violations?.length ? '<span class="proto-badge">' + escapeHtml(t('manage.outsideRule')) + '</span>' : '';
       const leaseBadge = isLease(p)
         ? '<span class="lease-badge" role="img" aria-label="' + escapeHtml(t('grid.leaseBadge')) +
           '" title="' + escapeHtml(t('grid.leaseBadge')) + '"></span>'
@@ -671,10 +675,47 @@ import { api } from './api.js?v=92';
         '<div class="port-num">' + p.port + '</div>' +
         labelText +
         bindView.html +
-        '<div class="cell-meta"><span class="indicator"></span>' + protoBadge + accessBadge + leaseBadge + statusText + '</div>' +
+        '<div class="cell-meta"><span class="indicator"></span>' + protoBadge + accessBadge + leaseBadge + ruleBadge + statusText + '</div>' +
         '</button>';
-    }).join('');
+    };
+    const focusedRun = document.activeElement?.closest?.('details[data-run]')?.dataset.run;
+    rootEl._portRuns = new Map();
+    rootEl._renderPortRun = run => sortPorts(run.slice()).map(renderCell).join('');
+    if (!rootEl._runListener) {
+      rootEl._runListener = true;
+      rootEl.addEventListener('toggle', event => {
+        const detail = event.target;
+        if (!detail.matches?.('details[data-run]')) return;
+        const run = rootEl._portRuns.get(detail.dataset.run);
+        const container = detail.querySelector('.group-ports');
+        if (!run || !container) return;
+        const key = hostId + ':' + detail.dataset.run;
+        if (detail.open) {
+          expandedRuns.add(key);
+          if (expandedRuns.size > 1024) expandedRuns.delete(expandedRuns.values().next().value);
+          if (!container.children.length) container.innerHTML = rootEl._renderPortRun(run);
+        } else { expandedRuns.delete(key); container.innerHTML = ''; }
+      }, true);
+    }
+    const opened = new Set(Array.from(rootEl.querySelectorAll('details[data-run][open]')).map(el => el.dataset.run));
+    if (S.groupMode && S.groupMode !== 'none' && !S.searchTerm && S.searchPortNum === null) {
+      rootEl.innerHTML = groupPorts(displayPorts, S.groupMode).map(group => '<section class="port-group"><h3>' +
+        escapeHtml(group.label || t('manage.other')) + '</h3><div class="group-ports">' + (S.sortMode === 'port-desc' ? portRuns(group.rows).reverse() : portRuns(group.rows)).map(run => {
+          if (run.length < 4) return rootEl._renderPortRun(run);
+          const key = group.key + ':' + run[0].port;
+          rootEl._portRuns.set(key, run);
+          const open = opened.has(key) || expandedRuns.has(hostId + ':' + key) || run.some(p => p.port === S.selectedPort || String(p.port) === String(restorePort));
+          return '<details class="port-run" data-run="' + escapeHtml(key) + '"' + (open ? ' open' : '') + '><summary>' +
+            run[0].port + '–' + run.at(-1).port + ' · ' + escapeHtml(t('manage.portCount', { count: run.length })) +
+            ' · ' + escapeHtml(t('status.' + run[0].status)) + (run[0].conflict ? ' · ' + escapeHtml(t('manage.conflicts')) : '') +
+            '</summary><div class="group-ports">' + (open ? rootEl._renderPortRun(run) : '') + '</div></details>';
+        }).join('') + '</div></section>').join('');
+    } else rootEl.innerHTML = displayPorts.map(renderCell).join('');
 
+    if (focusedRun && !restorePort) {
+      const detail = Array.from(rootEl.querySelectorAll('details[data-run]')).find(el => el.dataset.run === focusedRun);
+      detail?.querySelector('summary')?.focus({ preventScroll: true });
+    }
     if (restorePort && (!restoreHost || restoreHost === hostId)) {
       const again = rootEl.querySelector('.port-cell[data-port="' + restorePort + '"]');
       if (again) again.focus({ preventScroll: true });

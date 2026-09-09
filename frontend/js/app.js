@@ -1,24 +1,25 @@
 /* Port-Light frontend */
 
-import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=92';
-import { errorText, escapeHtml, t } from './text.js?v=92';
-import { moveChipFocus, trapTab } from './a11y.js?v=92';
+import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=93';
+import { errorText, escapeHtml, t } from './text.js?v=93';
+import { moveChipFocus, trapTab } from './a11y.js?v=93';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=92';
-import { openModal, closeModals, modalOpen } from './modal.js?v=92';
-import { applyRoute as updateRoute } from './router.js?v=92';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=92';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=92';
-import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=92';
-import { refreshFleet } from './fleet.js?v=92';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=92';
-import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=92';
-import { mountDoctorPage } from './doctor.js?v=92';
+} from './dom.js?v=93';
+import { openModal, closeModals, modalOpen } from './modal.js?v=93';
+import { applyRoute as updateRoute } from './router.js?v=93';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=93';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=93';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=93';
+import { refreshFleet } from './fleet.js?v=93';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=93';
+import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=93';
+import { mountManagementPage } from './management.js?v=93';
+import { mountDoctorPage } from './doctor.js?v=93';
 
 (function () {
   'use strict';
@@ -37,9 +38,10 @@ import { mountDoctorPage } from './doctor.js?v=92';
 
   let settingsPage = null;
   let doctorPage = null;
+  let managementPage = null;
 
   function applyRoute() {
-    updateRoute({ render, refresh: tick, settingsPage, doctorPage });
+    updateRoute({ render, refresh: tick, settingsPage, doctorPage, managementPage });
   }
 
   async function updateHostHealth(hostId) {
@@ -53,7 +55,7 @@ import { mountDoctorPage } from './doctor.js?v=92';
   let loadGeneration = 0;
 
   function onWorkspacePage() {
-    return S.route.name === 'settings' || S.route.name === 'doctor';
+    return ['settings', 'doctor', 'manage'].includes(S.route.name);
   }
 
   async function loadAllOccupancy(opts, generation) {
@@ -235,12 +237,17 @@ import { mountDoctorPage } from './doctor.js?v=92';
       syncHeaderHeight();
     },
   });
+  managementPage = mountManagementPage(document.getElementById('management-page'));
+  const groupSelect = document.getElementById('group-mode');
+  groupSelect.addEventListener('change', () => { S.groupMode = groupSelect.value; saveView(); render(); });
   doctorPage = mountDoctorPage(document.getElementById('doctor-page'));
 
   hydrateCachedAppearance();
   try {
     const view = JSON.parse(localStorage.getItem('port-light-view') || '{}');
     if (view.sort) S.sortMode = view.sort;
+    if (["none", "project", "service"].includes(view.group)) S.groupMode = view.group;
+    groupSelect.value = S.groupMode;
     if (view.status && view.status !== 'running') S.statusFilter = view.status;
     if (Array.isArray(view.kinds)) {
       S.kindFilters = new Set(view.kinds);
@@ -266,6 +273,7 @@ import { mountDoctorPage } from './doctor.js?v=92';
   function occupancyFocusTarget() {
     if (S.route.name === 'settings') return document.getElementById('settings-form');
     if (S.route.name === 'doctor') return document.getElementById('doctor-page');
+    if (S.route.name === 'manage') return document.getElementById('management-page');
     if (hasPeers()) {
       return document.getElementById('host-grid-' + S.focusHostId)
         || document.querySelector('.host-grid')

@@ -7,7 +7,7 @@ from pathlib import Path
 from backend.settings import FIELDS
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 LOCALES_DIR = ROOT / "frontend" / "locales"
 CODES = ("en", "fr", "de", "es", "zh-CN", "zh-TW", "ja")
 

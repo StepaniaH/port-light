@@ -16,17 +16,22 @@ Python 3.11+. Docker is optional if you only touch parsers.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env
-# set COMPOSE_SCAN_DIR to a folder of compose projects
-uvicorn backend.main:app --reload --port 2100
-ruff check backend tests mcp port_light_client scripts/check_release_ci.py
-pytest
 npm ci
-npm run lint
-npm test
+.venv/bin/python scripts/dev.py serve --compose-dir /path/to/compose-stacks --reload
+.venv/bin/python scripts/dev.py test
 npx playwright install chromium
-npm run smoke:browser
+.venv/bin/python scripts/dev.py test --browser
 ```
+
+For a disposable preview with example projects, a conflict, and a 256-port range:
+
+```bash
+.venv/bin/python scripts/dev.py preview --port 2100
+```
+
+The preview binds to `127.0.0.1`, scans only generated Compose files, and removes its temporary directory on exit. Stop it with Ctrl-C. The `serve` command uses `./data` by default and accepts `--data-dir`; it does not load `.env` automatically.
+
+Python tests are grouped under `tests/api`, `tests/scanners`, `tests/client`, `tests/storage`, `tests/frontend`, and `tests/release`. Run a directory with `pytest tests/scanners` when working on one domain. Browser flows are `npm run smoke:browser` for the existing fleet/settings workflow and `npm run smoke:management` for grouping, rules, reservations, and mobile layout.
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants `PORT_LIGHT_DATA_DIR=./data`. Set `PORT_LIGHT_SCANNERS=listen,compose` when Docker is intentionally absent, and point `COMPOSE_SCAN_DIR` to a readable directory. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
 
@@ -84,7 +89,7 @@ Development branches such as `dev` stay local; this repository keeps only `main`
 1. Move Unreleased notes into a version section in `CHANGELOG.md`.
 2. Bump `__version__` in `port_light_client/__init__.py`; the backend, CLI,
    MCP server, package metadata, and release check all read that one value.
-3. Update pinned image examples in both READMEs and `docs/deployment.md`.
+3. Update pinned image examples in both READMEs, `docs/deployment.md`, and `deploy/unraid/port-light.xml`. Remove the development-only notice when these features are included in the release.
 4. Merge the local development branch into `main`, push only `main`, and wait for its CI to pass.
 5. Tag that tested commit `vX.Y.Z` and push the tag. [Release](.github/workflows/release.yml) verifies that the tagged commit belongs to `main` and has a successful `main` push run of `ci.yml`. It waits up to 15 minutes if CI has not finished; a failed, cancelled, or timed-out check blocks publication.
 6. Release verifies that the backend, CLI, and tag versions match, then builds
@@ -94,3 +99,5 @@ Development branches such as `dev` stay local; this repository keeps only `main`
    suite.
 
 If publication is blocked by CI, fix or rerun the failing CI check first, then rerun the failed Release jobs in Actions. If a code change is needed, release a new tested commit; do not move an existing version tag. Manual branch builds no longer publish a `dev` image tag.
+
+The release workflow also updates the Docker Hub description from the tagged README, resolving relative documentation and screenshot URLs to that tag. Preview the output with `python scripts/dockerhub_description.py --ref main --output /tmp/port-light-dockerhub.md`. The update uses the existing `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets; a description failure can be rerun without rebuilding the images. Community Applications submission details are in [deploy/unraid/README.md](deploy/unraid/README.md).

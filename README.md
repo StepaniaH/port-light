@@ -13,67 +13,11 @@ A self-hosted dashboard for host port occupancy. It combines host listeners, Doc
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
+[Quick start](#quick-start) · [Unraid](docs/deployment.md#unraid) · [Documentation](docs/port-management.md)
+
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Port-Light dashboard showing two adaptive host boards">
 </p>
-
-## What it does
-
-Port-Light merges three local sources into one grid:
-
-| Source | What you learn |
-|--------|----------------|
-| Host listen tables (`/proc` or `ss`) | TCP/UDP ports that are actually bound |
-| Docker API | Container name, status, image, published mappings |
-| Compose files | Ports that are **declared** even if the stack is stopped |
-
-| Color | State | Meaning |
-|-------|-------|---------|
-| Blue | In use | Something is listening, or a container is running with that mapping |
-| Amber | Configured | Declared in Compose (or added manually), but nothing is listening |
-| Green | Free | Shown when you search for a port number — nearby unused ports are offered as alternatives |
-
-The default grid lists **occupied and declared** ports only. It does not paint every unused port from 1–9999.
-
-This is a **port occupancy map**, not a container manager. It does not start/stop containers, tail logs, or replace Portainer.
-
-## Features
-
-- Container / service names on the cards
-- Search by port number, with nearby free alternatives if it is taken
-- Occupancy counts filter in-use / configured; kind chips for running, system, Docker, web, UDP, localhost, wildcard binds, hidden
-- Sort by port, name, or status; clamp the visible range
-- Manual entries for things the scanners miss
-- Compose conflict warning when two projects publish the same host port on overlapping bind addresses
-- Built-in names for common homelab ports (SSH, Jellyfin, Postgres, …), plus a local override file
-- Adjustable auto-refresh (5 seconds to 5 minutes in Settings) with a peer-capacity recommendation for the selected interval
-- Copy the port number on click
-- Optional card bind-address summaries, with separate IPv4/IPv6 controls, compact IPv6 rendering, and repetitive wildcard binds omitted
-- One UI can pull occupancy maps from up to 32 other Port-Light instances (LAN / Tailscale). A waterfall shows all machines by default; Settings → Appearance → Cards can switch to tabs. Optional notes below machine names can record IPs or other context. Each host still scans itself.
-- Settings save automatically after each change. Appearance controls keep their live preview: brightness (system / light / dark) and color palette (Gruvbox, Catppuccin, Solarized, Nord, Dracula, Tokyo Night, One Dark, Everforest, Rosé Pine, Kanagawa) are independent controls. All ten palette families include light and dark variants. The UI supports English, Français, Deutsch, Español, 简体中文, 繁體中文, and 日本語; language can also be set through Compose environment variables.
-- Custom palettes, import/export, and Loose / Standard / Compact card-density presets
-- Setup / Doctor checks settings storage, snapshot freshness, host-listener trust, Docker access, Compose discovery, and recent degraded events; its copy/download report excludes names, URLs, ports, paths, credentials, environment values, and event scopes
-- Optional HTTP Basic Auth (`AUTH_USER` / `AUTH_PASSWORD`)
-- Annotate ports with labels: `port-light.port.<port>.name` / `.category` in Compose or Docker
-- Find free ports: toolbar button (or `GET /api/free-runs?count=N`) returns the largest contiguous free runs in your range, with atomic batch reservation
-- Automation API: `GET /api/ports/suggest` returns ports available in the latest scan, while `POST /api/reservations` creates recoverable reservations or expiring leases. A dependency-free `port-light` CLI, MCP stdio server, and agent integration are included.
-- Local history: port state transitions land in `history.db` inside your data volume (default 7 days; `HISTORY_RETENTION_DAYS=0` disables) — the detail drawer shows recent changes and `GET /api/ports/{n}/history` exposes them
-- Optional webhooks: `WEBHOOK_URL` + `WEBHOOK_EVENTS=new_listener,conflict` POST JSON when a port starts being used or two stacks collide
-- Background scanning updates history and webhooks without an open browser. Open UIs receive occupancy changes through `GET /api/events` (SSE), with periodic ETag polling for reconnects and peers
-- UDP as well as TCP; bind scope (`0.0.0.0` / localhost / LAN)
-- Vanilla HTML/CSS/JS frontend served as native ES modules, without a production build step
-
-### Known limits (read before you deploy)
-
-- **LAN tool.** There is no login unless you set `AUTH_USER` and `AUTH_PASSWORD`. Put it behind a reverse proxy or keep it off the public internet. See [SECURITY.md](SECURITY.md).
-- **Hide from grid** is a display filter. It becomes an API gate only when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set.
-- **Multi-host is a read-only viewer.** Each machine still runs Port-Light. One UI can pull up to 32 peers over LAN or Tailscale (Settings → Occupancy). The refresh control shows an advisory capacity for the chosen interval; requests are still internally bounded if you exceed it. Do not expose port 2100 to the public internet. The hub fetches those URLs itself; a Docker bridge container often cannot reach Tailscale `100.x` — use a LAN IP, or `network_mode: host` on the hub.
-- Process names come from `/host/proc` (inode → `comm`) when that mount is present — the usual image. Without it, the grid shows Docker container names. `ss -tlnp` names still need a host-network / bare-metal path.
-- Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
-
-Roadmap and architecture: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md). Command line: [docs/cli.md](docs/cli.md). API and MCP integrations: [docs/integrations.md](docs/integrations.md).
-
-If an occupancy warning persists after upgrading, hover over its information icon, or focus or select the warning, for scanner-specific guidance. See the [troubleshooting and upgrade guide](docs/troubleshooting.md#occupancy-scan-warning) for configuration changes that an image update cannot apply.
 
 ## Quick start
 
@@ -108,6 +52,53 @@ Mounting `/var/run/docker.sock` grants broad Docker API access; a read-only moun
 `NET_ADMIN` is **not required** in the usual bridge setup. It only helps the `ss` fallback on bare metal.
 
 All three scanners are enabled by default. If an enabled source fails, Compose scanning is incomplete, or a snapshot expires, the map shows a warning and unconfirmed ports remain unknown. Free-port planning and batch reservations return `503`. For a native installation without Docker, set `PORT_LIGHT_SCANNERS=listen,compose`; use `listen` to scan only host listeners. Occupancy in disabled sources is outside the checks.
+
+## What it does
+
+Port-Light merges three local sources into one grid:
+
+| Source | What you learn |
+|--------|----------------|
+| Host listen tables (`/proc` or `ss`) | TCP/UDP ports that are actually bound |
+| Docker API | Container name, status, image, published mappings |
+| Compose files | Ports that are **declared** even if the stack is stopped |
+
+| Color | State | Meaning |
+|-------|-------|---------|
+| Blue | In use | Something is listening, or a container is running with that mapping |
+| Amber | Configured | Declared in Compose (or added manually), but nothing is listening |
+| Green | Free | Shown when you search for a port number — nearby unused ports are offered as alternatives |
+
+The default grid lists **occupied and declared** ports only. It does not paint every unused port from 1–9999.
+
+This is a **port occupancy map**, not a container manager. It does not start/stop containers, tail logs, or replace Portainer.
+
+## Features
+
+- Search by port, service, project, process, or bind address; filter and sort occupied and declared ports.
+- Group Compose ports by project or service. Expand contiguous ranges to inspect individual ports.
+- Review Compose conflicts, choose an available replacement, and copy a mapping for the selected service.
+- Manage manual entries and reservations, including labels, expiry filters, and release commands for reservations created in the current browser tab.
+- Define named port ranges, reserve through a selected rule, and flag declarations outside an assigned project range.
+- View up to 32 other Port-Light instances. Each host scans its own listeners, Docker API, and Compose files.
+- Use the dependency-free CLI or MCP server for checks and recoverable reservations.
+- Configure appearance, seven UI languages, history, webhooks, and optional Basic Auth. Setup / Doctor provides a sanitized diagnostic report.
+
+Grouping, management pages, and named port rules are available in the development branch after v0.8.2. To try them, [run from source](CONTRIBUTING.md#development).
+
+See the [port management guide](docs/port-management.md), [CLI documentation](docs/cli.md), and [API reference](docs/integrations.md).
+
+### Limitations
+
+- **LAN tool.** There is no login unless you set `AUTH_USER` and `AUTH_PASSWORD`. Put it behind a reverse proxy or keep it off the public internet. See [SECURITY.md](SECURITY.md).
+- **Hide from grid** is a display filter. It becomes an API gate only when `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD` is set.
+- **Multi-host is a read-only viewer.** Each machine still runs Port-Light. One UI can pull up to 32 peers over LAN or Tailscale (Settings → Occupancy). The refresh control shows an advisory capacity for the chosen interval; requests are still internally bounded if you exceed it. Do not expose port 2100 to the public internet. The hub fetches those URLs itself; a Docker bridge container often cannot reach Tailscale `100.x` — use a LAN IP, or `network_mode: host` on the hub.
+- Process names come from `/host/proc` (inode → `comm`) when that mount is present — the usual image. Without it, the grid shows Docker container names. `ss -tlnp` names still need a host-network / bare-metal path.
+- Host-network containers are matched via `/proc/<pid>/fd` socket inodes when `/host/proc` is mounted; otherwise they fall back to `ExposedPorts`.
+
+Roadmap and architecture: [docs/roadmap.md](docs/roadmap.md), [docs/architecture.md](docs/architecture.md). Command line: [docs/cli.md](docs/cli.md). API and MCP integrations: [docs/integrations.md](docs/integrations.md).
+
+If an occupancy warning persists after upgrading, hover over its information icon, or focus or select the warning, for scanner-specific guidance. See the [troubleshooting and upgrade guide](docs/troubleshooting.md#occupancy-scan-warning) for configuration changes that an image update cannot apply.
 
 ## Configuration
 
@@ -167,6 +158,8 @@ If an existing `port_light.json` is unreadable, malformed, or contains invalid r
 - Machine descriptions are plain text visible to anyone with dashboard or API access and may appear in screenshots. Do not include passwords, tokens, or other secrets in them.
 - Doctor reports are generated from an explicit aggregate allowlist. They include statuses, counts, safe source enums, and known failure reasons, but omit machine identity, peer details, bind addresses, ports, filesystem paths, environment values, credentials, and degradation scopes. Unknown event sources and reasons are redacted.
 - Sibling `.env` files next to Compose stacks are read locally for `${VAR}` substitution and are never uploaded.
+- Browser-created reservation keys and release tokens stay in the current tab’s session storage. Copied release commands contain a secret token.
+- Port rules and assigned project names are visible to authenticated dashboard/API users, or to anyone who can reach the instance when authentication is disabled.
 - Manual labels, port history, agent-call labels, peer settings, and Docker-side CLI release tokens stay in the data volume. Saved peer passwords are stored in `port_light.json`, while CLI tokens use `/data/cli-state`; protect the data volume as you would any other credentials store.
 
 ## Tech stack

@@ -7,7 +7,7 @@ from backend.main import VERSION
 from port_light_client import __version__
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 def test_package_exposes_dependency_free_console_script():

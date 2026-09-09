@@ -108,7 +108,7 @@ def _load() -> dict:
     if not isinstance(data, dict) or any(
         key in data and not isinstance(data[key], expected)
         for key, expected in (("manual_ports", list), ("hidden_ports", list),
-                              ("peers", list), ("machines", list), ("settings", dict),
+                              ("peers", list), ("machines", list), ("settings", dict), ("port_rules", list),
                               ("reservation_requests", dict))
     ):
         raise _read_error()
@@ -126,6 +126,13 @@ def _load() -> dict:
     if any(not _valid_request_record(key, value)
            for key, value in data.get("reservation_requests", {}).items()):
         raise _read_error()
+    if "port_rules" in data:
+        from .port_rules import RuleDocument
+        try:
+            document = RuleDocument(rules=data["port_rules"])
+            data["port_rules"] = [rule.model_dump() for rule in document.rules]
+        except ValueError as exc:
+            raise StoreReadError("invalid port rules in data file") from exc
     _FILE_MEMO[str(f)] = (token, data)
     return copy.deepcopy(data)
 
@@ -394,6 +401,15 @@ def allocate_reservation(taken: set[int], start: int, end: int, parameters: dict
                 del records[digest]
         if len(records) >= MAX_RESERVATION_REQUESTS:
             raise ReservationConflict("reservation recovery capacity reached; release unused reservations and wait until inactive receipts are seven days old")
+        if parameters.get("rule"):
+            from .port_rules import allocation_range
+            try:
+                current = allocation_range(data.get("port_rules", []), parameters["rule"],
+                                           parameters["start"], parameters["end"])
+            except ValueError as exc:
+                raise ReservationConflict(str(exc)) from exc
+            if current != (start, end):
+                raise ReservationConflict("port rule changed during allocation; retry the request")
         occupied = _occupied(data, taken)
         picks = [port for port in range(start, end + 1) if port not in occupied][:parameters["count"]]
         if parameters["require_count"] and len(picks) != parameters["count"]:
@@ -624,3 +640,15 @@ def replace_peers(peers: list[dict]) -> list[dict]:
         data["peers"] = list(peers)
         _save(data)
         return list(peers)
+
+
+def get_port_rules() -> list[dict]:
+    with _LOCK:
+        return copy.deepcopy(_load().get("port_rules", []))
+
+
+def set_port_rules(rules: list[dict]) -> None:
+    with _LOCK:
+        data = _load()
+        data["port_rules"] = copy.deepcopy(rules)
+        _save(data)

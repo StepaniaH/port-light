@@ -1576,3 +1576,22 @@ a:focus-visible,
 #detail-history { margin-top: 10px; }
 #detail-history .history-title { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; opacity: .7; margin: 0 0 4px; }
 #detail-history .history-event { font-size: 12px; padding: 2px 0; }
+
+/* Port management and grouped occupancy. */
+.manage-tabs, .manage-filters, .manage-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 16px 0; }
+.manage-tabs a { padding: 8px 12px; }
+.manage-tabs a[aria-current="page"] { font-weight: 700; text-decoration: underline; }
+.manage-form label, .manage-filters label { display: grid; gap: 6px; }
+.manage-form input, .manage-form select, .manage-filters select, .group-control select { color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; max-width: 220px; }
+.manage-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin: 12px 0; overflow-wrap: anywhere; }
+.manage-card h2 { margin-top: 0; }
+.manage-card button { margin-right: 8px; }
+.manage-card pre { overflow-x: auto; padding: 12px; }
+.compose-conflict + .compose-conflict { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 12px; }
+.port-group, .port-run { grid-column: 1 / -1; min-width: 0; }
+.port-group h3 { margin: 8px 0; font-size: 14px; overflow-wrap: anywhere; }
+.group-ports { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--cell-min-w, 138px), 1fr)); gap: var(--cell-gap, 8px); }
+.port-run { border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.port-run summary { cursor: pointer; padding: 4px; }
+.port-run[open] summary { margin-bottom: 10px; }
+.group-control { display: block; margin: 12px 0; }

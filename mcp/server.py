@@ -55,6 +55,7 @@ TOOLS = [
                           "description": "How many ports are needed"},
                 "start": {"type": "integer", "minimum": 1, "maximum": 65535},
                 "end": {"type": "integer", "minimum": 1, "maximum": 65535},
+                "rule": {"type": "string", "description": "Named allocation range on this server"},
                 "reserve": {"type": "boolean", "default": False},
                 "label": {"type": "string",
                           "description": "Label stored with reserved ports"},
@@ -140,6 +141,8 @@ def run_tool(name: str, args: dict) -> dict:
             scope=str(args.get("scope", "self")),
             label=str(args.get("label", "")),
         )
+        if args.get("rule") is not None:
+            parameters["rule"] = str(args["rule"])
         if parameters["reserve"] or parameters["ttl"] is not None:
             from port_light_client.state import ReservationStore
             store = ReservationStore()

@@ -335,6 +335,7 @@ class PortLightClient:
         scope: str = "self",
         require_count: bool = False,
         request_key: str | None = None,
+        rule: str | None = None,
     ) -> dict[str, Any]:
         if type(count) is not int or not 1 <= count <= 64:
             raise PortLightError("invalid_request", "count must be between 1 and 64")
@@ -350,6 +351,8 @@ class PortLightClient:
             raise PortLightError("invalid_request", "end must be greater than or equal to start")
         if scope not in ("self", "all"):
             raise PortLightError("invalid_request", "scope must be self or all")
+        if rule is not None:
+            self._require_capability("port_rules", allow_legacy=False)
         reservation_expected = reserve or ttl is not None
         if reservation_expected:
             self._require_capability("reservations")
@@ -360,6 +363,8 @@ class PortLightClient:
         if scope == "all":
             self._require_capability("scope_all")
         params: list[tuple[str, str]] = [("count", str(count)), ("scope", scope)]
+        if rule is not None:
+            params.append(("rule", rule))
         if start is not None:
             params.append(("start", str(start)))
         if end is not None:
@@ -379,6 +384,7 @@ class PortLightClient:
             result = self._transport.request("POST", "/api/reservations", headers=headers, json={
                 "count": count, "start": start, "end": end, "label": label,
                 "ttl": ttl, "scope": scope, "require_count": require_count,
+                **({"rule": rule} if rule is not None else {}),
             })
         else:
             result = self._transport.request(
@@ -404,6 +410,7 @@ class PortLightClient:
         ttl: int | None = 3600,
         scope: str = "self",
         request_key: str | None = None,
+        rule: str | None = None,
     ) -> dict[str, Any]:
         result = self.suggest_ports(
             count=count,
@@ -415,6 +422,7 @@ class PortLightClient:
             scope=scope,
             require_count=True,
             request_key=request_key,
+            **({"rule": rule} if rule is not None else {}),
         )
         reservations = result["reservations"]
         if not reservations:

@@ -429,3 +429,15 @@ def test_storage_failure_after_remote_reservation_returns_recovery_tokens():
     assert code == 3
     assert json.loads(output)["recovery_required"] is True
     assert error == ""
+
+
+def test_rule_is_part_of_journal_and_allocation_request():
+    client = FakeClient()
+    store = FakeStore()
+    captured = []
+    store.pending_request = lambda url, parameters: (captured.append(parameters) or nullcontext('k' * 43))
+    code, output, error = invoke(['reserve', '--rule', 'development', '--json'], client=client, store=store)
+    assert code == 0, (output, error)
+    assert captured[0]['rule'] == 'development'
+    call = next(call for call in client.calls if call[0] == 'reserve_ports')
+    assert call[1]['rule'] == 'development'

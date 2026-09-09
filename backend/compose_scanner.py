@@ -6,12 +6,14 @@ import glob as _glob
 import os
 import re
 from dataclasses import dataclass, field
-from contextvars import ContextVar
 from pathlib import Path
 
 import yaml
 
-from .netaddr import clean_bind_ip, proto_base
+from .compose_limits import ComposeWouldFail, ComposePortLimit, _PortBudget, _port_budget, _consume_ports
+from .compose_ports import (_norm_proto as _norm_proto, _normalize_host_ip as _normalize_host_ip, parse_port_entry as parse_port_entry, parse_expose_entry as parse_expose_entry, parse_short_port as parse_short_port, _port_interval as _port_interval, expand_port_range as expand_port_range, _target_ports as _target_ports, _published_unset as _published_unset)
+from .compose_documents import (_unwrap_compose as _unwrap_compose, _service_map as _service_map, _port_entries as _port_entries, _overlay_port_fields as _overlay_port_fields, _overlay_compose_docs as _overlay_compose_docs, _load_yaml as _load_yaml, _ComposeTag as _ComposeTag)
+
 from .port_scanner import is_host_netns_mode
 from . import degradations
 
@@ -26,96 +28,10 @@ _COMPOSE_PREFIXES = ("compose.", "docker-compose.")
 _COMPOSE_SUFFIXES = (".yml", ".yaml")
 
 
-class _ComposeLoader(yaml.SafeLoader):
-    """Keep Compose ``!reset`` / ``!override`` so extends can replace, not merge."""
-
-
-class _ComposeTag:
-    __slots__ = ("name", "value")
-
-    def __init__(self, name: str, value):
-        self.name = name
-        self.value = value
-
-
-def _unknown_compose_tag(loader, tag_suffix, node):
-    if isinstance(node, yaml.ScalarNode):
-        value = loader.construct_scalar(node)
-    elif isinstance(node, yaml.SequenceNode):
-        value = loader.construct_sequence(node)
-    elif isinstance(node, yaml.MappingNode):
-        value = loader.construct_mapping(node)
-    else:
-        value = None
-    suffix = str(tag_suffix or "").lstrip("!").lower()
-    if suffix in ("reset", "override"):
-        return _ComposeTag(suffix, value)
-    return value
-
-
-_ComposeLoader.add_multi_constructor("!", _unknown_compose_tag)
-
-# Compose uses YAML 1.2. PyYAML's 1.1 sexagesimal ints turn unquoted
-# ``22:22`` / ``8080:22`` into numbers and we drop them as unpublished.
-_ComposeLoader.yaml_implicit_resolvers = {
-    key: list(resolvers)
-    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
-}
-_INT_NO_SEXAGESIMAL = re.compile(
-    r"""^(?:[-+]?0b[0-1_]+
-        |[-+]?0[0-7_]+
-        |[-+]?(?:0|[1-9][0-9_]*)
-        |[-+]?0x[0-9a-fA-F_]+)$""",
-    re.X,
-)
-for _ch, _resolvers in list(_ComposeLoader.yaml_implicit_resolvers.items()):
-    _ComposeLoader.yaml_implicit_resolvers[_ch] = [
-        (tag, regexp) for tag, regexp in _resolvers
-        if tag != "tag:yaml.org,2002:int"
-    ]
-    if not _ComposeLoader.yaml_implicit_resolvers[_ch]:
-        del _ComposeLoader.yaml_implicit_resolvers[_ch]
-_ComposeLoader.add_implicit_resolver(
-    "tag:yaml.org,2002:int",
-    _INT_NO_SEXAGESIMAL,
-    list("-+0123456789"),
-)
-
 _AUTO_OVERRIDE_NAMES = frozenset({
     "compose.override.yml", "compose.override.yaml",
     "docker-compose.override.yml", "docker-compose.override.yaml",
 })
-
-
-class ComposeWouldFail(Exception):
-    """Compose would refuse this project (required interp / env_file / include)."""
-
-
-class ComposePortLimit(ComposeWouldFail):
-    """A bounded, non-secret diagnostic suitable for display to operators."""
-    def __init__(self, code: str, limit: int, spec: str = "", filepath: str = ""):
-        super().__init__(f"port expansion limit ({limit}); reduce the scan scope or split the range")
-        self.code, self.limit, self.spec, self.filepath = code, limit, spec, filepath
-
-
-@dataclass
-class _PortBudget:
-    expanded: int = 0
-    emitted: int = 0
-
-
-_port_budget: ContextVar[_PortBudget | None] = ContextVar("compose_port_budget", default=None)
-
-
-def _consume_ports(count: int, *, emitted: bool = False, filepath: str = "") -> None:
-    budget = _port_budget.get()
-    if budget is None:
-        return
-    attribute = "emitted" if emitted else "expanded"
-    total = getattr(budget, attribute) + count
-    if total > _MAX_SCAN_PORTS:
-        raise ComposePortLimit("port_budget", _MAX_SCAN_PORTS, filepath=filepath)
-    setattr(budget, attribute, total)
 
 
 def _parse_entry(entry, parser, filepath: str):
@@ -124,18 +40,6 @@ def _parse_entry(entry, parser, filepath: str):
     except ComposePortLimit as exc:
         exc.filepath = filepath
         raise
-
-
-def _load_yaml(text: str):
-    docs = [doc for doc in yaml.load_all(text, Loader=_ComposeLoader) if doc is not None]
-    if not docs:
-        return None
-    merged = None
-    for doc in docs:
-        if not isinstance(doc, dict):
-            continue
-        merged = doc if merged is None else _overlay_compose_docs(merged, doc)
-    return merged
 
 
 def _macvlan_names_tree(
@@ -229,10 +133,6 @@ def _project_display_name(raw_name, fallback: str) -> str:
     return fallback
 
 
-def _norm_proto(proto) -> str:
-    return proto_base(proto)
-
-
 def _is_host_network(net: str | None) -> bool:
     return is_host_netns_mode(net)
 
@@ -291,35 +191,6 @@ def _service_macvlan_ips(svc_cfg: dict, macvlan_names: set[str]) -> list[str]:
     return ips
 
 
-def _unwrap_compose(val):
-    return val.value if isinstance(val, _ComposeTag) else val
-
-
-def _service_map(raw) -> dict:
-    data = _unwrap_compose(raw)
-    if not isinstance(data, dict):
-        return {}
-    out: dict = {}
-    for name, cfg in data.items():
-        body = _unwrap_compose(cfg)
-        if isinstance(body, dict):
-            out[name] = body
-    return out
-
-
-def _port_entries(ports_cfg) -> list:
-    ports_cfg = _unwrap_compose(ports_cfg)
-    if ports_cfg is None or ports_cfg is False:
-        return []
-    if isinstance(ports_cfg, dict):
-        if any(k in ports_cfg for k in ("published", "target", "host_ip", "protocol", "mode")):
-            return [ports_cfg]
-        return [{k: v} for k, v in ports_cfg.items()]
-    if isinstance(ports_cfg, list):
-        return [_unwrap_compose(item) for item in ports_cfg]
-    return [ports_cfg]
-
-
 @dataclass
 class ComposePort:
     port: int
@@ -334,6 +205,7 @@ class ComposePort:
 
     def __post_init__(self):
         _consume_ports(1, emitted=True, filepath=self.compose_file)
+    mapping_source: str = "ports"
 
 
 @dataclass
@@ -359,7 +231,7 @@ def scan_compose_files(
 def scan_compose_tree(scan_dir: str, max_depth: int | None = None,
                       max_files: int | None = None,
                       exclude_dirs: tuple[str, ...] | list[str] | None = None) -> ComposeScan:
-    token = _port_budget.set(_PortBudget())
+    token = _port_budget.set(_PortBudget(limit=_MAX_SCAN_PORTS))
     try:
         return _scan_compose_tree(scan_dir, max_depth, max_files, exclude_dirs)
     finally:
@@ -742,11 +614,11 @@ def _parse_compose_data(
             continue
         entries: list = []
         if not _is_host_network(net):
-            entries = _port_entries(svc_cfg.get("ports"))
+            entries = [("ports", entry) for entry in _port_entries(svc_cfg.get("ports"))]
             deploy = _unwrap_compose(svc_cfg.get("deploy"))
             if isinstance(deploy, dict):
-                entries.extend(_port_entries(deploy.get("ports")))
-        for entry in entries:
+                entries.extend(("deploy.ports", entry) for entry in _port_entries(deploy.get("ports")))
+        for source, entry in entries:
             for p in _parse_entry(entry, parse_port_entry, filepath):
                 ports.append(ComposePort(
                     port=p["host_port"],
@@ -758,6 +630,7 @@ def _parse_compose_data(
                     protocol=p.get("protocol", "tcp"),
                     host_ip=p.get("host_ip"),
                     network_mode=net,
+                    mapping_source=source,
                 ))
         if _is_host_network(net):
             for entry in _port_entries(svc_cfg.get("expose")):
@@ -772,6 +645,7 @@ def _parse_compose_data(
                         protocol=p.get("protocol", "tcp"),
                         host_ip=p.get("host_ip"),
                         network_mode=net,
+                        mapping_source="expose",
                     ))
             continue
         lan_ips = _service_macvlan_ips(svc_cfg, lan_names)
@@ -780,7 +654,7 @@ def _parse_compose_data(
         lan_rows: list[dict] = []
         for entry in _port_entries(svc_cfg.get("expose")):
             lan_rows.extend(_parse_entry(entry, parse_expose_entry, filepath))
-        for entry in entries:
+        for source, entry in entries:
             parsed = _parse_entry(entry, parse_port_entry, filepath)
             if parsed:
                 for p in parsed:
@@ -812,6 +686,7 @@ def _parse_compose_data(
                     protocol=p.get("protocol", "tcp"),
                     host_ip=ip,
                     network_mode=net,
+                    mapping_source="lan",
                 ))
     return ports
 
@@ -983,129 +858,6 @@ def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
     return _service_map(data.get("services"))
 
 
-def _overlay_port_fields(base: dict, child: dict) -> dict:
-    out = dict(base)
-    child_net_raw = child.get("network_mode")
-    if isinstance(child_net_raw, _ComposeTag):
-        if child_net_raw.name == "reset":
-            out.pop("network_mode", None)
-        else:
-            net = _unwrap_compose(child_net_raw.value)
-            if net:
-                out["network_mode"] = net
-            else:
-                out.pop("network_mode", None)
-    else:
-        child_net = _unwrap_compose(child_net_raw)
-        if child_net:
-            out["network_mode"] = child_net
-    for key in ("ports", "expose"):
-        child_val = child.get(key)
-        if isinstance(child_val, _ComposeTag) and child_val.name in ("reset", "override"):
-            out[key] = _port_entries(child_val.value)
-            continue
-        merged: list = []
-        for src in (base, child):
-            val = _unwrap_compose(src.get(key))
-            if isinstance(val, list):
-                merged.extend(_unwrap_compose(item) for item in val)
-            elif isinstance(val, dict):
-                merged.extend(_port_entries(val))
-            elif val is not None and val is not False:
-                merged.append(val)
-        if merged:
-            out[key] = merged
-    child_nets_raw = child.get("networks")
-    if isinstance(child_nets_raw, _ComposeTag) and child_nets_raw.name in ("reset", "override"):
-        out["networks"] = _unwrap_compose(child_nets_raw.value)
-    elif child_nets_raw is not None:
-        child_nets = _unwrap_compose(child_nets_raw)
-        base_nets = _unwrap_compose(out.get("networks"))
-        if isinstance(base_nets, dict) and isinstance(child_nets, dict):
-            merged_nets = dict(base_nets)
-            merged_nets.update(child_nets)
-            out["networks"] = merged_nets
-        else:
-            out["networks"] = child_nets
-    child_deploy_raw = child.get("deploy")
-    if child_deploy_raw is not None:
-        base_deploy = _unwrap_compose(out.get("deploy"))
-        if not isinstance(base_deploy, dict):
-            base_deploy = {}
-        if isinstance(child_deploy_raw, _ComposeTag) and child_deploy_raw.name in ("reset", "override"):
-            body = _unwrap_compose(child_deploy_raw.value)
-            out["deploy"] = body if isinstance(body, dict) else {}
-        else:
-            child_deploy = _unwrap_compose(child_deploy_raw)
-            if not isinstance(child_deploy, dict):
-                out["deploy"] = child_deploy
-            else:
-                merged_deploy = dict(base_deploy)
-                merged_deploy.update({k: v for k, v in child_deploy.items() if k != "ports"})
-                if "ports" in child_deploy:
-                    merged_deploy["ports"] = _overlay_port_fields(
-                        {"ports": base_deploy.get("ports")},
-                        {"ports": child_deploy.get("ports")},
-                    ).get("ports")
-                out["deploy"] = merged_deploy
-    return out
-
-
-def _overlay_compose_docs(base: dict, child: dict) -> dict:
-    """Merge a Compose override (or a later YAML document) onto *base*."""
-    out = dict(base)
-    child_name = child.get("name")
-    if isinstance(child_name, str) and child_name.strip():
-        out["name"] = child_name
-    for key in ("include", "env_file"):
-        extra = child.get(key)
-        if extra is None:
-            continue
-        existing = out.get(key)
-        if existing is None:
-            out[key] = extra
-        elif isinstance(existing, list) and isinstance(extra, list):
-            out[key] = [*existing, *extra]
-        elif isinstance(existing, list):
-            out[key] = [*existing, extra]
-        elif isinstance(extra, list):
-            out[key] = [existing, *extra]
-        else:
-            out[key] = [existing, extra]
-    child_nets = child.get("networks")
-    if child_nets is not None:
-        out["networks"] = _overlay_port_fields(
-            {"networks": out.get("networks")}, {"networks": child_nets},
-        ).get("networks")
-    base_svcs = _service_map(out.get("services"))
-    child_svcs_raw = child.get("services")
-    if isinstance(child_svcs_raw, _ComposeTag) and child_svcs_raw.name in ("reset", "override"):
-        out["services"] = _service_map(child_svcs_raw.value)
-    elif isinstance(child_svcs_raw, dict) or isinstance(_unwrap_compose(child_svcs_raw), dict):
-        child_svcs = child_svcs_raw if isinstance(child_svcs_raw, dict) else _unwrap_compose(child_svcs_raw)
-        merged = dict(base_svcs)
-        for name, cfg in child_svcs.items():
-            tagged = isinstance(cfg, _ComposeTag) and cfg.name in ("reset", "override")
-            body = _unwrap_compose(cfg)
-            if tagged:
-                merged[name] = body if isinstance(body, dict) else {}
-                continue
-            prev = merged.get(name)
-            if isinstance(prev, dict) and isinstance(body, dict):
-                merged[name] = _overlay_port_fields(prev, body)
-            elif isinstance(body, dict):
-                merged[name] = body
-        out["services"] = merged
-    return out
-
-
-def _normalize_host_ip(host_ip) -> str | None:
-    if host_ip is None:
-        return None
-    text = clean_bind_ip(str(host_ip))
-    return text or None
-
-
 def _resolve_extends(
     svc_cfg: dict,
     filepath: str,
@@ -1244,204 +996,3 @@ def substitute_vars(
         out.append(ch)
         i += 1
     return "".join(out)
-
-
-def parse_port_entry(entry) -> list[dict]:
-    if isinstance(entry, bool) or entry is None:
-        return []
-    if isinstance(entry, (int, float)) and not isinstance(entry, bool):
-        return []
-    if isinstance(entry, str):
-        return parse_short_port(entry)
-    if isinstance(entry, dict):
-        if (
-            "published" not in entry
-            and "target" not in entry
-            and "host_ip" not in entry
-            and len(entry) == 1
-        ):
-            key, val = next(iter(entry.items()))
-            if isinstance(val, dict):
-                return parse_port_entry(val)
-            key_s = str(key)
-            if "/" in key_s:
-                port_part, proto = key_s.rsplit("/", 1)
-                rows = parse_short_port(f"{port_part}:{val}")
-                for row in rows:
-                    row["protocol"] = _norm_proto(proto)
-                return rows
-            return parse_short_port(f"{key}:{val}")
-        host = entry.get("published")
-        target = entry.get("target")
-        proto = _norm_proto(entry.get("protocol") or "tcp")
-        host_ip = _normalize_host_ip(entry.get("host_ip"))
-        mode = str(entry.get("mode") or "").strip().lower()
-        if isinstance(target, str) and "/" in target:
-            t_s, t_proto = target.rsplit("/", 1)
-            if t_s.strip() and t_proto.strip():
-                if "protocol" not in entry:
-                    proto = _norm_proto(t_proto)
-                target = t_s.strip()
-        if _published_unset(host):
-            if mode == "host" and target is not None:
-                host = target
-            else:
-                return []
-        if target is None and mode != "host":
-            return []
-        host_s = str(host)
-        if isinstance(host, str) and "/" in host_s:
-            host_s, slash_proto = host_s.rsplit("/", 1)
-            if "protocol" not in entry and slash_proto:
-                proto = _norm_proto(slash_proto)
-        try:
-            host_ports = expand_port_range(host_s)
-            container_ports = _target_ports(target, len(host_ports))
-        except (ValueError, TypeError):
-            return []
-        return [
-            {
-                "host_port": hp,
-                "container_port": cp,
-                "protocol": proto,
-                "host_ip": host_ip,
-            }
-            for hp, cp in zip(host_ports, container_ports, strict=True)
-            if 1 <= hp <= 65535
-        ]
-    return []
-
-
-def parse_expose_entry(entry) -> list[dict]:
-    """Host-network ``expose``: the container port is the host port."""
-    if isinstance(entry, bool) or entry is None:
-        return []
-    if isinstance(entry, (int, float)) and not isinstance(entry, bool):
-        if isinstance(entry, float) and not entry.is_integer():
-            return []
-        entry = int(entry)
-        if 1 <= entry <= 65535:
-            _consume_ports(1)
-            return [{
-                "host_port": entry,
-                "container_port": entry,
-                "protocol": "tcp",
-                "host_ip": None,
-            }]
-        return []
-    if not isinstance(entry, str):
-        return []
-    protocol = "tcp"
-    text = entry.strip()
-    if "/" in text:
-        text, protocol = text.rsplit("/", 1)
-        protocol = _norm_proto(protocol or "tcp")
-    if ":" in text:
-        return []
-    try:
-        host_ports = expand_port_range(text)
-    except ValueError:
-        return []
-    return [
-        {
-            "host_port": hp,
-            "container_port": hp,
-            "protocol": protocol,
-            "host_ip": None,
-        }
-        for hp in host_ports
-        if 1 <= hp <= 65535
-    ]
-
-
-def parse_short_port(entry: str) -> list[dict]:
-    protocol = "tcp"
-    entry = entry.strip()
-    if "/" in entry:
-        left, right = entry.rsplit("/", 1)
-        if ":" in right:
-            proto_tok, _, tail = right.partition(":")
-            protocol = _norm_proto(proto_tok)
-            entry = f"{left}:{tail}" if tail else left
-        else:
-            entry, protocol = left, _norm_proto(right)
-    protocol = _norm_proto(protocol)
-    entry = entry.strip()
-    host_ip = None
-    if entry.startswith("["):
-        end = entry.find("]")
-        if end == -1:
-            return []
-        host_ip = entry[1:end] or None
-        entry = entry[end + 1:].lstrip(":")
-    parts = entry.split(":")
-    if len(parts) == 1:
-        return []
-    if len(parts) == 2:
-        host_spec, container_spec = parts
-    else:
-        if host_ip is None:
-            head = parts[0]
-            joined = ":".join(parts[:-2])
-            if head.isdigit() and "." not in joined:
-                return []
-            host_ip = joined or None
-        host_spec, container_spec = parts[-2], parts[-1]
-    try:
-        host_ports = expand_port_range(host_spec)
-        container_ports = _target_ports(container_spec, len(host_ports))
-    except ValueError:
-        return []
-    return [
-        {
-            "host_port": hp,
-            "container_port": cp,
-            "protocol": protocol,
-            "host_ip": host_ip,
-        }
-        for hp, cp in zip(host_ports, container_ports, strict=True)
-        if 1 <= hp <= 65535
-    ]
-
-
-def _port_interval(spec: str, cap: int = _MAX_RANGE) -> range:
-    spec = spec.strip()
-    if "-" not in spec:
-        start = end = int(spec)
-    else:
-        left, right = spec.split("-", 1)
-        start, end = sorted((int(left), int(right)))
-    if end - start + 1 > cap:
-        raise ComposePortLimit("port_range", cap, f"{start}-{end}")
-    return range(start, end + 1)
-
-
-def expand_port_range(spec: str, cap: int = _MAX_RANGE) -> list[int]:
-    ports = _port_interval(spec, cap)
-    _consume_ports(len(ports))
-    return list(ports)
-
-
-def _target_ports(spec, count: int) -> range | list:
-    if spec is None:
-        return [None] * count
-    ports = _port_interval(str(spec))
-    if len(ports) == 1:
-        return [ports.start] * count
-    if len(ports) != count:
-        raise ComposeWouldFail("published and target ranges must have equal lengths")
-    return ports
-
-
-def _published_unset(host) -> bool:
-    if host is None or host is False:
-        return True
-    text = str(host).strip()
-    if not text:
-        return True
-    if isinstance(host, str) and "/" in text:
-        text = text.split("/", 1)[0].strip()
-    try:
-        return int(str(text).split("-", 1)[0]) == 0
-    except (TypeError, ValueError):
-        return False

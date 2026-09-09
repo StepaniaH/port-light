@@ -224,3 +224,13 @@ Losing the state folder and the returned credentials also loses recovery access.
 CLI/MCP errors now distinguish `authentication_misconfigured` (repair AUTH_USER /
 AUTH_PASSWORD), `occupancy_unavailable` (inspect the scan warning or run Doctor),
 and `upgrade_required` / `unsupported_server` (upgrade the client/server pair).
+
+## Select a port rule
+
+On servers with named port rules (development branch after v0.8.2), reserve with:
+
+```bash
+port-light reserve --rule development --count 2 --ttl 3600 --label wiki-test
+```
+
+Create the rule under Manage ports → Port rules first. Optional `--start` and `--end` bounds must fit inside it. The rule name is included in the pending request journal, so retry and recovery retain the original allocation request. Existing reservations remain active if the rule is edited or deleted. See [port management](port-management.md) for browser behavior and project assignments.

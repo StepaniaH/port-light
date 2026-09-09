@@ -258,3 +258,22 @@ Point `PORT_LIGHT_URL` at a peer to query another machine; add
 `PORT_LIGHT_AGENT_TOKEN=<token>` when it sets `AGENT_TOKEN`.
 `PORT_LIGHT_TIMEOUT=<seconds>` and `PORT_LIGHT_CA_FILE=/path/to/ca.pem` apply
 to the shared MCP/CLI HTTP client.
+
+## Port rules
+
+Available in the development branch after v0.8.2. `GET /api/port-rules` returns the local rule document. `PUT /api/port-rules` replaces it; Basic Auth and settings read-only mode apply.
+
+```json
+{
+  "rules": [
+    {"name": "development", "start": 20000, "end": 29999, "projects": ["wiki"]},
+    {"name": "infrastructure", "start": 10000, "end": 19999, "projects": []}
+  ]
+}
+```
+
+`GET /api/ports/suggest?rule=development&count=2` selects that rule’s range. `POST /api/reservations` accepts an optional `rule` field with the same semantics and still requires a retained `Idempotency-Key`. Numeric bounds may narrow the selected range. Unknown rules or bounds outside it return `400`; malformed rule documents return `422`.
+
+MCP `suggest_ports` accepts `rule`. `/api/meta` advertises `port_rules: 1`. Rules are stored in the existing data directory. Deleting a rule leaves active reservations and their recovery receipts intact.
+
+`GET /api/reservations` lists local manual entries and reservations with public labels, machine names, optional expiry, and `is_reservation`. Hidden-port authorization filters this list; request keys and release tokens are never returned. Token-based release continues to use `DELETE /api/reservations/{port}`.

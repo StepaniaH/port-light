@@ -45,5 +45,6 @@ class OccupancyRow(TypedDict, total=False):
     is_reservation: bool
     known_service: dict | None
     is_hidden: bool
+    rule_violations: list[dict]
     conflict: bool
     urls: list[str]

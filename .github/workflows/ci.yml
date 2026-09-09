@@ -30,7 +30,7 @@ jobs:
         run: pip freeze
       - name: Lint
         if: matrix.python-version == '3.13'
-        run: ruff check backend tests mcp port_light_client scripts/check_release_ci.py
+        run: ruff check backend tests mcp port_light_client scripts/check_release_ci.py scripts/dev.py scripts/dockerhub_description.py
       - name: Build CLI wheel
         if: matrix.python-version == '3.13'
         run: |
@@ -73,6 +73,7 @@ jobs:
           pip install -r requirements.txt
           npx playwright install --with-deps chromium
           npm run smoke:browser
+          npm run smoke:management
 
   container:
     runs-on: ubuntu-latest

@@ -163,6 +163,7 @@ def classify(
             "protocol": cp.protocol,
             "host_ip": cp.host_ip,
             "network_mode": cp.network_mode,
+            "mapping_source": cp.mapping_source,
         })
 
     manual_map: dict[int, dict] = {}

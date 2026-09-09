@@ -1,7 +1,7 @@
 /* HTTP requests and conditional occupancy fetches. */
 
-import { S } from './state.js?v=92';
-import { occupancyUrl } from './hosts.js?v=92';
+import { S } from './state.js?v=93';
+import { occupancyUrl } from './hosts.js?v=93';
 
   export function apiHeaders(extra) {
     const headers = Object.assign({}, extra || {});

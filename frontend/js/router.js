@@ -1,10 +1,10 @@
 /* Hash router: #/, #/settings/:panel, #/port/:n, #/h/:host(/port/:n). */
 
-import { S, SETTINGS_PANELS } from './state.js?v=92';
-import { doctorBtn, settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=92';
-import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=92';
-import { applyPendingGridFocus } from './grid.js?v=92';
-import { closeDetail, showPortDetail } from './detail.js?v=92';
+import { S, SETTINGS_PANELS } from './state.js?v=93';
+import { doctorBtn, settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=93';
+import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=93';
+import { applyPendingGridFocus } from './grid.js?v=93';
+import { closeDetail, showPortDetail } from './detail.js?v=93';
 
 
   export function parseHash(hash) {
@@ -17,6 +17,7 @@ import { closeDetail, showPortDetail } from './detail.js?v=92';
       }
       return { name: 'settings', section: section };
     }
+    if (parts[0] === 'manage') return { name: 'manage', section: ['conflicts', 'reservations', 'rules'].includes(parts[1]) ? parts[1] : 'conflicts' };
     if (parts[0] === 'doctor') return { name: 'doctor' };
     let hostId = 'local';
     let rest = parts;
@@ -36,14 +37,17 @@ import { closeDetail, showPortDetail } from './detail.js?v=92';
     return parseHash(location.hash);
   }
 
-  export function applyRoute({ render, refresh, settingsPage, doctorPage }) {
+  export function applyRoute({ render, refresh, settingsPage, doctorPage, managementPage }) {
     const next = parseRoute();
     const prev = S.route.name;
     const previousHostId = S.focusHostId;
     S.route = next;
     const onSettings = S.route.name === 'settings';
     const onDoctor = S.route.name === 'doctor';
-    const onWorkspace = onSettings || onDoctor;
+    const onManage = S.route.name === 'manage';
+    const onWorkspace = onSettings || onDoctor || onManage;
+    const manageView = document.getElementById('view-manage');
+    if (manageView) manageView.classList.toggle('hidden', !onManage);
     document.getElementById('view-grid').classList.toggle('hidden', onWorkspace);
     document.getElementById('view-settings').classList.toggle('hidden', !onSettings);
     document.getElementById('view-doctor').classList.toggle('hidden', !onDoctor);
@@ -53,6 +57,12 @@ import { closeDetail, showPortDetail } from './detail.js?v=92';
     doctorBtn.classList.toggle('active', onDoctor);
     doctorBtn.setAttribute('aria-current', onDoctor ? 'page' : 'false');
     syncHeaderHeight();
+    if (onManage) {
+      S.pendingGridFocus = null;
+      closeDetail(true);
+      managementPage.open(S.route.section);
+      return;
+    }
     if (onSettings) {
       S.pendingGridFocus = null;
       closeDetail(true);
@@ -72,7 +82,7 @@ import { closeDetail, showPortDetail } from './detail.js?v=92';
       if (prev !== 'doctor') doctorPage.open();
       return;
     }
-    if (prev === 'settings' || prev === 'doctor') refresh();
+    if (prev === 'settings' || prev === 'doctor' || prev === 'manage') refresh();
     if (S.route.hostId && hostById(S.route.hostId)) S.focusHostId = S.route.hostId;
     else if (S.route.name !== 'settings') S.focusHostId = 'local';
     if (usesFocusedHostView() && S.focusHostId !== previousHostId) refresh();

@@ -1,7 +1,7 @@
 /* Setup diagnostics page. Rendering is fed only the sanitized Doctor API. */
 
-import { fetchDoctor } from './api.js?v=92';
-import { escapeHtml, t } from './text.js?v=92';
+import { fetchDoctor } from './api.js?v=93';
+import { escapeHtml, t } from './text.js?v=93';
 
 function statusLabel(status) {
   return t('doctor.status.' + status);
