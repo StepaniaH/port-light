@@ -104,12 +104,35 @@ try {
   await expect(page.locator('#host-grid-local [data-port="29099"]')).toBeVisible();
   await expect(page.locator('#host-grid-local .port-run [data-port="20128"]')).toBeVisible();
   assert.equal(await page.evaluate(async () => {
-    const { escapeHtml } = await import('/static/js/text.js?v=93');
+    const { escapeHtml } = await import('/static/js/text.js?v=94');
     const raw = '" onmouseover="alert(1)" <b>';
     const div = document.createElement('div');
     div.innerHTML = '<input value="' + escapeHtml(raw) + '">';
     return div.firstChild.value === raw && !div.firstChild.hasAttribute('onmouseover');
   }), true);
+  // The credential field appears only for instances configured to require it.
+  await page.route('**/api/meta', async route => {
+    const response = await route.fetch();
+    const body = await response.json(); body.automation.agent_token = true;
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto(base + '/#/manage/reservations');
+  await page.reload();
+  const tokenField = page.locator('[name="agentToken"]');
+  await expect(tokenField).toBeVisible();
+  await tokenField.fill('temporary-browser-test-token');
+  let sentToken;
+  await page.route('**/api/reservations', async route => {
+    if (route.request().method() === 'POST') sentToken = route.request().headers()['x-agent-token'];
+    await route.continue();
+  });
+  await page.locator('[data-form="reserve"] [name="rule"]').selectOption('infra');
+  await page.locator('[data-form="reserve"] button').click();
+  await expect(page.locator('[data-action="release"]:enabled')).toHaveCount(1);
+  assert.equal(sentToken, 'temporary-browser-test-token');
+  assert.equal(await page.evaluate(() => JSON.stringify(sessionStorage).includes('temporary-browser-test-token')), false);
+  await page.locator('[data-action="release"]:enabled').click();
+  await expect(page.locator('[data-action="release"]:enabled')).toHaveCount(0);
   assert.deepEqual(errors, []);
   console.log('Management smoke passed: range grouping, direct search/detail, conflict snippet, rules, lost-response retry, tab ownership, expiry filters, release and mobile layout.');
 } finally {

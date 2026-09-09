@@ -1,7 +1,9 @@
 /* Local reservation ownership, allocation rules, and Compose conflict review. */
-import { api } from './api.js?v=93';
-import { t, escapeHtml } from './text.js?v=93';
-import { copyReportText } from './doctor.js?v=93';
+import { S } from './state.js?v=94';
+import { hostName } from './hosts.js?v=94';
+import { api } from './api.js?v=94';
+import { t, escapeHtml } from './text.js?v=94';
+import { copyReportText } from './doctor.js?v=94';
 
 const storageKey = 'port-light-reservation-session';
 const e = escapeHtml;
@@ -51,43 +53,64 @@ export function mountManagementPage(root) {
   let agentToken = '';
   let busy = false;
   let rulesReadonly = false;
-  function status(message) { const el = root.querySelector('[role="status"]'); if (el) el.textContent = message; }
+  function status(message) {
+    const el = root.querySelector('[role="status"]');
+    if (el) el.textContent = message;
+  }
   function controls() {
-    return '<nav class="manage-tabs">' + ['conflicts', 'reservations', 'rules'].map(name =>
-      '<a href="#/manage/' + name + '" aria-current="' + (name === section ? 'page' : 'false') + '">' + tr(name) + '</a>').join('') + '<button type="button" class="btn-secondary" data-action="refresh">' + e(t('action.refresh')) + '</button></nav>';
+    return '<nav class="settings-nav manage-tabs" aria-label="' + tr('title') + '">' + ['conflicts', 'reservations', 'rules'].map(name =>
+      '<a href="#/manage/' + name + '" aria-current="' + (name === section ? 'page' : 'false') + '">' + tr(name) + '</a>').join('') + '</nav>';
+  }
+  function shell(content) {
+    return '<header class="page-intro manage-header"><div><h1>' + tr('title') + '</h1><p class="settings-lead">' +
+      e(hostName('local')) + ' <span class="manage-badge">' + e(t('hosts.thisMachine')) + '</span></p></div>' +
+      '</header>' +
+      controls() + '<p class="manage-status" role="status" aria-live="polite"></p>' + content;
+  }
+  function card(title, help, content, extra = '') {
+    return '<section class="settings-card ' + extra + '"><header class="settings-card-head"><h2>' + tr(title) + '</h2>' +
+      (help ? '<p>' + tr(help) + '</p>' : '') + '</header><div class="manage-card-body">' + content + '</div></section>';
   }
   function ruleOptions() {
     return '<label>' + tr('rule') + '<select name="rule"><option value="">' + tr('defaultRange') + '</option>' +
       rules.map(r => '<option value="' + e(r.name) + '">' + e(r.name) + ' · ' + r.start + '–' + r.end + '</option>').join('') + '</select></label>';
   }
+  function tokenInput() { return S.meta.automation?.agent_token ? input('agentToken', 'password', '', 'autocomplete="off"') : ''; }
+  function primary(label) { return '<div class="manage-form-actions"><button class="btn-primary">' + tr(label) + '</button></div>'; }
   function render() {
     let html = '';
     if (section === 'reservations') {
-      html = '<p>' + tr('ownership') + '</p><form data-form="reserve" class="manage-form">' +
+      const form = '<form data-form="reserve" class="manage-form">' +
         input('label', 'text', '', 'maxlength="256"') + input('count', 'number', 1, 'min="1" max="64" required') +
         ruleOptions() + input('start', 'number', '', 'min="1" max="65535"') + input('end', 'number', '', 'min="1" max="65535"') +
-        input('ttl', 'number', 3600, 'min="60" max="604800"') + input('agentToken', 'password', '', 'autocomplete="off"') +
-        '<button class="btn-secondary">' + tr('reserve') + '</button></form>' + button('retry', 'retry') +
-        '<div class="manage-filters"><label>' + tr('machine') + '<select data-filter="machine"><option value="">' + tr('all') + '</option>' +
+        input('ttl', 'number', 3600, 'min="60" max="604800"') + tokenInput() + primary('reserve') + '</form>';
+      const filters = '<div class="manage-filters"><label>' + tr('machine') + '<select data-filter="machine"><option value="">' + tr('all') + '</option>' +
         [...new Set(reservations.map(r => r.machine))].map(m => '<option>' + e(m) + '</option>').join('') + '</select></label>' +
-        '<label>' + tr('expiry') + '<select data-filter="expiry">' + ['all', 'permanent', 'expiring'].map(f => '<option value="' + f + '">' + tr(f) + '</option>').join('') + '</select></label></div><div id="reservation-list"></div>';
+        '<label>' + tr('expiry') + '<select data-filter="expiry">' + ['all', 'permanent', 'expiring'].map(f => '<option value="' + f + '">' + tr(f) + '</option>').join('') + '</select></label></div>';
+      html = card('newReservation', '', form) + card('reservations', '', filters + '<div id="reservation-list" class="manage-list"></div>') +
+        '<aside class="manage-help"><p>' + tr('ownership') + '</p>' + button('retry', 'retry') + '</aside>';
     } else if (section === 'rules') {
-      html = '<p>' + tr('rulesHelp') + '</p><form data-form="rule" class="manage-form">' + input('name', 'text', '', 'required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*"') +
+      const form = '<form data-form="rule" class="manage-form">' + input('name', 'text', '', 'required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*"') +
         input('start', 'number', 20000, 'required min="1" max="65535"') + input('end', 'number', 29999, 'required min="1" max="65535"') +
-        input('projects', 'text') + '<button class="btn-secondary">' + tr('saveRule') + '</button></form>' + rules.map((r, i) =>
-        '<article class="manage-card"><strong>' + e(r.name) + ' · ' + r.start + '–' + r.end + '</strong><p>' + e(r.projects.join(', ')) + '</p>' +
-        button('editRule', 'edit', 'data-index="' + i + '"') + button('deleteRule', 'delete', 'data-index="' + i + '"') + '</article>').join('');
+        input('projects', 'text') + primary('saveRule') + '</form>';
+      const list = rules.map((r, i) => '<article class="manage-card manage-row"><div class="manage-row-main"><h3>' + e(r.name) +
+        '</h3><p class="manage-range">' + r.start + '–' + r.end + '</p><p class="manage-meta">' + e(r.projects.join(', ')) + '</p></div><div class="manage-actions">' +
+        button('editRule', 'edit', 'data-index="' + i + '"') + button('deleteRule', 'delete', 'data-index="' + i + '"') + '</div></article>').join('');
+      html = card('saveRule', 'rulesHelp', form) + card('rules', '', '<div class="manage-list">' + (list || '<p class="manage-empty">' + tr('empty') + '</p>') + '</div>');
     } else {
       const conflicts = rows.filter(r => r.conflict || r.rule_violations?.length);
-      html = '<p>' + tr('conflictsHelp') + '</p>' + (conflicts.length ? conflicts.map(row => '<article class="manage-card"><h2><a href="#/port/' + row.port + '">' + row.port + '</a></h2>' +
-        (row.rule_violations || []).map(v => '<p>' + e(v.project + ' / ' + v.service + ' · ' + v.rule + ' · ' + v.start + '–' + v.end) + ' — ' + tr('outsideRule') + '</p>').join('') +
-        (row.compose_configs || []).map((c, i) => '<div class="compose-conflict"><strong>' + e((c.project_name || c.project_dir) + ' / ' + c.service_name) + '</strong><p>' + e(c.compose_file) + '</p><p>' +
-          e((c.host_ip || '*') + ':' + row.port + '/' + c.protocol + ' → ' + c.container_port) + '</p>' +
+      html = '<p class="manage-lead">' + tr('conflictsHelp') + '</p>' + (conflicts.length ? conflicts.map(row =>
+        '<article class="settings-card manage-card manage-conflict"><header class="settings-card-head manage-conflict-head"><h2><a href="#/port/' + row.port + '">' + row.port +
+        '</a><span class="manage-protocol">' + e(row.protocol) + '</span></h2><span class="manage-badge is-warning">' + tr(row.conflict ? 'conflicts' : 'outsideRule') + '</span></header><div class="manage-card-body">' +
+        (row.rule_violations || []).map(v => '<p class="manage-rule-warning">' + e(v.project + ' / ' + v.service + ' · ' + v.rule + ' · ' + v.start + '–' + v.end) + '</p>').join('') +
+        (row.compose_configs || []).map((c, i) => '<section class="compose-conflict"><div class="manage-service-head"><h3>' + e((c.project_name || c.project_dir) + ' / ' + c.service_name) +
+        '</h3><code>' + e((c.host_ip || '*') + ':' + row.port + '/' + c.protocol + ' → ' + c.container_port) + '</code></div><p class="manage-path">' + e(c.compose_file) + '</p>' +
           (composeSnippet(c, row.port) ? '<form data-form="suggest" data-port="' + row.port + '" data-index="' + i + '" class="manage-form">' +
-          ruleOptions() + input('start', 'number', '', 'min="1" max="65535"') + input('end', 'number', '', 'min="1" max="65535"') + input('agentToken', 'password', '', 'autocomplete="off"') + '<button class="btn-secondary">' + tr('suggest') + '</button></form><div class="snippet-result"></div>' : '<p>' + tr('hostNetwork') + '</p>') + '</div>').join('') + '</article>').join('') : '<p>' + tr('empty') + '</p>');
+          ruleOptions() + input('start', 'number', '', 'min="1" max="65535"') + input('end', 'number', '', 'min="1" max="65535"') +
+          tokenInput() + primary('suggest') + '</form><div class="snippet-result"></div>' : '<p class="manage-meta">' + tr('hostNetwork') + '</p>') + '</section>').join('') + '</div></article>').join('') : '<p class="manage-empty">' + tr('empty') + '</p>');
     }
-    if (section === 'rules' && rulesReadonly) html = '<p>' + e(t('doctor.detail.readonly')) + '</p><fieldset disabled>' + html + '</fieldset>';
-    root.innerHTML = '<h1>' + tr('title') + '</h1>' + controls() + '<p role="status" aria-live="polite"></p>' + html;
+    if (section === 'rules' && rulesReadonly) html = '<p class="manage-help">' + e(t('doctor.detail.readonly')) + '</p><fieldset class="manage-readonly" disabled>' + html + '</fieldset>';
+    root.innerHTML = shell(html);
     if (section === 'reservations') renderReservations();
   }
   function renderReservations() {
@@ -97,15 +120,17 @@ export function mountManagementPage(root) {
     try { owned = session().tokens; } catch { status(t('manage.storageFailed')); }
     const filtered = reservations.filter(r => (!machine || r.machine === machine) &&
       (expiry === 'all' || (expiry === 'permanent' ? !r.expires_at : !!r.expires_at)));
-    root.querySelector('#reservation-list').innerHTML = filtered.map(r => '<article class="manage-card"><a href="#/port/' + r.port + '">' + r.port + '</a> · ' + e(r.label) +
-      '<p>' + e(r.machine) + ' · ' + (r.expires_at ? e(new Date(r.expires_at * 1000).toLocaleString()) : tr('permanent')) + '</p>' +
-      (r.is_reservation ? button('copyRelease', 'copyRelease', 'data-port="' + r.port + '"' + (owned[r.port] ? '' : ' disabled')) +
-       button('release', 'release', 'data-port="' + r.port + '"' + (owned[r.port] ? '' : ' disabled')) : '<span>' + tr('manual') + '</span>') + '</article>').join('') || '<p>' + tr('empty') + '</p>';
+    root.querySelector('#reservation-list').innerHTML = filtered.map(r => '<article class="manage-card manage-row"><div class="manage-row-main"><h3><a class="manage-port" href="#/port/' + r.port + '">' + r.port +
+      '</a><span>' + e(r.label) + '</span></h3><p class="manage-meta"><span>' + e(r.machine) + '</span><span class="manage-badge">' +
+      (r.expires_at ? e(new Date(r.expires_at * 1000).toLocaleString(window.PortLightI18n?.locale())) : tr('permanent')) + '</span>' + (!r.is_reservation ? '<span class="manage-badge">' + tr('manual') + '</span>' : '') + '</p></div>' +
+      (r.is_reservation ? '<div class="manage-actions">' + button('copyRelease', 'copyRelease', 'data-port="' + r.port + '"' + (owned[r.port] ? '' : ' disabled')) +
+       button('release', 'release', 'data-port="' + r.port + '"' + (owned[r.port] ? '' : ' disabled')) + '</div>' : '') + '</article>').join('') || '<p class="manage-empty">' + tr('empty') + '</p>';
   }
   async function load(next = section) {
     section = next;
     const current = ++generation;
-    root.innerHTML = '<h1>' + tr('title') + '</h1>' + controls() + '<p role="status">' + tr('loading') + '</p>';
+    root.innerHTML = shell('');
+    status(t('manage.loading'));
     try {
       const results = await Promise.all([json('/api/port-rules'), json('/api/reservations'), section === 'conflicts' ? json('/api/ports?range_start=1&range_end=65535') : null]);
       if (current !== generation) return;
@@ -171,9 +196,8 @@ export function mountManagementPage(root) {
     busy = true;
     try {
       const action = btn.dataset.action;
-      if (action === 'refresh') await load();
-      else if (action === 'retry') {
-        agentToken = root.querySelector('[name="agentToken"]').value || agentToken;
+      if (action === 'retry') {
+        agentToken = root.querySelector('[name="agentToken"]')?.value || agentToken;
         const pending = session().pending;
         if (pending) {
           try {

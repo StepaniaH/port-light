@@ -4,6 +4,7 @@
     "aria": "Buscar"
   },
   "action": {
+    "more": "Más",
     "refresh": "Actualizar",
     "add": "Añadir puerto",
     "showHidden": "Mostrar puertos ocultos",
@@ -589,6 +590,7 @@
     "title": "Cambios recientes (24 h)"
   },
   "manage": {
+    "newReservation": "Nueva reserva",
     "title": "Gestión de puertos",
     "conflicts": "Conflictos",
     "reservations": "Reservas",

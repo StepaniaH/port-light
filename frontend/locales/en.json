@@ -4,6 +4,7 @@
     "aria": "Search"
   },
   "action": {
+    "more": "More",
     "refresh": "Refresh",
     "add": "Add port",
     "showHidden": "Show hidden ports",
@@ -606,6 +607,7 @@
     "title": "Recent changes (24h)"
   },
   "manage": {
+    "newReservation": "New reservation",
     "title": "Manage ports",
     "conflicts": "Conflicts",
     "reservations": "Reservations",

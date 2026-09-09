@@ -74,6 +74,7 @@ jobs:
           npx playwright install --with-deps chromium
           npm run smoke:browser
           npm run smoke:management
+          npm run smoke:fleet
 
   container:
     runs-on: ubuntu-latest

@@ -1,10 +1,10 @@
 /* Hash router: #/, #/settings/:panel, #/port/:n, #/h/:host(/port/:n). */
 
-import { S, SETTINGS_PANELS } from './state.js?v=93';
-import { doctorBtn, settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=93';
-import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=93';
-import { applyPendingGridFocus } from './grid.js?v=93';
-import { closeDetail, showPortDetail } from './detail.js?v=93';
+import { S, SETTINGS_PANELS } from './state.js?v=94';
+import { doctorBtn, settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=94';
+import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=94';
+import { applyPendingGridFocus } from './grid.js?v=94';
+import { closeDetail, showPortDetail } from './detail.js?v=94';
 
 
   export function parseHash(hash) {
@@ -56,6 +56,10 @@ import { closeDetail, showPortDetail } from './detail.js?v=93';
     settingsBtn.setAttribute('aria-current', onSettings ? 'page' : 'false');
     doctorBtn.classList.toggle('active', onDoctor);
     doctorBtn.setAttribute('aria-current', onDoctor ? 'page' : 'false');
+    document.getElementById('btn-refresh').hidden = onSettings || onDoctor;
+    const manageButton = document.querySelector('.app-actions a[href="#/manage/conflicts"]');
+    manageButton?.classList.toggle('active', onManage);
+    manageButton?.setAttribute('aria-current', onManage ? 'page' : 'false');
     syncHeaderHeight();
     if (onManage) {
       S.pendingGridFocus = null;

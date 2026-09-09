@@ -4,6 +4,7 @@
     "aria": "搜尋"
   },
   "action": {
+    "more": "更多",
     "refresh": "重新整理",
     "add": "新增連接埠",
     "showHidden": "顯示隱藏的連接埠",
@@ -589,6 +590,7 @@
     "title": "最近變動（24 小時）"
   },
   "manage": {
+    "newReservation": "建立預留",
     "title": "連接埠管理",
     "conflicts": "衝突",
     "reservations": "預留",

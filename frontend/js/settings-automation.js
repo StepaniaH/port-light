@@ -1,9 +1,9 @@
 /* Automation examples, activity, and lease controls. */
-import { S } from './state.js?v=93';
-import { t, escapeHtml } from './text.js?v=93';
-import { api } from './api.js?v=93';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=93';
-import { settingsCard, kvRow } from './settings-format.js?v=93';
+import { S } from './state.js?v=94';
+import { t, escapeHtml } from './text.js?v=94';
+import { api } from './api.js?v=94';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=94';
+import { settingsCard, kvRow } from './settings-format.js?v=94';
 
   function snippetBlock(captionKey, id, code) {
     return '<div class="snippet"><p class="snippet-cap">' + escapeHtml(t(captionKey)) + '</p>' +

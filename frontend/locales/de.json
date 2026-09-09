@@ -4,6 +4,7 @@
     "aria": "Suchen"
   },
   "action": {
+    "more": "Mehr",
     "refresh": "Aktualisieren",
     "add": "Port hinzufügen",
     "showHidden": "Verborgene Ports anzeigen",
@@ -589,6 +590,7 @@
     "title": "Letzte Änderungen (24 h)"
   },
   "manage": {
+    "newReservation": "Neue Reservierung",
     "title": "Portverwaltung",
     "conflicts": "Konflikte",
     "reservations": "Reservierungen",

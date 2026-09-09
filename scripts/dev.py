@@ -73,15 +73,16 @@ def main() -> int:
     dev.add_argument('--reload', action='store_true')
     dev.add_argument('--port', type=int, default=2100)
     preview = commands.add_parser('preview', help='run with temporary example data; Ctrl-C cleans up')
+    preview.add_argument('--fleet', action='store_true', help='simulate four machines with distinct services and port states')
     preview.add_argument('--port', type=int, default=2100)
     check = commands.add_parser('test', help='run Python and frontend checks')
     check.add_argument('--browser', action='store_true')
     args = parser.parse_args()
     if args.command == 'test':
-        steps = [[sys.executable, '-m', 'ruff', 'check', 'backend', 'tests', 'mcp', 'port_light_client', 'scripts/dev.py', 'scripts/check_release_ci.py', 'scripts/dockerhub_description.py'],
+        steps = [[sys.executable, '-m', 'ruff', 'check', 'backend', 'tests', 'mcp', 'port_light_client', 'scripts/dev.py', 'scripts/preview_fleet.py', 'scripts/check_release_ci.py', 'scripts/dockerhub_description.py'],
                  [sys.executable, '-m', 'pytest', '-q'], ['npm', 'run', 'lint'], ['npm', 'test']]
         if args.browser:
-            steps += [['npm', 'run', 'smoke:browser'], ['npm', 'run', 'smoke:management']]
+            steps += [['npm', 'run', 'smoke:browser'], ['npm', 'run', 'smoke:management'], ['npm', 'run', 'smoke:fleet']]
         for command in steps:
             result = subprocess.run(command, cwd=ROOT)
             if result.returncode:
@@ -91,6 +92,9 @@ def main() -> int:
         parser.error('port must be between 1 and 65535')
     if args.command == 'serve':
         return serve(args, args.data_dir, args.compose_dir)
+    if args.fleet:
+        from preview_fleet import run_fleet
+        return run_fleet(args.port)
     with tempfile.TemporaryDirectory(prefix='port-light-preview-') as directory:
         data = Path(directory)
         return serve(args, data, demo_data(data), demo=True)

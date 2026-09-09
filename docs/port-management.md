@@ -1,6 +1,6 @@
 # Port management
 
-The management pages and grouping controls are available in the development branch after v0.8.2.
+The management pages and grouping controls are available in the development branch after v0.8.2. Open **Manage ports** in the header. **More** contains Add port, Find free ports, Show hidden ports, Setup diagnostics, and Settings.
 
 ## Group projects and services
 
@@ -32,7 +32,7 @@ Under **Manage ports → Port rules**, create a named inclusive range, such as `
 
 Each project can be assigned to one rule. Ranges may overlap. Unassigned projects are not flagged. Saving an existing name updates its rule. A declaration outside its assigned range remains visible, with a warning on its card and in the conflict list.
 
-Rules apply when explicitly selected for allocation. They do not reserve the whole range, bind sockets, change service configurations, or restrict allocations that omit a rule. Existing toolbar block reservations still use their selected numeric range. Settings read-only mode prevents rule edits.
+Rules apply when explicitly selected for allocation. They do not reserve the whole range, bind sockets, change service configurations, or restrict allocations that omit a rule. **More → Find free ports** uses the selected numeric range. Settings read-only mode prevents rule edits.
 
 ```bash
 port-light reserve --rule development --count 2 --ttl 3600 --label wiki-test

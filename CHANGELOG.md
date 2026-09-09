@@ -10,17 +10,22 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - A local management page for Compose conflicts, replacement mapping snippets, reservations, and named port rules.
 - Browser reservation recovery after a lost response, with release credentials retained in the current tab.
 - Project range checks and rule selection in the allocation API, CLI (`--rule`), and MCP.
-- Disposable development previews and a shared local test command.
+- Disposable single-machine and four-machine development previews and a shared local test command.
 - Docker Hub README synchronization after release and repository metadata for Unraid Community Applications submission.
 
 ### Fixed
 
 - Escape quotes in dynamic HTML attributes so names and group identifiers cannot break their markup.
+- Keep waterfall boards across the available width when their heights differ.
+- Preserve card columns and mobile density inside expanded Compose ranges.
+- Apply name and status sorting within grouped views and refresh the active management page from the toolbar.
 
 ### Changed
 
 - Split API routes by domain, Compose decoding and port parsing into separate modules, and the peer editor out of the settings controller.
 - Organize Python tests by domain.
+- Align management page navigation, forms, and lists with the settings UI.
+- Keep refresh and port management in the header; move other actions to a labeled More menu.
 - Shorten README feature lists, move installation instructions forward, and retain the dashboard screenshot.
 - Update the Unraid template to v0.8.2 and document current submission requirements.
 

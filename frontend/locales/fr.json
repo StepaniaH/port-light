@@ -4,6 +4,7 @@
     "aria": "Rechercher"
   },
   "action": {
+    "more": "Plus",
     "refresh": "Actualiser",
     "add": "Ajouter un port",
     "showHidden": "Afficher les ports masqués",
@@ -589,6 +590,7 @@
     "title": "Changements récents (24\u00A0h)"
   },
   "manage": {
+    "newReservation": "Nouvelle réservation",
     "title": "Gestion des ports",
     "conflicts": "Conflits",
     "reservations": "Réservations",

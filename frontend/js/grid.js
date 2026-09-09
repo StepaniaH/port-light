@@ -1,17 +1,25 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { groupPorts, portRuns } from './port-groups.js?v=93';
-import { S } from './state.js?v=93';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=93';
-import { KIND_MATCHERS } from './kinds.js?v=93';
-import { isLease } from './leases.js?v=93';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=93';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=93';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=93';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=93';
-import { api } from './api.js?v=93';
+import { groupPorts, portRuns } from './port-groups.js?v=94';
+import { S } from './state.js?v=94';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=94';
+import { KIND_MATCHERS } from './kinds.js?v=94';
+import { isLease } from './leases.js?v=94';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=94';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=94';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=94';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=94';
+import { api } from './api.js?v=94';
 
 const expandedRuns = new Set();
+const boardSizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
+  for (const { target } of entries) sizeHostBoard(target);
+});
+function sizeHostBoard(board) {
+  // One-pixel grid rows preserve masonry flow without leaving empty CSS columns.
+  const span = Math.ceil(board.getBoundingClientRect().height) + 16;
+  if (board.style.gridRowEnd !== 'span ' + span) board.style.gridRowEnd = 'span ' + span;
+}
 
 
   export function syncFilterUI() {
@@ -28,6 +36,8 @@ const expandedRuns = new Set();
     const title = t(S.showHidden ? 'action.hiddenVisible' : 'action.showHidden');
     unhideBtn.title = title;
     unhideBtn.setAttribute('aria-label', title);
+    const label = unhideBtn.querySelector('span');
+    if (label) label.textContent = title;
   }
 
   export function snapshotGridFocus() {
@@ -351,6 +361,12 @@ const expandedRuns = new Set();
     }
   }
 
+  export function sortPortRuns(rows) {
+    const ranks = new Map(sortPorts([...rows]).map((row, index) => [row.port, index]));
+    const rank = run => Math.min(...run.map(row => ranks.get(row.port)));
+    return portRuns(rows).sort((a, b) => rank(a) - rank(b));
+  }
+
   export function portFromList(port, hostId) {
     const data = dataForHost(hostId || S.selectedHostId || 'local');
     if (!data || !data.ports) return null;
@@ -432,11 +448,7 @@ const expandedRuns = new Set();
     const restore = snapshotGridFocus();
     const warnings = scanWarningState(hostBoards);
     const hosts = displayedHosts();
-    /* CSS columns can otherwise reserve more narrow columns than there are
-       boards. Capping the count at the actual fleet size lets a small fleet
-       expand across a wide screen while preserving masonry flow for larger
-       fleets. */
-    hostBoards.style.setProperty('--host-board-count', String(Math.max(1, hosts.length)));
+    boardSizeObserver?.disconnect();
     hostBoards.innerHTML = hosts.map(function (h) {
       return '<article class="host-board' + (h.id === S.focusHostId ? ' is-active' : '') +
         '" data-host="' + escapeHtml(h.id) + '" aria-labelledby="host-title-' + escapeHtml(h.id) + '">' +
@@ -482,6 +494,10 @@ const expandedRuns = new Set();
         root.innerHTML = '<div class="empty">' + escapeHtml(t('hosts.loading')) + '</div>';
       }
     });
+    for (const board of hostBoards.querySelectorAll('.host-board')) {
+      sizeHostBoard(board);
+      boardSizeObserver?.observe(board);
+    }
     wireScanWarnings(hostBoards, warnings);
   }
 
@@ -548,7 +564,6 @@ const expandedRuns = new Set();
         hostBoards.hidden = true;
         hostBoards.classList.add('hidden');
         hostBoards.innerHTML = '';
-        hostBoards.style.removeProperty('--host-board-count');
       }
       if (hostSwitcher) {
         hostSwitcher.hidden = true;
@@ -700,7 +715,7 @@ const expandedRuns = new Set();
     const opened = new Set(Array.from(rootEl.querySelectorAll('details[data-run][open]')).map(el => el.dataset.run));
     if (S.groupMode && S.groupMode !== 'none' && !S.searchTerm && S.searchPortNum === null) {
       rootEl.innerHTML = groupPorts(displayPorts, S.groupMode).map(group => '<section class="port-group"><h3>' +
-        escapeHtml(group.label || t('manage.other')) + '</h3><div class="group-ports">' + (S.sortMode === 'port-desc' ? portRuns(group.rows).reverse() : portRuns(group.rows)).map(run => {
+        escapeHtml(group.label || t('manage.other')) + '</h3><div class="group-ports">' + sortPortRuns(group.rows).map(run => {
           if (run.length < 4) return rootEl._renderPortRun(run);
           const key = group.key + ':' + run[0].port;
           rootEl._portRuns.set(key, run);

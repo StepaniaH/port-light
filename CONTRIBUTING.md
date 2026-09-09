@@ -29,9 +29,17 @@ For a disposable preview with example projects, a conflict, and a 256-port range
 .venv/bin/python scripts/dev.py preview --port 2100
 ```
 
-The preview binds to `127.0.0.1`, scans only generated Compose files, and removes its temporary directory on exit. Stop it with Ctrl-C. The `serve` command uses `./data` by default and accepts `--data-dir`; it does not load `.env` automatically.
+For a four-machine dashboard with synthetic listeners, distinct projects, conflicts, and reservations:
 
-Python tests are grouped under `tests/api`, `tests/scanners`, `tests/client`, `tests/storage`, `tests/frontend`, and `tests/release`. Run a directory with `pytest tests/scanners` when working on one domain. Browser flows are `npm run smoke:browser` for the existing fleet/settings workflow and `npm run smoke:management` for grouping, rules, reservations, and mobile layout.
+```bash
+.venv/bin/python scripts/dev.py preview --fleet --port 2100
+```
+
+The fleet uses a local dashboard and three peers on automatically assigned loopback ports. All demo data and processes are removed when it exits.
+
+The single-machine preview binds to `127.0.0.1`, scans only generated Compose files, and removes its temporary directory on exit. Stop it with Ctrl-C. The `serve` command uses `./data` by default and accepts `--data-dir`; it does not load `.env` automatically.
+
+Python tests are grouped under `tests/api`, `tests/scanners`, `tests/client`, `tests/storage`, `tests/frontend`, and `tests/release`. Run a directory with `pytest tests/scanners` when working on one domain. Browser flows are `npm run smoke:browser` for the existing fleet/settings workflow, `npm run smoke:management` for grouping, rules, reservations, and mobile layout, and `npm run smoke:fleet` for adaptive card columns, multi-host navigation, the header menu, and management page themes.
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants `PORT_LIGHT_DATA_DIR=./data`. Set `PORT_LIGHT_SCANNERS=listen,compose` when Docker is intentionally absent, and point `COMPOSE_SCAN_DIR` to a readable directory. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
 

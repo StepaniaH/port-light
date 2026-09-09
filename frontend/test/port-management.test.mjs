@@ -50,11 +50,28 @@ test('quoted names remain text in attributes and grouped range identifiers', asy
 });
 
 test('status sorting puts used ports first, then configured and free', async () => {
-  const { S } = await import('../js/state.js?v=93');
-  const { sortPorts } = await import('../js/grid.js?v=93');
+  const { S } = await import('../js/state.js?v=94');
+  const { sortPorts } = await import('../js/grid.js?v=94');
   const original = S.sortMode;
   try {
     S.sortMode = 'status';
     assert.deepEqual(sortPorts([{ port: 1, status: 'free' }, { port: 2, status: 'configured' }, { port: 3, status: 'used' }]).map(r => r.status), ['used', 'configured', 'free']);
+  } finally { S.sortMode = original; }
+});
+
+test('grouped runs respect name and status sorting across noncontiguous ports', async () => {
+  const { S } = await import('../js/state.js?v=94');
+  const { sortPortRuns } = await import('../js/grid.js?v=94');
+  const original = S.sortMode;
+  const entries = [
+    { port: 8080, status: 'configured', manual_label: 'Zulu', source_type: 'manual' },
+    { port: 9000, status: 'used', manual_label: 'Alpha', source_type: 'manual' },
+    { port: 7000, status: 'configured', manual_label: 'Beta', source_type: 'manual' },
+  ];
+  try {
+    for (const [mode, expected] of [['name-asc', [9000, 7000, 8080]], ['name-desc', [8080, 7000, 9000]], ['status', [9000, 7000, 8080]], ['port-desc', [9000, 8080, 7000]]]) {
+      S.sortMode = mode;
+      assert.deepEqual(sortPortRuns(entries).map(run => run[0].port), expected);
+    }
   } finally { S.sortMode = original; }
 });

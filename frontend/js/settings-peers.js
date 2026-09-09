@@ -1,6 +1,6 @@
 /* Peer editor and payload serialization. */
-import { S } from './state.js?v=93';
-import { t, escapeHtml } from './text.js?v=93';
+import { S } from './state.js?v=94';
+import { t, escapeHtml } from './text.js?v=94';
 
   export function renderPeersEditor(readonly, syncRefreshCapacity = () => {}) {
     const host = document.getElementById('settings-peers');

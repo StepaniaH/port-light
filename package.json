@@ -6,7 +6,8 @@
     "lint": "eslint frontend/js frontend/i18n.js",
     "test": "node --test \"frontend/test/**/*.test.mjs\"",
     "smoke:browser": "node frontend/test/browser-smoke.mjs",
-    "smoke:management": "node frontend/test/management-smoke.mjs"
+    "smoke:management": "node frontend/test/management-smoke.mjs",
+    "smoke:fleet": "node frontend/test/fleet-regression.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

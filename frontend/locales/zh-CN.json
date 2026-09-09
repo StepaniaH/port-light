@@ -4,6 +4,7 @@
     "aria": "搜索"
   },
   "action": {
+    "more": "更多",
     "refresh": "刷新",
     "add": "添加端口",
     "showHidden": "显示隐藏端口",
@@ -606,6 +607,7 @@
     "title": "最近变动（24 小时）"
   },
   "manage": {
+    "newReservation": "创建预留",
     "title": "端口管理",
     "conflicts": "冲突",
     "reservations": "预留",
