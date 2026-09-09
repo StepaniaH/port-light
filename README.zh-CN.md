@@ -4,7 +4,7 @@
 
 # Port-Light
 
-自托管的主机端口占用看板，将主机监听、Docker 映射和 Compose 声明合并为红绿灯网格。
+自托管的主机端口占用看板，汇总主机监听、Docker 端口映射和 Compose 声明。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docker Hub](https://img.shields.io/docker/v/stepaniah/port-light?label=docker%20hub&sort=semver)](https://hub.docker.com/r/stepaniah/port-light)
@@ -21,7 +21,7 @@
 
 ## 快速开始
 
-镜像：[`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light)（`linux/amd64`、`linux/arm64`）。打 tag 发布时也会推到 GHCR（`ghcr.io/stepaniah/port-light`）。重要机器请钉版本标签，不要长期用 `latest`。
+镜像：[`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light)（`linux/amd64`、`linux/arm64`）。打 tag 发布时也会推到 GHCR（`ghcr.io/stepaniah/port-light`）。固定版本可使用版本标签或镜像摘要。
 
 ```yaml
 services:
@@ -47,76 +47,54 @@ docker compose up -d
 
 打开 `http://localhost:2100`。
 
-挂载 `/var/run/docker.sock` 会授予广泛的 Docker API 访问权限；只读挂载不会限制 API 操作。如果 UI 可能被不完全信任的人访问，请用 [socket proxy](docs/deployment.md#docker-socket-proxy)。更多安装方式（Unraid 模板、Podman、反向代理、从源码构建）见 [docs/deployment.md](docs/deployment.md)。
+挂载 Docker socket 会授予 Docker API 访问权限，包括修改操作。可通过 [socket proxy](docs/deployment.md#docker-socket-proxy) 限制权限。Unraid、Podman 和反向代理配置见[部署文档](docs/deployment.md)。
 
-常规桥接网络**不需要** `NET_ADMIN`。它只对裸机上的 `ss` 回退路径有帮助。
-
-扫描来源默认全部启用。任一启用来源失败、Compose 扫描不完整或快照过期时，端口图会显示警告，无法确认的端口显示为未知，查找空闲端口和批量预留返回 `503`。不使用 Docker 的本机部署可设置 `PORT_LIGHT_SCANNERS=listen,compose`；仅扫描监听端口可设为 `listen`。禁用来源中的占用不会参与检查。
-
-## 它做什么
-
-把三条**本机**数据合成一张网格：
-
-| 来源 | 你能看到什么 |
-|------|----------------|
-| 主机监听表（`/proc` 或 `ss`） | 实际绑定的 TCP/UDP 端口 |
-| Docker API | 容器名、状态、镜像、发布的端口映射 |
-| Compose 文件 | **声明了**但栈可能没在跑的端口 |
-
-| 颜色 | 状态 | 含义 |
-|------|------|------|
-| 蓝 | 占用 | 有进程在听，或有容器带着这个映射在跑 |
-| 黄 | 已配置 | Compose 里声明了（或手动添加了），但当前没人听 |
-| 绿 | 空闲 | **搜索某个端口号时**才会出现，并带上附近可用端口作备选 |
-
-默认网格只画**已被占用或已声明**的端口，不会把 1–9999 全涂成绿色。
-
-这是**端口占用图**，不是容器管理器。它不会启停容器、看日志，也不替代 Portainer。
+默认启用监听、Docker 和 Compose 三种扫描来源。无 Docker 的部署可设置 `PORT_LIGHT_SCANNERS=listen,compose`。扫描失败或数据过期时，页面会显示警告，端口分配暂停；排查方法见[故障排查](docs/troubleshooting.md#occupancy-scan-warning)。
 
 ## 功能
 
-- 按端口、服务、项目、进程或绑定地址搜索，筛选和排序已占用或已声明的端口。
-- 按 Compose 项目或服务分组，展开连续范围查看单个端口。
-- 查看 Compose 冲突，选择可用的替代端口，复制对应服务的映射片段。
-- 管理手动条目和预留，查看标签、筛选到期状态，复制当前浏览器标签页创建的预留的释放命令。
-- 定义命名端口范围，按规则预留，并标记超出项目指定范围的声明。
-- 查看最多 32 台其他 Port-Light 实例；每台主机独立扫描监听、Docker API 和 Compose 文件。
-- 通过无额外依赖的 CLI 或 MCP 服务检查和预留端口，支持中断后的请求恢复。
-- 配置外观、七种界面语言、历史、Webhook 和可选 Basic Auth；Setup / Doctor 提供脱敏诊断报告。
+- 按端口、服务、项目、进程或绑定地址搜索，支持筛选和排序。
+- 按 Compose 项目或服务分组，折叠连续端口范围。
+- 查看 Compose 冲突，生成替代端口的映射片段。
+- 创建和管理端口预留，按到期状态筛选，复制释放命令。
+- 定义命名端口范围，并检查项目声明是否超出范围。
+- 汇总最多 32 台其他实例的端口，支持瀑布流和标签页布局。每台机器运行独立实例，管理操作在对应实例中执行。
+- 通过 CLI、API 或 MCP 检查和预留端口。
+- 支持七种界面语言、主题配色、端口历史、Webhook 和 Doctor 诊断。
 
-分组、管理页面和命名端口规则位于 v0.8.2 之后的开发分支。体验这些功能请[从源码运行](CONTRIBUTING.md#development)。
+分组、管理页面和命名端口规则目前位于 `dev` 分支，尚未包含在 v0.8.2 中。体验方法见[开发指南](CONTRIBUTING.md#development)。
 
-用法见[端口管理指南](docs/port-management.md)、[CLI 文档](docs/cli.md)和 [API 参考](docs/integrations.md)。
+看板默认显示已占用和已配置的端口，搜索端口号时显示空闲建议：
 
-### 使用限制
+| 状态 | 含义 |
+|------|------|
+| 占用 | 存在监听进程或运行中的容器映射 |
+| 已配置 | 已在 Compose 或手动条目中登记，尚未检测到监听 |
+| 空闲 | 当前扫描范围内可用 |
 
-- **局域网工具。** 未设置 `AUTH_USER` / `AUTH_PASSWORD` 时没有登录。请放在反向代理后面，或不要暴露到公网。见 [SECURITY.md](SECURITY.md)。
-- **从网格隐藏**只是显示过滤。只有配置了 `AUTH_*` 或 `HIDDEN_UNLOCK_PASSWORD` 时，API 才会真正不返回这些端口。
-- **多机是只读汇总。** 每台机器仍各自跑 Port-Light。一个界面可以通过局域网或 Tailscale 拉取最多 32 台其他机器的占用图（设置 → 占用图）。刷新控件会按当前间隔提示建议容量；即使超过建议值，内部请求仍会限流。不要把 2100 端口暴露到公网。由 Hub 自己去拉这些地址；Docker 桥接容器常常连不上 Tailscale 的 `100.x` — 改填局域网 IP，或让 Hub 使用 `network_mode: host`。
-- 挂了 `/host/proc` 时（镜像默认如此），监听端口可以从 inode 对上进程名。没挂则只能看到 Docker 的容器名。`ss -tlnp` 的进程名仍需要 host network 或裸机。
-- `network_mode: host` 的容器在挂了 `/host/proc` 时通过 socket inode 关联；否则回退到 `ExposedPorts`。
+## 访问控制
 
-后续计划与架构：[docs/roadmap.md](docs/roadmap.md)、[docs/architecture.md](docs/architecture.md)。命令行客户端：[docs/cli.md](docs/cli.md)。API 与 MCP 集成：[docs/integrations.md](docs/integrations.md)。
+通过 `AUTH_USER` 和 `AUTH_PASSWORD` 为页面和 API 启用 Basic Auth。公网部署应配合 HTTPS 反向代理。
 
-升级后若仍出现占用警告，可将鼠标移至信息图标，或聚焦、点击警告查看对应扫描器的排查建议。镜像升级不能自动处理的权限与配置问题，见 [升级与故障排查（英文）](docs/troubleshooting.md#occupancy-scan-warning)。
+启用 Basic Auth 或 `HIDDEN_UNLOCK_PASSWORD` 后，隐藏端口需解锁才能通过 API 读取；其他情况下，隐藏操作仅影响显示。详见 [SECURITY.md](SECURITY.md)。
 
 ## 配置
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | 启用的扫描来源，逗号分隔；未列出的来源明确禁用。至少选择一项。也可在设置 → 占用图中修改。 |
+| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | 启用的扫描来源，逗号分隔，至少选择一项。 |
 | `PORT_LIGHT_SCAN_TIMEOUT_S` | `10` | 后台刷新超时秒数（1–60），超时后保留快照并标记过期。只能用环境变量。 |
 | `COMPOSE_SCAN_DIR` | `/compose` | 扫描 compose 文件的目录（只能用环境变量） |
 | `COMPOSE_SCAN_DEPTH` | `4` | 扫描子目录的最大深度 |
 | `COMPOSE_SCAN_EXCLUDE_DIRS` | 未设置 | 自动发现时跳过的目录名，逗号分隔；Compose 中显式 `include` / `extends` 的文件仍会读取。 |
 | `COMPOSE_SCAN_MAX_FILES` | `400` | 每次刷新最多解析的 compose 文件数 |
 | `PORT_RANGE_START` | `1` | **空闲数量**统计的起始端口 |
-| `PORT_RANGE_END` | `9999` | 上述区间的结束（不会把网格填满绿格） |
+| `PORT_RANGE_END` | `9999` | 空闲数量统计的结束端口 |
 | `PORT_LIGHT_DATA_DIR` | `/data` | 手动端口、隐藏列表、已保存设置（JSON） |
-| `PORT_LIGHT_PORT` | `2100` | uvicorn 在容器内监听的端口；经 `/api/meta` 暴露，自动化面板据此生成 MCP 片段，不再写死 |
+| `PORT_LIGHT_PORT` | `2100` | 容器内的 HTTP 监听端口 |
 | `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称（只能用环境变量） |
-| `THEME_MODE` | `system` | `system` / `dark` / `light`，解析后的明暗；配色跟随明暗 |
-| `THEME_PALETTE` | 内置 | 叠在明暗之上的配色族：`gruvbox`、`catppuccin`、`solarized`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`everforest`、`rose-pine`、`kanagawa`。留空使用内置颜色。 |
+| `THEME_MODE` | `system` | `system` / `dark` / `light` |
+| `THEME_PALETTE` | 内置 | 配色：`gruvbox`、`catppuccin`、`solarized`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`everforest`、`rose-pine`、`kanagawa`。留空使用内置颜色。 |
 | `LOCALE` | `auto` | `auto` / `en` / `fr` / `de` / `es` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
 | `GRID_DENSITY` | `standard` | 卡片密度预设：`loose`(宽松)、`standard`(标准)、`compact`(紧凑)。旧值 `comfortable` 视同 `standard`。 |
 | `SHOW_BIND_ADDRESSES` | `false` | 在已占用卡片上显示紧凑的绑定地址摘要。 |
@@ -131,36 +109,32 @@ docker compose up -d
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页的值覆盖 env 默认值。`env`：只认 Compose，设置页只读。 |
 | `PORT_LIGHT_HOST_NAME` | 主机名 | 多机器视图中本机占用图的名称。也可在设置 → 占用图中修改。 |
 | `PORT_LIGHT_HOST_DESCRIPTION` | 空 | 多机器视图中本机名称下方的可选纯文本短描述，最多 120 字。 |
-| `PORT_LIGHT_PEERS` | 未设置 | 最多 32 个 `{name, url, description?, username?, password?}` 条目的 JSON 数组。短描述为可选纯文本，最多 120 字。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。与设置页同一把锁。 |
+| `PORT_LIGHT_PEERS` | 未设置 | 最多 32 个 `{name, url, description?, username?, password?}` 条目的 JSON 数组。短描述为可选纯文本，最多 120 字。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。 |
 | `PORT_LIGHT_LOG_LEVEL` | `warning` | 后端日志级别（`debug` / `info` / `warning` / `error`）。扫描器降级（Docker 不可达、Compose 文件解析失败等）会记一条日志，并出现在 `/api/health` 的 `degradations` 里。只能用环境变量。 |
-| `WEBHOOK_URL` | 未设置 | 可选 webhook 目标（仅 http/https）。配合 `WEBHOOK_EVENTS=new_listener,conflict`，在端口开始占用或发生冲突时以 fire-and-forget 方式 POST `{event, port}`。 |
+| `WEBHOOK_URL` | 未设置 | 可选 webhook 目标（仅 http/https）。配合 `WEBHOOK_EVENTS=new_listener,conflict`，在端口开始占用或发生冲突时 POST `{event, port}`。 |
 | `WEBHOOK_SECRET` | 未设置 | 以 `X-Port-Light-Secret` 头发送。 |
 | `WEBHOOK_EVENTS` | 未设置 | 逗号分隔：`new_listener`、`conflict`。 |
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
 | `AGENT_TOKEN` | 未设置 | 设置后，端口建议及预留创建、恢复接口需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
 
-上表里除超时、路径和密钥外，也可以在 Web UI 的**设置**中修改，包括本机名称、扫描来源、Compose 发现范围和其他机器。修改会自动写入 `/data/port_light.json`；请求只提交实际改动的字段，也可以移除已保存的覆盖值，恢复继承环境变量或默认值。OpenAPI 在 `/docs`。
+多数选项也可在设置页修改，自动保存到 `/data/port_light.json`。超时、路径和密钥通过环境变量配置；`PORT_LIGHT_SETTINGS_SOURCE=env` 可将设置页设为只读。
 
-状态栏会显示待保存、已保存或保存失败。离开页面前，请补全每台机器的名称和 URL。创建、导入或删除自定义色板仍需在色板编辑器中手动操作。
+自定义端口名称可参考 [custom_ports.example.json](custom_ports.example.json)。挂载前请先创建对应文件。
 
-把 [custom_ports.example.json](custom_ports.example.json) 复制为 `custom_ports.json`（已 gitignore）。分类：`system`、`web`、`database`、`message`、`proxy`、`vpn`、`selfhosted`、`dev`、`infra`、`gaming`。
+## 数据与隐私
 
-如果在 Compose 里 bind-mount `custom_ports.json`，请先在宿主机上建好**文件**。路径不存在时 Docker 会建成目录，应用就读不了。
+Port-Light 无遥测。出站 HTTP 请求用于已配置的实例查询和 Webhook；Webhook 发送 `{event, port}`。
 
-已有的 `port_light.json` 如果不可读、JSON 损坏或记录结构无效，相关 API 会返回 `503` 并保留原文件，修复后可重试；只有文件不存在时才按空配置初始化。
+扫描结果、机器描述和端口规则可由页面及 API 用户读取，多机汇总实例也会接收这些数据。Compose 的 `.env` 在本地用于变量替换。Doctor 报告提供脱敏后的汇总信息。
 
-## 隐私
+设置、标签、历史和 CLI 凭据保存在数据卷中，其中 `port_light.json` 可包含其他实例的访问密码。浏览器创建的预留凭据保存在标签页会话存储中，复制的释放命令含有令牌。请保护数据卷、命令和截图中的敏感信息。
 
-- 无遥测、无统计。
-- 除非配置了其他 Port-Light 实例或 webhook，否则应用不会发送出站 HTTP 请求。Webhook 只发送 `{event, port}`。
-- 扫描数据存储在本机，并提供给页面和 API 客户端；Hub 会接收已配置实例返回的占用数据。启用身份验证可限制读取权限。
-- API 和端口详情原本就包含绑定地址；开启卡片摘要后，截图会更容易包含这些地址，分享前请检查截图内容。
-- 机器短描述是纯文本，拥有页面或 API 访问权限的人均可读取，也可能出现在截图中。请勿填写密码、令牌或其他秘密信息。
-- Doctor 报告由聚合数据白名单生成，只包含状态、数量、安全的来源枚举和已知失败原因；不包含机器身份、其他机器详情、绑定地址、端口、文件路径、环境变量值、凭据或降级事件范围。未知来源和原因会被替换为 `unknown` / `redacted`。
-- Compose 旁边的 `.env` 只用于本地 `${VAR}` 替换，不会上传。
-- 浏览器创建的预留请求密钥和释放令牌保存在当前标签页的会话存储中；复制出的释放命令包含秘密令牌。
-- 已登录的页面和 API 用户可读取端口规则及其关联项目名；未启用认证时，可访问实例的人均可读取。
-- 手动标签、端口历史、自动化调用标签、peer 设置和 Docker 内 CLI 的释放凭证都保存在数据卷中。peer 密码写入 `port_light.json`，CLI 凭证写入 `/data/cli-state`；应像保护其他凭据存储一样保护该数据卷。
+## 文档
+
+- [端口管理](docs/port-management.md)：分组、冲突、预留与范围规则
+- [部署](docs/deployment.md)与[故障排查](docs/troubleshooting.md)
+- [CLI](docs/cli.md)、[API 与 MCP](docs/integrations.md)；运行实例的 `/docs` 提供 OpenAPI 文档
+- [架构](docs/architecture.md)、[路线图](docs/roadmap.md)与[贡献指南](CONTRIBUTING.md)
 
 ## 技术栈
 
