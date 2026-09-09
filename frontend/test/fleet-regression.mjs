@@ -1,7 +1,7 @@
 /* Exercise the real multi-machine preview and grouped grids at desktop/mobile sizes. */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
@@ -37,31 +37,48 @@ try {
   await page.goto(base);
   await expect(page.locator('.host-board')).toHaveCount(4);
   const peers = catalog.peers;
-  await expect(page.locator('.app-actions > .toolbar-btn, #btn-more')).toHaveCount(3);
-  for (const id of ['btn-refresh', 'btn-manage', 'btn-more']) assert.ok((await page.locator('#' + id).innerText()).trim());
-  await page.locator('#btn-more').click();
-  await expect(page.locator('#toolbar-menu')).toBeVisible();
-  await expect(page.locator('.action-menu-item')).toHaveCount(5);
+  await expect(page.locator('.app-actions > .toolbar-btn, #btn-manage')).toHaveCount(3);
+  await expect(page.locator('#btn-more')).toHaveCount(0);
+  for (const id of ['btn-refresh', 'btn-manage', 'btn-settings']) assert.ok((await page.locator('#' + id).innerText()).trim());
+  await page.locator('#btn-manage').click();
+  await expect(page.locator('#port-menu')).toBeVisible();
+  await expect(page.locator('#port-menu .action-menu-item')).toHaveCount(6);
   await page.locator('#btn-add').click();
   await expect(page.locator('#add-modal')).toBeVisible();
-  await expect(page.locator('#toolbar-menu')).toBeHidden();
+  await expect(page.locator('#port-menu')).toBeHidden();
   await expect(page.locator('#add-port')).toBeFocused();
   await page.locator('#add-cancel').click();
-  await page.locator('#btn-more').focus();
-  await page.locator('#btn-more').press('ArrowDown');
-  await expect(page.locator('#btn-add')).toBeFocused();
-  await page.locator('#btn-add').press('End');
-  await expect(page.locator('#btn-settings')).toBeFocused();
-  await page.locator('#btn-settings').press('Escape');
-  await expect(page.locator('#toolbar-menu')).toBeHidden();
-  await expect(page.locator('#btn-more')).toBeFocused();
-  await page.locator('#btn-more').click();
+  await page.locator('#btn-manage').focus();
+  await page.locator('#btn-manage').press('ArrowDown');
+  await expect(page.locator('#port-menu a').first()).toBeFocused();
+  await page.locator('#port-menu a').first().press('End');
+  await expect(page.locator('#btn-unhide')).toBeFocused();
+  await page.locator('#btn-unhide').press('Escape');
+  await expect(page.locator('#port-menu')).toBeHidden();
+  await expect(page.locator('#btn-manage')).toBeFocused();
+  await page.locator('#btn-manage').click();
   await page.locator('#search').click();
-  await expect(page.locator('#toolbar-menu')).toBeHidden();
-  await page.locator('#btn-more').click();
+  await expect(page.locator('#port-menu')).toBeHidden();
+  for (const section of ['conflicts', 'reservations', 'rules']) {
+    await page.locator('#btn-manage').click();
+    await page.locator('#port-menu a[href="#/manage/' + section + '"]').click();
+    await expect(page).toHaveURL(new RegExp('#/manage/' + section + '$'));
+    await expect(page.locator('#port-menu')).toBeHidden();
+    await expect(page.locator('#management-page .settings-nav')).toHaveCount(0);
+  }
+  await page.locator('#btn-manage').click();
+  await page.locator('#btn-free').click();
+  await expect(page.locator('#free-modal')).toBeVisible();
+  await page.locator('#free-cancel').click();
   await page.locator('#btn-settings').click();
   await expect(page).toHaveURL(/#\/settings\/appearance$/);
-  await expect(page.locator('#toolbar-menu')).toBeHidden();
+  await page.locator('#settings-tab-advanced').click();
+  await expect(page.locator('#settings-panel-advanced #btn-doctor')).toBeVisible();
+  await page.locator('#btn-doctor').click();
+  await expect(page.locator('#doctor-results')).toBeVisible();
+  await expect(page.locator('#btn-settings')).toHaveAttribute('aria-current', 'page');
+  await page.locator('.settings-backlink').click();
+  await expect(page).toHaveURL(/#\/settings\/advanced$/);
   await page.goto(base);
 
   for (const width of [1920, 2560, 1280, 390]) {
@@ -133,7 +150,7 @@ try {
     for (const section of ['conflicts', 'reservations', 'rules']) {
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(base + '/#/manage/' + section);
-      await expect(page.locator('.manage-tabs [aria-current="page"]')).toHaveAttribute('href', '#/manage/' + section);
+      await expect(page.locator('#port-menu [aria-current="page"]')).toHaveAttribute('href', '#/manage/' + section);
       await expect(page.locator('.settings-card').first()).toBeVisible();
       const colors = await page.locator('.settings-card').first().evaluate(el => ({ background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }));
       assert.notEqual(colors.background, 'rgba(0, 0, 0, 0)');
@@ -141,15 +158,34 @@ try {
       await page.setViewportSize({ width: 390, height: 844 });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), section + ' overflow');
       if (process.env.PORT_LIGHT_TEST_SCREENSHOTS) await page.screenshot({ path: join(process.env.PORT_LIGHT_TEST_SCREENSHOTS, `${section}-${mode}-mobile.png`), fullPage: true });
-      await page.locator('#btn-more').click();
-      await expect(page.locator('#toolbar-menu')).toBeVisible();
-      const menu = await page.locator('#toolbar-menu').boundingBox();
+      await page.locator('#btn-manage').click();
+      await expect(page.locator('#port-menu')).toBeVisible();
+      const menu = await page.locator('#port-menu').boundingBox();
       assert.ok(menu.x >= 0 && menu.x + menu.width <= 390);
-      await page.locator('#btn-more').press('Escape');
+      await page.locator('#btn-manage').press('Escape');
     }
   }
+  for (const locale of ['en', 'zh-CN', 'zh-TW', 'ja', 'de', 'fr', 'es']) {
+    const messages = JSON.parse(readFileSync(join(root, 'frontend/locales', locale + '.json'), 'utf8'));
+    await put('/api/settings', { locale });
+    await page.goto(base);
+    await expect(page.locator('#search')).toBeVisible();
+    const search = await page.locator('#search').boundingBox();
+    assert.ok(search.width >= 120, locale + ' mobile search too narrow: ' + search.width);
+    await expect(page.locator('html')).toHaveAttribute('lang', locale);
+    await page.locator('#btn-manage').click();
+    await expect(page.locator('#port-menu .action-menu-item')).toHaveText([
+      messages.manage.conflicts, messages.action.findFree, messages.manage.reservations,
+      messages.manage.rules, messages.action.add, messages.action.showHidden,
+    ]);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.locator('#btn-manage').press('Escape');
+    await page.locator('#btn-settings').click();
+    await page.locator('#settings-tab-advanced').click();
+    await expect(page.locator('#btn-doctor')).toHaveText(messages.doctor.refresh);
+  }
   assert.deepEqual(errors, []);
-  console.log('Fleet regression passed: full-width 2/4-host layouts, grouped range columns, mobile density, first-click tabs, keyboard, refresh, detail switching, management light/dark/mobile.');
+  console.log('Fleet regression passed: full-width 2/4-host layouts, grouped range columns, mobile density, first-click tabs, keyboard, refresh, detail switching, management light/dark/mobile, port menu navigation and seven languages.');
 } finally {
   await browser?.close();
   child.kill('SIGTERM');

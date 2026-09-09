@@ -104,7 +104,7 @@ try {
   await expect(page.locator('#host-grid-local [data-port="29099"]')).toBeVisible();
   await expect(page.locator('#host-grid-local .port-run [data-port="20128"]')).toBeVisible();
   assert.equal(await page.evaluate(async () => {
-    const { escapeHtml } = await import('/static/js/text.js?v=94');
+    const { escapeHtml } = await import('/static/js/text.js?v=95');
     const raw = '" onmouseover="alert(1)" <b>';
     const div = document.createElement('div');
     div.innerHTML = '<input value="' + escapeHtml(raw) + '">';

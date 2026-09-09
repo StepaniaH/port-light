@@ -1538,7 +1538,8 @@ a:focus-visible,
 }
 
 @media (max-width: 720px) {
-  .app-bar { padding: 0 10px; gap: 8px; }
+  .app-bar { height: auto; min-height: 52px; padding: 8px 10px; gap: 8px; flex-wrap: wrap; }
+  .app-search { order: 3; flex: 1 0 100%; }
   .brand-text { display: none; }
   .sync-age { display: none; }
   .app-actions { flex-wrap: wrap; }
@@ -1583,10 +1584,6 @@ a:focus-visible,
 .management-page a:hover { text-decoration: underline; }
 .manage-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .manage-header .settings-lead { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.manage-tabs a { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--text-dim); font-size: .8rem; font-weight: 550; text-decoration: none; }
-.manage-tabs a[aria-current="page"] { background: var(--chip-active-bg); border-color: var(--accent); color: var(--accent); }
-.manage-tabs a:hover { color: var(--text); }
-.manage-tabs a:focus-visible { outline: none; box-shadow: var(--focus); }
 .manage-status:empty { display: none; }
 .manage-status { margin: 0 0 14px; padding: 10px 14px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: .82rem; overflow-wrap: anywhere; }
 .manage-card-body { padding: 16px 18px; }
@@ -1648,7 +1645,7 @@ a:focus-visible,
   .group-ports { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
 }
 
-/* Keep frequent header actions visible and name the remaining actions in a disclosure. */
+/* Port actions share one disclosure beside refresh and settings. */
 .toolbar-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex-shrink: 0; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font-size: .8rem; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .toolbar-btn:hover, .toolbar-btn[aria-expanded="true"] { border-color: var(--accent); }
 .toolbar-btn.active { color: var(--accent); background: var(--chip-active-bg); border-color: var(--accent); }
@@ -1669,3 +1666,8 @@ a:focus-visible,
 
 .toolbar-btn[hidden] { display: none; }
 #app.page-settings #sync-age { display: none; }
+
+.action-menu-item[aria-current="page"] { background: var(--chip-active-bg); color: var(--accent); }
+.settings-diagnostics { padding: 12px 0; }
+.settings-diagnostics a { display: inline-flex; align-items: center; text-decoration: none; }
+.settings-backlink { display: inline-block; margin-bottom: 10px; color: var(--accent); text-underline-offset: 3px; font-size: .82rem; }

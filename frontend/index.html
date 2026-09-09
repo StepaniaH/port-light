@@ -26,7 +26,7 @@
       }
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=94">
+  <link rel="stylesheet" href="/static/style.css?v=95">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -152,33 +152,26 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
               <path d="M13.25 2.4v3.1H10.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           <span data-i18n="action.refresh"></span></button>
-          <a href="#/manage/conflicts" id="btn-manage" class="toolbar-btn" data-i18n-title="manage.title" data-i18n-aria="manage.title"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M2 6h12M6 6v8"/></svg><span data-i18n="manage.title"></span></a>
           <div class="action-menu" id="action-menu">
-            <button type="button" id="btn-more" class="toolbar-btn" aria-expanded="false" aria-controls="toolbar-menu">
-              <span data-i18n="action.more">More</span>
+            <button type="button" id="btn-manage" class="toolbar-btn" aria-expanded="false" aria-controls="port-menu">
+              <span data-i18n="manage.title">Manage ports</span>
               <svg viewBox="0 0 16 16" width="12" height="12" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <div id="toolbar-menu" class="action-menu-panel" role="group" data-i18n-aria="action.more" hidden>
-              <button type="button" id="btn-add" class="action-menu-item" data-i18n-title="action.add">
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 1.5a.75.75 0 0 1 .75.75v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0v-5h-5a.75.75 0 0 1 0-1.5h5v-5A.75.75 0 0 1 8 1.5z"/></svg>
-          <span data-i18n="action.add"></span></button>
+            <div id="port-menu" class="action-menu-panel" role="group" data-i18n-aria="manage.title" hidden>
+              <a href="#/manage/conflicts" class="action-menu-item" data-i18n="manage.conflicts"></a>
               <button type="button" id="btn-free" class="action-menu-item" data-i18n-title="action.findFree">
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M11.5 2a3.5 3.5 0 0 0-3.4 4.4L2.3 12.2a1 1 0 0 0 0 1.4l.1.1a1 1 0 0 0 1.4 0l5.8-5.8A3.5 3.5 0 1 0 11.5 2zm0 5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>
-          <span data-i18n="action.findFree"></span></button>
+                <span data-i18n="action.findFree"></span></button>
+              <a href="#/manage/reservations" class="action-menu-item" data-i18n="manage.reservations"></a>
+              <a href="#/manage/rules" class="action-menu-item" data-i18n="manage.rules"></a>
+              <button type="button" id="btn-add" class="action-menu-item" data-i18n-title="action.add">
+                <span data-i18n="action.add"></span></button>
               <button type="button" id="btn-unhide" class="action-menu-item" data-i18n-title="action.showHidden" aria-pressed="false">
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 3c-3.2 0-5.9 2.1-7.2 5 1.3 2.9 4 5 7.2 5s5.9-2.1 7.2-5C13.9 5.1 11.2 3 8 3zm0 8.2A3.2 3.2 0 1 1 8 4.8a3.2 3.2 0 0 1 0 6.4zM8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8z"/></svg>
-          <span data-i18n="action.showHidden"></span></button>
-              <hr>
-              <a href="#/doctor" id="btn-doctor" class="action-menu-item" data-nav="doctor" data-i18n-title="action.doctor">
-            <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
-              <path d="M2 8h2.2l1.1-3.2 2.1 6.4L9 7.1l1 1.9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          <span data-i18n="action.doctor"></span></a>
-              <a href="#/settings" id="btn-settings" class="action-menu-item" data-nav="settings" data-i18n-title="action.settings">
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5.87-2.13.9.52a.75.75 0 0 1 .28 1.02l-.7 1.21a.75.75 0 0 1-.95.32l-1.04-.4a5.03 5.03 0 0 1-1.13.65l-.16 1.1A.75.75 0 0 1 9.32 14H6.68a.75.75 0 0 1-.74-.64l-.16-1.1a5.03 5.03 0 0 1-1.13-.65l-1.04.4a.75.75 0 0 1-.95-.32l-.7-1.21a.75.75 0 0 1 .28-1.02l.9-.52a5.1 5.1 0 0 1 0-1.74l-.9-.52a.75.75 0 0 1-.28-1.02l.7-1.21a.75.75 0 0 1 .95-.32l1.04.4c.35-.27.73-.5 1.13-.65l.16-1.1A.75.75 0 0 1 6.68 2h2.64a.75.75 0 0 1 .74.64l.16 1.1c.4.15.78.38 1.13.65l1.04-.4a.75.75 0 0 1 .95.32l.7 1.21a.75.75 0 0 1-.28 1.02l-.9.52c.08.57.08 1.17 0 1.74z"/></svg>
-          <span data-i18n="action.settings"></span></a>
+                <span data-i18n="action.showHidden"></span></button>
             </div>
           </div>
+          <a href="#/settings" id="btn-settings" class="toolbar-btn" data-nav="settings" data-i18n-title="action.settings">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5.87-2.13.9.52a.75.75 0 0 1 .28 1.02l-.7 1.21a.75.75 0 0 1-.95.32l-1.04-.4a5.03 5.03 0 0 1-1.13.65l-.16 1.1A.75.75 0 0 1 9.32 14H6.68a.75.75 0 0 1-.74-.64l-.16-1.1a5.03 5.03 0 0 1-1.13-.65l-1.04.4a.75.75 0 0 1-.95-.32l-.7-1.21a.75.75 0 0 1 .28-1.02l.9-.52a5.1 5.1 0 0 1 0-1.74l-.9-.52a.75.75 0 0 1-.28-1.02l.7-1.21a.75.75 0 0 1 .95-.32l1.04.4c.35-.27.73-.5 1.13-.65l.16-1.1A.75.75 0 0 1 6.68 2h2.64a.75.75 0 0 1 .74.64l.16 1.1c.4.15.78.38 1.13.65l1.04-.4a.75.75 0 0 1 .95.32l.7 1.21a.75.75 0 0 1-.28 1.02l-.9.52c.08.57.08 1.17 0 1.74z"/></svg>
+          <span data-i18n="action.settings"></span></a>
         </div>
       </div>
       <div class="context-bar" id="context-bar">
@@ -248,6 +241,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     <section id="view-doctor" class="view hidden">
       <main id="doctor-page" class="doctor-page" tabindex="-1">
         <div class="page-intro">
+          <a class="settings-backlink" href="#/settings/advanced" data-i18n="action.settings">Settings</a>
           <h1 data-i18n="doctor.title">Doctor</h1>
           <p class="settings-lead" data-i18n="doctor.lead">Check setup health and create a sanitized diagnostic report.</p>
         </div>
@@ -317,7 +311,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=94"></script>
-  <script type="module" src="/static/js/app.js?v=94"></script>
+  <script src="/static/i18n.js?v=95"></script>
+  <script type="module" src="/static/js/app.js?v=95"></script>
 </body>
 </html>

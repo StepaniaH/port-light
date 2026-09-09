@@ -152,7 +152,6 @@ try {
     await page.locator('input[name="host_name"]').fill('Pending hub name');
     await expect.poll(() => saveHeld).toBe(true);
     await page.getByRole('link', { name: /^Port-Light/ }).click();
-    await page.locator('#btn-more').click();
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Occupancy', exact: true }).click();
     await expect(page.locator('input[name="host_name"]')).toHaveValue('Pending hub name');
@@ -347,7 +346,7 @@ try {
   await expect(boundCell).toContainText('192.0.2.8');
   await expect(boundCell).not.toHaveAttribute('title', /IPv6/);
 
-  await page.locator('#btn-more').click();
+  await page.locator('#btn-manage').click();
   await page.locator('#btn-free').click();
   await page.locator('#free-count').fill('2');
   await page.locator('#free-label').fill('Browser batch');
@@ -423,8 +422,7 @@ try {
   assert.ok(!diagnosticReport.includes(peer));
   assert.ok(!diagnosticReport.includes(hub));
 
-  await page.locator('#btn-more').click();
-    await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.locator('#btn-settings').click();
   await page.getByRole('tab', { name: 'Occupancy', exact: true }).click();
   await expect(page.locator('input[name="host_name"]')).toBeVisible();
   assert.deepEqual(errors, []);

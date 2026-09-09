@@ -1,9 +1,9 @@
 /* Local reservation ownership, allocation rules, and Compose conflict review. */
-import { S } from './state.js?v=94';
-import { hostName } from './hosts.js?v=94';
-import { api } from './api.js?v=94';
-import { t, escapeHtml } from './text.js?v=94';
-import { copyReportText } from './doctor.js?v=94';
+import { S } from './state.js?v=95';
+import { hostName } from './hosts.js?v=95';
+import { api } from './api.js?v=95';
+import { t, escapeHtml } from './text.js?v=95';
+import { copyReportText } from './doctor.js?v=95';
 
 const storageKey = 'port-light-reservation-session';
 const e = escapeHtml;
@@ -57,15 +57,11 @@ export function mountManagementPage(root) {
     const el = root.querySelector('[role="status"]');
     if (el) el.textContent = message;
   }
-  function controls() {
-    return '<nav class="settings-nav manage-tabs" aria-label="' + tr('title') + '">' + ['conflicts', 'reservations', 'rules'].map(name =>
-      '<a href="#/manage/' + name + '" aria-current="' + (name === section ? 'page' : 'false') + '">' + tr(name) + '</a>').join('') + '</nav>';
-  }
   function shell(content) {
-    return '<header class="page-intro manage-header"><div><h1>' + tr('title') + '</h1><p class="settings-lead">' +
+    return '<header class="page-intro manage-header"><div><h1>' + tr(section) + '</h1><p class="settings-lead">' +
       e(hostName('local')) + ' <span class="manage-badge">' + e(t('hosts.thisMachine')) + '</span></p></div>' +
       '</header>' +
-      controls() + '<p class="manage-status" role="status" aria-live="polite"></p>' + content;
+      '<p class="manage-status" role="status" aria-live="polite"></p>' + content;
   }
   function card(title, help, content, extra = '') {
     return '<section class="settings-card ' + extra + '"><header class="settings-card-head"><h2>' + tr(title) + '</h2>' +

@@ -1,26 +1,26 @@
 /* Port-Light frontend */
 
-import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=94';
-import { errorText, escapeHtml, t } from './text.js?v=94';
-import { moveChipFocus, trapTab } from './a11y.js?v=94';
+import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=95';
+import { errorText, escapeHtml, t } from './text.js?v=95';
+import { moveChipFocus, trapTab } from './a11y.js?v=95';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=94';
-import { openModal, closeModals, modalOpen } from './modal.js?v=94';
-import { applyRoute as updateRoute } from './router.js?v=94';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=94';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=94';
-import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=94';
-import { refreshFleet } from './fleet.js?v=94';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=94';
-import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=94';
-import { mountManagementPage } from './management.js?v=94';
-import { mountActionMenu } from './action-menu.js?v=94';
-import { mountDoctorPage } from './doctor.js?v=94';
+} from './dom.js?v=95';
+import { openModal, closeModals, modalOpen } from './modal.js?v=95';
+import { applyRoute as updateRoute } from './router.js?v=95';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=95';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=95';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=95';
+import { refreshFleet } from './fleet.js?v=95';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=95';
+import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=95';
+import { mountManagementPage } from './management.js?v=95';
+import { mountActionMenu } from './action-menu.js?v=95';
+import { mountDoctorPage } from './doctor.js?v=95';
 
 (function () {
   'use strict';

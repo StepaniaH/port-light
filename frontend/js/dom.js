@@ -1,6 +1,6 @@
 /* Shared DOM references and sticky-header / sync-banner utilities. */
 
-import { t } from './text.js?v=94';
+import { t } from './text.js?v=95';
 
 function byId(id) {
   return document.getElementById(id);
@@ -19,7 +19,6 @@ export const rangeStartInput = byId('range-start');
 export const rangeEndInput = byId('range-end');
 export const sortSelect = byId('sort-select');
 export const unhideBtn = byId('btn-unhide');
-export const doctorBtn = byId('btn-doctor');
 export const settingsBtn = byId('btn-settings');
 
 export function syncHeaderHeight() {

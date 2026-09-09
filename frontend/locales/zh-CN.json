@@ -4,7 +4,6 @@
     "aria": "搜索"
   },
   "action": {
-    "more": "更多",
     "refresh": "刷新",
     "add": "添加端口",
     "showHidden": "显示隐藏端口",

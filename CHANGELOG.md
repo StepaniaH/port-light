@@ -25,7 +25,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Split API routes by domain, Compose decoding and port parsing into separate modules, and the peer editor out of the settings controller.
 - Organize Python tests by domain.
 - Align management page navigation, forms, and lists with the settings UI.
-- Keep refresh and port management in the header; move other actions to a labeled More menu.
+- Group port operations in the Manage ports dropdown and move setup diagnostics to Settings → Advanced.
 - Shorten README feature lists, move installation instructions forward, and retain the dashboard screenshot.
 - Update the Unraid template to v0.8.2 and document current submission requirements.
 

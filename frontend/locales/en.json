@@ -4,7 +4,6 @@
     "aria": "Search"
   },
   "action": {
-    "more": "More",
     "refresh": "Refresh",
     "add": "Add port",
     "showHidden": "Show hidden ports",

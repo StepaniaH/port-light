@@ -4,7 +4,6 @@
     "aria": "Buscar"
   },
   "action": {
-    "more": "Más",
     "refresh": "Actualizar",
     "add": "Añadir puerto",
     "showHidden": "Mostrar puertos ocultos",

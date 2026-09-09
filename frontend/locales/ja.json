@@ -4,7 +4,6 @@
     "aria": "検索"
   },
   "action": {
-    "more": "その他",
     "refresh": "更新",
     "add": "ポートを追加",
     "showHidden": "非表示ポートを表示",

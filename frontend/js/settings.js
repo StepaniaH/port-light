@@ -1,19 +1,19 @@
-import { automationCardsHtml, ensureAutomationDelegates } from './settings-automation.js?v=94';
-export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=94';
-import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=94';
-export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=94';
-import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=94';
-export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=94';
-import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=94';
-export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=94';
+import { automationCardsHtml, ensureAutomationDelegates } from './settings-automation.js?v=95';
+export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=95';
+import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=95';
+export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=95';
+import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=95';
+export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=95';
+import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=95';
+export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=95';
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=94';
-import { t, escapeHtml, errorText } from './text.js?v=94';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=94';
-import { api, fetchHosts, fetchSettings } from './api.js?v=94';
-import { bindAddressView } from './grid.js?v=94';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=94';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=95';
+import { t, escapeHtml, errorText } from './text.js?v=95';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=95';
+import { api, fetchHosts, fetchSettings } from './api.js?v=95';
+import { bindAddressView } from './grid.js?v=95';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=95';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -943,6 +943,7 @@ function settingValuesEqual(left, right) {
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div><p id="peers-status" class="action-status" role="status" aria-live="polite"></p>')) +
       settingsPanelHtml('automation', automationCardsHtml(S.meta && S.meta.automation ? S.meta.automation : {})) +
       settingsPanelHtml('advanced',
+        settingsCard('action.doctor', 'doctor.lead', '<div class="settings-diagnostics"><a href="#/doctor" id="btn-doctor" class="btn-secondary" data-i18n="doctor.refresh">' + escapeHtml(t('doctor.refresh')) + '</a></div>') +
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
         extraAdvanced +
         settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div>'));

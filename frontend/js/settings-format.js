@@ -1,5 +1,5 @@
 /* Shared settings markup. */
-import { t, escapeHtml } from './text.js?v=94';
+import { t, escapeHtml } from './text.js?v=95';
 
   export function choiceLabel(c) {
     return t('choice.' + c);

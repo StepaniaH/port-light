@@ -1,7 +1,7 @@
-/* Header disclosure for infrequent actions; links and buttons retain native semantics. */
+/* Port management disclosure; links and buttons retain native semantics. */
 export function mountActionMenu(root) {
-  const trigger = root.querySelector('#btn-more');
-  const panel = root.querySelector('#toolbar-menu');
+  const trigger = root.querySelector('[aria-controls]');
+  const panel = root.querySelector('#' + trigger.getAttribute('aria-controls'));
   const items = () => [...panel.querySelectorAll('button:not(:disabled), a[href]')];
   function close(restore = false) {
     if (panel.hidden) return;
