@@ -1,9 +1,9 @@
 /* Local reservation ownership, allocation rules, and Compose conflict review. */
-import { S } from './state.js?v=95';
-import { hostName } from './hosts.js?v=95';
-import { api } from './api.js?v=95';
-import { t, escapeHtml } from './text.js?v=95';
-import { copyReportText } from './doctor.js?v=95';
+import { S } from './state.js?v=96';
+import { hostName } from './hosts.js?v=96';
+import { api } from './api.js?v=96';
+import { t, escapeHtml } from './text.js?v=96';
+import { copyReportText } from './doctor.js?v=96';
 
 const storageKey = 'port-light-reservation-session';
 const e = escapeHtml;
@@ -172,7 +172,7 @@ export function mountManagementPage(root) {
         await reserve(saved.pending);
       } else if (form.dataset.form === 'rule') {
         const rule = { name: data.name, start: Number(data.start), end: Number(data.end), projects: data.projects.split(',').map(p => p.trim()).filter(Boolean) };
-        await json('/api/port-rules', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules: [...rules.filter(r => r.name !== rule.name), rule] }) });
+        await json('/api/port-rules', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules: [...rules.filter(r => r.name !== (form.dataset.ruleName || rule.name)), rule] }) });
         await load();
       } else if (form.dataset.form === 'suggest') {
         const params = new URLSearchParams({ count: '1', require_count: 'true' });
@@ -219,6 +219,7 @@ export function mountManagementPage(root) {
         }
       } else if (action === 'editRule') {
         const rule = rules[Number(btn.dataset.index)]; const form = root.querySelector('form');
+        form.dataset.ruleName = rule.name;
         for (const key of ['name', 'start', 'end']) form.elements[key].value = rule[key];
         form.elements.projects.value = rule.projects.join(', '); form.elements.name.focus();
       } else if (action === 'deleteRule') {

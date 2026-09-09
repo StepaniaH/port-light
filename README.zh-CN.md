@@ -26,7 +26,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.8.2
+    image: stepaniah/port-light:v0.8.3
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -61,8 +61,6 @@ docker compose up -d
 - 汇总最多 32 台其他实例的端口，支持瀑布流和标签页布局。每台机器运行独立实例，管理操作在对应实例中执行。
 - 通过 CLI、API 或 MCP 检查和预留端口。
 - 支持七种界面语言、主题配色、端口历史、Webhook 和 Doctor 诊断。
-
-分组、管理页面和命名端口规则目前位于 `dev` 分支，尚未包含在 v0.8.2 中。体验方法见[开发指南](CONTRIBUTING.md#development)。
 
 看板默认显示已占用和已配置的端口，搜索端口号时显示空闲建议：
 
@@ -127,7 +125,7 @@ Port-Light 无遥测。出站 HTTP 请求用于已配置的实例查询和 Webho
 
 扫描结果、机器描述和端口规则可由页面及 API 用户读取，多机汇总实例也会接收这些数据。Compose 的 `.env` 在本地用于变量替换。Doctor 报告提供脱敏后的汇总信息。
 
-设置、标签、历史和 CLI 凭据保存在数据卷中，其中 `port_light.json` 可包含其他实例的访问密码。浏览器创建的预留凭据保存在标签页会话存储中，复制的释放命令含有令牌。请保护数据卷、命令和截图中的敏感信息。
+设置、标签和历史保存在数据卷中，其中 `port_light.json` 可包含其他实例的访问密码。CLI 释放凭据保存在本地私有状态目录中，容器内默认为 `/data/cli-state`。浏览器创建的预留凭据保存在标签页会话存储中，复制的释放命令含有令牌。请保护数据卷、命令和截图中的敏感信息。
 
 ## 文档
 

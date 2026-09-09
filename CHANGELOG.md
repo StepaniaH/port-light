@@ -4,6 +4,8 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+## 0.8.3 — 2026-09-09
+
 ### Added
 
 - Compose project/service grouping with expandable contiguous port ranges.
@@ -15,6 +17,9 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Fixed
 
+- Preserve rule identity when renaming and reject collisions with another rule.
+- Disable local-only port actions when a remote machine is selected.
+- Keep the search field usable on narrow screens with translated header labels.
 - Escape quotes in dynamic HTML attributes so names and group identifiers cannot break their markup.
 - Keep waterfall boards across the available width when their heights differ.
 - Preserve card columns and mobile density inside expanded Compose ranges.
@@ -27,7 +32,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 - Align management page navigation, forms, and lists with the settings UI.
 - Group port operations in the Manage ports dropdown and move setup diagnostics to Settings → Advanced.
 - Shorten README feature lists, move installation instructions forward, and retain the dashboard screenshot.
-- Update the Unraid template to v0.8.2 and document current submission requirements.
+- Update the Unraid template to v0.8.3 and document current submission requirements.
 
 ## 0.8.2 — 2026-09-08
 

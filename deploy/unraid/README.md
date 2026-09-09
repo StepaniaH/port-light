@@ -1,6 +1,6 @@
 # Unraid template
 
-`port-light.xml` installs the published `stepaniah/port-light:v0.8.2` image. It uses bridge networking, exposes the Web UI on port 2100, and stores settings and history under `/mnt/user/appdata/port-light`.
+`port-light.xml` installs the published `stepaniah/port-light:v0.8.3` image. It uses bridge networking, exposes the Web UI on port 2100, and stores settings and history under `/mnt/user/appdata/port-light`.
 
 Set the host path for Compose projects before applying the template. The Docker socket and host `/proc` mounts provide occupancy sources. The Docker socket grants Docker API access even with a read-only filesystem mount. To enable HTTP Basic Auth, set both `AUTH_USER` and `AUTH_PASSWORD`.
 

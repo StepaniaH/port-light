@@ -1,6 +1,6 @@
 # Port management
 
-The management pages and grouping controls are available in the development branch after v0.8.2. The **Manage ports** menu contains Conflicts, Find free ports, Reservations, Port rules, Add port, and Show hidden ports. Setup diagnostics is under **Settings → Advanced**.
+The **Manage ports** menu contains Conflicts, Find free ports, Reservations, Port rules, Add port, and Show hidden ports. Setup diagnostics is under **Settings → Advanced**.
 
 ## Group projects and services
 

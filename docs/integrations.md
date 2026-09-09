@@ -261,7 +261,7 @@ to the shared MCP/CLI HTTP client.
 
 ## Port rules
 
-Available in the development branch after v0.8.2. `GET /api/port-rules` returns the local rule document. `PUT /api/port-rules` replaces it; Basic Auth and settings read-only mode apply.
+Available since v0.8.3. `GET /api/port-rules` returns the local rule document. `PUT /api/port-rules` replaces it; Basic Auth and settings read-only mode apply.
 
 ```json
 {

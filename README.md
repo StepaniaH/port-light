@@ -26,7 +26,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.8.2
+    image: stepaniah/port-light:v0.8.3
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -61,8 +61,6 @@ All three scanners are enabled by default. For installations without Docker, set
 - View up to 32 peers in waterfall or tab layouts. Each machine runs its own instance; management actions run on the corresponding instance.
 - Check and reserve ports through the CLI, API, or MCP server.
 - Configure seven UI languages, themes, port history, webhooks, and Doctor diagnostics.
-
-Grouping, management pages, and named port rules are on `dev` and are not included in v0.8.2. See the [development guide](CONTRIBUTING.md#development) to try them.
 
 The dashboard lists occupied and configured ports. Searching for a port number also shows available alternatives:
 
@@ -127,7 +125,7 @@ Port-Light has no telemetry. Outbound HTTP requests serve configured peer querie
 
 Dashboard and API users can read scan results, machine descriptions, and port rules. Configured hubs also receive this data. Compose `.env` files are used locally for variable substitution. Doctor reports contain sanitized summaries.
 
-Settings, labels, history, and CLI credentials are stored in the data volume. `port_light.json` may contain peer passwords. Browser reservation credentials use tab session storage, and copied release commands contain tokens. Protect sensitive information in the data volume, commands, and screenshots.
+Settings, labels, and history are stored in the data volume. `port_light.json` may contain peer passwords. CLI release credentials use a private local state directory (`/data/cli-state` in the container). Browser reservation credentials use tab session storage, and copied release commands contain tokens. Protect sensitive information in the data volume, commands, and screenshots.
 
 ## Documentation
 

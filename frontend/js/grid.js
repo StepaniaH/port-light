@@ -1,15 +1,15 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { groupPorts, portRuns } from './port-groups.js?v=95';
-import { S } from './state.js?v=95';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=95';
-import { KIND_MATCHERS } from './kinds.js?v=95';
-import { isLease } from './leases.js?v=95';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=95';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=95';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=95';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=95';
-import { api } from './api.js?v=95';
+import { groupPorts, portRuns } from './port-groups.js?v=96';
+import { S } from './state.js?v=96';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=96';
+import { KIND_MATCHERS } from './kinds.js?v=96';
+import { isLease } from './leases.js?v=96';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=96';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=96';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=96';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=96';
+import { api } from './api.js?v=96';
 
 const expandedRuns = new Set();
 const boardSizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
@@ -518,13 +518,15 @@ function sizeHostBoard(board) {
   }
 
   export function syncAddButton() {
-    const btn = document.getElementById('btn-add');
-    if (!btn) return;
     const local = !hasPeers() || S.focusHostId === 'local';
-    btn.disabled = !local;
-    const title = local ? t('action.add') : t('hosts.localOnly');
-    btn.title = title;
-    btn.setAttribute('aria-label', title);
+    for (const [id, label] of [['btn-add', 'action.add'], ['btn-free', 'action.findFree']]) {
+      const btn = document.getElementById(id);
+      if (!btn) continue;
+      btn.disabled = !local;
+      const title = local ? t(label) : t('hosts.localOnly');
+      btn.title = title;
+      btn.setAttribute('aria-label', title);
+    }
   }
 
   export function render() {

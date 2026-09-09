@@ -54,11 +54,27 @@ try {
   await form.locator('[name="end"]').fill('28005');
   await form.getByRole('button').click();
   await expect(page.locator('.manage-card')).toHaveCount(2);
+  // Renaming preserves identity and project assignments; collisions keep both rules intact.
+  const ruleSnapshot = async () => (await (await fetch(base + '/api/port-rules')).json()).rules;
+  for (const [oldName, newName] of [['infra', 'infrastructure'], ['development', 'dev-range']]) {
+    await page.locator('.manage-card').filter({ has: page.getByText(oldName, { exact: true }) }).locator('[data-action="editRule"]').click();
+    await form.locator('[name="name"]').fill(newName);
+    await form.getByRole('button').click();
+    await expect.poll(async () => (await ruleSnapshot()).map(rule => rule.name)).not.toContain(oldName);
+    assert.equal((await ruleSnapshot()).length, 2);
+  }
+  const beforeCollision = await ruleSnapshot();
+  await page.locator('.manage-card').filter({ has: page.getByText('dev-range', { exact: true }) }).locator('[data-action="editRule"]').click();
+  await form.locator('[name="name"]').fill('infrastructure');
+  const rejected = page.waitForResponse(response => response.url().endsWith('/api/port-rules') && response.request().method() === 'PUT');
+  await form.getByRole('button').click();
+  assert.equal((await rejected).status(), 422);
+  assert.deepEqual(await ruleSnapshot(), beforeCollision);
   await page.goto(base + '/#/manage/reservations');
   await expect(page.locator('#reservation-list .manage-card')).toHaveCount(1);
   const reserve = page.locator('[data-form="reserve"]');
   await reserve.locator('[name="label"]').fill('browser test');
-  await reserve.locator('[name="rule"]').selectOption('infra');
+  await reserve.locator('[name="rule"]').selectOption('infrastructure');
   await reserve.locator('[name="count"]').fill('2');
   // Commit on the server, then lose the response. Reload and retry the retained key.
   let dropped = false;
@@ -104,7 +120,7 @@ try {
   await expect(page.locator('#host-grid-local [data-port="29099"]')).toBeVisible();
   await expect(page.locator('#host-grid-local .port-run [data-port="20128"]')).toBeVisible();
   assert.equal(await page.evaluate(async () => {
-    const { escapeHtml } = await import('/static/js/text.js?v=95');
+    const { escapeHtml } = await import('/static/js/text.js?v=96');
     const raw = '" onmouseover="alert(1)" <b>';
     const div = document.createElement('div');
     div.innerHTML = '<input value="' + escapeHtml(raw) + '">';
@@ -126,7 +142,7 @@ try {
     if (route.request().method() === 'POST') sentToken = route.request().headers()['x-agent-token'];
     await route.continue();
   });
-  await page.locator('[data-form="reserve"] [name="rule"]').selectOption('infra');
+  await page.locator('[data-form="reserve"] [name="rule"]').selectOption('infrastructure');
   await page.locator('[data-form="reserve"] button').click();
   await expect(page.locator('[data-action="release"]:enabled')).toHaveCount(1);
   assert.equal(sentToken, 'temporary-browser-test-token');

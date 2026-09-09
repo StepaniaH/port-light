@@ -4,7 +4,7 @@ Published image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/por
 
 | Tag | Meaning |
 |-----|---------|
-| `v0.8.2` (and other `v*`) | Release built from that git tag |
+| `v0.8.3` (and other `v*`) | Release built from that git tag |
 | `latest` | Most recently published version image |
 
 The Release workflow publishes version and `latest` tags only after the tagged commit passes CI on `main`. Manual branch builds no longer update the legacy `dev` image tag; use a version tag or build from source for development.
@@ -16,7 +16,7 @@ Pin a version tag or digest for reproducible deployments.
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.8.2
+    image: stepaniah/port-light:v0.8.3
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -55,7 +55,7 @@ docker run -d \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  stepaniah/port-light:v0.8.2
+  stepaniah/port-light:v0.8.3
 ```
 
 ## Build from this repo
@@ -93,7 +93,7 @@ services:
       - internal
 
   port-light:
-    image: stepaniah/port-light:v0.8.2
+    image: stepaniah/port-light:v0.8.3
     restart: unless-stopped
     ports:
       - "2100:2100"
@@ -160,7 +160,7 @@ podman run -d --name port-light --restart unless-stopped \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  docker.io/stepaniah/port-light:v0.8.2
+  docker.io/stepaniah/port-light:v0.8.3
 ```
 
 Rootless socket is typically `$XDG_RUNTIME_DIR/podman/podman.sock`. SELinux hosts often need `:z` (or `:Z`) on the volume flags.
@@ -184,7 +184,6 @@ All three sources are enabled by default. If this deployment intentionally has n
 `PORT_LIGHT_SCAN_TIMEOUT_S` bounds waiting for a background refresh (default 10 seconds, range 1–60). Timed-out scans retain old data and cannot publish a late result. A stuck filesystem call cannot be forcibly interrupted; its worker slot remains occupied until it exits, keeping thread usage bounded. Restore the mount/daemon or restart the service if it stays blocked.
 
 If `port_light.json` becomes unreadable or invalid, fix its permissions or restore a valid backup. Port-Light preserves the original file and returns `503` for affected operations. It does not rename it and initialize an empty replacement.
-
 
 ## Settings (Compose and Web UI)
 

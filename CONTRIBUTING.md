@@ -4,7 +4,7 @@ Contributions should keep the project focused on port occupancy and avoid unnece
 
 ## Scope
 
-This is a port occupancy map, not a Docker control plane. PRs that start/stop containers or tail logs will be declined. See [docs/roadmap.md](docs/roadmap.md) and [docs/architecture.md](docs/architecture.md).
+Port-Light focuses on port occupancy. Container lifecycle management and log streaming are outside its scope. See [docs/roadmap.md](docs/roadmap.md) and [docs/architecture.md](docs/architecture.md).
 
 Open an issue first for new scanners (Podman, remote Docker), auth changes, or a frontend framework.
 
@@ -58,14 +58,14 @@ client module rather than being copied into either adapter.
 ## Adding UI copy
 
 Edit `frontend/locales/en.json`, run `.venv/bin/python scripts/locale-scaffold.py`
-to copy the new keys into the other locale files, translate the copied values, done —
-`tests/test_i18n.py` enforces key parity, non-empty values, placeholder tokens, and
+to copy the new keys into the other locale files, and translate the copied values.
+`tests/frontend/test_i18n.py` enforces key parity, non-empty values, placeholder tokens, and
 rejects orphaned keys nobody references. `--untranslated` lists suspicious
 still-equal-to-English values per locale.
 
 ## Locales
 
-UI copy lives in `frontend/locales/{en,fr,de,es,zh-CN,zh-TW,ja}.json`. English is the source tree; the other six files must use the same keys (`tests/test_i18n.py` checks this). `frontend/i18n.js` resolves `auto` from `navigator.languages`, sets `html lang`, and interpolates `{name}` placeholders. Do not concatenate translated fragments. Language names in `choice.*` stay in their own script in every file.
+UI copy lives in `frontend/locales/{en,fr,de,es,zh-CN,zh-TW,ja}.json`. English is the source tree; the other six files must use the same keys (`tests/frontend/test_i18n.py` checks this). `frontend/i18n.js` resolves `auto` from `navigator.languages`, sets `html lang`, and interpolates `{name}` placeholders. Do not concatenate translated fragments. Language names in `choice.*` stay in their own script in every file.
 
 Bump the `?v=` on `i18n.js` and the `CACHE_BUST` constant inside it when locale JSON changes.
 

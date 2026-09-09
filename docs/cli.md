@@ -227,7 +227,7 @@ and `upgrade_required` / `unsupported_server` (upgrade the client/server pair).
 
 ## Select a port rule
 
-On servers with named port rules (development branch after v0.8.2), reserve with:
+On servers running v0.8.3 or later, reserve within a named port rule:
 
 ```bash
 port-light reserve --rule development --count 2 --ttl 3600 --label wiki-test

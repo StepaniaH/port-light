@@ -133,6 +133,10 @@ try {
     await page.locator(`[data-host-switch="${id}"]`).click();
     await expect(page.locator('[data-host-switch][aria-selected="true"]')).toHaveAttribute('data-host-switch', id);
     await expect(page.locator('.host-board')).toHaveAttribute('data-host', id);
+    for (const action of ['btn-add', 'btn-free']) {
+      if (id === 'local') await expect(page.locator('#' + action)).toBeEnabled();
+      else await expect(page.locator('#' + action)).toBeDisabled();
+    }
     await page.locator('#btn-refresh').click();
     await expect(page.locator('.host-board')).toHaveAttribute('data-host', id);
   }
