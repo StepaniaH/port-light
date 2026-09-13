@@ -110,15 +110,31 @@ try {
   const widths = await page.locator('.host-board').evaluateAll(els => els.map(el => el.clientWidth));
   assert.ok(widths.every(width => width > 1200), JSON.stringify(widths));
   const columnsByDensity = [];
+  const gridLayout = () => page.evaluate(() => {
+    // Reload creates placeholders before occupancy arrives and replaces them.
+    // Read the current populated grid in one evaluation to avoid detached nodes.
+    const grid = document.getElementById('host-grid-local');
+    return {
+      loaded: !!grid?.querySelector('.port-cell'),
+      width: grid?.getBoundingClientRect().width || 0,
+      columns: grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0,
+    };
+  });
   for (const density of ['loose', 'standard', 'compact']) {
     await put('/api/settings', { grid_density: density });
     await page.reload();
     await expect(page.locator('.host-board')).toHaveCount(2);
-    const wide = await page.locator('#host-grid-local').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+    let wide;
+    await expect.poll(async () => {
+      wide = await gridLayout();
+      return wide.loaded && wide.width > 1000 && wide.columns > 1;
+    }, { message: density + ': wide grid must be populated before measuring' }).toBe(true);
     await page.setViewportSize({ width: 1200, height: 1000 });
-    const narrow = await page.locator('#host-grid-local').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
-    assert.ok(wide > narrow, density + ': card columns must adapt to available width');
-    columnsByDensity.push(wide);
+    await expect.poll(async () => {
+      const narrow = await gridLayout();
+      return narrow.loaded && narrow.width > 0 && narrow.width < wide.width && narrow.columns < wide.columns;
+    }, { message: density + ': card columns must adapt to available width' }).toBe(true);
+    columnsByDensity.push(wide.columns);
     await page.setViewportSize({ width: 2560, height: 1000 });
   }
   assert.ok(columnsByDensity[2] > columnsByDensity[0], 'compact density must fit more cards than loose');
