@@ -163,6 +163,7 @@ def test_scan_timeout_bounds_startup_workers_and_shutdown(empty_scan, monkeypatc
         release.wait(5)
         return [ListeningPort(port=42000, ip="127.0.0.1", protocol="tcp")]
     monkeypatch.setattr(main, "scan_listening_ports", blocked)
+    scan_timeout = occupancy_monitor._scan_timeout
     monkeypatch.setattr(occupancy_monitor, "_scan_timeout", lambda: 0.05)
     before = time.monotonic()
     try:
@@ -184,6 +185,9 @@ def test_scan_timeout_bounds_startup_workers_and_shutdown(empty_scan, monkeypatc
         job.result(timeout=1)
         assert empty_scan.status()["initialized"] is False  # late result cannot publish
         monkeypatch.setattr(main, "scan_listening_ports", lambda **kw: [])
+        # Only the blocked scan needs the short deadline. Restore the normal
+        # timeout before checking that a healthy restart succeeds.
+        monkeypatch.setattr(occupancy_monitor, "_scan_timeout", scan_timeout)
         with TestClient(main.app) as client:
             assert client.get("/api/health").json()["occupancy"]["ready"] is True
             assert client.get("/api/ports/42000").json()["status"] == "free"
