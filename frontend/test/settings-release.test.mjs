@@ -203,6 +203,9 @@ test('copy click survives clipboard denial without an unhandled rejection', asyn
   const savedNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
   const fakeNavigator = { clipboard: { writeText: function () { return Promise.reject(new Error('denied')); } } };
   Object.defineProperty(globalThis, 'navigator', { value: fakeNavigator, configurable: true });
+  const savedPrompt = window.prompt;
+  const manualCopies = [];
+  window.prompt = (_message, value) => { manualCopies.push(value); };
 
   let unhandled = null;
   const onUnhandled = function (reason) { if (!unhandled) unhandled = reason; };
@@ -210,10 +213,15 @@ test('copy click survives clipboard denial without an unhandled rejection', asyn
   try {
     clickHandler({ target: { closest: function (sel) { return sel === '[data-copy]' ? copyBtn : null; } } });
     await new Promise(function (resolve) { setImmediate(resolve); });
+    delete fakeNavigator.clipboard;
+    clickHandler({ target: { closest: function (sel) { return sel === '[data-copy]' ? copyBtn : null; } } });
+    await new Promise(function (resolve) { setImmediate(resolve); });
   } finally {
     process.off('unhandledRejection', onUnhandled);
     if (savedNavigator) Object.defineProperty(globalThis, 'navigator', savedNavigator);
     else delete globalThis.navigator;
+    window.prompt = savedPrompt;
   }
   assert.equal(unhandled, null);
+  assert.deepEqual(manualCopies, [src.textContent, src.textContent]);
 });

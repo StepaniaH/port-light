@@ -30,7 +30,7 @@ jobs:
         run: pip freeze
       - name: Lint
         if: matrix.python-version == '3.13'
-        run: ruff check backend tests mcp port_light_client scripts/check_release_ci.py scripts/dev.py scripts/dockerhub_description.py
+        run: ruff check backend tests mcp port_light_client scripts/check_release_ci.py scripts/check_ai_install.py scripts/dev.py scripts/dockerhub_description.py
       - name: Build CLI wheel
         if: matrix.python-version == '3.13'
         run: |
@@ -39,6 +39,7 @@ jobs:
           "$RUNNER_TEMP/port-light-cli-smoke/bin/pip" install --no-index dist/*.whl
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/port-light-cli-smoke/bin/port-light" --version
+          python "$GITHUB_WORKSPACE/scripts/check_ai_install.py" "$RUNNER_TEMP/port-light-cli-smoke/bin/python" "$GITHUB_WORKSPACE"/dist/*.whl
       - name: Test
         run: |
           set -o pipefail
@@ -86,4 +87,10 @@ jobs:
       - name: Smoke CLI and MCP entry points
         run: |
           docker run --rm --entrypoint port-light port-light:ci --version
-          docker run --rm --entrypoint python port-light:ci mcp/server.py
+          docker run --rm --entrypoint python port-light:ci -c 'from pathlib import Path; assert Path("/app/docs/ai-setup.md").stat().st_size > 0; assert Path("/app/skills/port-light/SKILL.md").stat().st_size > 0'
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | docker run --rm -i --entrypoint python port-light:ci /app/mcp/server.py > mcp-smoke.jsonl
+          python -c 'import json; rows = [json.loads(line) for line in open("mcp-smoke.jsonl")]; assert [r["id"] for r in rows] == [1, 2]; assert {"doctor", "reserve_ports", "release_port"} <= {t["name"] for t in rows[1]["result"]["tools"]}'

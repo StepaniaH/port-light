@@ -468,6 +468,22 @@ def favicon() -> FileResponse:
     return FileResponse(_FRONTEND_DIR / "icon.png")
 
 
+@app.get("/ai-setup.md", include_in_schema=False)
+def ai_setup() -> FileResponse:
+    return FileResponse(
+        _FRONTEND_DIR.parent / "docs" / "ai-setup.md",
+        media_type="text/markdown", headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/skill.md", include_in_schema=False)
+def agent_skill() -> FileResponse:
+    return FileResponse(
+        _FRONTEND_DIR.parent / "skills" / "port-light" / "SKILL.md",
+        media_type="text/markdown", headers={"Cache-Control": "no-cache"},
+    )
+
+
 app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
 
 

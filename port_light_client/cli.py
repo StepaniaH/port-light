@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any, TextIO
@@ -13,6 +14,7 @@ from typing import Any, TextIO
 from . import __version__
 from .client import PortLightClient, PortLightError, create_client
 from .state import ReservationStore
+from .integration import connection_environment, mcp_configuration, verify_integration
 from .client import validate_request_key
 from contextlib import nullcontext
 
@@ -79,6 +81,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="check whether Port-Light can provide trustworthy results",
         parents=[common],
     )
+    setup = commands.add_parser("mcp-config", help="print MCP configuration without writing AI settings", parents=[common])
+    setup.add_argument("--client", required=True, choices=("codex", "claude-code"))
+    commands.add_parser("verify", help="verify the local MCP connection without reserving ports", parents=[common])
 
     check = commands.add_parser(
         "check",
@@ -404,7 +409,7 @@ def main(
     except PortLightError as exc:
         if "--json" in raw_argv:
             command = next(
-                (value for value in raw_argv if value in ("doctor", "check", "reserve", "release", "requests", "recover")),
+                (value for value in raw_argv if value in ("doctor", "check", "reserve", "release", "requests", "recover", "mcp-config", "verify")),
                 None,
             )
             _json_write(stdout, _error_document(command, exc))
@@ -415,7 +420,30 @@ def main(
     json_output = bool(getattr(args, "json", False))
     try:
         active_client = client or _client_from_environment(args, environ)
-        active_store = store or ReservationStore()
+        state_dir = environ.get("PORT_LIGHT_STATE_DIR", "").strip()
+        active_store = store or ReservationStore(Path(state_dir).expanduser() if state_dir else None)
+        if args.command in ("mcp-config", "verify"):
+            environment = connection_environment(
+                active_client.base_url, active_store, environ,
+                timeout=getattr(args, "timeout", None), ca_file=getattr(args, "ca_file", None),
+            )
+            if args.command == "mcp-config":
+                config = mcp_configuration(args.client, environment)
+                if json_output:
+                    _json_write(stdout, {"schema_version": SCHEMA_VERSION, "ok": True, "command": args.command, **config})
+                else:
+                    stdout.write(config["config"])
+                return 0
+            verification = verify_integration(environment, environ, active_store)
+            if json_output:
+                _json_write(stdout, {"schema_version": SCHEMA_VERSION, "ok": verification["ready"],
+                                     "command": args.command, **verification})
+            else:
+                stdout.write(f"Target: {verification['target_url']}\n")
+                for check in verification["checks"]:
+                    stdout.write(f"{check['status'].upper():7} {check['id']}: {check['detail']}\n")
+                stdout.write(f"AI registration: not checked. {verification['next_step']}.\n")
+            return 0 if verification["ready"] else 1
         if args.command == "doctor":
             return _doctor(active_client, json_output=json_output, stdout=stdout)
         if args.command == "check":

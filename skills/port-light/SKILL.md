@@ -1,70 +1,86 @@
 ---
 name: port-light
-description: Check port occupancy and reserve ports before starting servers or writing Docker Compose mappings. Use when selecting a port, investigating a port conflict, or coordinating reservations with other Port-Light clients.
+description: Check host port occupancy and reserve ports when choosing development server ports, editing Docker Compose port mappings, or investigating address-already-in-use errors with Port-Light.
 ---
 
 # Port-Light
 
-Port-Light combines listening sockets, Docker port mappings, Compose declarations,
-and manual entries. Results describe the latest scan; reservations coordinate
-Port-Light clients but do not bind operating-system sockets.
+Use the configured Port-Light instance for the host where the service will run.
+The AI client's machine and the monitored host may differ. Keep existing project
+ports and named port rules when they still fit the task; a conflict alone does
+not authorize stopping another service or changing an unrelated deployment.
 
-## Setup
+## Choose and use ports
 
-Install the CLI from the same release as the server. Configure the URL reachable
-from the environment where the command runs:
+- Inspect existing mappings and check their ports before proposing replacements.
+  For planning, use `check_port` / `suggest_ports` without `reserve` or `ttl`.
+- When ready to start a new service, use `reserve_ports` with a short
+  `project/service` label and the needed count, range or `rule`. It claims the
+  whole count or fails. The default lease is one hour; `ttl` accepts 60–604800
+  seconds. Let the task determine the duration.
+- Use the returned ports in the intended configuration and start promptly.
+  Reservations coordinate Port-Light clients but do not bind OS sockets.
+  If binding still fails, check the conflict, release your unused claim, and
+  choose a replacement within the task's allowed range.
+- Release with `release_port(port=...)` after stopping or abandoning the service.
+  The client uses its privately saved token. Keep the same URL and state folder.
+  Release does not stop a process. Do not release a still-needed reservation just
+  because the conversation is ending; report its expiry if the service stays up.
 
-```bash
-export PORT_LIGHT_URL="http://127.0.0.1:2100"
-# Optional authentication configured on the server:
-export PORT_LIGHT_AUTH="user:password"
-export PORT_LIGHT_AGENT_TOKEN="agent-token"
-```
+Prefer MCP when connected; use the CLI when only shell execution is available.
+Older MCP adapters lack `reserve_ports`: use `suggest_ports(reserve=true,
+ ttl=3600, ...)` and retain its returned token for release, or use the CLI.
+Never use both interfaces to reserve the same service twice.
 
-Keep credentials out of command-line arguments and shared logs. Use a persistent,
-private `PORT_LIGHT_STATE_DIR` for release tokens and pending recovery requests.
-
-## Check occupancy
+## CLI equivalent
 
 ```bash
 port-light doctor
 port-light check 5432
+port-light reserve --count 2 --start 8000 --end 8999 --ttl 1h --label my-project/preview
 ```
 
-`check` exits 0 when the port is free and 1 when it is used or configured. An
-incomplete scan returns an error; do not treat that result as a free port.
+Record the returned port numbers. After each service stops, run
+`port-light release <port>` for that service's actual reserved port.
 
-## Reserve ports
+`check` exits 0 for free and 1 for occupied/configured; an error is not a free
+port. CLI reservations also default to one hour. Persistent claims require
+explicit `--no-expiry`. Release uses the saved token. `--json` supplies structured
+CLI output but reservation JSON contains secret tokens: keep it out of shared logs.
+The new MCP `reserve_ports` saves tokens and omits them from tool results.
 
-```bash
-port-light reserve --count 1 --start 8000 --end 8999 --label my-preview
-```
+## Failures and scope
 
-Reservations default to one hour. Use `--ttl 10m` for a different duration or
-`--no-expiry` for a persistent reservation. `--scope all` checks configured peers
-and refuses allocation if any peer cannot supply a complete, unlocked map.
-Reservations are stored only on the selected server.
+- After an uncertain reservation failure, retry identical arguments against the
+  same URL and private state folder. Pending requests recover the original claim.
+  Do not change the label, range or interface while the outcome is uncertain.
+  For recovery without allocating, run `port-light requests` and
+  `port-light recover <request-id>`; neither creates new claims or extends TTL.
+- On unreachable, stale or incomplete occupancy, use `doctor` (or CLI
+  `port-light doctor`) and explain the cause. Do not assume missing ports are free
+  or remove required scanners to force allocation.
+- `scope=self` checks the selected host. Use `scope=all` when the task needs to
+  avoid configured peers too; every peer must provide a complete, unlocked map.
+  Claims are still saved only on the selected instance. Independent instances
+  do not share a distributed lock.
 
-The CLI saves release tokens locally. Use `--json` when structured output is
-needed, and treat the output as secret because it contains release tokens.
-Labels appear in the dashboard and must not contain credentials.
+## Connection
 
-## Recover or release
+`PORT_LIGHT_URL` selects the instance. Optional `PORT_LIGHT_AUTH=user:password`
+and `PORT_LIGHT_AGENT_TOKEN` supply Basic Auth and the separate allocation gate.
+`PORT_LIGHT_STATE_DIR` holds private tokens and pending requests; keep it stable.
+Do not include credentials in URLs, labels, project instructions or chat output.
 
-After a timeout, retry the same reservation arguments with the same URL and
-state directory. To inspect pending requests or recover without allocating:
+If setup is missing, read `<instance>/ai-setup.md` using the supplied instance URL.
+It explains client installation, MCP registration and verification. Ask for the
+instance address only if the task and existing configuration do not identify it.
+If a web reader cannot access the instance guide, use
+https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/ai-setup.md
+with the same target URL. This does not make an unreachable LAN server accessible.
+On clients that offer it, `port-light verify` tests the local adapter and access
+without reserving ports. It does not confirm that the AI tool loaded its config;
+reload the tool and call MCP `doctor` to check that final step.
 
-```bash
-port-light requests
-port-light recover <request-id>
-port-light release 8000
-```
-
-Explicit recovery can retrieve still-active claims after the automatic retry
-window. It never creates new claims or extends leases. Release uses the saved
-per-port token. Bind promptly after reserving: another process can still claim
-the operating-system port between the scan and the bind.
-
-For stateless automation, `--no-save --json` requires a caller-retained
-`PORT_LIGHT_REQUEST_KEY`; reuse that secret key after uncertain failures.
-See `docs/cli.md` and `docs/integrations.md` for the full command and HTTP APIs.
+Report the chosen host, ports, relevant configuration changes and lease expiry
+briefly. For failures, state the cause and next action. Keep successful check
+results concise.

@@ -11,6 +11,15 @@ For an operator-friendly wrapper around the check, reserve, release, and
 diagnostic APIs, see the [command-line client guide](cli.md). The CLI and MCP
 server share one dependency-free HTTP client and error model.
 
+## Connect an AI assistant
+
+Open **Settings → Automation** and copy the installation prompt into your AI
+tool. The running instance serves the [installation guide](ai-setup.md) at
+`/ai-setup.md` and the portable skill at `/skill.md`; both follow instance Basic
+Auth. The guide covers local and Docker clients, existing-config updates and
+read-only verification. The AI execution environment must be able to reach
+the instance.
+
 ## HTTP API
 
 ### Suggest free ports
@@ -214,9 +223,51 @@ above instead of guessing ports. The published image includes it at
 
 ### MCP server (experimental)
 
-`mcp/server.py` is a dependency-free MCP stdio adapter over the same shared
-client as the CLI. It exposes six tools: `suggest_ports`, `check_port`, `list_occupancy`,
-`port_history`, `list_degradations`, `release_port`.
+`port_light_client/mcp.py` is a dependency-free MCP stdio adapter over the same
+shared client as the CLI; `mcp/server.py` remains a compatibility entry point.
+It exposes eight tools: `doctor`, `suggest_ports`, `reserve_ports`, `check_port`,
+`list_occupancy`, `port_history`, `list_degradations`, `release_port`.
+
+The `port-light-cli` package now also installs `port-light-mcp`. Both use
+Python 3.11+ without runtime dependencies. Use an absolute executable path in
+GUI clients and set `PORT_LIGHT_URL` to the instance reachable from the agent's
+computer. A source checkout is no longer required for a separately installed
+MCP client. This entry point requires v0.8.4 or later; older wheels contain only the CLI.
+
+Use `port-light mcp-config --client codex` or `--client claude-code` to generate
+the correct registration format. `port-light verify` checks the actual adapter,
+diagnostics and read-only agent gate without reserving ports. See the
+[AI setup guide](ai-setup.md) for client-specific installation and updates.
+
+The stdio adapter supports protocol versions `2024-11-05`, `2025-06-18`
+and `2025-11-25`. An unsupported requested version negotiates
+`2025-11-25`; it is never echoed as supported. Tools require `initialize` followed
+by `notifications/initialized`. UTF-8 JSON messages are newline-delimited and
+limited to 1 MiB each. Malformed input returns a protocol error and the next line
+can still be processed. Notifications never execute tools.
+
+New integrations should use:
+
+- `doctor`: read-only connection and scan diagnostics.
+- `suggest_ports`: planning, without `reserve` or `ttl`.
+- `reserve_ports`: all-or-none reservation with a one-hour default lease,
+  persistent retry recovery, and privately saved tokens omitted from tool output.
+- `release_port`: release by port using the saved token for that URL; an explicit
+  token remains supported for claims from another client.
+
+Keep the same `PORT_LIGHT_URL` and `PORT_LIGHT_STATE_DIR` during retries, releases
+and updates. `reserve_ports` accepts `count`, `start`, `end`, `rule`, `scope`,
+`label` and `ttl` (60–604800 seconds). A pending failed call must be retried with
+identical arguments; a completed call followed by another call creates a new
+reservation. For explicit recovery use the companion CLI's `requests` / `recover`
+commands. If release succeeds but local cleanup fails, the result includes
+`remote_released: true` and a warning.
+
+Legacy `suggest_ports(reserve=true, ...)` keeps its original behavior and token
+output. Use an explicit TTL with that path; without one it creates persistent
+reservations. Tool descriptions and initialization instructions explain the
+workflow, and annotations distinguish read-only tools from mutating tools.
+`suggest_ports` is marked potentially mutating because of its legacy options.
 
 The published image ships the server at `/app/mcp/server.py`, so Docker
 deployments do not need a source checkout:
@@ -226,14 +277,14 @@ deployments do not need a source checkout:
   "mcpServers": {
     "port-light": {
       "command": "docker",
-      "args": ["exec", "-i", "port-light", "python", "mcp/server.py"],
+      "args": ["exec", "-i", "-e", "PORT_LIGHT_URL", "port-light", "python", "/app/mcp/server.py"],
       "env": {"PORT_LIGHT_URL": "http://127.0.0.1:2100"}
     }
   }
 }
 ```
 
-The agent skill rides along at `/app/skills/port-light/SKILL.md`.
+The agent skill is included at `/app/skills/port-light/SKILL.md`.
 
 ```bash
 PORT_LIGHT_URL=http://127.0.0.1:2100 python mcp/server.py
@@ -252,6 +303,12 @@ Client registration (Claude Code and MCP-compatible clients):
   }
 }
 ```
+
+For Docker, add `"-e", "PORT_LIGHT_AUTH"` and/or
+`"-e", "PORT_LIGHT_AGENT_TOKEN"` before the container name when setting those
+variables in the MCP process environment. `env` alone does not forward host
+variables into `docker exec`. This route requires access to the Docker daemon
+hosting Port-Light, not just a Docker installation on the agent’s computer.
 
 Point `PORT_LIGHT_URL` at a peer to query another machine; add
 `PORT_LIGHT_AUTH=user:password` when that instance uses Basic Auth, and add

@@ -23,6 +23,7 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Browser reservations | Request keys and release tokens remain in the tab’s session storage. They are never included in reservation list responses. Copied release commands contain a secret token. |
 | Port rules | Rule names, ranges, and assigned project names use the same read authorization as other configuration. Rule changes require editable settings. |
 | CLI | An HTTP client; it has no direct Docker, `/proc`, or Compose access. Basic Auth and agent tokens come from environment variables. Per-port release tokens are saved in owner-only local state unless `--no-save` is explicitly used with JSON output. |
+| AI integration | MCP returns requested port data to the connected AI tool. Setup documents use the same authentication as the UI. Generated configuration uses credential variable references; it does not contain their values. |
 
 Without auth, anyone who can reach port 2100 can read the port map (names, images, bind addresses, Compose paths), machine descriptions, and peer connection settings other than passwords. They can also change manual/hidden entries and editable settings.
 
@@ -40,6 +41,24 @@ hashes, not plaintext request keys or release tokens. Keep the client state
 directory persistent and private; exclude `Idempotency-Key` headers and JSON
 reservation/recovery output from shared logs. Stateless CLI use requires a
 caller-retained `PORT_LIGHT_REQUEST_KEY` as well as `--no-save --json`.
+
+## AI tools and data sharing
+
+Connecting an AI tool allows it to request instance diagnostics, port numbers,
+service names and history within the configured API permissions. These results
+may be processed or retained by the AI provider under that tool's settings.
+The copied setup prompt includes the instance URL. Review the target and the AI
+tool's data settings before sharing details from a private environment.
+
+Port-Light does not send data to an AI provider on its own. A public setup guide
+does not grant network access or bypass instance authentication. Use a client
+environment that can reach the instance without exposing it publicly.
+
+MCP `reserve_ports` saves release tokens locally and omits them from its result.
+Legacy `suggest_ports` reservation results and CLI reservation JSON still include
+tokens for compatibility; keep that output private. Preserve the private state
+directory across client updates. `mcp-config` prints absolute local paths and the
+instance URL, so review generated configuration before committing or sharing it.
 
 ## Recommendations
 

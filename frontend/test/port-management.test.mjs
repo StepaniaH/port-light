@@ -50,8 +50,8 @@ test('quoted names remain text in attributes and grouped range identifiers', asy
 });
 
 test('status sorting puts used ports first, then configured and free', async () => {
-  const { S } = await import('../js/state.js?v=96');
-  const { sortPorts } = await import('../js/grid.js?v=96');
+  const { S } = await import('../js/state.js?v=99');
+  const { sortPorts } = await import('../js/grid.js?v=99');
   const original = S.sortMode;
   try {
     S.sortMode = 'status';
@@ -60,8 +60,8 @@ test('status sorting puts used ports first, then configured and free', async () 
 });
 
 test('grouped runs respect name and status sorting across noncontiguous ports', async () => {
-  const { S } = await import('../js/state.js?v=96');
-  const { sortPortRuns } = await import('../js/grid.js?v=96');
+  const { S } = await import('../js/state.js?v=99');
+  const { sortPortRuns } = await import('../js/grid.js?v=99');
   const original = S.sortMode;
   const entries = [
     { port: 8080, status: 'configured', manual_label: 'Zulu', source_type: 'manual' },

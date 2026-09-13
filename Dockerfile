@@ -22,6 +22,7 @@ COPY frontend/ ./frontend/
 COPY mcp/ ./mcp/
 COPY port_light_client/ ./port_light_client/
 COPY skills/ ./skills/
+COPY docs/ai-setup.md ./docs/ai-setup.md
 COPY scripts/port-light /usr/local/bin/port-light
 
 # Ensure files are readable by non-root users (e.g. when container runs with --user 1000:1000)

@@ -1,18 +1,18 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=96';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=96';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=96';
-import { trapTab } from './a11y.js?v=96';
-import { api } from './api.js?v=96';
-import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=96';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=96';
+import { S, saveView } from './state.js?v=99';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=99';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=99';
+import { trapTab } from './a11y.js?v=99';
+import { api } from './api.js?v=99';
+import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=99';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=99';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=96';
-import { closeModals, modalOpen, openModal } from './modal.js?v=96';
+} from './grid.js?v=99';
+import { closeModals, modalOpen, openModal } from './modal.js?v=99';
 
 let tick;
 let loadPorts;

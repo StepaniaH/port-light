@@ -29,6 +29,7 @@ router = APIRouter()
 def meta(request: Request) -> dict:
     automation = {
         "agent_token": bool(os.environ.get("AGENT_TOKEN", "").strip()),
+        "auth_required": auth_configured(),
         "metrics": os.environ.get("METRICS_ENABLED", "").strip().lower()
                    in ("1", "true", "yes", "on"),
         "webhook": bool(os.environ.get("WEBHOOK_URL", "").strip()),

@@ -26,7 +26,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.8.3
+    image: stepaniah/port-light:v0.8.4
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -69,6 +69,23 @@ The dashboard lists occupied and configured ports. Searching for a port number a
 | In use | A process is listening or a running container publishes the port |
 | Configured | Declared in Compose or a manual entry, with no listener detected |
 | Free | Available within the current scan scope |
+
+## Work with an AI assistant
+
+In **Settings → Automation**, copy the setup prompt into your AI tool. It includes
+this instance's URL and instructions to install or update the integration and
+verify the connection. The assistant can then check project ports, reserve them
+before starting services, and release its claims when the services stop.
+
+For an assistant that can read GitHub, you can also use:
+
+> Read https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/ai-setup.md
+> and follow its instructions to install or update Port-Light for my AI tool.
+> My instance URL is `<your-instance-url>`.
+
+The instance must be reachable from the AI's execution environment. See the
+[AI setup guide](docs/ai-setup.md) for MCP, CLI + skill, Docker and update details.
+AI setup and the packaged MCP entry point are available in v0.8.4 and later.
 
 ## Access control
 

@@ -26,7 +26,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.8.3
+    image: stepaniah/port-light:v0.8.4
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -69,6 +69,21 @@ docker compose up -d
 | 占用 | 存在监听进程或运行中的容器映射 |
 | 已配置 | 已在 Compose 或手动条目中登记，尚未检测到监听 |
 | 空闲 | 当前扫描范围内可用 |
+
+## 和 AI 一起使用
+
+在 **设置 → 自动化** 中复制接入指令，发给你的 AI 工具。指令带有当前实例地址，
+AI 会按说明安装或更新接入并验证连接。之后可让它检查项目端口、在启动服务前预留，
+并在服务停止后释放自己的预留。
+
+也可以将下面这段话发给能读取 GitHub 的助手，替换实例地址即可：
+
+> 读取 https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/ai-setup.md，
+> 并按其中的说明，为我的 AI 工具安装或更新 Port-Light 接入。
+> 我的实例地址是 `<你的实例地址>`。
+
+AI 的运行环境需要能访问实例。MCP、CLI + Skill、Docker 与更新方式见
+[AI 接入说明](docs/ai-setup.md)。接入页面和独立 MCP 安装入口从 v0.8.4 开始提供。
 
 ## 访问控制
 

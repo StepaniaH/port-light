@@ -38,6 +38,11 @@ Use the server URL that is reachable from where the command runs. Inside the
 Port-Light container the default `http://127.0.0.1:2100` is normally correct;
 from the host, use its published port or reverse-proxy URL.
 
+The package also includes the `port-light-mcp` stdio entry point for AI tools
+since v0.8.4. See the [AI setup guide](ai-setup.md). Older releases
+include only the CLI; match the client to the server and check available
+entry points before registering MCP.
+
 ## Configure
 
 Command options take precedence over environment variables.
@@ -75,6 +80,39 @@ port-light release 8000
 ```
 
 ## Commands
+
+### `mcp-config --client codex|claude-code`
+
+Prints the selected client's TOML or JSON without changing AI settings or making
+network requests. Use the installed CLI in its permanent environment. Output
+contains an absolute executable path, the target URL, a persistent state directory
+and secret variable references, never credential values. Merge only the Port-Light
+entry into the existing configuration; preserve its scope, custom settings and state.
+See the [AI setup guide](ai-setup.md) for file locations and safe updates.
+
+```bash
+port-light --url https://ports.example.lan mcp-config --client codex
+port-light --url https://ports.example.lan mcp-config --client claude-code
+```
+
+### `verify`
+
+Starts the actual local MCP adapter and checks initialization, tool discovery,
+instance diagnostics, the read-only suggestion endpoint (including its agent-token
+gate), and the local state directory's writability. It does not reserve a port or
+change AI configuration. A read-only suggestion can appear in activity history.
+
+```bash
+port-light verify
+port-light verify --json
+```
+
+Results include the target URL, both versions, individual checks and
+`ai_registration: "not_checked"`. Exit `0` means these local checks passed;
+exit `1` means at least one completed check needs attention (including credentials).
+Startup/configuration errors use the normal error envelope and exit codes.
+Reload the AI tool and call `doctor` there to confirm that it loaded the connection.
+These commands require v0.8.4 or later; check `--help` on older installations.
 
 ### `doctor`
 

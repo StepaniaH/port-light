@@ -2,10 +2,24 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
-## Unreleased
+## 0.8.4 — 2026-09-13
+
+### Added
+
+- AI integration setup instructions and skill documents, available from Settings → Automation and included in the Docker image.
+- A `port-light-mcp` entry point in the CLI package, plus `doctor` and `reserve_ports` tools. Reservations default to one hour and save release tokens locally.
+- `mcp-config` to generate Codex and Claude Code configuration, and `verify` to check the adapter and instance without reserving ports.
+
+### Changed
+
+- The Automation panel starts with setup and usage examples. Manual configuration is expandable, with a copy fallback when the clipboard is unavailable.
+- MCP can release reservations using saved credentials and recover pending requests after a connection failure.
 
 ### Fixed
 
+- Refresh AI setup prompts immediately when switching the interface language.
+- Recover after malformed or oversized MCP input, validate the initialization lifecycle, and negotiate only supported protocol versions.
+- Forward connection and authentication variables into Docker MCP processes instead of setting only their parent process environment.
 - Identify Docker Hub authentication and repository-update failures separately and document the token permissions needed to synchronize the description.
 
 ## 0.8.3 — 2026-09-09

@@ -22,3 +22,9 @@ custom_ports.json
 custom_ports.example.json
 docker-compose.yml
 ruff.toml
+
+# Documents served by the application.
+!docs/
+docs/*
+!docs/ai-setup.md
+!skills/port-light/SKILL.md

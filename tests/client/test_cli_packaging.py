@@ -16,6 +16,7 @@ def test_package_exposes_dependency_free_console_script():
     assert project["project"]["dependencies"] == []
     assert project["project"]["scripts"] == {
         "port-light": "port_light_client.cli:main",
+        "port-light-mcp": "port_light_client.mcp:main",
     }
     assert project["tool"]["setuptools"]["packages"] == ["port_light_client"]
 

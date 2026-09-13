@@ -105,11 +105,12 @@ Guessed access URLs: loopback binds use `127.0.0.1`; a LAN-only bind uses that a
 integrations. It owns URL validation, authentication headers, TLS and timeout
 handling, redirect refusal, response validation, compact port rows, named
 capability checks, and normalized failures. Its narrow transport interface is
-the test seam. `port_light_client/cli.py` and `mcp/server.py` are adapters over
+the test seam. `port_light_client/cli.py` and `port_light_client/mcp.py` are adapters over
 that module; neither duplicates HTTP behavior or scans the machine itself.
 
-The CLI provides four commands: `doctor`, `check`, `reserve`, and
-`release`. Human output hides release tokens. Machine output uses a versioned
+The CLI supports connection diagnostics, port checks, reservation management,
+recovery and MCP configuration. See the [CLI guide](cli.md) for commands.
+Human output hides release tokens. Machine output uses a versioned
 JSON envelope and exit statuses distinguish success, valid negative results,
 input/state errors, and operational failures. Reservation tokens are stored by
 normalized server URL and port in owner-only local state. Host installations use

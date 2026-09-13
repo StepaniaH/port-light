@@ -1,9 +1,9 @@
 /* Automation examples, activity, and lease controls. */
-import { S } from './state.js?v=96';
-import { t, escapeHtml } from './text.js?v=96';
-import { api } from './api.js?v=96';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=96';
-import { settingsCard, kvRow } from './settings-format.js?v=96';
+import { S } from './state.js?v=99';
+import { t, escapeHtml } from './text.js?v=99';
+import { api } from './api.js?v=99';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=99';
+import { settingsCard, kvRow } from './settings-format.js?v=99';
 
   function snippetBlock(captionKey, id, code) {
     return '<div class="snippet"><p class="snippet-cap">' + escapeHtml(t(captionKey)) + '</p>' +
@@ -15,9 +15,16 @@ import { settingsCard, kvRow } from './settings-format.js?v=96';
 
   export function automationCardsHtml(a) {
     const origin = location.origin;
+    const base = origin + (location.pathname || '/').replace(/\/(?:index\.html)?$/, '');
+    const guide = base + '/ai-setup.md';
+    const publicGuide = 'https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/ai-setup.md';
     const port = Number(a.listen_port) > 0 ? String(a.listen_port) : '<port>';
     const dockerEnv = { PORT_LIGHT_URL: 'http://127.0.0.1:' + port };
-    const sourceEnv = { PORT_LIGHT_URL: origin };
+    const sourceEnv = { PORT_LIGHT_URL: base };
+    if (a.auth_required) {
+      dockerEnv.PORT_LIGHT_AUTH = '<user:password>';
+      sourceEnv.PORT_LIGHT_AUTH = '<user:password>';
+    }
     if (a.agent_token) {
       dockerEnv.PORT_LIGHT_AGENT_TOKEN = '<your-token>';
       sourceEnv.PORT_LIGHT_AGENT_TOKEN = '<your-token>';
@@ -26,7 +33,8 @@ import { settingsCard, kvRow } from './settings-format.js?v=96';
       mcpServers: {
         'port-light': {
           command: 'docker',
-          args: ['exec', '-i', 'port-light', 'python', 'mcp/server.py'],
+          args: ['exec', '-i', ...Object.keys(dockerEnv).flatMap(key => ['-e', key]),
+            'port-light', 'python', '/app/mcp/server.py'],
           env: dockerEnv,
         },
       },
@@ -34,25 +42,40 @@ import { settingsCard, kvRow } from './settings-format.js?v=96';
     const mcpSource = JSON.stringify({
       mcpServers: {
         'port-light': {
-          command: 'python',
-          args: ['/path/to/port-light/mcp/server.py'],
+          command: '/absolute/path/to/port-light-mcp',
           env: sourceEnv,
         },
       },
     }, null, 2);
-    let curl = 'curl -s "' + origin + '/api/ports/suggest?count=2"';
+    const curlUrl = (base + '/api/ports/suggest?count=2').replaceAll("'", "'\\''");
+    let curl = "curl --fail-with-body -sS '" + curlUrl + "'";
+    if (a.auth_required) curl += ' \\\n  -u "<user:password>"';
     if (a.agent_token) curl += ' \\\n  -H "X-Agent-Token: <your-token>"';
 
+    const cli = "port-light --url '" + base.replaceAll("'", "'\\''") + "' ";
+    const setupCommands = cli + 'mcp-config --client codex\n' +
+      cli + 'mcp-config --client claude-code\n' + cli + 'verify';
+
     const connect =
+      snippetBlock('settings.auto.connect.promptTitle', 'al-setup-prompt',
+        t('settings.auto.connect.prompt', { guide, publicGuide, url: base })) +
+      '<p class="muted">' + escapeHtml(t('settings.auto.connect.promptHint')) + '</p>' +
+      '<a href="' + escapeHtml(guide) + '" target="_blank" rel="noopener">' +
+      escapeHtml(t('settings.auto.connect.guide')) + '</a>' +
+      snippetBlock('settings.auto.connect.tryTitle', 'al-try-prompt', t('settings.auto.connect.tryPrompt')) +
+      '<p class="muted">' + escapeHtml(t('settings.auto.connect.verifyHint')) + '</p>' +
+      '<details class="auto-manual"><summary>' + escapeHtml(t('settings.auto.connect.manual')) + '</summary>' +
+      '<p class="muted">' + escapeHtml(t('settings.auto.connect.manualHint')) + '</p>' +
+      snippetBlock('settings.auto.connect.commands', 'al-setup-commands', setupCommands) +
+      snippetBlock('settings.auto.connect.mcpSource', 'al-mcp-src', mcpSource) +
       snippetBlock('settings.auto.connect.mcpDocker', 'al-mcp-docker', mcpDocker) +
       '<p class="muted">' + escapeHtml(t('settings.auto.connect.dockerHint')) + '</p>' +
-      snippetBlock('settings.auto.connect.mcpSource', 'al-mcp-src', mcpSource) +
-      snippetBlock('settings.auto.connect.skill', 'al-skill',
-        'docker exec port-light cat /app/skills/port-light/SKILL.md' +
-        ' > ~/.claude/skills/port-light/SKILL.md') +
+      '<a href="' + escapeHtml(base + '/skill.md') + '" target="_blank" rel="noopener">' +
+      escapeHtml(t('settings.auto.connect.skill')) + '</a>' +
       '<p class="muted">' + escapeHtml(t('settings.auto.connect.skillHint')) + '</p>' +
       snippetBlock('settings.auto.connect.curl', 'al-curl', curl) +
-      (a.agent_token ? '<p class="muted">' + escapeHtml(t('settings.auto.connect.curlToken')) + '</p>' : '');
+      (a.agent_token ? '<p class="muted">' + escapeHtml(t('settings.auto.connect.curlToken')) + '</p>' : '') +
+      '</details>';
 
     const statusRows = [
       kvRow('settings.auto.agentToken',
@@ -139,13 +162,18 @@ import { settingsCard, kvRow } from './settings-format.js?v=96';
       if (copyBtn) {
         const src = document.getElementById(copyBtn.getAttribute('data-copy'));
         if (!src) return;
-        navigator.clipboard.writeText(src.textContent.trim()).then(function () {
+        Promise.resolve().then(() => {
+          if (!navigator.clipboard) throw new Error('Clipboard unavailable');
+          return navigator.clipboard.writeText(src.textContent.trim());
+        }).then(function () {
           copyBtn.textContent = t('settings.auto.connect.copied');
           setTimeout(function () {
             copyBtn.textContent = copyBtn.getAttribute('data-label') ||
               t('settings.auto.connect.copy');
           }, 1200);
-        }).catch(function () {});
+        }).catch(function () {
+          window.prompt(t('settings.auto.connect.manualCopy'), src.textContent.trim());
+        });
         return;
       }
       const relBtn = e.target.closest('[data-release-port]');

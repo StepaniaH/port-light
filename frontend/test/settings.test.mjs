@@ -51,9 +51,52 @@ const withEvents = () => Object.assign({}, base, {
 
 test('connect card renders both MCP variants and curl without token', () => {
   const html = automationCardsHtml(Object.assign({}, base, { listen_port: 8899 }));
-  assert.match(html.replaceAll('&quot;', '"'), /"command":\s*"docker",\s*"args":\s*\[\s*"exec",\s*"-i",\s*"port-light",\s*"python",\s*"mcp\/server\.py"/);
+  assert.match(html.replaceAll('&quot;', '"'), /"command":\s*"docker",\s*"args":\s*\[\s*"exec",\s*"-i",\s*"-e",\s*"PORT_LIGHT_URL",\s*"port-light",\s*"python",\s*"\/app\/mcp\/server\.py"/);
+  assert.match(html, /\/absolute\/path\/to\/port-light-mcp/);
   assert.match(html, /mcp\/server\.py/);
   assert.doesNotMatch(html, /X-Agent-Token/);
+});
+
+test('Docker registration forwards every configured credential to the container', () => {
+  const html = automationCardsHtml({ ...base, listen_port: 8899, agent_token: true, auth_required: true });
+  const source = html.match(/<pre id="al-mcp-docker">([\s\S]*?)<\/pre>/)[1];
+  const config = JSON.parse(source.replaceAll('&quot;', '"').replaceAll('&lt;', '<').replaceAll('&gt;', '>'));
+  const server = config.mcpServers['port-light'];
+  assert.deepEqual(server.args, ['exec', '-i', '-e', 'PORT_LIGHT_URL',
+    '-e', 'PORT_LIGHT_AUTH', '-e', 'PORT_LIGHT_AGENT_TOKEN',
+    'port-light', 'python', '/app/mcp/server.py']);
+  for (const key of Object.keys(server.env)) {
+    assert.ok(server.args.some((arg, i) => arg === '-e' && server.args[i + 1] === key));
+  }
+  assert.equal(server.env.PORT_LIGHT_AUTH, '<user:password>');
+  assert.equal(server.env.PORT_LIGHT_AGENT_TOKEN, '<your-token>');
+  assert.doesNotMatch(html, /\n\+  -u/);
+});
+
+test('setup prompt carries the instance path and manual configuration starts collapsed', () => {
+  const saved = window.PortLightI18n;
+  const pathname = location.pathname;
+  const english = JSON.parse(readFileSync(new URL('../locales/en.json', import.meta.url), 'utf8'));
+  window.PortLightI18n = { t(key, vars) {
+    const raw = key.split('.').reduce((value, part) => value?.[part], english) || key;
+    return raw.replace(/\{(\w+)\}/g, (_, name) => String(vars?.[name]));
+  } };
+  try {
+    location.pathname = '/ports/';
+    const html = automationCardsHtml(base);
+    assert.match(html, /Read http:\/\/127\.0\.0\.1:2100\/ports\/ai-setup\.md/);
+    assert.match(html, /Instance URL: http:\/\/127\.0\.0\.1:2100\/ports/);
+    assert.match(html, /https:\/\/raw\.githubusercontent\.com\/StepaniaH\/port-light\/main\/docs\/ai-setup\.md/);
+    assert.match(html, /mcp-config --client codex/);
+    assert.match(html, /mcp-config --client claude-code/);
+    assert.match(html, /<details class="auto-manual"><summary>/);
+    assert.match(html, /href="http:\/\/127\.0\.0\.1:2100\/ports\/skill\.md"/);
+    assert.ok(html.indexOf('al-setup-prompt') < html.indexOf('al-mcp-src'));
+    assert.doesNotMatch(html, />settings\.auto\.connect\./);
+  } finally {
+    location.pathname = pathname;
+    window.PortLightI18n = saved;
+  }
 });
 
 test('docker MCP env port follows meta listen_port', () => {

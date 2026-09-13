@@ -52,8 +52,19 @@ Settings that belong on both Compose and the UI live in `backend/settings.py`. S
 The dependency-free command-line client lives in `port_light_client/`. Run it
 from a checkout with `python -m port_light_client`, or install the console
 entry point in a disposable environment with `pipx install .` / `uv tool
-install .`. CLI and MCP transport or error behavior belongs in the shared
-client module rather than being copied into either adapter.
+install .`. HTTP transport and response validation belong in the shared client module.
+Keep CLI output and MCP protocol handling in their respective adapters.
+
+CI checks both installed client entry points outside the source tree and repeats
+a wheel installation to check state preservation. Run the same check in a
+disposable environment with:
+
+```bash
+python scripts/check_ai_install.py /path/to/venv/bin/python /path/to/client.whl
+```
+
+This command reinstalls the supplied wheel in that environment. It does not
+register an AI tool or contact a Port-Light instance.
 
 ## Adding UI copy
 

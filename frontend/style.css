@@ -1513,12 +1513,21 @@ a:focus-visible,
   background: var(--elevated); border: 1px solid var(--border);
   padding: .5rem; overflow-x: auto; font-size: .8em; margin: 0 0 .25rem;
 }
-.snippet-body { position: relative; }
+.snippet-body { display: flex; align-items: flex-start; gap: 8px; }
+.snippet-body pre { flex: 1; min-width: 0; }
 .snippet-body .btn-secondary {
-  position: absolute; top: 8px; right: 8px;
+  flex-shrink: 0;
   height: 26px; padding: 0 12px; font-size: .75rem;
   box-shadow: var(--shadow);
 }
+#al-setup-prompt, #al-try-prompt {
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: inherit; line-height: 1.7; padding: 12px;
+  border-radius: var(--radius-sm);
+}
+.auto-manual { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 12px; }
+.auto-manual summary { cursor: pointer; font-weight: 600; }
+.auto-manual .muted { margin: 10px 0; }
 .auto-summary { font-weight: 600; }
 .lease-row {
   display: flex; align-items: center; gap: .6rem;
