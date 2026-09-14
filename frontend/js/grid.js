@@ -1,15 +1,15 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { groupPorts, portRuns } from './port-groups.js?v=99';
-import { S } from './state.js?v=99';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=99';
-import { KIND_MATCHERS } from './kinds.js?v=99';
-import { isLease } from './leases.js?v=99';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=99';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=99';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=99';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=99';
-import { api } from './api.js?v=99';
+import { groupPorts, portRuns } from './port-groups.js?v=100';
+import { S } from './state.js?v=100';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=100';
+import { KIND_MATCHERS } from './kinds.js?v=100';
+import { isLease } from './leases.js?v=100';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=100';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=100';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=100';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=100';
+import { api } from './api.js?v=100';
 
 const expandedRuns = new Set();
 const boardSizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {

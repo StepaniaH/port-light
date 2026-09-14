@@ -62,6 +62,7 @@ def meta(request: Request) -> dict:
         "hidden_ports_withheld": hidden_ports_withheld(),
         "settings_readonly": app_settings.settings_readonly(),
         "automation": automation,
+        "ui_links": list(getattr(request.app.state, "ui_links", ())),
     }
 
 

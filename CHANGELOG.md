@@ -2,6 +2,16 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## Unreleased
+
+### Added
+
+- A local UI navigation hook for composed applications to register their own pages without replacing the core dashboard.
+
+### Changed
+
+- Make AI setup prompts optional disclosures with distinct copy actions, and improve Automation status, empty states, and mobile layout.
+
 ## 0.8.4 — 2026-09-13
 
 ### Added

@@ -1,19 +1,19 @@
-import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=99';
-export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=99';
-import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=99';
-export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=99';
-import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=99';
-export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=99';
-import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=99';
-export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=99';
+import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=100';
+export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=100';
+import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=100';
+export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=100';
+import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=100';
+export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=100';
+import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=100';
+export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=100';
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=99';
-import { t, escapeHtml, errorText } from './text.js?v=99';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=99';
-import { api, fetchHosts, fetchSettings } from './api.js?v=99';
-import { bindAddressView } from './grid.js?v=99';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=99';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=100';
+import { t, escapeHtml, errorText } from './text.js?v=100';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=100';
+import { api, fetchHosts, fetchSettings } from './api.js?v=100';
+import { bindAddressView } from './grid.js?v=100';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=100';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
