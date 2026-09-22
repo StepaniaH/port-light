@@ -47,6 +47,17 @@ configure the extra endpoint; they do not supply a model key. A malformed endpoi
 configuration disables the analysis workspace while leaving the dashboard active.
 Plain HTTP local model endpoints are not supported by this adapter.
 
+The adapters use Chat Completions, not the OpenAI Responses or Anthropic Messages
+protocols. OpenAI requests use `max_completion_tokens`, JSON-object output and
+`store: false`. DeepSeek requests use `max_tokens` and JSON-object output.
+OpenCode Go requests use `max_tokens` without JSON mode and include an
+`x-opencode-session` identifier for the attempt. Custom endpoints use the token
+parameter and JSON mode configured above.
+
+Provider requests do not follow redirects or use proxy environment variables
+such as `HTTP_PROXY` and `HTTPS_PROXY`. The Hub needs a direct HTTPS connection
+to the configured endpoint.
+
 ## Storage and access
 
 Data lives below `PORT_LIGHT_DATA_DIR/analysis`:
@@ -76,5 +87,40 @@ The provider still receives the API key as authentication and can see the Hub's
 network address. Review the payload and the provider's data policy before sending.
 
 Interrupted requests are not retried automatically; an upstream provider may
-already have billed a timed-out request. Temporary captures expire in memory.
+already have billed a timed-out request. Temporary single-port previews and
+workbench captures expire after 10 minutes; finishing an AI attempt starts a new
+10-minute retention period. Expired entries are cleaned up every 30 seconds.
 Corrupt report databases are preserved, and storage errors do not stop scanning.
+
+
+## HTTP API
+
+All paths below are relative to `/analysis/api`. Requests use the dashboard's
+Basic Auth when enabled. Keep the browser's HttpOnly, SameSite=Strict session
+cookie, scoped to `/analysis`, to access its captures and reports. Mutations
+require `X-Port-Light-Analysis: 1` and must pass the same-origin check. Hidden
+resources also require the current `X-Hidden-Unlock` header.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/settings` | Read connection settings without the API key. |
+| PUT / DELETE | `/settings/ai` | Save or clear the connection. |
+| GET | `/workbench/options` | Read available scopes and limits. |
+| POST | `/workbench/captures` | Capture observations and suggested checks. |
+| GET | `/workbench/captures/{id}` | Read a capture and its current status. |
+| POST | `/workbench/captures/{id}/ai` | Start one explicitly confirmed model request. |
+| POST | `/workbench/captures/{id}/cancel` | Cancel an attempt. |
+| GET / POST | `/workbench/reports` | List or save reports. |
+| GET | `/workbench/reports/{id}` | Read a saved report. |
+| GET | `/workbench/reports/{id}/export` | Download a saved report as JSON. |
+| POST | `/workbench/rechecks` | Compare new observations with a saved report. |
+
+The single-port API also provides `POST /analysis/previews`,
+`GET /analysis/{id}`, and `POST /analysis/{id}/start` or `/cancel`.
+`GET /analysis/{id}/report` exports a completed temporary result.
+Use `GET /reports` to list saved single-port reports, `POST /reports` to save one,
+and `GET /reports/{id}` or `/reports/{id}/export` to read or export it.
+
+Submitting the same attempt twice does not trigger a second provider request.
+Captures and reports are checked against the requesting session and current port
+access on each read. Saving a report does not grant access to hidden ports.

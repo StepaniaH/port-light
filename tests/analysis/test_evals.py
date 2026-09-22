@@ -1,4 +1,5 @@
 """Offline synthetic evidence checks; no credentials or network requests."""
+import copy
 import json
 import socket
 from pathlib import Path
@@ -83,3 +84,12 @@ def test_synthetic_evidence(case, monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", deny_network)
     monkeypatch.setattr(socket, "getaddrinfo", deny_network)
     assert run_case(case)["result"] == "passed"
+
+
+@pytest.mark.parametrize("field", ["allowed_inferences", "forbidden_assertions", "next_step_goals"])
+@pytest.mark.parametrize("value", [[], ["x" * 501], ["x"] * 9, None])
+def test_case_descriptions_are_required_and_bounded(field, value):
+    case = copy.deepcopy(CORPUS["cases"][0])
+    case[field] = value
+    with pytest.raises(AssertionError):
+        validate_case_descriptions(case)
