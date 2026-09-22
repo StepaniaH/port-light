@@ -6,6 +6,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Added
 
+- Local troubleshooting with suggested checks, port changes, saved reports, and comparisons against earlier reports.
+- Optional AI assistance using your own model key with saved BYOK settings, evidence preview, explicit consent, and seven interface languages.
+- Bounded port observations and persistent observation events for TCP/UDP evidence and rechecks.
+
 - A local UI navigation hook for composed applications to register their own pages without replacing the core dashboard.
 
 ### Changed

@@ -1,0 +1,188 @@
+<div class="analysis-workspace">
+  <p class="settings-lead" data-analysis-i18n="lead"></p>
+  <p id="analysis-error" class="error" role="alert" hidden></p>
+  <p id="analysis-status" class="notice" role="status" aria-live="polite" hidden></p>
+
+  <div class="analysis-layout">
+    <aside class="analysis-scope-column">
+      <section class="analysis-panel analysis-task-panel" aria-labelledby="analysis-task-heading">
+        <h2 id="analysis-task-heading" data-analysis-i18n="task"></h2>
+        <div class="task-choices" role="group" data-analysis-i18n-aria="task">
+          <button id="analysis-task-triage" class="task-choice" type="button" aria-pressed="true">
+            <strong data-analysis-i18n="task_triage"></strong>
+            <span data-analysis-i18n="task_triage_hint"></span>
+          </button>
+          <button id="analysis-task-changes" class="task-choice" type="button" aria-pressed="false">
+            <strong data-analysis-i18n="task_changes"></strong>
+            <span data-analysis-i18n="task_changes_hint"></span>
+          </button>
+        </div>
+
+        <form id="analysis-capture-form" novalidate>
+          <label for="analysis-scope-kind" data-analysis-i18n="scope"></label>
+          <select id="analysis-scope-kind">
+            <option value="all_known" data-analysis-i18n="scope_all_known"></option>
+            <option value="selected_ports" data-analysis-i18n="scope_selected_ports"></option>
+            <option value="port_range" data-analysis-i18n="scope_port_range"></option>
+            <option value="single_port" data-analysis-i18n="scope_single_port"></option>
+          </select>
+          <p id="analysis-known-ports-note" class="hint" aria-live="polite"></p>
+
+          <div id="analysis-single-port-fields" class="scope-fields" hidden>
+            <label for="analysis-single-port" data-analysis-i18n="single_port"></label>
+            <input id="analysis-single-port" type="number" inputmode="numeric" min="1" max="65535" required>
+          </div>
+
+          <div id="analysis-selected-ports-fields" class="scope-fields" hidden>
+            <label for="analysis-known-port" data-analysis-i18n="known_port"></label>
+            <div class="add-port-row">
+              <select id="analysis-known-port" aria-describedby="analysis-known-ports-note"></select>
+              <button id="analysis-add-known-port" class="btn-secondary" type="button" data-analysis-i18n="add"></button>
+            </div>
+            <label for="analysis-manual-port" data-analysis-i18n="manual_port"></label>
+            <div class="add-port-row">
+              <input id="analysis-manual-port" type="number" inputmode="numeric" min="1" max="65535">
+              <button id="analysis-add-manual-port" class="btn-secondary" type="button" data-analysis-i18n="add"></button>
+            </div>
+            <label for="analysis-bulk-ports" data-analysis-i18n="bulk_ports"></label>
+            <textarea id="analysis-bulk-ports" rows="3" maxlength="12000" spellcheck="false" data-analysis-i18n-placeholder="bulk_ports_placeholder"></textarea>
+            <p class="hint" data-analysis-i18n="bulk_ports_hint"></p>
+            <button id="analysis-add-bulk-ports" class="btn-secondary" type="button" data-analysis-i18n="add_list"></button>
+            <p id="analysis-selected-ports-empty" class="hint" data-analysis-i18n="selected_ports_empty"></p>
+            <ul id="analysis-selected-ports" class="port-chips" aria-live="polite"></ul>
+            <button id="analysis-show-more-selected" class="btn-secondary" type="button" hidden data-analysis-i18n="show_more"></button>
+          </div>
+
+          <div id="analysis-range-fields" class="scope-fields" hidden>
+            <label for="analysis-range-start" data-analysis-i18n="range_start"></label>
+            <input id="analysis-range-start" type="number" inputmode="numeric" min="1" max="65535" required>
+            <label for="analysis-range-end" data-analysis-i18n="range_end"></label>
+            <input id="analysis-range-end" type="number" inputmode="numeric" min="1" max="65535" required>
+            <p class="hint" data-analysis-i18n="range_limit"></p>
+          </div>
+
+          <label for="analysis-protocol" data-analysis-i18n="protocol"></label>
+          <select id="analysis-protocol">
+            <option value="all" data-analysis-i18n="protocol_all"></option>
+            <option value="tcp" data-analysis-i18n="protocol_tcp"></option>
+            <option value="udp" data-analysis-i18n="protocol_udp"></option>
+          </select>
+
+          <div id="analysis-window-fields" hidden>
+            <label for="analysis-history-hours" data-analysis-i18n="history_window"></label>
+            <select id="analysis-history-hours">
+              <option value="1" data-analysis-i18n="history_1"></option>
+              <option value="6" data-analysis-i18n="history_6"></option>
+              <option value="24" selected data-analysis-i18n="history_24"></option>
+            </select>
+          </div>
+
+          <button id="analysis-capture-button" class="btn-primary" type="submit" data-analysis-i18n="capture"></button>
+          <p id="analysis-scope-hint" class="hint" data-analysis-i18n="local_scope"></p>
+        </form>
+      </section>
+    </aside>
+
+    <div class="analysis-content">
+      <section id="analysis-results-panel" class="analysis-panel" aria-labelledby="analysis-results-heading">
+        <div class="section-heading">
+          <h2 id="analysis-results-heading" tabindex="-1" data-analysis-i18n="results"></h2>
+          <span id="analysis-result-state" class="status" aria-live="polite" data-analysis-i18n="waiting"></span>
+        </div>
+        <div id="analysis-empty-result" class="empty">
+          <p data-analysis-i18n="empty"></p>
+          <p class="hint" data-analysis-i18n="empty_hint"></p>
+        </div>
+        <div id="analysis-results" hidden>
+          <p id="analysis-scope-changed" class="notice" hidden></p>
+          <div class="result-overview">
+            <p id="analysis-conclusion" class="conclusion" tabindex="-1"></p>
+            <p id="analysis-capture-meta" class="hint"></p>
+            <p class="hint" data-analysis-i18n="interpretation_boundary"></p>
+            <div id="analysis-coverage" class="coverage" aria-live="polite"></div>
+          </div>
+
+          <section id="analysis-comparison-section" class="comparison" hidden aria-labelledby="analysis-comparison-heading">
+            <h3 id="analysis-comparison-heading" data-analysis-i18n="recheck_result"></h3>
+            <p id="analysis-comparison-meta" class="hint"></p>
+            <div class="comparison-grid">
+              <div><h4 data-analysis-i18n="comparison_added"></h4><ul id="analysis-comparison-added"></ul></div>
+              <div><h4 data-analysis-i18n="comparison_persisting"></h4><ul id="analysis-comparison-persisting"></ul></div>
+              <div><h4 data-analysis-i18n="comparison_not_observed"></h4><ul id="analysis-comparison-not-observed"></ul></div>
+              <div><h4 data-analysis-i18n="comparison_cannot_compare"></h4><ul id="analysis-comparison-cannot-compare"></ul></div>
+            </div>
+          </section>
+
+          <section aria-labelledby="analysis-priority-heading">
+            <div class="section-heading">
+              <h3 id="analysis-priority-heading" data-analysis-i18n="priority_queue"></h3>
+              <span id="analysis-queue-meta" class="status"></span>
+            </div>
+            <p id="analysis-priority-intro" class="hint"></p>
+            <div id="analysis-priority-queue" class="problem-list"></div>
+          </section>
+
+          <section id="analysis-remaining-section" hidden aria-labelledby="analysis-remaining-heading">
+            <div class="section-heading">
+              <h3 id="analysis-remaining-heading" data-analysis-i18n="remaining_problems"></h3>
+              <button id="analysis-show-more-problems" class="btn-secondary" type="button" aria-expanded="false" data-analysis-i18n="show_more"></button>
+            </div>
+            <div id="analysis-remaining-problems" class="problem-list" hidden></div>
+          </section>
+
+          <details class="facts-details">
+            <summary data-analysis-i18n="facts"></summary>
+            <p id="analysis-facts-note" class="hint"></p>
+            <div id="analysis-facts"></div>
+            <button id="analysis-show-more-facts" class="btn-secondary" type="button" hidden data-analysis-i18n="show_more"></button>
+          </details>
+
+          <div class="actions result-actions">
+            <button id="analysis-save-report" class="btn-secondary" type="button" data-analysis-i18n="save_report"></button>
+            <a id="analysis-export-link" class="btn-secondary" download hidden data-analysis-i18n="export"></a>
+            <button id="analysis-recheck" class="btn-primary" type="button" data-analysis-i18n="recheck"></button>
+          </div>
+          <p id="analysis-report-status" class="hint" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="analysis-ai-panel" class="analysis-panel" aria-labelledby="analysis-ai-heading">
+        <div class="section-heading"><h2 id="analysis-ai-heading" data-analysis-i18n="ai_heading"></h2><span id="analysis-ai-state" class="status"></span></div>
+        <p id="analysis-ai-empty" class="hint" data-analysis-i18n="ai_empty"></p>
+        <p id="analysis-ai-empty-action" class="connection-action" hidden><a href="#/settings/analysis/ai" data-analysis-i18n="manage_ai_settings"></a></p>
+        <div id="analysis-ai-content" hidden>
+          <p id="analysis-ai-eligibility" class="hint" role="status"></p>
+          <p id="analysis-ai-payload-summary" class="hint" hidden></p>
+          <details id="analysis-ai-payload-details" hidden>
+            <summary data-analysis-i18n="send_payload"></summary>
+            <p id="analysis-ai-payload-meta" class="hint"></p>
+            <pre id="analysis-ai-payload"></pre>
+          </details>
+          <div id="analysis-ai-connection" class="ai-connection">
+            <p id="analysis-ai-connection-summary" class="connection-summary"></p>
+            <p id="analysis-ai-connection-action" class="connection-action"><a id="analysis-manage-ai-settings" href="#/settings/analysis/ai" data-analysis-i18n="manage_ai_settings"></a></p>
+            <label id="analysis-consent-field" class="check"><input id="analysis-consent" type="checkbox"><span id="analysis-consent-label"></span></label>
+            <div class="actions"><button id="analysis-start-ai" class="btn-primary" type="button" data-analysis-i18n="start_ai"></button><button id="analysis-cancel-ai" class="btn-secondary" type="button" hidden data-analysis-i18n="cancel_ai"></button></div>
+          </div>
+          <div id="analysis-ai-recommendations" hidden>
+            <h3 data-analysis-i18n="ai_recommendations"></h3>
+            <div id="analysis-ai-recommendation-list" class="recommendation-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="analysis-panel" aria-labelledby="analysis-saved-heading">
+        <div class="section-heading"><h2 id="analysis-saved-heading" data-analysis-i18n="saved_reports"></h2><span id="analysis-report-list-status" class="status" aria-live="polite"></span></div>
+        <p id="analysis-report-storage-note" class="hint" data-analysis-i18n="storage_note"></p>
+        <p id="analysis-saved-empty" class="hint" data-analysis-i18n="saved_empty"></p>
+        <ul id="analysis-report-list" class="report-list"></ul>
+        <button id="analysis-load-more-reports" class="btn-secondary" type="button" hidden data-analysis-i18n="show_more"></button>
+        <details id="analysis-legacy-reports" hidden>
+          <summary data-analysis-i18n="legacy_reports"></summary>
+          <p class="hint" data-analysis-i18n="legacy_reports_hint"></p>
+          <ul id="analysis-legacy-report-list" class="report-list"></ul>
+        </details>
+      </section>
+    </div>
+  </div>
+</div>

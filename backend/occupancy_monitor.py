@@ -14,6 +14,7 @@ import os
 import sqlite3
 import threading
 import time
+import uuid
 from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future
@@ -63,7 +64,7 @@ class OccupancyMonitor:
         self._lock = threading.RLock()
         self._publish_lock = threading.Lock()
         self._observation_lock = threading.Lock()
-        self._pending_observations: deque[list[dict]] = deque(maxlen=128)
+        self._pending_observations: deque[tuple[list[dict] | None, list[dict]]] = deque(maxlen=128)
         self._job: Future | None = None
         self._running = False
         self._epoch = 0
@@ -72,6 +73,11 @@ class OccupancyMonitor:
         self._latest: dict | None = None
         self._fingerprint = ""
         self._sequence = 0
+        self._capture_sequence = 0
+        self._capture_namespace = uuid.uuid4().hex[:12]
+        self._observation_events: deque[dict] = deque(maxlen=512)
+        self._event_baseline: dict[int, dict] | None = None
+        self._event_quality: str | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._refresh_event: asyncio.Event | None = None
         self._change_event: asyncio.Event | None = None
@@ -255,25 +261,142 @@ class OccupancyMonitor:
         digest = hashlib.sha256(json.dumps(
             fingerprint_body, ensure_ascii=False, separators=(",", ":"), sort_keys=True,
         ).encode("utf-8")).hexdigest()
+        event_rows = {row["port"]: self._event_row(row) for row in rows}
         changed = False
+        new_events: list[dict] = []
         with self._lock:
             if valid is not None and not valid():
                 return False
             if scanned:
                 self._failed = False
             self._interval = _interval(values)
+            self._capture_sequence += 1
+            snap["capture_id"] = f"obs-{self._capture_namespace}-{self._capture_sequence}"
+            snap["captured_at"] = int(time.time())
             if digest != self._fingerprint:
                 self._fingerprint = digest
                 self._sequence += 1
                 changed = True
+            new_events = self._record_observation_events(snap, event_rows, changed)
             self._latest = snap
         if changed:
             self._signal_waiters()
-        if complete(snap):
+        if complete(snap) or new_events:
             if len(self._pending_observations) == self._pending_observations.maxlen:
                 degradations.report("monitor", "observations", "queue full; intermediate changes omitted")
-            self._pending_observations.append(rows)
+            self._pending_observations.append((rows if complete(snap) else None, new_events))
         return True
+
+    @staticmethod
+    def _event_row(row: dict) -> dict:
+        protocols = tuple(sorted({
+            protocol for protocol in str(row.get("protocol") or "").split(",")
+            if protocol in ("tcp", "udp")
+        }))
+        return {
+            "status": row.get("status") if row.get("status") in ("used", "configured", "free") else "unknown",
+            "protocols": protocols,
+            "bind_scope": row.get("bind_scope") if row.get("bind_scope") in (
+                "public", "lan", "link", "localhost",
+            ) else None,
+            "compose_conflict": bool(row.get("conflict")),
+            "hidden": bool(row.get("is_hidden")),
+        }
+
+    @staticmethod
+    def _event_public(fact: dict) -> dict:
+        return {key: fact[key] for key in ("status", "protocols", "bind_scope", "compose_conflict")}
+
+    def _append_observation_event(
+        self,
+        snap: dict,
+        kind: str,
+        *,
+        port: int | None,
+        before: dict,
+        after: dict,
+        requires_hidden_access: bool = False,
+    ) -> dict:
+        suffix = "global" if port is None else str(port)
+        capture_id = snap["capture_id"]
+        event = {
+            "schema_version": 1,
+            "event_id": f"{capture_id}:{kind}:{suffix}",
+            "observation_id": capture_id,
+            "observed_at": snap["captured_at"],
+            "port": port,
+            "protocol": "all",
+            "kind": kind,
+            "before": before,
+            "after": after,
+            "evidence_refs": [f"{capture_id}:port:{suffix}"],
+            "source_quality": "complete" if complete(snap) else "degraded",
+            "requires_hidden_access": requires_hidden_access,
+        }
+        self._observation_events.append(event)
+        return event
+
+    def _record_observation_events(self, snap: dict, rows: dict[int, dict], changed: bool) -> list[dict]:
+        created: list[dict] = []
+        quality = "complete" if complete(snap) else "degraded"
+        if self._event_quality is None:
+            self._event_quality = quality
+            self._event_baseline = rows if quality == "complete" else None
+            return created
+        if quality != self._event_quality:
+            created.append(self._append_observation_event(
+                snap,
+                "observation_recovered" if quality == "complete" else "observation_degraded",
+                port=None,
+                before={"quality": self._event_quality},
+                after={"quality": quality},
+            ))
+            self._event_quality = quality
+            self._event_baseline = rows if quality == "complete" else None
+            return created
+        if quality != "complete" or not changed:
+            return created
+        previous = self._event_baseline or {}
+        free = {
+            "status": "free",
+            "protocols": (),
+            "bind_scope": None,
+            "compose_conflict": False,
+            "hidden": False,
+        }
+        for port in sorted(set(previous) | set(rows)):
+            before = previous.get(port, free)
+            after = rows.get(port, free)
+            hidden = bool(before["hidden"] or after["hidden"])
+            if before["status"] != after["status"]:
+                created.append(self._append_observation_event(
+                    snap,
+                    "state_changed",
+                    port=port,
+                    before=self._event_public(before),
+                    after=self._event_public(after),
+                    requires_hidden_access=hidden,
+                ))
+            if before["bind_scope"] != after["bind_scope"]:
+                created.append(self._append_observation_event(
+                    snap,
+                    "bind_scope_changed",
+                    port=port,
+                    before=self._event_public(before),
+                    after=self._event_public(after),
+                    requires_hidden_access=hidden,
+                ))
+            if before["compose_conflict"] != after["compose_conflict"]:
+                created.append(self._append_observation_event(
+                    snap,
+                    "configuration_mismatch",
+                    port=port,
+                    before=self._event_public(before),
+                    after=self._event_public(after),
+                    requires_hidden_access=hidden,
+                ))
+        self._event_baseline = rows
+        return created
 
     def _observe_pending(self, valid: Callable[[], bool] | None = None) -> None:
         # Observation order follows publication order. Slow SQLite/webhook work
@@ -283,10 +406,14 @@ class OccupancyMonitor:
                 with self._publish_lock:
                     if not self._pending_observations:
                         return
-                    rows = self._pending_observations.popleft()
-                webhooks.observe(rows)
+                    rows, events = self._pending_observations.popleft()
+                if rows is not None:
+                    webhooks.observe(rows)
                 try:
-                    history.record(rows)
+                    if rows is not None:
+                        history.record(rows)
+                    if events:
+                        history.record_observation_events(events)
                 except sqlite3.Error:
                     degradations.report("history", "history.db", "occupancy history write failed")
 
@@ -367,7 +494,62 @@ class OccupancyMonitor:
             self._pending_observations.clear()
             self._fingerprint = ""
             self._sequence = 0
+            self._capture_sequence = 0
+            self._capture_namespace = uuid.uuid4().hex[:12]
+            self._observation_events.clear()
+            self._event_baseline = None
+            self._event_quality = None
             self._failed = False
+
+    def observation_events(self, port: int, *, allow_hidden: bool) -> list[dict]:
+        """Recent deterministic events for one visible port and global scan quality."""
+        with self._lock:
+            events = tuple(self._observation_events)
+        return [
+            {key: value for key, value in event.items() if key != "requires_hidden_access"}
+            for event in events
+            if event["port"] in (None, port)
+            and (allow_hidden or not event["requires_hidden_access"])
+        ][-64:]
+
+    def latest_with_observation_events(
+        self, values: dict | None = None, *, allow_hidden: bool
+    ) -> tuple[dict, list[dict]]:
+        """Freeze current facts and in-memory events at one capture boundary.
+
+        A later monitor publication may happen while a batch route reads
+        persisted history.  Returning the selected capture id with this copy
+        lets the history reader fence persisted rows on the same boundary.
+        """
+        snap = self.latest(values)
+        capture_id = snap.get("capture_id")
+        if not isinstance(capture_id, str):
+            return snap, []
+        parts = capture_id.rsplit("-", 1)
+        try:
+            sequence = int(parts[1])
+        except (IndexError, ValueError):
+            return snap, []
+        namespace = parts[0]
+        with self._lock:
+            events = tuple(self._observation_events)
+        result = []
+        for event in events:
+            observation_id = event.get("observation_id")
+            if not isinstance(observation_id, str):
+                continue
+            event_parts = observation_id.rsplit("-", 1)
+            try:
+                event_sequence = int(event_parts[1])
+            except (IndexError, ValueError):
+                continue
+            if event_parts[0] != namespace or event_sequence > sequence:
+                continue
+            if not allow_hidden and event.get("requires_hidden_access"):
+                continue
+            result.append({key: value for key, value in event.items()
+                           if key != "requires_hidden_access"})
+        return snap, result
 
     def packed(self, values: dict, start: int, end: int,
                show_hidden: bool, hidden_locked: bool) -> tuple[dict, str, str]:

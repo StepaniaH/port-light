@@ -1,27 +1,29 @@
 /* Port-Light frontend */
 
-import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=100';
-import { errorText, escapeHtml, t } from './text.js?v=100';
-import { moveChipFocus, trapTab } from './a11y.js?v=100';
+import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=103';
+import { errorText, escapeHtml, t } from './text.js?v=103';
+import { moveChipFocus, trapTab } from './a11y.js?v=103';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=100';
-import { openModal, closeModals, modalOpen } from './modal.js?v=100';
-import { applyRoute as updateRoute } from './router.js?v=100';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=100';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=100';
-import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=100';
-import { refreshFleet } from './fleet.js?v=100';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=100';
-import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=100';
-import { mountManagementPage } from './management.js?v=100';
-import { mountActionMenu } from './action-menu.js?v=100';
-import { mountDoctorPage } from './doctor.js?v=100';
-import { renderUiLinks } from './ui-links.js?v=100';
+} from './dom.js?v=103';
+import { openModal, closeModals, modalOpen } from './modal.js?v=103';
+import { applyRoute as updateRoute } from './router.js?v=103';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=103';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=103';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=103';
+import { refreshFleet } from './fleet.js?v=103';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=103';
+import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=103';
+import { mountManagementPage } from './management.js?v=103';
+import { mountActionMenu } from './action-menu.js?v=103';
+import { mountDoctorPage } from './doctor.js?v=103';
+import { renderUiLinks } from './ui-links.js?v=103';
+import { mountWorkspacePage } from './workspace.js?v=103';
+import { observeSelects, enhanceSelects } from './select.js?v=103';
 
 (function () {
   'use strict';
@@ -41,9 +43,10 @@ import { renderUiLinks } from './ui-links.js?v=100';
   let settingsPage = null;
   let doctorPage = null;
   let managementPage = null;
+  const workspacePage = mountWorkspacePage(document.getElementById('workspace-page'));
 
   function applyRoute() {
-    updateRoute({ render, refresh: tick, settingsPage, doctorPage, managementPage });
+    updateRoute({ render, refresh: tick, settingsPage, doctorPage, managementPage, workspacePage });
   }
 
   async function updateHostHealth(hostId) {
@@ -57,7 +60,7 @@ import { renderUiLinks } from './ui-links.js?v=100';
   let loadGeneration = 0;
 
   function onWorkspacePage() {
-    return ['settings', 'doctor', 'manage'].includes(S.route.name);
+    return ['settings', 'doctor', 'manage', 'workspace'].includes(S.route.name);
   }
 
   async function loadAllOccupancy(opts, generation) {
@@ -235,6 +238,8 @@ import { renderUiLinks } from './ui-links.js?v=100';
     onSaved: setupRefresh,
     onLocaleApplied() {
       renderUiLinks(S.meta.ui_links);
+      if (S.route.name === 'workspace') workspacePage.open(S.route);
+      enhanceSelects(document);
       syncHiddenButton();
       if (S.currentData) render();
       syncHeaderHeight();
@@ -245,6 +250,7 @@ import { renderUiLinks } from './ui-links.js?v=100';
   const groupSelect = document.getElementById('group-mode');
   groupSelect.addEventListener('change', () => { S.groupMode = groupSelect.value; saveView(); render(); });
   doctorPage = mountDoctorPage(document.getElementById('doctor-page'));
+  observeSelects(document.body);
 
   hydrateCachedAppearance();
   try {
@@ -278,6 +284,7 @@ import { renderUiLinks } from './ui-links.js?v=100';
     if (S.route.name === 'settings') return document.getElementById('settings-form');
     if (S.route.name === 'doctor') return document.getElementById('doctor-page');
     if (S.route.name === 'manage') return document.getElementById('management-page');
+    if (S.route.name === 'workspace') return document.getElementById('workspace-page');
     if (hasPeers()) {
       return document.getElementById('host-grid-' + S.focusHostId)
         || document.querySelector('.host-grid')
@@ -719,6 +726,7 @@ import { renderUiLinks } from './ui-links.js?v=100';
 
   function startApp() {
     sortSelect.value = S.sortMode;
+    enhanceSelects(document);
     rangeStartInput.value = S.rangeStart;
     rangeEndInput.value = S.rangeEnd;
     syncFilterUI();

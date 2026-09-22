@@ -1,4 +1,13 @@
 {
+  "workspace": {
+    "title": "工作區",
+    "loading": "正在載入…",
+    "unavailable": "排障工作台暫時無法使用。",
+    "failed": "無法載入排障工作台，請檢查連線後重試。"
+  },
+  "analysis": {
+    "title": "AI"
+  },
   "search": {
     "placeholder": "搜尋連接埠、名稱或主機",
     "aria": "搜尋"

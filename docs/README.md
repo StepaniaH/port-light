@@ -14,3 +14,5 @@
 | [../SECURITY.md](../SECURITY.md) | Trust model and how to report issues |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Development, contribution and release workflow |
 | [../CHANGELOG.md](../CHANGELOG.md) | Release notes |
+
+- [Troubleshooting and BYOK](analysis.md): local captures, reports, rechecks, and optional model requests.

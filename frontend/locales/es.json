@@ -1,4 +1,13 @@
 {
+  "workspace": {
+    "title": "Área de trabajo",
+    "loading": "Cargando…",
+    "unavailable": "Este espacio de trabajo no está disponible.",
+    "failed": "No se pudo cargar el espacio de trabajo. Comprueba la conexión."
+  },
+  "analysis": {
+    "title": "IA"
+  },
   "search": {
     "placeholder": "Buscar puerto, nombre o equipo",
     "aria": "Buscar"

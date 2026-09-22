@@ -1,4 +1,13 @@
 {
+  "workspace": {
+    "title": "Arbeitsbereich",
+    "loading": "Wird geladen…",
+    "unavailable": "Dieser Arbeitsbereich ist nicht verfügbar.",
+    "failed": "Der Arbeitsbereich konnte nicht geladen werden. Prüfen Sie die Verbindung."
+  },
+  "analysis": {
+    "title": "KI"
+  },
   "search": {
     "placeholder": "Port, Name oder Host suchen",
     "aria": "Suchen"

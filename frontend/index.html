@@ -26,7 +26,7 @@
       }
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=100">
+  <link rel="stylesheet" href="/static/style.css?v=103">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -228,6 +228,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
           <button type="button" role="tab" id="settings-tab-appearance" data-settings-panel="appearance" aria-controls="settings-panel-appearance" aria-selected="true" tabindex="0" data-i18n="settings.nav.appearance">Appearance</button>
           <button type="button" role="tab" id="settings-tab-occupancy" data-settings-panel="occupancy" aria-controls="settings-panel-occupancy" aria-selected="false" tabindex="-1" data-i18n="settings.nav.occupancy">Occupancy</button>
           <button type="button" role="tab" id="settings-tab-automation" data-settings-panel="automation" aria-controls="settings-panel-automation" aria-selected="false" tabindex="-1" data-i18n="settings.nav.automation">Automation</button>
+          <button type="button" role="tab" id="settings-tab-analysis" data-settings-panel="analysis" aria-controls="settings-panel-analysis" aria-selected="false" tabindex="-1" data-i18n="analysis.title">AI</button>
           <button type="button" role="tab" id="settings-tab-advanced" data-settings-panel="advanced" aria-controls="settings-panel-advanced" aria-selected="false" tabindex="-1" data-i18n="settings.nav.advanced">Advanced</button>
         </nav>
         <div id="settings-fields"></div>
@@ -238,6 +239,8 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     </section>
 
     <section id="view-manage" class="view hidden"><main id="management-page" class="management-page" tabindex="-1"></main></section>
+
+    <section id="view-workspace" class="view hidden"><main id="workspace-page" class="workspace-page" tabindex="-1"></main></section>
 
     <section id="view-doctor" class="view hidden">
       <main id="doctor-page" class="doctor-page" tabindex="-1">
@@ -312,7 +315,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=100"></script>
-  <script type="module" src="/static/js/app.js?v=100"></script>
+  <script src="/static/i18n.js?v=103"></script>
+  <script type="module" src="/static/js/app.js?v=103"></script>
 </body>
 </html>

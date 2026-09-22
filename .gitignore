@@ -18,3 +18,11 @@ venv/
 data/
 .env
 custom_ports.json
+
+# Local editor, assistant and browser-test output
+.codex/
+.claude/
+.agents/
+AGENTS.local.md
+playwright-report/
+test-results/

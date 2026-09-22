@@ -209,7 +209,7 @@ test('lease rows show remaining time through the remaining key', () => {
 });
 
 test('automation panel is registered between occupancy and advanced', () => {
-  assert.deepEqual(SETTINGS_PANELS, ['appearance', 'occupancy', 'automation', 'advanced']);
+  assert.deepEqual(SETTINGS_PANELS, ['appearance', 'occupancy', 'automation', 'analysis', 'advanced']);
   assert.deepEqual(parseHash('#/settings/automation'), { name: 'settings', section: 'automation' });
 });
 

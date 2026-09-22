@@ -1,4 +1,13 @@
 {
+  "workspace": {
+    "title": "Workspace",
+    "loading": "Loading…",
+    "unavailable": "This workspace is unavailable.",
+    "failed": "This workspace could not be loaded. Check the connection and try again."
+  },
+  "analysis": {
+    "title": "AI"
+  },
   "search": {
     "placeholder": "Search port, name, or host",
     "aria": "Search"

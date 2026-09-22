@@ -1,19 +1,20 @@
-import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=100';
-export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=100';
-import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=100';
-export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=100';
-import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=100';
-export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=100';
-import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=100';
-export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=100';
+import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=103';
+export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=103';
+import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=103';
+export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=103';
+import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=103';
+export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=103';
+import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=103';
+export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=103';
 /* Settings view: four panels, locale menu, theme picker, peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=100';
-import { t, escapeHtml, errorText } from './text.js?v=100';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=100';
-import { api, fetchHosts, fetchSettings } from './api.js?v=100';
-import { bindAddressView } from './grid.js?v=100';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=100';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=103';
+import { t, escapeHtml, errorText } from './text.js?v=103';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=103';
+import { api, fetchHosts, fetchSettings } from './api.js?v=103';
+import { bindAddressView } from './grid.js?v=103';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=103';
+import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=103';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -121,6 +122,7 @@ function settingValuesEqual(left, right) {
       S.customThemes = Array.isArray(doc.custom_themes) ? doc.custom_themes : [];
       S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);
       renderSettingsForm(doc);
+      return syncAnalysisSettings();
     });
   }
 
@@ -241,6 +243,8 @@ function settingValuesEqual(left, right) {
     document.querySelectorAll('#settings-fields .settings-panel').forEach(function (panel) {
       panel.hidden = panel.getAttribute('data-settings-panel') !== id;
     });
+    if (id === 'analysis') syncAnalysisSettings(S.route?.analysisSection);
+    else closeAnalysisSettings();
     if (resetScroll) window.scrollTo(0, 0);
   }
 
@@ -942,6 +946,7 @@ function settingValuesEqual(left, right) {
         settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
         settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div><p id="peers-status" class="action-status" role="status" aria-live="polite"></p>')) +
       settingsPanelHtml('automation', automationCardsHtml(S.meta && S.meta.automation ? S.meta.automation : {})) +
+      settingsPanelHtml('analysis', analysisCardsHtml()) +
       settingsPanelHtml('advanced',
         settingsCard('action.doctor', 'doctor.lead', '<div class="settings-diagnostics"><a href="#/doctor" id="btn-doctor" class="btn-secondary" data-i18n="doctor.refresh">' + escapeHtml(t('doctor.refresh')) + '</a></div>') +
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
@@ -1185,6 +1190,7 @@ function settingValuesEqual(left, right) {
         syncLocaleTrigger();
         syncRefreshCapacity();
         rerenderAutomationCards();
+        rerenderAnalysis();
         if (S.settingsDoc) {
           const lead = document.getElementById('settings-lead');
           if (lead) lead.textContent = t(S.settingsDoc.readonly ? 'settings.leadReadonly' : 'settings.lead');
@@ -1338,6 +1344,7 @@ function settingValuesEqual(left, right) {
         return loadSettingsPage();
       },
       show(section) { showSettingsPanel(section, true); },
+      close() { closeAnalysisSettings(); },
       syncPaletteAvailability,
       closeTransient(opts) { return closeLocaleMenu(opts); },
       hasPending() {

@@ -56,6 +56,8 @@ def meta(request: Request) -> dict:
             "idempotent_reservations": 1,
             "reservation_release": 1,
             "scope_all": 1,
+            "port_observation": 1,
+            "batch_port_observation": 1,
         },
         "auth_required": auth_configured(),
         "hidden_unlock_required": hidden_unlock_configured(),

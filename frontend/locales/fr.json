@@ -1,4 +1,13 @@
 {
+  "workspace": {
+    "title": "Espace de travail",
+    "loading": "Chargement…",
+    "unavailable": "Cet espace de travail est indisponible.",
+    "failed": "Impossible de charger cet espace de travail. Vérifiez la connexion."
+  },
+  "analysis": {
+    "title": "IA"
+  },
   "search": {
     "placeholder": "Rechercher un port, un nom ou un hôte",
     "aria": "Rechercher"

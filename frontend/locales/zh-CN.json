@@ -1,4 +1,13 @@
 {
+  "workspace": {
+    "title": "工作区",
+    "loading": "正在加载…",
+    "unavailable": "排障工作台暂不可用。",
+    "failed": "无法加载排障工作台，请检查连接后重试。"
+  },
+  "analysis": {
+    "title": "AI"
+  },
   "search": {
     "placeholder": "搜索端口、名称或主机",
     "aria": "搜索"

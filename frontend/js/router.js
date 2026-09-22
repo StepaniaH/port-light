@@ -1,10 +1,10 @@
-/* Hash router: #/, #/settings/:panel, #/port/:n, #/h/:host(/port/:n). */
+/* Hash router: #/, #/settings/:panel(/:analysisSection), #/port/:n, #/h/:host(/port/:n). */
 
-import { S, SETTINGS_PANELS } from './state.js?v=100';
-import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=100';
-import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=100';
-import { applyPendingGridFocus, syncAddButton } from './grid.js?v=100';
-import { closeDetail, showPortDetail } from './detail.js?v=100';
+import { S, SETTINGS_PANELS } from './state.js?v=103';
+import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=103';
+import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=103';
+import { applyPendingGridFocus, syncAddButton } from './grid.js?v=103';
+import { closeDetail, showPortDetail } from './detail.js?v=103';
 
 
   export function parseHash(hash) {
@@ -15,10 +15,22 @@ import { closeDetail, showPortDetail } from './detail.js?v=100';
       if (SETTINGS_PANELS.indexOf(section) < 0) {
         section = S.route.name === 'settings' && S.settingsPanel ? S.settingsPanel : 'appearance';
       }
+      if (section === 'analysis') {
+        const analysisSection = parts.length === 3 && /^[a-z][a-z0-9-]{0,39}$/.test(parts[2]) ? parts[2] : undefined;
+        return analysisSection ? { name: 'settings', section, analysisSection } : { name: 'settings', section };
+      }
       return { name: 'settings', section: section };
     }
     if (parts[0] === 'manage') return { name: 'manage', section: ['conflicts', 'reservations', 'rules'].includes(parts[1]) ? parts[1] : 'conflicts' };
     if (parts[0] === 'doctor') return { name: 'doctor' };
+    if (parts[0] === 'workspace' && /^[a-z][a-z0-9-]{0,39}$/.test(parts[1] || '')) {
+      if (parts.length === 2) return { name: 'workspace', key: parts[1] };
+      const port = Number(parts[3]);
+      if (parts.length === 4 && parts[2] === 'port' && /^\d+$/.test(parts[3]) && port >= 1 && port <= 65535) {
+        return { name: 'workspace', key: parts[1], port };
+      }
+      return { name: 'grid', hostId: 'local' };
+    }
     let hostId = 'local';
     let rest = parts;
     if (parts[0] === 'h' && parts[1]) {
@@ -37,7 +49,7 @@ import { closeDetail, showPortDetail } from './detail.js?v=100';
     return parseHash(location.hash);
   }
 
-  export function applyRoute({ render, refresh, settingsPage, doctorPage, managementPage }) {
+  export function applyRoute({ render, refresh, settingsPage, doctorPage, managementPage, workspacePage }) {
     const next = parseRoute();
     const prev = S.route.name;
     const previousHostId = S.focusHostId;
@@ -45,7 +57,17 @@ import { closeDetail, showPortDetail } from './detail.js?v=100';
     const onSettings = S.route.name === 'settings';
     const onDoctor = S.route.name === 'doctor';
     const onManage = S.route.name === 'manage';
-    const onWorkspace = onSettings || onDoctor || onManage;
+    const onExtension = S.route.name === 'workspace';
+    const onWorkspace = onSettings || onDoctor || onManage || onExtension;
+    if (!onSettings && prev === 'settings') settingsPage?.close?.();
+    document.getElementById('view-workspace')?.classList.toggle('hidden', !onExtension);
+    if (!onExtension) workspacePage?.close();
+    for (const link of document.querySelectorAll('#ui-links a')) {
+      const active = onExtension && link.getAttribute('href') === '#/workspace/' + S.route.key;
+      link.classList.toggle('active', active);
+      if (active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    }
     const manageView = document.getElementById('view-manage');
     if (manageView) manageView.classList.toggle('hidden', !onManage);
     document.getElementById('view-grid').classList.toggle('hidden', onWorkspace);
@@ -54,7 +76,7 @@ import { closeDetail, showPortDetail } from './detail.js?v=100';
     appEl.classList.toggle('page-settings', onWorkspace);
     settingsBtn.classList.toggle('active', onSettings || onDoctor);
     settingsBtn.setAttribute('aria-current', (onSettings || onDoctor) ? 'page' : 'false');
-    document.getElementById('btn-refresh').hidden = onSettings || onDoctor;
+    document.getElementById('btn-refresh').hidden = onSettings || onDoctor || onExtension;
     const manageButton = document.getElementById('btn-manage');
     manageButton?.classList.toggle('active', onManage);
     for (const link of document.querySelectorAll('#port-menu a')) {
@@ -63,6 +85,12 @@ import { closeDetail, showPortDetail } from './detail.js?v=100';
       else link.removeAttribute('aria-current');
     }
     syncHeaderHeight();
+    if (onExtension) {
+      S.pendingGridFocus = null;
+      closeDetail(true);
+      workspacePage?.open(S.route);
+      return;
+    }
     if (onManage) {
       S.focusHostId = 'local';
       syncAddButton();
@@ -75,7 +103,8 @@ import { closeDetail, showPortDetail } from './detail.js?v=100';
       S.pendingGridFocus = null;
       closeDetail(true);
       S.settingsPanel = S.route.section || 'appearance';
-      const want = '#/settings/' + S.settingsPanel;
+      const want = '#/settings/' + S.settingsPanel +
+        (S.settingsPanel === 'analysis' && S.route.analysisSection ? '/' + S.route.analysisSection : '');
       if ((location.hash || '') !== want) history.replaceState(null, '', want);
       if (prev === 'settings') {
         settingsPage.show(S.settingsPanel);
@@ -90,7 +119,7 @@ import { closeDetail, showPortDetail } from './detail.js?v=100';
       if (prev !== 'doctor') doctorPage.open();
       return;
     }
-    if (prev === 'settings' || prev === 'doctor' || prev === 'manage') refresh();
+    if (['settings', 'doctor', 'manage', 'workspace'].includes(prev)) refresh();
     if (S.route.hostId && hostById(S.route.hostId)) S.focusHostId = S.route.hostId;
     else if (S.route.name !== 'settings') S.focusHostId = 'local';
     if (usesFocusedHostView() && S.focusHostId !== previousHostId) refresh();

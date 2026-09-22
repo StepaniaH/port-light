@@ -3,11 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "eslint frontend/js frontend/i18n.js",
+    "lint": "eslint frontend/js frontend/i18n.js backend/analysis/static/*.js",
     "test": "node --test \"frontend/test/**/*.test.mjs\"",
     "smoke:browser": "node frontend/test/browser-smoke.mjs",
     "smoke:management": "node frontend/test/management-smoke.mjs",
-    "smoke:fleet": "node frontend/test/fleet-regression.mjs"
+    "smoke:fleet": "node frontend/test/fleet-regression.mjs",
+    "smoke:analysis": "node frontend/test/analysis-smoke.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

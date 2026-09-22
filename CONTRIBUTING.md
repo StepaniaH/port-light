@@ -101,7 +101,7 @@ Maintain technical documentation under `docs/` in English. Keep the existing Sim
 
 ## Release (maintainers)
 
-Development branches such as `dev` stay local; this repository keeps only `main` on the remote. External contributions can use pull requests from forks.
+Submit pull requests against `main`.
 
 [CI](.github/workflows/ci.yml) runs on pushes to `main` and pull requests targeting `main`, not on version tags. It tests Python 3.11–3.13 and the frontend, including the Chromium smoke flow. Ruff runs once, on Python 3.13. A newer push cancels an older CI run for the same branch or pull request.
 
@@ -109,7 +109,7 @@ Development branches such as `dev` stay local; this repository keeps only `main`
 2. Bump `__version__` in `port_light_client/__init__.py`; the backend, CLI,
    MCP server, package metadata, and release check all read that one value.
 3. Update pinned image examples in both READMEs, `docs/deployment.md`, and `deploy/unraid/port-light.xml`. Remove the development-only notice when these features are included in the release.
-4. Merge the local development branch into `main`, push only `main`, and wait for its CI to pass.
+4. Merge the release changes into `main` and wait for its CI to pass.
 5. Tag that tested commit `vX.Y.Z` and push the tag. [Release](.github/workflows/release.yml) verifies that the tagged commit belongs to `main` and has a successful `main` push run of `ci.yml`. It waits up to 15 minutes if CI has not finished; a failed, cancelled, or timed-out check blocks publication.
 6. Release verifies that the backend, CLI, and tag versions match, then builds
    amd64+arm64 images for Docker Hub and GHCR plus a platform-independent CLI
@@ -120,3 +120,15 @@ Development branches such as `dev` stay local; this repository keeps only `main`
 If publication is blocked by CI, fix or rerun the failing CI check first, then rerun the failed Release jobs in Actions. If a code change is needed, release a new tested commit; do not move an existing version tag. Manual branch builds no longer publish a `dev` image tag.
 
 The release workflow also updates the Docker Hub description from the tagged README, resolving relative documentation and screenshot URLs to that tag. Preview the output with `python scripts/dockerhub_description.py --ref main --output /tmp/port-light-dockerhub.md`. The update uses `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. Updating the repository description requires a personal access token with **Read, Write & Delete** permission and repository admin access; a token that can push images may still be rejected for this operation. If the description job returns 403, check these permissions and update the Actions secret, then rerun the failed job. Successful image and GitHub Release jobs do not need to be rerun. Community Applications submission details are in [deploy/unraid/README.md](deploy/unraid/README.md).
+
+## Troubleshooting workspace
+
+The bundled runtime and its static assets live in `backend/analysis/`. Its host
+owns startup and teardown separately from scanning. Keep model calls explicit and
+keep local checks available when no model provider is configured.
+
+Run `pytest tests/analysis tests/api/test_observation_batches.py tests/api/test_port_observations.py` for the evidence and storage
+contracts, `npm test` for display/localization tests, and `npm run smoke:analysis`
+for the complete synthetic browser flow. The browser test exercises seven locales,
+mobile layouts, immutable reports, rechecks, and BYOK configuration without sending
+requests to a real model. Runtime assets use a content hash for cache invalidation.

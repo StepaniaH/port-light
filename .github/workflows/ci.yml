@@ -76,6 +76,7 @@ jobs:
           npm run smoke:browser
           npm run smoke:management
           npm run smoke:fleet
+          npm run smoke:analysis
 
   container:
     runs-on: ubuntu-latest

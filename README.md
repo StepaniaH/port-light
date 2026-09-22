@@ -70,6 +70,16 @@ The dashboard lists occupied and configured ports. Searching for a port number a
 | Configured | Declared in Compose or a manual entry, with no listener detected |
 | Free | Available within the current scan scope |
 
+## Local troubleshooting (unreleased)
+
+The troubleshooting workspace suggests checks, shows recent port changes, and
+saves reports for later comparison. These checks run locally without a model key.
+
+Optional AI assistance uses your own provider and key, configured in **Settings → AI**.
+Review the selected evidence and confirm each request; the provider bills your key.
+See [troubleshooting and BYOK](docs/analysis.md) for limits, storage and privacy.
+These additions are not included in the v0.8.4 image shown above.
+
 ## Work with an AI assistant
 
 In **Settings → Automation**, copy the setup prompt into your AI tool. It includes
@@ -138,7 +148,7 @@ Use [custom_ports.example.json](custom_ports.example.json) as a template for cus
 
 ## Data and privacy
 
-Port-Light has no telemetry. Outbound HTTP requests serve configured peer queries and webhooks; webhooks send `{event, port}`.
+Port-Light has no telemetry. Outbound HTTP requests serve configured peer queries, webhooks, and explicitly confirmed BYOK model requests. Webhooks send `{event, port}`; model requests send the selected sanitized evidence to your configured provider.
 
 Dashboard and API users can read scan results, machine descriptions, and port rules. Configured hubs also receive this data. Compose `.env` files are used locally for variable substitution. Doctor reports contain sanitized summaries.
 

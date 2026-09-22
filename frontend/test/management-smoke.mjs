@@ -32,7 +32,20 @@ try {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(base);
   await expect(page.locator('.port-cell')).toHaveCount(259);
-  await page.locator('#group-mode').selectOption('service');
+  const groupMenu = page.getByRole('combobox', { name: 'Group by', exact: true });
+  await groupMenu.click();
+  await expect(page.getByRole('listbox', { name: 'Group by' })).toBeVisible();
+  await page.getByRole('option', { name: 'Service', exact: true }).click();
+  await expect(page.locator('#group-mode')).toHaveValue('service');
+  await expect(groupMenu).toBeFocused();
+  await groupMenu.press('ArrowDown');
+  await groupMenu.press('Home');
+  await groupMenu.press('Escape');
+  await expect(page.locator('#group-mode')).toHaveValue('service');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await groupMenu.press('Home');
+  await groupMenu.press('End');
+  await groupMenu.press('Enter');
   await expect(page.locator('.port-run summary')).toContainText(['20000–20255']);
   await page.locator('.port-run summary').click();
   await expect(page.locator('.port-cell[data-port="20128"]')).toBeVisible();
@@ -120,7 +133,7 @@ try {
   await expect(page.locator('#host-grid-local [data-port="29099"]')).toBeVisible();
   await expect(page.locator('#host-grid-local .port-run [data-port="20128"]')).toBeVisible();
   assert.equal(await page.evaluate(async () => {
-    const { escapeHtml } = await import('/static/js/text.js?v=100');
+    const { escapeHtml } = await import('/static/js/text.js?v=101');
     const raw = '" onmouseover="alert(1)" <b>';
     const div = document.createElement('div');
     div.innerHTML = '<input value="' + escapeHtml(raw) + '">';
@@ -143,7 +156,7 @@ try {
     await route.continue();
   });
   await page.locator('[data-form="reserve"] [name="rule"]').selectOption('infrastructure');
-  await page.locator('[data-form="reserve"] button').click();
+  await page.locator('[data-form="reserve"]').getByRole('button', { name: 'Reserve', exact: true }).click();
   await expect(page.locator('[data-action="release"]:enabled')).toHaveCount(1);
   assert.equal(sentToken, 'temporary-browser-test-token');
   assert.equal(await page.evaluate(() => JSON.stringify(sessionStorage).includes('temporary-browser-test-token')), false);
