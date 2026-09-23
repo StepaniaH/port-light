@@ -1,4 +1,4 @@
-"""Synthetic public observation data for private module tests."""
+"""Synthetic observations for analysis tests."""
 
 
 def observation(port=8080, *, hidden=False, protocol="all"):

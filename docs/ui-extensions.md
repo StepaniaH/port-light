@@ -18,8 +18,9 @@ register_ui_link(
 ```
 
 The dashboard reads these links from `GET /api/meta` and places them beside its
-existing toolbar actions. The default app registers its bundled troubleshooting workspace. Labels follow the
-selected interface language, falling back to `label`. HTML is rendered as text.
+existing toolbar actions. The default app registers its bundled troubleshooting
+workspace. Labels follow the selected interface language, falling back to
+`label`. HTML is rendered as text.
 
 The hook accepts up to four unique keys. Paths are absolute local paths using
 letters, digits, underscores, hyphens and slashes, without query strings or
@@ -43,8 +44,9 @@ workspace={
 The toolbar opens `#/workspace/tools` inside the existing application shell.
 `port_action` also adds a link from local port details, passing the port as
 `#/workspace/tools/port/8080`. Remote host observations are not passed implicitly.
-Assets must be local `.js` and `.css` files under the registered path. The bundled workbench host adds a hash of its static assets as `revision` for asset cache keys.
-Callers cannot supply that revision through registration.
+Assets must be local `.js` and `.css` files under the registered path. The
+bundled workbench host adds a hash of its static assets as `revision` for asset
+cache keys. Callers cannot supply that revision through registration.
 
 The entry is an ES module exporting `mount({ root, locale, port, signal,
 enhanceSelects, revision })`. Render inside `root`, inherit the core CSS variables,

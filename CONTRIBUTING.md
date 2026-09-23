@@ -43,7 +43,8 @@ Python tests are grouped under `tests/api`, `tests/scanners`, `tests/client`, `t
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants `PORT_LIGHT_DATA_DIR=./data`. Set `PORT_LIGHT_SCANNERS=listen,compose` when Docker is intentionally absent, and point `COMPOSE_SCAN_DIR` to a readable directory. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
 
-`npm run smoke:browser` starts a temporary eight-instance local fleet and checks startup, recovery from invalid scanner configuration, default waterfall and saved tab layouts, independent settings and peer saves, custom-theme feedback, persisted machine descriptions, slider focus and refresh-capacity guidance, detail, a saved label, local scanner settings, warning disclosures, bind-address rendering, atomic batch reservation with a conflicting writer and retry, keyboard/mobile host switching, and the sanitized Doctor report in Chromium. It removes its data and stops every server on exit. Set `PYTHON` to override the Python executable.
+`npm run smoke:browser` starts a temporary eight-instance fleet and removes its
+data and processes on exit. Set `PYTHON` to override the Python executable.
 
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 
@@ -127,8 +128,8 @@ The bundled runtime and its static assets live in `backend/analysis/`. Its host
 owns startup and teardown separately from scanning. Keep model calls explicit and
 keep local checks available when no model provider is configured.
 
-Run `pytest tests/analysis tests/api/test_observation_batches.py tests/api/test_port_observations.py` for the evidence and storage
-contracts, `npm test` for display/localization tests, and `npm run smoke:analysis`
-for the complete synthetic browser flow. The browser test exercises seven locales,
-mobile layouts, immutable reports, rechecks, and BYOK configuration without sending
-requests to a real model. Runtime assets use a content hash for cache invalidation.
+Run `pytest tests/analysis tests/api/test_observation_batches.py
+tests/api/test_port_observations.py` for the evidence and storage contracts,
+`npm test` for display and localization, and `npm run smoke:analysis` for the
+synthetic browser flow. The browser test does not call a real model. Runtime
+assets use a content hash for cache invalidation.

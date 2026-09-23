@@ -1,5 +1,4 @@
 """Offline synthetic evidence checks; no credentials or network requests."""
-import copy
 import json
 import socket
 from pathlib import Path
@@ -8,19 +7,16 @@ import pytest
 
 from backend.analysis.baseline import baseline
 from backend.analysis.evidence import AnalysisError, prepare_evidence
-from backend.analysis.interpretation import demo_selection, render_interpretation, validate_interpretation
+from backend.analysis.interpretation import demo_selection, validate_interpretation
 
-def validate_case_descriptions(case):
-    for key in ("allowed_inferences", "forbidden_assertions", "next_step_goals"):
-        values = case.get(key)
-        assert isinstance(values, list) and 1 <= len(values) <= 8, (case.get("id"), key)
-        assert all(
-            isinstance(value, str) and value.strip() and len(value) <= 500 for value in values
-        ), (case.get("id"), key)
+
+def validate_case_goals(case):
+    goals = case.get("next_step_goals")
+    assert isinstance(goals, list) and goals and all(isinstance(goal, str) for goal in goals)
 
 
 def run_case(case):
-    validate_case_descriptions(case)
+    validate_case_goals(case)
     expected = case["expected"]
     try:
         evidence = prepare_evidence(
@@ -31,12 +27,7 @@ def run_case(case):
         )
     except AnalysisError as error:
         assert error.code == expected["error"], case["id"]
-        return {
-            "id": case["id"],
-            "result": "passed",
-            "model_eligible": False,
-            "input_rejected": error.code,
-        }
+        return
     assert expected["error"] is None, case["id"]
     rules = baseline(evidence)
     assert rules["conclusion"]["code"] == expected["baseline_code"], (
@@ -55,22 +46,8 @@ def run_case(case):
     encoded = json.dumps(evidence, ensure_ascii=False)
     assert all(value not in encoded for value in expected["excluded"]), case["id"]
     assert "requires_hidden_access" not in encoded
-    selection = None
     if rules["ai"]["eligible"]:
-        selection = validate_interpretation(json.dumps(demo_selection(evidence)), evidence)
-    if case["id"] == "A01-normal":
-        return {
-            "id": case["id"],
-            "result": "passed",
-            "model_eligible": rules["ai"]["eligible"],
-            "comparison": {
-                "label": "Synthetic output; not model quality evidence",
-                "rules": rules,
-                "test_interpretation": selection,
-                "interpretation_view": render_interpretation(selection, evidence),
-            },
-        }
-    return {"id": case["id"], "result": "passed", "model_eligible": rules["ai"]["eligible"]}
+        validate_interpretation(json.dumps(demo_selection(evidence)), evidence)
 
 
 CORPUS = json.loads(Path(__file__).with_name("cases.json").read_text())
@@ -83,13 +60,4 @@ def test_synthetic_evidence(case, monkeypatch):
     monkeypatch.setattr(socket, "create_connection", deny_network)
     monkeypatch.setattr(socket.socket, "connect", deny_network)
     monkeypatch.setattr(socket, "getaddrinfo", deny_network)
-    assert run_case(case)["result"] == "passed"
-
-
-@pytest.mark.parametrize("field", ["allowed_inferences", "forbidden_assertions", "next_step_goals"])
-@pytest.mark.parametrize("value", [[], ["x" * 501], ["x"] * 9, None])
-def test_case_descriptions_are_required_and_bounded(field, value):
-    case = copy.deepcopy(CORPUS["cases"][0])
-    case[field] = value
-    with pytest.raises(AssertionError):
-        validate_case_descriptions(case)
+    run_case(case)

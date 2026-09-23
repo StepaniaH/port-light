@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { chromium, expect } from '@playwright/test';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const project = fileURLToPath(new URL('../../', import.meta.url));
-const python = process.env.PYTHON || join(project, '.venv/bin/python');
+const python = process.env.PYTHON || (existsSync(join(project, '.venv/bin/python')) ? join(project, '.venv/bin/python') : 'python');
 const temporary = await mkdtemp(join(tmpdir(), 'port-light-workbench-smoke-'));
 const screenshots = process.env.PORT_LIGHT_SCREENSHOT_DIR || join(temporary, 'screenshots');
 const children = [];
@@ -51,14 +52,14 @@ async function startHost({ name = 'demo', demo = true } = {}) {
   child.stderr.on('data', chunk => { logs = (logs + chunk).slice(-8000); });
   const base = 'http://127.0.0.1:' + port;
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    if (child.exitCode !== null) throw new Error('Signed host exited:\n' + logs);
+    if (child.exitCode !== null) throw new Error('Workbench test host exited:\n' + logs);
     try {
       const response = await fetch(base + '/__preview/workbench/state');
       if (response.ok) return base;
     } catch (_) { /* The listener is still starting. */ }
     await delay(100);
   }
-  throw new Error('Signed host did not start:\n' + logs);
+  throw new Error('Workbench test host did not start:\n' + logs);
 }
 
 async function responseJson(response, expected = 200) {

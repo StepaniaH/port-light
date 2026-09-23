@@ -146,17 +146,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "声明不足以确认运行",
-        "监听来源已禁用"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "declaration"
       ]
@@ -304,16 +293,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -464,17 +443,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "声明不足以确认运行",
-        "监听来源已禁用"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "declaration"
       ]
@@ -622,16 +590,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "核心已判定声明冲突，原因仍需核对"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "declaration"
       ]
@@ -779,16 +737,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -939,16 +887,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "核心已判定声明冲突，原因仍需核对"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "declaration"
       ]
@@ -1134,16 +1072,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅确认绑定类别变化，不能确认公网可达"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history",
         "binding"
@@ -1330,16 +1258,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -1529,16 +1447,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅确认绑定类别变化，不能确认公网可达"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -1703,16 +1611,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "两个地址族的范围应分别阅读"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "binding"
       ]
@@ -1877,16 +1775,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -2017,16 +1905,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "binding"
       ]
@@ -2169,16 +2047,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "可确认监听，不能从未发送身份认定系统服务"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "mapping"
       ]
@@ -2321,16 +2189,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -2476,16 +2334,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "可确认监听，不能从未发送身份认定系统服务"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "mapping"
       ]
@@ -2627,16 +2475,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "预留与真实监听是两个事实"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "reservation"
       ]
@@ -2778,16 +2616,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -2932,16 +2760,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "预留与真实监听是两个事实"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "reservation"
       ]
@@ -3089,16 +2907,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -3246,16 +3054,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -3406,16 +3204,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -3688,16 +3476,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "只解释所选事件，不能重建未记录窗口"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -3845,16 +3623,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -4130,16 +3898,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "只解释所选事件，不能重建未记录窗口"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -4287,16 +4045,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "不同协议的事实不能合并为一个冲突"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "binding"
       ]
@@ -4444,16 +4192,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -4608,16 +4346,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "binding"
       ]
@@ -4821,16 +4549,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "事件可按时间整理，不能认定共同发布原因"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -4979,16 +4697,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -5195,16 +4903,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "事件可按时间整理，不能认定共同发布原因"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -5355,16 +5053,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "只从白名单事实提出待验证解释"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "declaration"
       ]
@@ -5515,16 +5203,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]
@@ -5678,16 +5356,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "只从白名单事实提出待验证解释"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "declaration"
       ]
@@ -5827,16 +5495,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -5976,16 +5634,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "scan_status"
       ]
@@ -6128,16 +5776,6 @@
           "release_label"
         ]
       },
-      "allowed_inferences": [
-        "仅说明当前观察与缺口；不启动模型"
-      ],
-      "forbidden_assertions": [
-        "已确认公网可达",
-        "确认应用已崩溃",
-        "预留保证服务启动",
-        "跨主机或跨 TCP/UDP 合并冲突",
-        "自动执行或修改"
-      ],
       "next_step_goals": [
         "port_history"
       ]

@@ -173,9 +173,7 @@ protocol is free. `history.resolution` is currently `port_state_only`, so its
 entries cannot establish a past owner, protocol, or bind scope. Recent
 `events` include recent deterministic changes. When history is enabled they
 are stored in the same local retention window as state transitions, so a
-report can retain evidence across a restart. The separate
-`history.resolution` remains `port_state_only`; it cannot establish a past
-owner, protocol, or bind scope.
+report can retain evidence across a restart.
 
 Hidden ports return `404` unless `include_hidden=true` accompanies the same
 current hidden-unlock authorization used by the normal port API. A caller that
