@@ -11,7 +11,7 @@ File format::
       ],
       "hidden_ports": [1234, 5678],
       "peers": [
-        {"id": "a1b2c3d4", "name": "NAS", "url": "http://10.0.0.2:2100",
+        {"id": "a1b2c3d4", "name": "NAS", "url": "http://<peer-lan-ip>:2100",
          "username": "", "password": ""}
       ]
     }

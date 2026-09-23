@@ -38,7 +38,7 @@ services:
       - PORT_LIGHT_SCAN_TIMEOUT_S=${PORT_LIGHT_SCAN_TIMEOUT_S:-10}
       # - PORT_LIGHT_SETTINGS_SOURCE=auto
       # - PORT_LIGHT_HOST_NAME=Studio
-      # - PORT_LIGHT_PEERS=[{"name":"NAS","url":"http://10.0.0.2:2100"}]
+      # - PORT_LIGHT_PEERS=[{"name":"NAS","url":"http://<peer-lan-ip>:2100"}]
     healthcheck:
       test:
         [

@@ -1,4 +1,4 @@
-"""Local troubleshooting and optional user-funded model requests."""
+"""Local troubleshooting with optional BYOK model requests."""
 
 import os
 from collections.abc import Mapping
@@ -21,8 +21,7 @@ def create_module(context: Mapping) -> FastAPI:
     configured_readonly = context.get("settings_readonly")
 
     def settings_readonly():
-        # A module built against an older host must never turn missing or broken
-        # host configuration into permission to write a local credential.
+        # Missing or unreadable host settings must keep credential writes disabled.
         try:
             return configured_readonly() is not False
         except Exception:  # noqa: BLE001 - The host owns this reader.

@@ -92,7 +92,6 @@ workbench captures expire after 10 minutes; finishing an AI attempt starts a new
 10-minute retention period. Expired entries are cleaned up every 30 seconds.
 Corrupt report databases are preserved, and storage errors do not stop scanning.
 
-
 ## HTTP API
 
 All paths below are relative to `/analysis/api`. Requests use the dashboard's

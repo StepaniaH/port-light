@@ -1,8 +1,6 @@
-"""Bounded local-Hub troubleshooting facts, rules, and optional model selections.
+"""Build troubleshooting snapshots, suggested checks, and report comparisons.
 
-This module deliberately has no knowledge of browser rendering.  It turns the
-scanner's batch observation into a workbench snapshot, then keeps all ordering and comparison decisions deterministic.  A
-model can only select from this module's frozen problem and evidence IDs.
+Models may select only the problem and evidence IDs included in the snapshot.
 """
 
 from __future__ import annotations

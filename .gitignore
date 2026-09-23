@@ -23,6 +23,7 @@ custom_ports.json
 .codex/
 .claude/
 .agents/
+.superpowers/
 AGENTS.local.md
 playwright-report/
 test-results/

@@ -28,3 +28,12 @@ ruff.toml
 docs/*
 !docs/ai-setup.md
 !skills/port-light/SKILL.md
+
+# Local tooling and test output.
+.codex
+.claude
+.agents
+.superpowers
+.ruff_cache
+playwright-report
+test-results
