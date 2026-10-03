@@ -334,7 +334,7 @@ def _event_precedes_capture(event: dict, capture_id: str, captured_at: int) -> b
     return type(event.get("observed_at")) is int and event["observed_at"] < captured_at
 
 
-def _event_order(event: dict) -> tuple:
+def observation_event_order(event: dict) -> tuple:
     """Order same-second captures by the monitor's numeric sequence."""
     parts = _capture_parts(str(event.get("observation_id") or ""))
     if parts is None:
@@ -443,7 +443,7 @@ def query_observation_events_batch(
         if event is None or not _event_precedes_capture(event, capture_id, captured_at):
             continue
         by_id[event["event_id"]] = event
-    ordered = sorted(by_id.values(), key=_event_order, reverse=True)
+    ordered = sorted(by_id.values(), key=observation_event_order, reverse=True)
     truncated = len(ordered) > limit or query_truncated
     # The query is newest-first so retain the newest complete set, then return
     # chronological order like the single-port history API.

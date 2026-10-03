@@ -37,9 +37,36 @@ try {
   await page.goto(base);
   await expect(page.locator('.host-board')).toHaveCount(4);
   const peers = catalog.peers;
-  await expect(page.locator('.app-actions > .toolbar-btn, #btn-manage')).toHaveCount(3);
+  await expect(page.locator('.app-actions > .toolbar-btn, #btn-manage')).toHaveCount(4);
   await expect(page.locator('#btn-more')).toHaveCount(0);
   for (const id of ['btn-refresh', 'btn-manage', 'btn-settings']) assert.ok((await page.locator('#' + id).innerText()).trim());
+  await page.locator('#btn-language').click();
+  await expect(page).toHaveURL(/#\/settings\/appearance$/);
+  await expect(page.locator('[data-setting="locale"] .locale-trigger')).toBeVisible();
+  await page.locator('#theme-editor summary').click();
+  await expect(page.locator('[data-editor-hex="bg"]')).not.toHaveValue('#000000');
+  for (const [width, columns] of [[1280, 3], [850, 2], [390, 1]]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.equal(await page.locator('.editor-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length), columns);
+    assert.equal(await page.locator('[data-editor-hex]').evaluateAll(els => els.some(el => el.scrollWidth > el.clientWidth)), false);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  }
+  await page.setViewportSize({ width: 1920, height: 1000 });
+  for (const locale of ['en', 'fr', 'de', 'es', 'ja', 'zh-TW', 'zh-CN']) {
+    const copy = JSON.parse(readFileSync(join(root, 'frontend/locales', locale + '.json'), 'utf8'));
+    await page.locator('#settings-tab-appearance').click();
+    await page.locator('.locale-trigger').click();
+    await page.locator('.locale-row[data-value="' + locale + '"]').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', locale);
+    await expect(page.locator('[data-editor-export]')).toHaveText(copy.settings.editor.export);
+    await expect(page.locator('#editor-name')).toHaveAttribute('placeholder', copy.settings.editor.name);
+    await page.locator('#settings-tab-hosts').click();
+    await expect(page.locator('[name="host_name"]')).toHaveValue(copy.preview.nasName);
+    await expect(page.locator('[name="host_description"]')).toHaveValue(copy.preview.nasDescription);
+    await expect(page.locator('.peer-summary-name')).toHaveText([copy.preview.appsName, copy.preview.devName, copy.preview.edgeName]);
+    await expect(page.locator('#peer-add')).toHaveText(copy.hosts.add);
+  }
+  await page.goto(base);
   await page.locator('#btn-manage').click();
   await expect(page.locator('#port-menu')).toBeVisible();
   await expect(page.locator('#port-menu .action-menu-item')).toHaveCount(6);
@@ -171,12 +198,20 @@ try {
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(base + '/#/manage/' + section);
       await expect(page.locator('#port-menu [aria-current="page"]')).toHaveAttribute('href', '#/manage/' + section);
-      await expect(page.locator('.settings-card').first()).toBeVisible();
-      const colors = await page.locator('.settings-card').first().evaluate(el => ({ background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }));
+      const visibleCard = page.locator('.settings-card:visible').first();
+      await expect(visibleCard).toBeVisible();
+      const colors = await visibleCard.evaluate(el => ({ background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }));
       assert.notEqual(colors.background, 'rgba(0, 0, 0, 0)');
       if (process.env.PORT_LIGHT_TEST_SCREENSHOTS) await page.screenshot({ path: join(process.env.PORT_LIGHT_TEST_SCREENSHOTS, `${section}-${mode}.png`), fullPage: true });
       await page.setViewportSize({ width: 390, height: 844 });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), section + ' overflow');
+      if (section !== 'conflicts') {
+        await expect(page.locator('#manage-editor')).toBeHidden();
+        await page.locator('[data-action="newEntry"]').click();
+        await expect(page.locator('#manage-editor')).toBeVisible();
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), section + ' editor overflow');
+        await page.locator('[data-action="cancelEditor"]').click();
+      }
       if (process.env.PORT_LIGHT_TEST_SCREENSHOTS) await page.screenshot({ path: join(process.env.PORT_LIGHT_TEST_SCREENSHOTS, `${section}-${mode}-mobile.png`), fullPage: true });
       await page.locator('#btn-manage').click();
       await expect(page.locator('#port-menu')).toBeVisible();
@@ -203,6 +238,10 @@ try {
     await page.locator('#btn-settings').click();
     await page.locator('#settings-tab-advanced').click();
     await expect(page.locator('#btn-doctor')).toHaveText(messages.doctor.refresh);
+    await expect(page.locator('#settings-nav')).toHaveAttribute('aria-orientation', 'horizontal');
+    const activeTab = await page.locator('#settings-tab-advanced').boundingBox();
+    assert.ok(activeTab.x >= 0 && activeTab.x + activeTab.width <= 390, locale + ' active category clipped');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), locale + ' settings overflow');
   }
   assert.deepEqual(errors, []);
   console.log('Fleet regression passed: full-width 2/4-host layouts, grouped range columns, mobile density, first-click tabs, keyboard, refresh, detail switching, management light/dark/mobile, port menu navigation and seven languages.');

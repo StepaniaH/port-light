@@ -15,15 +15,19 @@ const data = { ports: [], summary: { hidden_locked: false } };
 
 function createApp(fetchOccupancy) {
   const listeners = {};
+  const streams = [];
+  const document = { hidden: false };
   class EventSource {
+    constructor() { streams.push(this); }
     addEventListener(name, callback) { listeners[name] = callback; }
+    close() { this.closed = true; }
   }
   const S = {
     settings: { auto_refresh: true, refresh_ms: 300000 }, route: { name: 'grid' },
     focusHostId: 'local', showHidden: false, hostMaps: {}, currentData: data,
     lockedHitCache: {}, lockedHitInflight: {}, hostRetrying: {},
   };
-  const app = runInNewContext(coordinator + '\n({loadPorts, tick, startEventStream, inFlight: () => refreshInFlight})', {
+  const app = runInNewContext(coordinator + '\n({loadPorts, tick, startEventStream, syncEventStream, inFlight: () => refreshInFlight})', {
     S, refreshFleet, hasPeers: () => true, usesFocusedHostView: () => false,
     listedHosts: () => ['local', 'peer1', 'peer2', 'peer3'].map(id => ({ id })),
     fetchHostOccupancy: fetchOccupancy,
@@ -31,10 +35,29 @@ function createApp(fetchOccupancy) {
     dataForHost: id => S.hostMaps[id]?.data || null,
     hostBoards: { querySelectorAll: () => [] }, modalOpen: () => false,
     occupancyFingerprint: () => 'snapshot', render() {}, markRefreshed() {}, setSyncError() {},
-    EventSource, window: { EventSource }, setInterval() {}, clearInterval() {},
+    EventSource, window: { EventSource }, document, setInterval() {}, clearInterval() {},
   });
-  return { S, app, listeners };
+  return { S, app, listeners, streams, document };
 }
+
+test('event stream closes on management and hidden pages and resumes on the visible grid', () => {
+  const { S, app, streams, document } = createApp(async () => ({ ok: true, data }));
+  app.syncEventStream();
+  assert.equal(streams.length, 1);
+  S.route.name = 'manage';
+  app.syncEventStream();
+  assert.equal(streams[0].closed, true);
+  S.route.name = 'grid';
+  app.syncEventStream();
+  assert.equal(streams.length, 2);
+  document.hidden = true;
+  app.syncEventStream();
+  assert.equal(streams[1].closed, true);
+  document.hidden = false;
+  S.settings.auto_refresh = false;
+  app.syncEventStream();
+  assert.equal(streams.length, 2);
+});
 
 test('local SSE events do not poll peers before the configured interval', async () => {
   const fetched = [];

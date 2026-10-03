@@ -303,6 +303,39 @@ def test_opencode_go_uses_its_endpoint_identity_and_session(evidence):
     assert result == interpretation()
 
 
+@pytest.mark.parametrize(
+    "provider, model, reasoning",
+    [("opencode-go", "deepseek-v4.1-flash", "none"),
+     ("opencode-go", "fixture-model", None),
+     ("deepseek", "deepseek-v4.1-flash", None)],
+)
+def test_go_deepseek_preserves_output_budget_for_probe_and_analysis(
+    evidence, provider, model, reasoning
+):
+    from backend.analysis.workbench import WorkbenchGateway
+
+    budgets = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        assert body.get("reasoning_effort") == reasoning
+        budgets.append(body["max_tokens"])
+        content = "OK" if len(body["messages"]) == 1 else json.dumps(interpretation())
+        return httpx.Response(200, json={
+            "choices": [{"finish_reason": "stop", "message": {"content": content}}]
+        })
+
+    async def scenario():
+        transport = httpx.MockTransport(handler)
+        gateway = ChatGateway(transport)
+        await gateway.probe(provider, model, "fixture-key")
+        await gateway(provider, model, "fixture-key", evidence)
+        await WorkbenchGateway(transport)(provider, model, "fixture-key", {})
+
+    asyncio.run(scenario())
+    assert budgets == [64, 1800, 2000]
+
+
 def test_operator_can_configure_a_compatible_provider(evidence, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_BYOK_BASE_URL", "https://example.invalid/models/v1/")
     monkeypatch.setenv("PORT_LIGHT_BYOK_NAME", "Fixture provider")
@@ -335,7 +368,7 @@ def test_operator_can_configure_a_compatible_provider(evidence, monkeypatch):
 @pytest.mark.parametrize(
     "url",
     [
-        "http://example.invalid/v1",
+        "ftp://example.invalid/v1",
         "https://user:fixture-secret@example.invalid/v1",
         "https://example.invalid/v1?token=fixture-secret",
         "https://example.invalid/v1#fragment",

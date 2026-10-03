@@ -27,6 +27,7 @@ class Entry:
     usage: dict = field(default_factory=dict)
     error: dict | None = None
     task: asyncio.Task | None = field(default=None, repr=False)
+    connection: dict | None = field(default=None, repr=False)
 
 
 class Analysis:
@@ -113,10 +114,10 @@ class Analysis:
     def record_saved_report(self, identifier, owner, report_id):
         self._entry(identifier, owner).report_id = report_id
 
-    def start(self, identifier, owner, provider, model, key):
+    def start(self, identifier, owner, provider, model, key, *, connection=None):
         entry = self._entry(identifier, owner)
         if entry.status != "preview":
-            if (entry.provider, entry.model) != (provider, model):
+            if (entry.provider, entry.model, entry.connection) != (provider, model, connection):
                 raise AnalysisError("already_started", "该预览已用于另一项分析，请重新预览。", 409)
             return self.get(identifier, owner)
         decision = baseline(entry.evidence, max_input_bytes=self.max_input_bytes)["ai"]
@@ -144,6 +145,7 @@ class Analysis:
                     self.attempt_gate.release(gate_id)
                 raise
         entry.provider, entry.model, entry.status = provider, model, "running"
+        entry.connection = deepcopy(connection)
         entry.task = asyncio.create_task(
             self._run(entry, key, identifier), name="port-light-analysis"
         )
@@ -153,7 +155,8 @@ class Analysis:
         try:
             async with asyncio.timeout(90):
                 selection, entry.usage = await self.gateway(
-                    entry.provider, entry.model, key, entry.evidence, session_id=identifier
+                    entry.provider, entry.model, key, entry.evidence, session_id=identifier,
+                    **({"connection": entry.connection} if entry.connection else {}),
                 )
             entry.interpretation = validate_interpretation(json.dumps(selection), entry.evidence)
             entry.status = "completed"
@@ -202,6 +205,7 @@ class Analysis:
                 if self.attempt_gate is not None:
                     self.attempt_gate.release("analysis:" + identifier)
                 self._finish_receipt(identifier, entry)
+                entry.expires = self.clock() + self.ttl
         return self.get(identifier, owner)
 
     async def close(self):

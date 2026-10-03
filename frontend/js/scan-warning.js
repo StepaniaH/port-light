@@ -1,5 +1,5 @@
 /* Explanations derived from the current occupancy response, including older peers. */
-import { t, escapeHtml } from './text.js?v=103';
+import { t, escapeHtml } from './text.js?v=121';
 
 export function scanDiagnosticKeys(summary = {}) {
   if (summary.scan_complete === true && !summary.stale) return [];
@@ -42,7 +42,7 @@ export function scanWarningMarkup(summary, hostId, context) {
     (needsConfig ? '<p>' + copy('selection') + '</p><p>' + copy('upgrade') + '</p>' : '') +
     (!local ? '<p>' + copy('remote') + '</p>' : '') +
     '<div class="scan-warning-links">' +
-    (local ? '<a href="#/settings/occupancy">' + copy('settings') + '</a>' : '') +
+    (local ? '<a href="#/settings/hosts">' + copy('settings') + '</a>' : '') +
     '<a href="https://github.com/StepaniaH/port-light/blob/main/docs/troubleshooting.md#occupancy-scan-warning"' +
     ' target="_blank" rel="noopener noreferrer">' + copy('guide') + '</a></div></div></details>';
 }

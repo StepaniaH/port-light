@@ -1,9 +1,9 @@
 /* Automation examples, activity, and lease controls. */
-import { S } from './state.js?v=103';
-import { t, escapeHtml } from './text.js?v=103';
-import { api } from './api.js?v=103';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=103';
-import { settingsCard, kvRow } from './settings-format.js?v=103';
+import { S } from './state.js?v=121';
+import { t, escapeHtml } from './text.js?v=121';
+import { api } from './api.js?v=121';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=121';
+import { settingsCard, kvRow } from './settings-format.js?v=121';
 
   function copyButton(id, labelKey, primary = false) {
     const label = escapeHtml(t(labelKey));
@@ -106,12 +106,12 @@ import { settingsCard, kvRow } from './settings-format.js?v=103';
 
     const ev = a.agent_events || null;
     const activity = ev
-      ? '<p class="auto-summary" data-auto-summary>' +
-        escapeHtml(t('settings.auto.activity.total')) + ': ' + ev.total + ' · ' +
-        escapeHtml(t('settings.auto.activity.activeLeases')) + ': ' + (ev.active_leases || 0) + ' · ' +
-        escapeHtml(t('settings.auto.activity.lastUsed', {
+      ? '<div class="auto-summary" data-auto-summary><dl>' +
+        '<div><dt>' + escapeHtml(t('settings.auto.activity.total')) + '</dt><dd>' + ev.total + '</dd></div>' +
+        '<div><dt>' + escapeHtml(t('settings.auto.activity.activeLeases')) + '</dt><dd>' + (ev.active_leases || 0) + '</dd></div>' +
+        '</dl><p>' + escapeHtml(t('settings.auto.activity.lastUsed', {
           time: ev.last_used_at ? formatAgo(ev.last_used_at) : t('settings.auto.activity.never'),
-        })) + '</p>' +
+        })) + '</p></div>' +
         ((ev.recent || []).length ? '<div class="auto-table-scroll"><table class="auto-table"><thead><tr>' +
         ['thTime', 'thCount', 'thScope', 'thLabel', 'thLeased']
           .map(k => '<th>' + escapeHtml(t('settings.auto.activity.' + k)) + '</th>').join('') +

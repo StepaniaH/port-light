@@ -3,6 +3,7 @@ import stat
 import time
 from contextlib import asynccontextmanager
 
+import httpx
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ from tests.analysis.observation_fixture import observation
 from backend.analysis.evidence import AnalysisError
 from backend.analysis.interpretation import demo_selection
 from backend.analysis.module import create_module
+from backend.analysis.provider import ChatGateway
 from backend.analysis.settings import (
     MAX_PROFILE_BYTES,
     PROFILE_FILE,
@@ -118,6 +120,9 @@ def test_settings_document_persists_one_profile_without_disclosing_key(tmp_path,
             "enabled": True,
             "capabilities": {"byok_port_analysis": True},
             "providers": initial.json()["providers"],
+            "connections": [],
+            "active_connection_id": None,
+            "connections_limit": 16,
             "ai": {
                 "provider": None,
                 "model": None,
@@ -130,9 +135,10 @@ def test_settings_document_persists_one_profile_without_disclosing_key(tmp_path,
             "openai",
             "deepseek",
             "opencode-go",
+            "custom",
         }
         assert all(
-            set(item) in ({"id", "name"}, {"id", "name", "notice"})
+            set(item) - {"base_url"} in ({"id", "name"}, {"id", "name", "notice"})
             and isinstance(item["id"], str)
             and isinstance(item["name"], str)
             for item in initial.json()["providers"]
@@ -403,3 +409,37 @@ def test_corrupt_profile_does_not_break_module_startup_or_non_saved_analysis(tmp
         )
         assert started.status_code == 202
         assert completed(client, path)["status"] == "completed"
+
+
+def test_connection_probe_keeps_browser_session_out_of_provider_headers(tmp_path, monkeypatch):
+    monkeypatch.delenv("PORT_LIGHT_ANALYSIS_DEMO", raising=False)
+    provider_sessions = []
+
+    def handler(request):
+        provider_sessions.append(request.headers.get("x-opencode-session"))
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}],
+        })
+
+    gateway_init = ChatGateway.__init__
+
+    def mock_gateway_init(self, transport=None, *, providers=None):
+        gateway_init(self, httpx.MockTransport(handler), providers=providers)
+
+    monkeypatch.setattr(ChatGateway, "__init__", mock_gateway_init)
+    with TestClient(host(tmp_path, {}, settings_reader=lambda: False)) as client:
+        saved = save_profile(client, provider="opencode-go")
+        assert saved.status_code == 200
+        preview(client)
+        browser_session = client.cookies.get("port_light_analysis_session")
+        assert browser_session
+        for _ in range(2):
+            response = client.post(
+                "/analysis/api/settings/ai/test",
+                headers=ACTION,
+                json={"config_revision": saved.json()["ai"]["revision"], "confirmed": True},
+            )
+            assert response.status_code == 200
+        assert len(provider_sessions) == 2
+        assert all(value and value != browser_session for value in provider_sessions)
+        assert provider_sessions[0] != provider_sessions[1]

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import { chromium, expect } from '@playwright/test';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
@@ -16,7 +17,9 @@ const python = process.env.PYTHON || (existsSync(join(project, '.venv/bin/python
 const temporary = await mkdtemp(join(tmpdir(), 'port-light-workbench-smoke-'));
 const screenshots = process.env.PORT_LIGHT_SCREENSHOT_DIR || join(temporary, 'screenshots');
 const children = [];
+const connectionWrites = /\/analysis\/api\/settings\/ai\/connections(?:\/[^/]+)?$/;
 let browser;
+let modelServer;
 
 async function freePort() {
   const socket = createServer().listen(0, '127.0.0.1');
@@ -75,7 +78,19 @@ async function advance(page, base, phase) {
 }
 
 async function capture(page) {
-  await page.locator('#analysis-capture-button').click();
+  try {
+    const [response] = await Promise.all([
+      page.waitForResponse(response => response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === '/analysis/api/workbench/captures'),
+      page.locator('#analysis-capture-button').click(),
+    ]);
+    await responseJson(response, 201);
+  } catch (error) {
+    await page.screenshot({ path: join(screenshots, 'capture-failure.png'), fullPage: false });
+    console.error(await page.locator('#workspace-page').ariaSnapshot());
+    throw error;
+  }
+  await expect(page.locator('#analysis-capture-button')).toBeEnabled({ timeout: 10000 });
   await expect(page.locator('#analysis-results')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('#analysis-result-state')).not.toHaveText(/Working|采集中/);
 }
@@ -132,6 +147,33 @@ async function scrollToHeading(page, selector) {
   await page.evaluate(() => window.scrollBy(0, -64));
 }
 
+async function checkWorkspaceLoadingRecovery(browser, base) {
+  for (const path of ['**/analysis/assets/analysis.css?*', '**/analysis/assets/analysis.js?*', '**/analysis/api/workbench/options']) {
+    const page = await browser.newPage();
+    try {
+      await page.clock.install();
+      let pending;
+      await page.route(path, route => { pending = route; });
+      await page.goto(base);
+      await page.locator('#ui-links a[href="#/workspace/port-analysis"]').click();
+      await expect.poll(() => !!pending).toBe(true);
+      await expect(page.locator('#workspace-page > [role="status"]')).toBeVisible();
+      if (path.includes('/options')) await expect(page.locator('#analysis-capture-button')).toBeDisabled();
+      await page.clock.fastForward(15000);
+      await expect(page.locator('#workspace-page > [role="alert"]')).toBeVisible();
+      await expect(page.locator('#workspace-page > [role="status"]')).toHaveCount(0);
+      await expect(page.locator('#analysis-capture-button')).toHaveCount(0);
+      await page.unroute(path);
+      await pending.abort().catch(() => {});
+      await page.locator('#workspace-page button').click();
+      await expect(page.locator('#analysis-capture-button')).toBeEnabled();
+      await expect(page.locator('#workspace-page > [role="status"]')).toHaveCount(0);
+    } finally {
+      await page.close();
+    }
+  }
+}
+
 try {
   await mkdir(screenshots, { recursive: true });
   const base = await startHost();
@@ -140,6 +182,7 @@ try {
   assert.equal(fixture.phase, 'baseline');
 
   browser = await chromium.launch({ headless: true });
+  await checkWorkspaceLoadingRecovery(browser, base);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -174,7 +217,19 @@ try {
   await capture(page);
   const queueCount = await page.locator('#analysis-priority-queue .problem-card').count();
   assert.ok(queueCount >= 1 && queueCount <= 5, 'The priority queue stays bounded to five cards');
-  await expect(page.locator('#analysis-priority-queue')).toContainText('端口 8081 · TCP');
+  await expect(page.locator('#analysis-priority-queue .problem-resources').getByRole('link', { name: '打开端口 8081, TCP', exact: true })).toBeVisible();
+  const mappingCard = page.locator('#analysis-priority-queue .problem-card').filter({ hasText: 'Compose 端口没有对应的 Docker 映射' });
+  await expect(mappingCard.locator('.problem-resources')).toContainText('8081');
+  await expect(mappingCard.locator('.problem-resources')).not.toContainText('8080');
+  await mappingCard.locator('.problem-basis > summary').click();
+  await expect(mappingCard.locator('.problem-basis')).toContainText('8080');
+  await mappingCard.locator('.problem-basis > summary').click();
+  const basis = page.locator('#analysis-priority-queue .problem-basis').first();
+  await expect(basis).toHaveJSProperty('open', false);
+  await expect(page.locator('#analysis-priority-queue .problem-card').first().locator('.problem-resources')).toBeVisible();
+  await basis.locator(':scope > summary').click();
+  await expect(basis.locator(':scope > dl')).toBeVisible();
+  await basis.locator(':scope > summary').click();
   assert.doesNotMatch(await page.locator('#analysis-priority-queue .problem-card').first().innerText(), /\b(?:current|event):/,
     'Visible problem evidence uses readable facts, not opaque evidence IDs');
   await expect(page.locator('#analysis-ai-payload-details')).toBeVisible();
@@ -183,12 +238,33 @@ try {
   await page.locator('#analysis-protocol').selectOption('tcp');
   await expect(page.locator('#analysis-consent')).not.toBeChecked();
   await expect(page.locator('#analysis-ai-payload-details')).toBeHidden();
+  await expect(page.locator('#analysis-scope-changed')).toBeVisible();
+  await basis.locator(':scope > summary').click();
+  await page.locator('#analysis-protocol').selectOption('all');
+  await expect(page.locator('#analysis-scope-changed')).toBeHidden();
+  await expect(page.locator('#analysis-ai-payload-details')).toBeVisible();
+  await expect(basis).toHaveJSProperty('open', true);
+  await expect(page.locator('#analysis-consent')).not.toBeChecked();
+
+  // Returning from settings preserves a pending draft even on a one-port deep link.
+  await page.locator('#analysis-scope-kind').selectOption('single_port');
+  await page.locator('#analysis-single-port').fill('8080');
+  await page.goto(base + '/#/settings/analysis/ai');
+  await expect(page.locator('#analysis-settings-ai')).toBeVisible();
+  await page.goto(base + '/#/workspace/port-analysis/port/8081');
+  await expect(page.locator('#analysis-single-port')).toHaveValue('8080');
+  await expect(page.locator('#analysis-scope-changed')).toBeVisible();
+  await expect(page.locator('#analysis-result-scope')).toContainText('3');
+  await page.locator('#analysis-restore-scope').click();
+  await expect(page.locator('#analysis-scope-kind')).toHaveValue('selected_ports');
+  await expect(page.locator('#analysis-scope-changed')).toBeHidden();
+  await expect(page.locator('#analysis-selected-ports .port-chip')).toHaveCount(3);
 
   // Save a complete all-known baseline. The screenshot uses only the local synthetic test host.
   await page.locator('#analysis-scope-kind').selectOption('all_known');
   await page.locator('#analysis-protocol').selectOption('all');
   await capture(page);
-  await expect(page.locator('#analysis-priority-queue')).toContainText('端口 65535 · TCP');
+  await expect(page.locator('#analysis-priority-queue .problem-resources').getByRole('link', { name: '打开端口 65535, TCP', exact: true })).toBeVisible();
   await page.locator('#analysis-save-report').click();
   await expect.poll(async () => (await workbenchReports(page, base)).reports.some(report => report.result_revision === 'rules-v1'),
     { timeout: 5000 }).toBe(true);
@@ -216,8 +292,8 @@ try {
   await newBlock.locator(':scope > summary').click();
   const savedFact = savedBlock.locator('.comparison-fact').first();
   const newFact = newBlock.locator('.comparison-fact').first();
-  await expect(savedFact).toContainText('Compose 冲突：是');
-  await expect(newFact).toContainText('Compose 冲突：否');
+  await expect(savedFact.locator('.fact-fields > div').filter({ has: page.getByText('Compose 冲突', { exact: true }) }).locator('dd')).toHaveText('是');
+  await expect(newFact.locator('.fact-fields > div').filter({ has: page.getByText('Compose 冲突', { exact: true }) }).locator('dd')).toHaveText('否');
   assert.notEqual(await savedFact.innerText(), await newFact.innerText(), 'A resolved comparison shows changed frozen values, not only different timestamps');
   const currentEvidenceId = await newFact.getAttribute('data-evidence-id');
   assert.ok(currentEvidenceId);
@@ -246,11 +322,21 @@ try {
   // Saving the recheck rules, then the completed AI selection, creates two immutable revisions for the same capture.
   await page.locator('#analysis-save-report').click();
   await expect(page.locator('#analysis-ai-payload-details')).toBeVisible();
+  const pollingBasis = page.locator('#analysis-priority-queue .problem-basis').first();
+  await pollingBasis.locator(':scope > summary').click();
+  const pollingBasisNode = await pollingBasis.elementHandle();
   await page.locator('#analysis-consent').check();
   await expect(page.locator('#analysis-start-ai')).toBeEnabled();
   const beforeAiPosts = aiPosts;
   await page.locator('#analysis-start-ai').click();
   await expect(page.locator('#analysis-ai-recommendations')).toBeVisible({ timeout: 15000 });
+  assert.equal(await pollingBasisNode.evaluate(node => node.isConnected && node.open), true,
+    'Starting AI and polling preserve the open local evidence node');
+  const recommendationFacts = page.locator('#analysis-ai-recommendation-list .comparison-facts').first();
+  await recommendationFacts.locator('summary').first().click();
+  await expect(recommendationFacts.locator('.comparison-fact').first()).toBeVisible();
+  assert.doesNotMatch(await page.locator('#analysis-ai-recommendation-list').innerText(), /\b(?:current|event):/,
+    'AI recommendations show readable frozen facts instead of internal evidence identifiers');
   assert.equal(aiPosts, beforeAiPosts + 1, 'One consent produces one demo AI request');
   await expect(page.locator('#analysis-save-report')).toBeEnabled();
   await page.locator('#analysis-save-report').click();
@@ -270,10 +356,19 @@ try {
   await capture(page);
   await expect(page.locator('#analysis-capture-meta')).toContainText('最近变更');
   const beforeAfter = page.locator('#analysis-priority-queue .fact-card').first();
+  await page.locator('#analysis-priority-queue .problem-basis').filter({ has: page.locator('.fact-card') }).first().locator(':scope > summary').click();
   await expect(beforeAfter).toBeVisible();
   await beforeAfter.locator(':scope > summary').click();
   await expect(beforeAfter.locator('.comparison-fact').first()).toContainText('状态');
   await expect(beforeAfter.locator('.fact-raw').first()).toHaveJSProperty('open', false);
+  await page.locator('#analysis-task-triage').click();
+  await page.goto(base + '/#/settings/analysis/ai');
+  await expect(page.locator('#analysis-settings-ai')).toBeVisible();
+  await page.goto(base + '/#/workspace/port-analysis/port/8081');
+  await expect(page.locator('#analysis-task-triage')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#analysis-scope-changed')).toBeVisible();
+  await page.locator('#analysis-restore-scope').click();
+  await expect(page.locator('#analysis-task-changes')).toHaveAttribute('aria-pressed', 'true');
 
   // A 1,024-port range produces more than a thousand frozen facts but only renders the first page until asked.
   await page.locator('#analysis-task-triage').click();
@@ -310,13 +405,14 @@ try {
   await page.route('**/analysis/api/workbench/captures/*', async route => {
     if (route.request().method() !== 'GET') return route.continue();
     unavailableReads += 1;
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { code: 'capture_expired', message: 'synthetic unavailable receipt' } }) });
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { code: 'not_found', message: 'synthetic unavailable receipt' } }) });
   });
   const beforeUnavailableAi = aiPosts;
   await page.locator('#analysis-consent').check();
   await page.locator('#analysis-start-ai').click();
   await expect(page.locator('#analysis-empty-result')).toBeVisible({ timeout: 9000 });
   await expect(page.locator('#analysis-results')).toBeHidden();
+  await expect(page.locator('#analysis-error')).toContainText('过期');
   await expect(page.locator('#analysis-capture-button')).toBeEnabled();
   assert.equal(aiPosts, beforeUnavailableAi + 1);
   assert.equal(unavailableReads, 1, 'A 404 receipt stops polling instead of creating an infinite retry loop');
@@ -343,6 +439,24 @@ try {
   await expect(page.locator('#analysis-results')).toBeVisible();
   assert.ok(!(await page.locator('#workspace-page').innerText()).includes('UNTRUSTED'));
 
+  // Contiguous resources retain every port behind one disclosure, with working deep links.
+  await advance(page, base, 'port_range');
+  await page.locator('#analysis-scope-kind').selectOption('port_range');
+  await page.locator('#analysis-range-start').fill('20000');
+  await page.locator('#analysis-range-end').fill('20031');
+  await capture(page);
+  const resourceRange = page.locator('.problem-resources .resource-range');
+  await expect(resourceRange).toHaveCount(1);
+  await expect(resourceRange).toHaveJSProperty('open', false);
+  await expect(resourceRange.locator(':scope > summary')).toContainText('20000–20031');
+  await resourceRange.locator(':scope > summary').click();
+  await expect(resourceRange.getByRole('link')).toHaveCount(32);
+  await expect(resourceRange.getByRole('link').last()).toHaveAttribute('href', '#/port/20031');
+  await expect(resourceRange.getByRole('link').last()).toHaveText('20031 UDP');
+  await resourceRange.getByRole('link').last().click();
+  await expect(page).toHaveURL(/#\/port\/20031$/);
+  await page.goto(base + '/#/workspace/port-analysis', { waitUntil: 'networkidle' });
+
   // Every supported locale and palette mounts the same task-oriented controls and inherited theme.
   const catalogs = JSON.parse(await readFile(join(project, 'backend/analysis/static/messages.json'), 'utf8'));
   for (const [locale, messages] of Object.entries(catalogs)) {
@@ -351,6 +465,13 @@ try {
     }));
     await page.reload({ waitUntil: 'networkidle' });
     await expect(page.locator('#analysis-task-triage')).toContainText(messages.workbench.task_triage);
+    await page.locator('.facts-details > summary').click();
+    const scanFact = page.locator('#analysis-facts .fact-card').filter({ has: page.locator('.fact-name', { hasText: messages.workbench.fact_scan }) }).first();
+    await scanFact.locator(':scope > summary').click();
+    await expect(scanFact.locator('.fact-fields dt').first()).toHaveText(messages.workbench.fact_label_scan);
+    await expect(scanFact.locator('.fact-fields dd').first()).toHaveText(messages.workbench.fact_ready);
+    await expect(scanFact.locator('h5')).toHaveText(messages.workbench.fact_label_sources);
+    assert.ok(!(await page.locator('#analysis-priority-queue').innerText()).includes('先检查'));
     await assertTheme(page);
   }
 
@@ -366,17 +487,20 @@ try {
   await page.unroute('**/analysis/api/workbench/captures');
 
   // A second local host runs in BYOK mode. The browser exercises the AI
-  // settings route and credential UX, but the only AI start is intercepted
-  // before it can reach any provider.
+  // settings route and credential UX. Model traffic below goes only to an
+  // ephemeral local HTTP fixture through the actual BYOK adapter.
   const byokBase = await startHost({ name: 'byok', demo: false });
   const byokPage = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   byokPage.on('pageerror', error => errors.push(error.message));
   await byokPage.goto(byokBase + '/#/settings/analysis', { waitUntil: 'networkidle' });
   await expect(byokPage.locator('#analysis-ai-form')).toBeVisible();
+  await expect(byokPage.locator('#analysis-settings-ai-title')).toHaveText('AI 连接');
+  assert.equal(await byokPage.locator('#analysis-ai-form').evaluate(node => node.tagName), 'DIV',
+    'AI controls do not nest a form inside the main settings form');
 
   let rejectedSettingsSaves = 0;
-  await byokPage.route('**/analysis/api/settings/ai', async route => {
-    if (route.request().method() !== 'PUT') return route.continue();
+  await byokPage.route(connectionWrites, async route => {
+    if (!['POST', 'PUT'].includes(route.request().method())) return route.continue();
     rejectedSettingsSaves += 1;
     await delay(180);
     await route.fulfill({
@@ -388,34 +512,58 @@ try {
   await byokPage.locator('#analysis-ai-provider').selectOption('openai');
   await byokPage.locator('#analysis-ai-model').fill('gpt-4.1-mini');
   await byokPage.locator('#analysis-ai-key').fill('fixture-browser-key-not-a-secret');
-  await byokPage.locator('#analysis-ai-form button[type="submit"]').click();
-  await expect(byokPage.locator('#analysis-ai-form button[type="submit"]')).toBeDisabled();
+  await byokPage.locator('.analysis-settings-reveal').click();
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('type', 'text');
+  await byokPage.locator('.analysis-settings-reveal').click();
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('type', 'password');
+  await byokPage.locator('#analysis-ai-save').click();
+  await expect(byokPage.locator('#analysis-ai-save')).toBeDisabled();
   await expect(byokPage.locator('.analysis-settings-status[role="alert"]')).toBeVisible();
   await expect(byokPage.locator('#analysis-ai-provider')).toHaveValue('openai');
   await expect(byokPage.locator('#analysis-ai-model')).toHaveValue('gpt-4.1-mini');
-  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('');
-  assert.equal(rejectedSettingsSaves, 1, 'A failed save retains only the non-secret draft');
-  await byokPage.unroute('**/analysis/api/settings/ai');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('fixture-browser-key-not-a-secret');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('type', 'password');
+  assert.equal(rejectedSettingsSaves, 1, 'A failed save retains the existing password input for retry');
+  await byokPage.unroute(connectionWrites);
 
   await byokPage.locator('#analysis-ai-key').fill('fixture-browser-key-not-a-secret');
-  await byokPage.locator('#analysis-ai-form button[type="submit"]').click();
+  await byokPage.locator('#analysis-ai-save').click();
   await expect(byokPage.locator('.analysis-settings-status.is-ok')).toBeVisible();
+  const success = byokPage.locator('.analysis-settings-status.is-ok');
+  for (const [mode, color] of [['light', 'rgb(26, 127, 55)'], ['dark', 'rgb(63, 185, 80)']]) {
+    await byokPage.evaluate(mode => { document.documentElement.dataset.mode = mode; }, mode);
+    await expect(success).toHaveCSS('color', color);
+  }
   const firstProfile = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
+  await expect(byokPage.locator('#analysis-ai-test')).toHaveText('测试连接');
+  assert.doesNotMatch(await byokPage.locator('#analysis-settings-ai').innerText(), /\btest_note\b/);
   assert.equal(firstProfile.ai.configured, true);
   assert.equal(firstProfile.ai.provider, 'openai');
   assert.equal(firstProfile.ai.model, 'gpt-4.1-mini');
   assert.ok(firstProfile.ai.revision);
   assert.doesNotMatch(await byokPage.locator('body').innerText(), /fixture-browser-key-not-a-secret/);
+  await expect(byokPage.locator('#analysis-ai-save')).toBeDisabled();
+  await byokPage.locator('#analysis-ai-provider').selectOption('deepseek');
+  await expect(byokPage.locator('#analysis-ai-model')).toHaveValue('');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('required', '');
+  await byokPage.locator('#analysis-ai-provider').selectOption('openai');
+  await expect(byokPage.locator('#analysis-ai-model')).toHaveValue('gpt-4.1-mini');
+  await expect(byokPage.locator('#analysis-ai-key')).not.toHaveAttribute('required', '');
+  await expect(byokPage.locator('#analysis-ai-save')).toBeDisabled();
 
   // A same-provider edit may retain the stored key while changing its revision.
   await byokPage.locator('#analysis-ai-model').fill('gpt-4.1-nano');
   await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('');
-  await byokPage.locator('#analysis-ai-form button[type="submit"]').click();
+  await byokPage.locator('#analysis-ai-save').click();
   await expect(byokPage.locator('.analysis-settings-status.is-ok')).toBeVisible();
   const changedProfile = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
   assert.equal(changedProfile.ai.model, 'gpt-4.1-nano');
   assert.notEqual(changedProfile.ai.revision, firstProfile.ai.revision);
   await byokPage.screenshot({ path: join(screenshots, 'ai-settings-zh-CN.png'), fullPage: false });
+  await byokPage.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await byokPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true,
+    'AI settings fit a narrow viewport');
+  await byokPage.setViewportSize({ width: 1440, height: 1100 });
 
   // Saving rules preserves a live one-port capture. Changing the connection in
   // settings must reset consent on return without downgrading to the report.
@@ -435,7 +583,7 @@ try {
   await byokPage.locator('#analysis-manage-ai-settings').click();
   await expect(byokPage.locator('#analysis-ai-form')).toBeVisible();
   await byokPage.locator('#analysis-ai-model').fill('gpt-4.1');
-  await byokPage.locator('#analysis-ai-form button[type="submit"]').click();
+  await byokPage.locator('#analysis-ai-save').click();
   await expect(byokPage.locator('.analysis-settings-status.is-ok')).toBeVisible();
 
   await byokPage.goto(byokBase + '/#/workspace/port-analysis/port/8081', { waitUntil: 'networkidle' });
@@ -485,17 +633,331 @@ try {
   await byokPage.unroute('**/analysis/api/workbench/captures/*');
 
   await byokPage.goto(byokBase + '/#/settings/analysis/ai', { waitUntil: 'networkidle' });
-  await expect(byokPage.locator('.analysis-settings-clear button')).toBeVisible();
-  await byokPage.locator('.analysis-settings-clear button').click();
-  await expect(byokPage.locator('#analysis-settings-ai')).toContainText('尚未保存');
+
+  // The editable custom connection exercises save, test, consent and report
+  // revisions through real HTTP requests to a deterministic local provider.
+  const modelRequests = [];
+  let modelOutcome = 'empty';
+  modelServer = createHttpServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const body = JSON.parse(Buffer.concat(chunks).toString());
+    modelRequests.push({ path: request.url, body });
+    assert.equal(request.url, '/v1/chat/completions');
+    assert.equal(request.headers.authorization, 'Bearer ' + (body.model.startsWith('fixture-second')
+      ? 'fixture-browser-second-key' : 'fixture-browser-custom-key'));
+    assert.equal(request.headers.cookie, undefined);
+    if (modelOutcome === 'connection_failure') {
+      request.socket.destroy();
+      return;
+    }
+    response.setHeader('Content-Type', 'application/json');
+    if (modelOutcome === 'auth_failure') {
+      response.statusCode = 401;
+      response.end(JSON.stringify({ error: 'fixture upstream error' }));
+      return;
+    }
+    if (modelOutcome === 'incomplete') {
+      response.end(JSON.stringify({
+        choices: [{ message: { content: '', reasoning_content: 'Unfinished reasoning' }, finish_reason: 'length' }],
+        usage: { completion_tokens: 2000 },
+      }));
+      return;
+    }
+    const payload = body.messages.length > 1 ? JSON.parse(body.messages[1].content) : null;
+    const content = !payload ? { ok: true } : {
+      schema_version: 1, recommendations: [],
+      conclusion: { text: '这些端口的状态已采集。请结合配置与监听记录检查映射。',
+        evidence_ids: Object.keys(payload.facts).filter(id => id.startsWith('current:')).slice(0, 1) },
+    };
+    if (payload) assert.equal(payload.capture.language, 'zh-CN');
+    response.end(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(content) }, finish_reason: 'stop' }],
+      usage: { total_tokens: 17 },
+    }));
+  }).listen(0, '127.0.0.1');
+  await once(modelServer, 'listening');
+  const modelBase = 'http://127.0.0.1:' + modelServer.address().port + '/v1';
+  await byokPage.locator('#analysis-ai-provider').selectOption('custom');
+  await expect(byokPage.locator('#analysis-ai-base-url')).toBeVisible();
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('required', '');
+  await byokPage.locator('#analysis-ai-base-url').fill(modelBase + '/chat/completions/');
+  await byokPage.locator('#analysis-ai-model').fill('fixture-model');
+  await byokPage.locator('.analysis-settings-options summary').click();
+  await byokPage.locator('#analysis-ai-token-parameter').selectOption('max_completion_tokens');
+  await byokPage.locator('#analysis-ai-json-mode').check();
+  await byokPage.locator('#analysis-ai-key').fill('fixture-browser-custom-key');
+  await byokPage.locator('#analysis-ai-model').fill('fixture-browser-custom-key');
+  await expect(byokPage.locator('#analysis-ai-model')).toHaveValue('');
+  await expect(byokPage.locator('#analysis-ai-model-help')).toContainText('不能包含 API 密钥');
+  await expect(byokPage.locator('#analysis-ai-test')).toBeDisabled();
+  await expect(byokPage.locator('#analysis-ai-save')).toBeDisabled();
+  assert.equal(modelRequests.length, 0, 'An autofilled key cannot be sent as a model');
+  await byokPage.locator('#analysis-ai-model').fill('fixture-model');
+  await expect(byokPage.locator('#analysis-ai-test')).toBeEnabled();
+  const modelInput = await byokPage.locator('#analysis-ai-model').elementHandle();
+  const keyInput = await byokPage.locator('#analysis-ai-key').elementHandle();
+  const assertSameInputs = async () => {
+    assert.equal(await modelInput.evaluate(node => node === document.querySelector('#analysis-ai-model')), true);
+    assert.equal(await keyInput.evaluate(node => node === document.querySelector('#analysis-ai-key')), true);
+  };
+  const beforeDraftTest = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
+  await byokPage.locator('#analysis-ai-test').click();
+  await expect(byokPage.locator('.analysis-settings-status.is-ok')).toHaveText('连接成功。');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('fixture-browser-custom-key');
+  const afterDraftTest = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
+  assert.deepEqual(afterDraftTest.ai, beforeDraftTest.ai, 'Testing the draft leaves the saved connection unchanged');
+  assert.equal(modelRequests.length, 1);
+  modelOutcome = 'connection_failure';
+  await byokPage.locator('#analysis-ai-test').click();
+  const connectionErrorCopy = JSON.parse(await readFile(join(project, 'frontend/locales/zh-CN.json'), 'utf8'))
+    .analysis.messages.settings.test_error_connection;
+  await expect(byokPage.locator('.analysis-settings-status.is-error')).toHaveText(connectionErrorCopy);
+  await expect(byokPage.locator('#analysis-ai-model')).toHaveValue('fixture-model');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('fixture-browser-custom-key');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('type', 'password');
+  await assertSameInputs();
+  assert.equal(modelRequests.length, 2, 'A failed connection test is not retried');
+  // A failed save must also preserve the original password field for retry.
+  await byokPage.route(connectionWrites, route => route.fulfill({
+    status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'settings_unavailable' } }),
+  }));
+  await byokPage.locator('#analysis-ai-save').click();
+  await expect(byokPage.locator('.analysis-settings-status.is-error')).toBeVisible();
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('fixture-browser-custom-key');
+  await assertSameInputs();
+  await byokPage.unroute(connectionWrites);
+  await byokPage.locator('#analysis-ai-save').click();
+  await expect(byokPage.locator('.analysis-settings-status.is-ok')).toBeVisible();
+  await expect(byokPage.locator('#analysis-ai-base-url')).toHaveValue(modelBase);
+  await expect(byokPage.locator('#analysis-ai-model')).toHaveValue('fixture-model');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('type', 'password');
+  await expect(byokPage.locator('.analysis-settings-badge')).toHaveText('已配置');
+  await assertSameInputs();
+  const savedCustom = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
+  assert.equal(savedCustom.ai.model, 'fixture-model');
+  assert.equal(JSON.stringify(savedCustom).includes('fixture-browser-custom-key'), false);
+  assert.equal(modelRequests.length, 2, 'Saving a custom connection does not call the service');
+  modelOutcome = 'empty';
+  await byokPage.locator('#analysis-ai-test').click();
+  await expect(byokPage.locator('.analysis-settings-status.is-ok')).toHaveText('连接成功。');
+  assert.equal(modelRequests.length, 3);
+  assert.equal(modelRequests[0].body.messages.length, 1, 'A connection test sends no port evidence');
+  assert.equal(modelRequests[0].body.max_completion_tokens, 64);
+  assert.deepEqual(modelRequests[0].body.response_format, { type: 'json_object' });
+  await byokPage.locator('#analysis-ai-base-url').fill(modelBase + '/different');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('required', '');
+  await expect(byokPage.locator('#analysis-ai-test')).toBeDisabled();
+  await byokPage.locator('#analysis-ai-base-url').fill(modelBase);
+  await expect(byokPage.locator('#analysis-ai-key')).not.toHaveAttribute('required', '');
+  await expect(byokPage.locator('#analysis-ai-save')).toBeDisabled();
+  await byokPage.screenshot({ path: join(screenshots, 'ai-custom-settings-zh-CN.png'), fullPage: false });
+  await byokPage.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await byokPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await byokPage.setViewportSize({ width: 1440, height: 1100 });
+
+  await byokPage.goto(byokBase + '/#/workspace/port-analysis/port/8081', { waitUntil: 'networkidle' });
+  await capture(byokPage);
+  await expect(byokPage.locator('#analysis-ai-destination')).toContainText(modelBase);
+  await byokPage.locator('#analysis-save-report').click();
+  await expect(byokPage.locator('#analysis-recheck')).toBeEnabled();
+  const rulesVisit = await byokPage.evaluate(() => JSON.parse(sessionStorage.getItem('port-light-workbench-visit-v1')));
+  await byokPage.locator('#analysis-consent').check();
+  await byokPage.locator('#analysis-start-ai').click();
+  await expect(byokPage.locator('#analysis-ai-recommendations-empty')).toBeVisible({ timeout: 10000 });
+  await expect(byokPage.locator('#analysis-ai-conclusion')).toContainText('这些端口的状态已采集');
+  await byokPage.locator('#analysis-ai-conclusion-evidence-title').click();
+  await expect(byokPage.locator('#analysis-ai-conclusion-facts')).toContainText('8081');
+  await expect(byokPage.locator('#analysis-save-report')).toBeEnabled();
+  await byokPage.locator('#analysis-save-report').click();
+  await expect(byokPage.locator('#analysis-recheck')).toBeEnabled();
+  const aiVisit = await byokPage.evaluate(() => JSON.parse(sessionStorage.getItem('port-light-workbench-visit-v1')));
+  assert.notEqual(aiVisit.reportId, rulesVisit.reportId, 'An AI conclusion is saved as a new report revision');
+  const aiReport = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/workbench/reports/' + aiVisit.reportId));
+  assert.equal(aiReport.capture.ai.status, 'completed');
+  assert.match(aiReport.capture.ai.conclusion.text, /这些端口的状态已采集/);
+  const savedAiButton = byokPage.locator('#analysis-report-list button[data-report-id="' + aiVisit.reportId + '"]');
+  await savedAiButton.click();
+  await expect(savedAiButton).toHaveAttribute('aria-current', 'true');
+  await expect(byokPage.locator('#analysis-report-context')).toBeVisible();
+  await expect(byokPage.locator('#analysis-ai-connection-summary')).toContainText('fixture-model');
+  await expect(byokPage.locator('#analysis-consent-field')).toBeHidden();
+
+  modelOutcome = 'auth_failure';
+  await capture(byokPage);
+  await byokPage.locator('#analysis-consent').check();
+  await byokPage.locator('#analysis-start-ai').click();
+  await expect(byokPage.locator('#analysis-ai-error')).toContainText('密钥', { timeout: 10000 });
+  await expect(byokPage.locator('#analysis-manage-ai-settings')).toBeVisible();
+  await expect(byokPage.locator('#analysis-retry-ai')).toBeEnabled();
+  await expect(byokPage.locator('#analysis-save-report')).toBeEnabled();
+  await byokPage.locator('#analysis-save-report').click();
+  await expect(byokPage.locator('#analysis-recheck')).toBeEnabled();
+  const failedVisit = await byokPage.evaluate(() => JSON.parse(sessionStorage.getItem('port-light-workbench-visit-v1')));
+  const failedReport = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/workbench/reports/' + failedVisit.reportId));
+  assert.equal(failedReport.capture.ai.error.code, 'provider_auth');
+  assert.equal(modelRequests.length, 5, 'The failed attempt is not retried');
+  modelOutcome = 'empty';
+  await byokPage.goto(byokBase + '/#/workspace/port-analysis/port/9000', { waitUntil: 'networkidle' });
+  await capture(byokPage);
+  await expect(byokPage.locator('#analysis-priority-queue .problem-card')).toHaveCount(0);
+  await expect(byokPage.locator('#analysis-task-hint')).toContainText('Compose');
+  await expect(byokPage.locator('#analysis-result-scope')).toContainText('9000');
+  await expect(byokPage.locator('#analysis-observations-summary dt').first()).toHaveText('主机监听');
+  await expect(byokPage.locator('#analysis-observations-summary dd').first()).toHaveText('0');
+  await expect(byokPage.locator('#analysis-consent-field')).toBeVisible();
+  await byokPage.locator('#analysis-consent').check();
+  await byokPage.locator('#analysis-start-ai').click();
+  await expect(byokPage.locator('#analysis-ai-conclusion')).toBeVisible({ timeout: 10000 });
+  await expect(byokPage.locator('#analysis-ai-conclusion')).toContainText('这些端口的状态已采集', { timeout: 10000 });
+  assert.equal(modelRequests.length, 6, 'A normal port can be analyzed without a rule finding');
+  await byokPage.screenshot({ path: join(screenshots, 'ai-conclusion-zh-CN.png'), fullPage: true });
+  await byokPage.goto(byokBase + '/#/settings/analysis/ai', { waitUntil: 'networkidle' });
+  const firstSaved = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
+  const firstId = firstSaved.active_connection_id;
+  const savedRow = identifier => byokPage.locator('[data-connection-id="' + identifier + '"]');
+  await expect(byokPage.locator('.analysis-connection')).toHaveCount(1);
+  await expect(savedRow(firstId).locator('input[type="radio"]')).toBeChecked();
+  await expect(savedRow(firstId)).toContainText(modelBase);
+  await expect(savedRow(firstId)).toContainText('密钥已保存');
+  await byokPage.locator('#analysis-ai-add').click();
+  await expect(byokPage.locator('#analysis-ai-model')).toHaveValue('');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('');
+  await byokPage.locator('#analysis-ai-provider').selectOption('custom');
+  await byokPage.locator('#analysis-ai-base-url').fill(modelBase);
+  await byokPage.locator('#analysis-ai-model').fill('fixture-second-model');
+  await byokPage.locator('#analysis-ai-key').fill('fixture-browser-second-key');
+  await byokPage.locator('#analysis-ai-save').click();
+  await expect(byokPage.locator('.analysis-settings-status.is-ok')).toBeVisible();
+  await expect(byokPage.locator('.analysis-connection')).toHaveCount(2);
+  const twoSaved = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
+  assert.deepEqual(twoSaved.ai, firstSaved.ai, 'Adding a connection preserves the one already in use');
+  const secondId = twoSaved.connections.find(profile => profile.id !== firstId).id;
+  await expect(savedRow(secondId).locator('input[type="radio"]')).not.toBeChecked();
+  await expect(byokPage.locator('#analysis-ai-editor-target')).toContainText('fixture-second-model');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('');
+  await savedRow(secondId).locator('[data-connection-action="test"]').click();
+  await expect(byokPage.locator('.analysis-settings-status.is-ok')).toContainText('fixture-second-model');
+  assert.equal(modelRequests.length, 7);
+  assert.equal(modelRequests.at(-1).body.model, 'fixture-second-model');
+  assert.equal(modelRequests.at(-1).body.messages.length, 1);
+  const afterListTest = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
+  assert.deepEqual(afterListTest.ai, firstSaved.ai, 'Testing an inactive connection does not select it');
+  const editorKeyBeforeSelect = await byokPage.locator('#analysis-ai-key').elementHandle();
+  await savedRow(secondId).locator('input[type="radio"]').check();
+  await expect(byokPage.locator('.analysis-settings-current')).toContainText('fixture-second-model');
+  await expect(savedRow(secondId).locator('.analysis-connection-active')).toHaveText('当前使用');
+  assert.equal(await editorKeyBeforeSelect.evaluate(node => node === document.querySelector('#analysis-ai-key')), true);
+  await byokPage.locator('#analysis-ai-model').fill('fixture-second-v2');
+  await byokPage.locator('#analysis-ai-save').click();
+  await expect(byokPage.locator('.analysis-settings-status.is-ok')).toBeVisible();
+  await expect(savedRow(secondId)).toContainText('fixture-second-v2');
+  await byokPage.reload({ waitUntil: 'networkidle' });
+  await expect(byokPage.locator('.analysis-connection')).toHaveCount(2);
+  await expect(savedRow(secondId).locator('input[type="radio"]')).toBeChecked();
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveValue('');
+  await byokPage.screenshot({ path: join(screenshots, 'ai-saved-connections-zh-CN.png'), fullPage: true });
+  await byokPage.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await byokPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await expect(savedRow(secondId).locator('[data-connection-action="edit"]')).toBeVisible();
+  await byokPage.setViewportSize({ width: 1440, height: 1100 });
+  await byokPage.goto(byokBase + '/#/workspace/port-analysis/port/9000', { waitUntil: 'networkidle' });
+  await capture(byokPage);
+  await expect(byokPage.locator('#analysis-ai-connection-summary')).toContainText('fixture-second-v2');
+  await expect(byokPage.locator('#analysis-consent')).not.toBeChecked();
+  await byokPage.locator('#analysis-consent').check();
+  await byokPage.locator('#analysis-start-ai').click();
+  await expect(byokPage.locator('#analysis-ai-conclusion')).toBeVisible({ timeout: 10000 });
+  await expect(byokPage.locator('#analysis-ai-conclusion')).toContainText('这些端口的状态已采集', { timeout: 10000 });
+  assert.equal(modelRequests.length, 8);
+  assert.equal(modelRequests.at(-1).body.model, 'fixture-second-v2', 'Analysis uses the selected connection and its own key');
+  await byokPage.goto(byokBase + '/#/settings/analysis/ai', { waitUntil: 'networkidle' });
+  await savedRow(firstId).locator('input[type="radio"]').check();
+  await expect(byokPage.locator('.analysis-settings-current')).toContainText('fixture-model');
+  await byokPage.goto(byokBase + '/#/workspace/port-analysis/port/9000', { waitUntil: 'networkidle' });
+  await expect(byokPage.locator('#analysis-ai-conclusion')).toBeVisible();
+  await expect(byokPage.locator('#analysis-ai-connection-summary')).toContainText('fixture-second-v2');
+  await expect(byokPage.locator('#analysis-ai-destination')).toBeHidden();
+  assert.equal(modelRequests.length, 8, 'Changing the current connection does not rewrite or repeat a completed analysis');
+  modelOutcome = 'incomplete';
+  await capture(byokPage);
+  await byokPage.locator('#analysis-consent').check();
+  await byokPage.locator('#analysis-start-ai').click();
+  await expect(byokPage.locator('#analysis-ai-error')).toContainText('未返回完整结论', { timeout: 10000 });
+  await expect(byokPage.locator('#analysis-ai-error')).not.toContainText('格式或证据');
+  await expect(byokPage.locator('#analysis-retry-ai')).toBeEnabled();
+  await scrollToHeading(byokPage, '#analysis-ai-heading');
+  await byokPage.screenshot({ path: join(screenshots, 'ai-recovery-zh-CN.png'), fullPage: false });
+  const beforeRecovery = await byokPage.evaluate(() => JSON.parse(sessionStorage.getItem('port-light-workbench-visit-v1')));
+  const recaptured = byokPage.waitForResponse(response => response.request().method() === 'POST' &&
+    new URL(response.url()).pathname === '/analysis/api/workbench/captures');
+  await byokPage.locator('#analysis-retry-ai').click();
+  await responseJson(await recaptured, 201);
+  await expect(byokPage.locator('#analysis-ai-error')).toBeHidden();
+  await expect(byokPage.locator('#analysis-retry-ai')).toBeHidden();
+  await expect(byokPage.locator('#analysis-consent')).not.toBeChecked();
+  await expect(byokPage.locator('#analysis-start-ai')).toBeDisabled();
+  const afterRecovery = await byokPage.evaluate(() => JSON.parse(sessionStorage.getItem('port-light-workbench-visit-v1')));
+  assert.notEqual(afterRecovery.captureId, beforeRecovery.captureId);
+  assert.equal(modelRequests.length, 9, 'Recovery refreshes local data and requires new consent without resending to the model');
+  modelOutcome = 'empty';
+  await byokPage.goto(byokBase + '/#/settings/analysis/ai', { waitUntil: 'networkidle' });
+  await savedRow(secondId).locator('[data-connection-action="delete"]').click();
+  await expect(savedRow(secondId)).toContainText('删除此连接及保存的密钥');
+  await savedRow(secondId).locator('[data-connection-action="cancel-delete"]').click();
+  await expect(byokPage.locator('.analysis-connection')).toHaveCount(2);
+  await savedRow(secondId).locator('[data-connection-action="delete"]').click();
+  await savedRow(secondId).locator('[data-connection-action="confirm-delete"]').click();
+  await expect(byokPage.locator('.analysis-connection')).toHaveCount(1);
+  await expect(savedRow(firstId).locator('input[type="radio"]')).toBeChecked();
+  await savedRow(firstId).locator('[data-connection-action="delete"]').click();
+  await savedRow(firstId).locator('[data-connection-action="confirm-delete"]').click();
+  await expect(byokPage.locator('.analysis-settings-badge')).toHaveText('未配置');
   const clearedProfile = await responseJson(await byokPage.request.get(byokBase + '/analysis/api/settings'));
   assert.equal(clearedProfile.ai.configured, false);
 
+  await byokPage.route('**/analysis/api/settings', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), readonly: true } });
+  });
+  await byokPage.reload({ waitUntil: 'networkidle' });
+  await expect(byokPage.locator('#analysis-settings-ai')).toContainText('只读');
+  await expect(byokPage.locator('#analysis-ai-form')).toHaveCount(0);
+  await expect(byokPage.locator('.analysis-settings-clear')).toHaveCount(0);
+  await byokPage.unroute('**/analysis/api/settings');
+
+  await byokPage.route('**/analysis/api/settings', route => route.fulfill({ status: 503,
+    contentType: 'application/json', body: JSON.stringify({ error: { code: 'settings_unavailable' } }) }));
+  await byokPage.reload({ waitUntil: 'networkidle' });
+  await expect(byokPage.locator('#analysis-settings-ai .btn-secondary')).toContainText('重试');
+  await byokPage.unroute('**/analysis/api/settings');
+  await byokPage.locator('#analysis-settings-ai .btn-secondary').click();
+  await expect(byokPage.locator('#analysis-ai-form')).toBeVisible();
+
+  await byokPage.route('**/analysis/api/settings', async route => {
+    const response = await route.fetch();
+    const profile = { provider: 'removed-provider', model: 'old-model', configured: true, key_saved: true, revision: 'a'.repeat(32) };
+    await route.fulfill({ response, json: { ...(await response.json()),
+      ai: profile, connections: [{ id: 'a'.repeat(32), ...profile }], active_connection_id: 'a'.repeat(32),
+    } });
+  });
+  await byokPage.reload({ waitUntil: 'networkidle' });
+  await expect(byokPage.locator('.analysis-settings-badge')).toHaveText('需要更新');
+  await expect(byokPage.locator('#analysis-ai-model')).toHaveValue('');
+  await expect(byokPage.locator('#analysis-ai-key')).toHaveAttribute('required', '');
+  await byokPage.unroute('**/analysis/api/settings');
+
+  await page.goto(base + '/#/settings/analysis', { waitUntil: 'networkidle' });
+  await expect(page.locator('.analysis-settings-badge')).toBeVisible();
+  await expect(page.locator('#analysis-ai-form')).toHaveCount(0);
+
   assert.deepEqual(errors, []);
-  console.log('Workbench smoke passed: bundled workbench, synthetic runtime fixture, task/scope controls, consent invalidation, immutable reports, BYOK settings save/change/clear, live-capture settings return, revision mismatch recovery, cross-capture evidence, mobile bounds, lazy facts, retry recovery, legacy reports, seven locales, and abort handling.');
+  console.log('Workbench smoke passed: saved connection lists, selection, independent keys, edit/test/delete flows, selected-model analysis, completed-model labels, normal-port conclusions, immutable reports, consent invalidation, live-capture recovery, mobile bounds, seven locales, and abort handling.');
   if (process.env.PORT_LIGHT_SCREENSHOT_DIR) console.log('Screenshots: ' + screenshots);
 } finally {
   if (browser) await browser.close();
+  if (modelServer) await new Promise(done => modelServer.close(done));
   for (const child of children) if (child.exitCode === null) child.kill('SIGTERM');
   await Promise.all(children.map(child => child.exitCode !== null ? Promise.resolve() : once(child, 'exit')));
   await rm(temporary, { recursive: true, force: true });

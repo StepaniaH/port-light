@@ -12,6 +12,7 @@ import tempfile
 import time
 import urllib.request
 import secrets
+from functools import lru_cache
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,17 +30,78 @@ def request(port: int, path: str, body: dict | None = None, method: str | None =
         return json.load(response)
 
 
+@lru_cache(maxsize=1)
+def sample_catalogs():
+    return {locale: json.loads((ROOT / 'frontend' / 'locales' / f'{locale}.json').read_text())['preview']
+            for locale in ('en', 'zh-CN', 'zh-TW', 'de', 'es', 'fr', 'ja')}
+
+
+def localize_samples(document, locale):
+    """Translate unchanged example text, preserving user edits and technical values."""
+    catalogs = sample_catalogs()
+    selected = catalogs.get(locale, catalogs['en'])
+    translations = {text: selected[key] for catalog in catalogs.values() for key, text in catalog.items()}
+    fields = {'name', 'description', 'host_name', 'host_description', 'label', 'manual_label'}
+
+    def visit(value, field=None):
+        if isinstance(value, dict):
+            return {key: visit(item, key) for key, item in value.items()}
+        if isinstance(value, list):
+            return [visit(item, field) for item in value]
+        if isinstance(value, str) and field in fields:
+            return translations.get(value, value)
+        return value
+
+    return visit(document)
+
+
+def create_app():
+    import backend.main as core
+    from backend import settings
+    from starlette.responses import JSONResponse
+
+    @core.app.middleware('http')
+    async def localized_examples(request, call_next):
+        if not request.url.path.startswith('/api/'):
+            return await call_next(request)
+        # Sample names depend on the selected language as well as occupancy.
+        request.scope['headers'] = [(key, value) for key, value in request.scope['headers']
+                                    if key.lower() != b'if-none-match']
+        response = await call_next(request)
+        if not response.headers.get('content-type', '').startswith('application/json'):
+            return response
+        body = b''.join([chunk async for chunk in response.body_iterator])
+        locale = settings.resolve()[0]['locale']
+        if locale == 'auto':
+            requested = [item.split(';')[0].strip() for item in request.headers.get('accept-language', 'en').split(',')]
+            locale = next((item if item in sample_catalogs() else item.split('-')[0]
+                           for item in requested if item in sample_catalogs() or item.split('-')[0] in sample_catalogs()), 'en')
+        headers = {key: value for key, value in response.headers.items()
+                   if key.lower() not in {'content-length', 'etag'}}
+        headers['Cache-Control'] = 'no-store'
+        document = localize_samples(json.loads(body), locale)
+        if request.url.path == '/api/meta' and response.status_code == 200:
+            document['preview'] = {'samples': sample_catalogs()}
+        return JSONResponse(document,
+                            status_code=response.status_code, headers=headers)
+
+    return core.app
+
+
 def run_worker(data: str, port: int):
-    import backend.main as app
+    application = create_app()
+    import backend.main as core
     from backend.port_scanner import ListeningPort
     import uvicorn
     listeners = json.loads((Path(data) / 'listeners.json').read_text())
-    app.scan_listening_ports = lambda **kwargs: [ListeningPort(p, 'tcp', '127.0.0.1' if p in (5432, 6379) else '0.0.0.0', name) for p, name in listeners]
-    app.host_listen_trusted = lambda: True
-    uvicorn.run(app.app, host='127.0.0.1', port=port, log_level='warning')
+    core.scan_listening_ports = lambda **kwargs: [ListeningPort(p, 'tcp', '127.0.0.1' if p in (5432, 6379) else '0.0.0.0', name) for p, name in listeners]
+    core.host_listen_trusted = lambda: True
+    uvicorn.run(application, host='127.0.0.1', port=port, log_level='warning')
 
 
 def run_fleet(port: int) -> int:
+    from scripts.dev import configure_ai_proxy
+
     children = []
     ports = [port]
     for _ in PROFILES[1:]:
@@ -75,6 +137,7 @@ def run_fleet(port: int) -> int:
                     'PORT_LIGHT_', 'AUTH_', 'HIDDEN_', 'AGENT_', 'WEBHOOK_', 'COMPOSE_', 'DOCKER_', 'URL_', 'PORT_RANGE_', 'HISTORY_'))}
                 env.update(PORT_LIGHT_DATA_DIR=str(data), COMPOSE_SCAN_DIR=str(compose), PORT_LIGHT_SETTINGS_SOURCE='file',
                     PORT_LIGHT_SCANNERS='listen,compose', HISTORY_RETENTION_DAYS='0', PORT_LIGHT_PORT=str(ports[index]))
+                configure_ai_proxy(env)
                 children.append(subprocess.Popen([sys.executable, '-m', 'scripts.preview_fleet', str(data), str(ports[index])], cwd=ROOT, env=env))
             for index, host_port in enumerate(ports):
                 for attempt in range(100):

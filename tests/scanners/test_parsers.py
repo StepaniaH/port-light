@@ -1803,13 +1803,13 @@ def test_parse_lsof_line_variants():
     assert parse_lsof_line("") is None
 
     v4 = parse_lsof_line(
-        "rapportd  912 stepaniah   10u  IPv4 0xabc      0t0  TCP *:49152 (LISTEN)"
+        "rapportd  912 exampleuser   10u  IPv4 0xabc      0t0  TCP *:49152 (LISTEN)"
     )
     assert v4 == ListeningPort(port=49152, protocol="tcp", ip="0.0.0.0",
                                process_name="rapportd", pid=912)
 
     loop = parse_lsof_line(
-        "Python  40905 stepaniah   12u  IPv4 0xdef      0t0  TCP 127.0.0.1:2100 (LISTEN)"
+        "Python  40905 exampleuser   12u  IPv4 0xdef      0t0  TCP 127.0.0.1:2100 (LISTEN)"
     )
     assert loop and loop.ip == "127.0.0.1" and loop.port == 2100
 
@@ -1819,7 +1819,7 @@ def test_parse_lsof_line_variants():
     assert v6 and v6.protocol == "tcp6" and v6.ip == "fe80::1" and v6.port == 443
 
     udp = parse_lsof_line(
-        "mDNSRespo  401 stepaniah   20u  IPv4 0x222      0t0  UDP *:5353"
+        "mDNSRespo  401 exampleuser   20u  IPv4 0x222      0t0  UDP *:5353"
     )
     assert udp and udp.protocol == "udp" and udp.port == 5353
 

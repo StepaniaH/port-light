@@ -1,23 +1,24 @@
-import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=103';
-export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=103';
-import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=103';
-export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=103';
-import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=103';
-export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=103';
-import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=103';
-export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=103';
-/* Settings view: four panels, locale menu, theme picker, peers editor. */
+import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=121';
+export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=121';
+import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=121';
+export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=121';
+import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=121';
+export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=121';
+import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows, testPeerConnection } from './settings-peers.js?v=121';
+export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=121';
+/* Settings panels, locale menu, theme picker, and peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=103';
-import { t, escapeHtml, errorText } from './text.js?v=103';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=103';
-import { api, fetchHosts, fetchSettings } from './api.js?v=103';
-import { bindAddressView } from './grid.js?v=103';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=103';
-import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=103';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=121';
+import { t, escapeHtml, errorText } from './text.js?v=121';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=121';
+import { api, fetchHosts, fetchSettings } from './api.js?v=121';
+import { bindAddressView } from './grid.js?v=121';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=121';
+import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=121';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
+let settingsLoadGeneration = 0;
 
 function setPageStatus(id, key, className, clearAfter) {
   const status = document.getElementById(id);
@@ -52,7 +53,6 @@ function resetDraftState(doc) {
     S.settingsDraft.port_range_end = S.rangeEnd;
   }
   S.settingsDirtyKeys = new Set();
-  S.settingsResetKeys = new Set();
   S.settingsSubmittingKeys = new Set();
   S.settingsKeyRevisions = {};
   S.peersDirty = false;
@@ -108,13 +108,17 @@ function settingValuesEqual(left, right) {
 }
 
   export function loadSettingsPage() {
+    const generation = ++settingsLoadGeneration;
     if (S.settingsDirty) {
       showSettingsPanel(S.settingsPanel);
       return Promise.resolve();
     }
+    // Clear the old AI form before loading the parent settings. Otherwise a
+    // connection edit can land on controls that the response is about to replace.
+    closeAnalysisSettings();
     const loadRevision = S.settingsRevision;
     return Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
-      if (S.settingsDirty || loadRevision !== S.settingsRevision) return;
+      if (generation !== settingsLoadGeneration || S.settingsDirty || loadRevision !== S.settingsRevision) return;
       const doc = pair[0];
       if (pair[1]) S.hostCatalog = pair[1];
       if (!doc) return;
@@ -243,6 +247,14 @@ function settingValuesEqual(left, right) {
     document.querySelectorAll('#settings-fields .settings-panel').forEach(function (panel) {
       panel.hidden = panel.getAttribute('data-settings-panel') !== id;
     });
+    const nav = document.getElementById('settings-nav');
+    const selected = document.getElementById('settings-tab-' + id);
+    if (nav && selected && nav.scrollWidth > nav.clientWidth) {
+      const edge = nav.getBoundingClientRect();
+      const tab = selected.getBoundingClientRect();
+      if (tab.left < edge.left + 14) nav.scrollLeft -= edge.left + 14 - tab.left;
+      else if (tab.right > edge.right - 14) nav.scrollLeft += tab.right - edge.right + 14;
+    }
     if (id === 'analysis') syncAnalysisSettings(S.route?.analysisSection);
     else closeAnalysisSettings();
     if (resetScroll) window.scrollTo(0, 0);
@@ -292,7 +304,6 @@ function settingValuesEqual(left, right) {
     const key = updateDraftForInput(input);
     S.settingsRevision += 1;
     if (key) {
-      S.settingsResetKeys.delete(key);
       const matchesConfirmed = settingValuesEqual(S.settingsDraft[key], S.settingsConfirmed[key]);
       if (matchesConfirmed && !S.settingsSubmittingKeys.has(key)) {
         S.settingsDirtyKeys.delete(key);
@@ -341,42 +352,7 @@ function settingValuesEqual(left, right) {
     persistAppearance();
   }
 
-  function originMetaContents(f) {
-    const sourceKey = f.origin === 'file' ? 'settings.origin.saved'
-      : f.origin === 'env' ? 'settings.origin.env' : '';
-    const source = sourceKey
-      ? '<span class="origin-hint" data-i18n="' + sourceKey + '" title="' + escapeHtml(f.env || '') + '">' + escapeHtml(t(sourceKey)) + '</span>'
-      : '';
-    const reset = f.can_reset
-      ? '<button type="button" class="setting-reset" data-reset-setting="' + escapeHtml(f.key) +
-        '" data-i18n="settings.origin.restore">' + escapeHtml(t('settings.origin.restore')) + '</button>'
-      : '';
-    return source + reset;
-  }
-
-  export function originHint(f) {
-    const contents = originMetaContents(f);
-    return contents ? '<span class="setting-meta">' + contents + '</span>' : '';
-  }
-
   export function syncSettingsMetadata(doc) {
-    (doc.fields || []).forEach(function (field) {
-      if (field.key === 'show_bind_addresses' || BIND_FAMILY_KEYS.includes(field.key)) return;
-      const row = document.querySelector('[data-setting="' + field.key + '"]');
-      if (!row) return;
-      let meta = row.querySelector('.setting-meta');
-      const contents = originMetaContents(field);
-      if (!contents) {
-        if (meta) meta.remove();
-        return;
-      }
-      if (!meta) {
-        meta = document.createElement('span');
-        meta.className = 'setting-meta';
-        (row.querySelector('.setting-control') || row).appendChild(meta);
-      }
-      meta.innerHTML = contents;
-    });
     document.querySelectorAll('.scanner-option').forEach(function (option) {
       const input = option.querySelector('input');
       const badge = option.querySelector('.scanner-state');
@@ -415,7 +391,7 @@ function settingValuesEqual(left, right) {
   }
 
   function themeTargetsHtml() {
-    return ['<option value="">' + escapeHtml(t('settings.editor.new')) + '</option>']
+      return ['<option value="" data-i18n="settings.editor.new">' + escapeHtml(t('settings.editor.new')) + '</option>']
       .concat((S.customThemes || []).map(function (th) {
         return '<option value="' + escapeHtml(th.id) + '">' + escapeHtml(th.name) + '</option>';
       })).join('');
@@ -427,26 +403,28 @@ function settingValuesEqual(left, right) {
       return '<div class="editor-row"><label for="ed-' + row.key + '" data-i18n="' + row.labelKey + '">' +
         escapeHtml(t(row.labelKey)) + '</label>' +
         '<input type="color" id="ed-' + row.key + '" data-editor-color="' + row.key + '" value="#000000"' + dis + '>' +
-        '<input type="text" class="range-input" maxlength="9" data-editor-hex="' + row.key + '" value="#000000"' + dis + '>' +
+        '<input type="text" class="range-input" maxlength="9" data-editor-hex="' + row.key + '" aria-label="' +
+        escapeHtml(t(row.labelKey)) + '" data-i18n-aria="' + row.labelKey + '" spellcheck="false" value="#000000"' + dis + '>' +
         '</div>';
     }).join('');
     return '<details id="theme-editor"><summary data-i18n="settings.editor.summary">' +
       escapeHtml(t('settings.editor.summary')) + '</summary>' +
       '<p class="muted" data-i18n="settings.editor.hint">' + escapeHtml(t('settings.editor.hint')) + '</p>' +
       '<div class="editor-actions">' +
-      '<button type="button" class="btn-secondary" data-editor-preset' + dis + '>' +
+      '<button type="button" class="btn-secondary" data-editor-preset data-i18n="settings.editor.preset"' + dis + '>' +
       escapeHtml(t('settings.editor.preset')) + '</button>' +
-      '<select class="dropdown" id="editor-target"' + dis + '>' + themeTargetsHtml() + '</select>' +
+      '<select class="dropdown" id="editor-target" aria-label="' + escapeHtml(t('settings.editor.target')) + '" data-i18n-aria="settings.editor.target"' + dis + '>' + themeTargetsHtml() + '</select>' +
       '<input type="text" class="range-input" id="editor-name" maxlength="40" placeholder="' +
-      escapeHtml(t('modal.optional')) + '"' + dis + '>' +
-      '<button type="button" class="btn-secondary" data-editor-export' + dis + '>' +
+      escapeHtml(t('settings.editor.name')) + '" data-i18n-placeholder="settings.editor.name" aria-label="' +
+      escapeHtml(t('settings.editor.name')) + '" data-i18n-aria="settings.editor.name"' + dis + '>' +
+      '<button type="button" class="btn-secondary" data-editor-export data-i18n="settings.editor.export"' + dis + '>' +
       escapeHtml(t('settings.editor.export')) + '</button>' +
       '<input type="file" id="editor-file" accept=".json,application/json" hidden' + dis + '>' +
-      '<button type="button" class="btn-secondary" data-editor-import' + dis + '>' +
+      '<button type="button" class="btn-secondary" data-editor-import data-i18n="settings.editor.import"' + dis + '>' +
       escapeHtml(t('settings.editor.import')) + '</button>' +
-      '<button type="button" class="btn-primary" data-editor-save' + dis + '>' +
+      '<button type="button" class="btn-primary" data-editor-save data-i18n="settings.editor.save"' + dis + '>' +
       escapeHtml(t('settings.editor.save')) + '</button>' +
-      '</div>' + rows + '</details><p id="theme-editor-status" class="action-status" role="status" aria-live="polite"></p>';
+      '</div><div class="editor-grid">' + rows + '</div></details><p id="theme-editor-status" class="action-status" role="status" aria-live="polite"></p>';
   }
 
   function rgbToHex(raw) {
@@ -465,6 +443,8 @@ function settingValuesEqual(left, right) {
   };
 
   export function fillEditorFromPreset() {
+    const editor = document.getElementById('theme-editor');
+    if (editor) editor.dataset.initialized = '1';
     const cs = getComputedStyle(document.documentElement);
     EDITOR_VARS.forEach(function (row) {
       const hex = rgbToHex(cs.getPropertyValue(CUSTOM_CSS_NAMES[row.key]));
@@ -509,7 +489,7 @@ function settingValuesEqual(left, right) {
     const control = document.querySelector('[data-setting="theme_palette"] .setting-control');
     if (control && paletteField) {
       control.innerHTML = renderPalettePicker(paletteField.choices || [], S.settings.theme_palette || '', currentMode(),
-        S.settingsDoc.readonly ? ' disabled' : '') + originHint(paletteField);
+        S.settingsDoc.readonly ? ' disabled' : '');
     }
     const target = document.getElementById('editor-target');
     if (target) {
@@ -623,7 +603,7 @@ function settingValuesEqual(left, right) {
       '<legend class="setting-copy"><span class="setting-label" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' +
       escapeHtml(fieldHelp(f)) + '</span></legend><div class="setting-control scanner-options">' + rows +
-      invalid + originHint(f) + '</div></fieldset>';
+      invalid + '</div></fieldset>';
   }
 
   function renderHostLayoutPicker(f, value, disabled) {
@@ -701,66 +681,10 @@ function settingValuesEqual(left, right) {
     }
     const wide = ['theme_mode', 'theme_palette', 'host_layout', 'refresh_ms', 'host_description'].includes(f.key) ? ' is-wide' : '';
     const composeOption = f.key.indexOf('compose_scan_') === 0 ? ' data-compose-option' : '';
-    const sourceHint = f.key === 'show_bind_addresses' || BIND_FAMILY_KEYS.includes(f.key)
-      ? '' : originHint(f);
     return '<' + tag + ' class="setting-row' + wide + '" data-setting="' + escapeHtml(f.key) + '"' + composeOption + '><span class="setting-copy"><span class="setting-label" id="' + escapeHtml(labelId) + '" data-i18n="settings.fields.' + f.key + '.label">' +
       escapeHtml(fieldLabel(f)) + '</span><span class="field-help" data-i18n="settings.fields.' + f.key + '.help">' + escapeHtml(fieldHelp(f)) +
-      '</span></span><span class="setting-control">' + control + sourceHint +
+      '</span></span><span class="setting-control">' + control +
       '</span></' + tag + '>';
-  }
-
-  function setFieldControlValue(field, value) {
-    const form = document.getElementById('settings-form');
-    if (!form || !field) return;
-    if (field.type === 'multi_choice') {
-      form.querySelectorAll('input[name="' + field.key + '"]').forEach(function (input) {
-        input.checked = Array.isArray(value) && value.indexOf(input.value) >= 0;
-      });
-      return;
-    }
-    if (field.type === 'choice') {
-      form.querySelectorAll('input[type="radio"][name="' + field.key + '"]').forEach(function (input) {
-        input.checked = input.value === value;
-      });
-    }
-    const el = form.elements[field.key];
-    if (!el) return;
-    if (field.type === 'bool') el.checked = !!value;
-    else if (field.type === 'string_list') el.value = Array.isArray(value) ? value.join('\n') : '';
-    else el.value = value == null ? '' : String(value);
-    if (field.key === 'refresh_ms') {
-      const hidden = document.querySelector('[data-refresh-hidden]');
-      const slider = document.querySelector('[data-refresh-slider]');
-      if (hidden) hidden.value = String(value);
-      if (slider) {
-        const choices = String(slider.getAttribute('data-refresh-values') || '').split(',').map(Number);
-        const index = choices.indexOf(Number(value));
-        if (index >= 0) {
-          slider.value = String(index);
-          updateRefreshSlider(slider);
-        }
-      }
-    }
-  }
-
-  export function restoreInheritedSetting(key) {
-    const field = fieldByKey(key);
-    if (!field || !field.can_reset || (S.settingsDoc && S.settingsDoc.readonly)) return false;
-    setFieldControlValue(field, field.inherited_value);
-    S.settingsRevision += 1;
-    S.settingsDraft[key] = field.inherited_value;
-    S.settingsDirtyKeys.add(key);
-    S.settingsResetKeys.add(key);
-    S.settingsKeyRevisions[key] = S.settingsRevision;
-    if (LIVE_APPLY_KEYS.indexOf(key) >= 0) {
-      S.settings[key] = field.inherited_value;
-      applyAppearance();
-      if (key === 'theme_mode') syncPaletteAvailability();
-    }
-    syncDirtyFlag();
-    syncDependentSettings();
-    setPageStatus('settings-status', 'settings.unsaved', '', 0);
-    return true;
   }
 
   let _themeDelegated = false;
@@ -803,6 +727,10 @@ function settingValuesEqual(left, right) {
         setPageStatus('theme-editor-status', 'settings.editor.deleteFailed', 'action-status is-error', 0);
       }
     });
+    document.addEventListener('toggle', function (event) {
+      const editor = event.target;
+      if (editor.id === 'theme-editor' && editor.open && !editor.dataset.initialized) fillEditorFromPreset();
+    }, true);
     /* The file input and hex rows are rebuilt on every renderSettingsForm, so
        these two are wired as document-level delegates rather than bound to
        today's elements. */
@@ -891,7 +819,7 @@ function settingValuesEqual(left, right) {
     const status = document.getElementById('settings-status');
     status.className = '';
     status.textContent = doc.readonly ? '' : t('settings.autosave');
-    lead.textContent = t(doc.readonly ? 'settings.leadReadonly' : 'settings.lead');
+    lead.textContent = doc.readonly ? t('settings.leadReadonly') : '';
 
     const byGroup = {};
     const groupOrder = [];
@@ -934,24 +862,24 @@ function settingValuesEqual(left, right) {
 
     host.innerHTML =
       settingsPanelHtml('appearance',
-        settingsCard('settings.sections.language.title', 'settings.sections.language.blurb',
-          rowsFor(languageFields)) +
-        settingsCard('settings.sections.theme.title', 'settings.sections.theme.blurb',
-          '<div data-appearance-section="theme">' + rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
+        settingsCard('settings.groups.appearance.title', 'settings.groups.appearance.blurb',
+          rowsFor(languageFields) + '<div data-appearance-section="theme">' +
+          rowsFor(themeFields) + themeEditorHtml(!!doc.readonly) + '</div>') +
         settingsCard('settings.cards.title', 'settings.cards.blurb',
           rowsFor(layoutFields) + rowsFor(densityFields) + displayPreviewHtml() + rowsFor(primaryCardFields) + bindFamilyOptions)) +
       settingsPanelHtml('occupancy',
+        settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || []))) +
+      settingsPanelHtml('hosts',
         settingsCard('settings.groups.local.title', 'settings.groups.local.blurb', rowsFor(byGroup.local || [])) +
-        settingsCard('settings.groups.grid.title', 'settings.groups.grid.blurb', rowsFor(byGroup.grid || [])) +
-        settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || [])) +
-        settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div><p id="peers-status" class="action-status" role="status" aria-live="polite"></p>')) +
+        settingsCard('hosts.title', 'hosts.blurb', '<div id="settings-peers"></div><p id="peers-status" class="action-status" role="status" aria-live="polite"></p>') +
+        settingsCard('settings.groups.scanning.title', 'settings.groups.scanning.blurb', rowsFor(byGroup.scanning || []))) +
       settingsPanelHtml('automation', automationCardsHtml(S.meta && S.meta.automation ? S.meta.automation : {})) +
       settingsPanelHtml('analysis', analysisCardsHtml()) +
       settingsPanelHtml('advanced',
         settingsCard('action.doctor', 'doctor.lead', '<div class="settings-diagnostics"><a href="#/doctor" id="btn-doctor" class="btn-secondary" data-i18n="doctor.refresh">' + escapeHtml(t('doctor.refresh')) + '</a></div>') +
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
         extraAdvanced +
-        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div>'));
+        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div><p class="settings-source-note" data-i18n="settings.lead">' + escapeHtml(t('settings.lead')) + '</p>'));
 
     const env = doc.env_only || {};
     const envHost = document.getElementById('settings-env-only');
@@ -985,10 +913,6 @@ function settingValuesEqual(left, right) {
     for (const key of keys) {
       const field = fieldByKey(key);
       if (!field) continue;
-      if (S.settingsResetKeys.has(key)) {
-        patch[key] = null;
-        continue;
-      }
       const value = readFieldValue(field);
       S.settingsDraft[key] = value;
       if (field.type === 'multi_choice' && !value.length) {
@@ -1025,7 +949,6 @@ function settingValuesEqual(left, right) {
       S.settingsSubmittingKeys.delete(key);
       if (S.settingsKeyRevisions[key] === revisions[key]) {
         S.settingsDirtyKeys.delete(key);
-        S.settingsResetKeys.delete(key);
         S.settingsDraft[key] = body.values[key];
       }
     });
@@ -1122,7 +1045,10 @@ function settingValuesEqual(left, right) {
     S.peersSubmitting = false;
     if (!res.ok) {
       const status = document.getElementById('peers-status');
-      if (status) { status.className = 'action-status is-error'; status.textContent = errorText(body, res.status); }
+      if (status) {
+        status.className = 'action-status is-error';
+        status.textContent = body.detail === 'credentials_required' ? t('hosts.testCredentials') : errorText(body, res.status);
+      }
       return false;
     }
     S.hostCatalog = {
@@ -1154,6 +1080,10 @@ function settingValuesEqual(left, right) {
     if (!root) throw new Error('settings root is required');
     const nav = document.getElementById('settings-nav');
     const fields = document.getElementById('settings-fields');
+    const compactNav = window.matchMedia('(max-width: 760px)');
+    const syncNavOrientation = () => nav.setAttribute('aria-orientation', compactNav.matches ? 'horizontal' : 'vertical');
+    syncNavOrientation();
+    compactNav.addEventListener?.('change', syncNavOrientation);
     let settingsTimer = null;
     let peersTimer = null;
     let settingsQueue = Promise.resolve(false);
@@ -1193,7 +1123,7 @@ function settingValuesEqual(left, right) {
         rerenderAnalysis();
         if (S.settingsDoc) {
           const lead = document.getElementById('settings-lead');
-          if (lead) lead.textContent = t(S.settingsDoc.readonly ? 'settings.leadReadonly' : 'settings.lead');
+          if (lead) lead.textContent = S.settingsDoc.readonly ? t('settings.leadReadonly') : '';
         }
         if (options.onLocaleApplied) options.onLocaleApplied();
       });
@@ -1253,16 +1183,6 @@ function settingValuesEqual(left, right) {
       scheduleSettings(700);
     });
     fields.addEventListener('click', function (event) {
-      const reset = event.target.closest('[data-reset-setting]');
-      if (reset) {
-        event.preventDefault();
-        const key = reset.getAttribute('data-reset-setting');
-        if (!restoreInheritedSetting(key)) return;
-        if (key === 'locale') applyLocale();
-        if (CARD_FIELD_KEYS[key]) updateDisplayPreview();
-        scheduleSettings(0);
-        return;
-      }
       const add = event.target.closest('#peer-add');
       if (add) {
         event.preventDefault();
@@ -1275,6 +1195,11 @@ function settingValuesEqual(left, right) {
         return;
       }
       const row = event.target.closest('.peer-row');
+      if (row && event.target.closest('[data-peer-test]')) {
+        event.preventDefault();
+        testPeerConnection(row);
+        return;
+      }
       if (row && event.target.closest('[data-peer-remove]')) {
         event.preventDefault();
         readPeersDraftFromForm();
@@ -1344,7 +1269,7 @@ function settingValuesEqual(left, right) {
         return loadSettingsPage();
       },
       show(section) { showSettingsPanel(section, true); },
-      close() { closeAnalysisSettings(); },
+      close() { settingsLoadGeneration += 1; closeAnalysisSettings(); },
       syncPaletteAvailability,
       closeTransient(opts) { return closeLocaleMenu(opts); },
       hasPending() {

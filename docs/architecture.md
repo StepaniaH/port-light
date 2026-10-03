@@ -168,7 +168,7 @@ The Nord, Dracula, and Tokyo Night light palettes adapt colors from [Navidrome S
 
 ## Why not Kubernetes / remote Docker
 
-Remote `DOCKER_HOST`, Swarm, and Kubernetes need a different agent. See [roadmap.md](roadmap.md).
+Remote `DOCKER_HOST`, Swarm, and Kubernetes need a different agent. See [project scope](../CONTRIBUTING.md#scope).
 
 ## Allocation and authentication failure boundaries
 

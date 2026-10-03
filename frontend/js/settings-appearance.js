@@ -1,7 +1,7 @@
 /* Locale menu and theme selection controls. */
-import { S, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable } from './state.js?v=103';
-import { t, escapeHtml } from './text.js?v=103';
-import { choiceLabel } from './settings-format.js?v=103';
+import { S, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable } from './state.js?v=121';
+import { t, escapeHtml } from './text.js?v=121';
+import { choiceLabel } from './settings-format.js?v=121';
 
   export function localeCopyHtml(c) {
     var native;
@@ -66,8 +66,10 @@ import { choiceLabel } from './settings-format.js?v=103';
     }).join('');
     return '<div class="locale-dropdown">' +
       '<input type="hidden" name="locale" value="' + escapeHtml(current) + '"' + disabled + '>' +
-      '<button type="button" class="locale-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="locale-menu" aria-label="' +
+      '<button type="button" class="locale-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="locale-menu" data-i18n-aria="settings.fields.locale.label" aria-label="' +
       label + '"' + disabled + '>' +
+      '<svg class="locale-globe" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+      '<circle cx="10" cy="10" r="8"></circle><path d="M2 10h16M10 2c2.2 2.2 3.3 4.9 3.3 8S12.2 15.8 10 18M10 2c-2.2 2.2-3.3 4.9-3.3 8S7.8 15.8 10 18"></path></svg>' +
       localeCopyHtml(current) + '<span class="locale-caret" aria-hidden="true"></span></button>' +
       '<div class="locale-menu" id="locale-menu" role="listbox" aria-label="' + label + '">' + rows + '</div></div>';
   }
@@ -89,7 +91,7 @@ import { choiceLabel } from './settings-format.js?v=103';
     const current = choices.indexOf(value) >= 0 ? value : 'system';
     const label = escapeHtml(t('settings.fields.theme_mode.label'));
     const core = CORE_THEMES.filter(function (c) { return choices.indexOf(c) >= 0; });
-    return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' +
+    return '<div class="theme-picker" role="radiogroup" data-i18n-aria="settings.fields.theme_mode.label" aria-label="' + label + '">' +
       '<div class="theme-picker-core">' + core.map(function (c) {
         return modeSwatch(c, current, disabled);
       }).join('') + '</div></div>';
@@ -154,9 +156,7 @@ import { choiceLabel } from './settings-format.js?v=103';
 
     const customs = S.customThemes || [];
 
-    return '<div class="theme-picker" role="radiogroup" aria-label="' + label + '">' +
-      '<p class="theme-picker-label" data-i18n="settings.theme.palettes">' +
-      escapeHtml(t('settings.theme.palettes')) + '</p>' +
+    return '<div class="theme-picker" role="radiogroup" data-i18n-aria="settings.fields.theme_palette.label" aria-label="' + label + '">' +
       '<div class="theme-picker-palettes">' + entry('').concat(families.map(entry).join(''), customs.map(customEntry).join('')) + '</div></div>';
   }
 

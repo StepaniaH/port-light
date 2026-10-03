@@ -26,7 +26,7 @@
       }
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="/static/style.css?v=103">
+  <link rel="stylesheet" href="/static/style.css?v=121">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -170,7 +170,10 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
                 <span data-i18n="action.showHidden"></span></button>
             </div>
           </div>
-          <a href="#/settings" id="btn-settings" class="toolbar-btn" data-nav="settings" data-i18n-title="action.settings">
+          <a href="#/settings/appearance" id="btn-language" class="toolbar-btn language-shortcut" title="Language / 语言" aria-label="Language / 语言">
+            <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="8"></circle><path d="M2 10h16M10 2c2.2 2.2 3.3 4.9 3.3 8S12.2 15.8 10 18M10 2c-2.2 2.2-3.3 4.9-3.3 8S7.8 15.8 10 18"></path></svg>
+          </a>
+          <a href="#/settings" id="btn-settings" class="toolbar-btn" data-nav="settings" data-i18n-title="action.settings" data-i18n-aria="action.settings">
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5.87-2.13.9.52a.75.75 0 0 1 .28 1.02l-.7 1.21a.75.75 0 0 1-.95.32l-1.04-.4a5.03 5.03 0 0 1-1.13.65l-.16 1.1A.75.75 0 0 1 9.32 14H6.68a.75.75 0 0 1-.74-.64l-.16-1.1a5.03 5.03 0 0 1-1.13-.65l-1.04.4a.75.75 0 0 1-.95-.32l-.7-1.21a.75.75 0 0 1 .28-1.02l.9-.52a5.1 5.1 0 0 1 0-1.74l-.9-.52a.75.75 0 0 1-.28-1.02l.7-1.21a.75.75 0 0 1 .95-.32l1.04.4c.35-.27.73-.5 1.13-.65l.16-1.1A.75.75 0 0 1 6.68 2h2.64a.75.75 0 0 1 .74.64l.16 1.1c.4.15.78.38 1.13.65l1.04-.4a.75.75 0 0 1 .95.32l.7 1.21a.75.75 0 0 1-.28 1.02l-.9.52c.08.57.08 1.17 0 1.74z"/></svg>
           <span data-i18n="action.settings"></span></a>
         </div>
@@ -220,21 +223,22 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
 
     <section id="view-settings" class="view hidden">
       <form id="settings-form" class="settings-page" autocomplete="off" tabindex="-1">
-        <div class="page-intro">
-          <h1 data-i18n="settings.title">Settings</h1>
-          <p class="settings-lead" id="settings-lead"></p>
+        <div class="page-intro settings-intro">
+          <div><h1 data-i18n="settings.title">Settings</h1>
+          <p class="settings-lead" id="settings-lead"></p></div>
         </div>
+        <aside class="settings-sidebar">
         <nav id="settings-nav" class="settings-nav" role="tablist" data-i18n-aria="settings.nav.label">
           <button type="button" role="tab" id="settings-tab-appearance" data-settings-panel="appearance" aria-controls="settings-panel-appearance" aria-selected="true" tabindex="0" data-i18n="settings.nav.appearance">Appearance</button>
           <button type="button" role="tab" id="settings-tab-occupancy" data-settings-panel="occupancy" aria-controls="settings-panel-occupancy" aria-selected="false" tabindex="-1" data-i18n="settings.nav.occupancy">Occupancy</button>
+          <button type="button" role="tab" id="settings-tab-hosts" data-settings-panel="hosts" aria-controls="settings-panel-hosts" aria-selected="false" tabindex="-1" data-i18n="settings.nav.hosts">Machines &amp; scanning</button>
           <button type="button" role="tab" id="settings-tab-automation" data-settings-panel="automation" aria-controls="settings-panel-automation" aria-selected="false" tabindex="-1" data-i18n="settings.nav.automation">Automation</button>
           <button type="button" role="tab" id="settings-tab-analysis" data-settings-panel="analysis" aria-controls="settings-panel-analysis" aria-selected="false" tabindex="-1" data-i18n="analysis.title">AI</button>
           <button type="button" role="tab" id="settings-tab-advanced" data-settings-panel="advanced" aria-controls="settings-panel-advanced" aria-selected="false" tabindex="-1" data-i18n="settings.nav.advanced">Advanced</button>
         </nav>
+        <div class="settings-footer"><span id="settings-status" role="status" aria-live="polite"></span></div>
+        </aside>
         <div id="settings-fields"></div>
-        <div class="settings-footer">
-          <span id="settings-status" role="status" aria-live="polite"></span>
-        </div>
       </form>
     </section>
 
@@ -244,18 +248,18 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
 
     <section id="view-doctor" class="view hidden">
       <main id="doctor-page" class="doctor-page" tabindex="-1">
-        <div class="page-intro">
-          <a class="settings-backlink" href="#/settings/advanced" data-i18n="action.settings">Settings</a>
+        <a class="settings-backlink" href="#/settings/advanced" data-i18n="action.settings">Settings</a>
+        <div class="page-intro doctor-intro"><div>
           <h1 data-i18n="doctor.title">Doctor</h1>
           <p class="settings-lead" data-i18n="doctor.lead">Check setup health and create a sanitized diagnostic report.</p>
-        </div>
-        <div class="doctor-actions">
-          <button type="button" class="btn-secondary" id="doctor-refresh" data-i18n="doctor.refresh">Run checks</button>
-          <button type="button" class="btn-secondary" id="doctor-copy" data-i18n="doctor.copy" disabled>Copy sanitized report</button>
-          <a class="btn-secondary" id="doctor-download" href="/api/doctor/report" download data-i18n="doctor.download">Download report</a>
+          </div><button type="button" class="btn-primary" id="doctor-refresh" data-i18n="doctor.refresh">Run checks</button>
         </div>
         <p id="doctor-status" class="action-status" role="status" aria-live="polite"></p>
         <div id="doctor-results"></div>
+        <div class="doctor-actions" role="group" data-i18n-aria="doctor.reportActions">
+          <button type="button" class="btn-secondary" id="doctor-copy" data-i18n="doctor.copy" disabled>Copy sanitized report</button>
+          <a class="btn-secondary" id="doctor-download" href="/api/doctor/report" download data-i18n="doctor.download">Download report</a>
+        </div>
       </main>
     </section>
 
@@ -315,7 +319,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=103"></script>
-  <script type="module" src="/static/js/app.js?v=103"></script>
+  <script src="/static/i18n.js?v=121"></script>
+  <script type="module" src="/static/js/app.js?v=121"></script>
 </body>
 </html>

@@ -13,7 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .analysis import Analysis, report_document
 from .evidence import AnalysisError, read_evidence, require_port_access
 from .provider import ChatGateway, DemoGateway
-from .settings import AIConnectionInput, AISettingsInput, BYOKStore, empty_profile
+from .settings import (
+    MAX_CONNECTIONS, AIConnectionInput, AIConnectionTestInput, AIProfileRevisionInput,
+    AIProfileSelectionInput, AISettingsEditInput, AISettingsInput, BYOKStore, empty_profile,
+)
 from .workbench import AttemptGate, Workbench, WorkbenchDemoGateway, WorkbenchGateway
 from .workbench_routes import workbench_router
 
@@ -91,6 +94,7 @@ def analysis_router(
 ):
     providers = providers or {}
     attempt_gate = AttemptGate()
+    connection_tester = ChatGateway(providers=providers)
     analysis = Analysis(
         gateway or (DemoGateway() if demo else ChatGateway(providers=providers)),
         demo=demo,
@@ -140,13 +144,16 @@ def analysis_router(
             {
                 "id": identifier,
                 "name": config["name"],
+                **({"base_url": config["endpoint"].removesuffix("/chat/completions")}
+                   if config.get("endpoint") else {}),
                 **({"notice": config["notice"]} if config.get("notice") else {}),
             }
             for identifier, config in providers.items()
         ]
 
     def settings_document():
-        profile = settings_store.load()
+        connections = settings_store.load_connections()
+        profile = connections.active
         return {
             "schema_version": 1,
             "analysis_mode": "demo" if demo else "byok",
@@ -156,7 +163,22 @@ def analysis_router(
                 "byok_port_analysis": True,
             },
             "providers": provider_rows(),
-            "ai": profile.public() if profile is not None else empty_profile(),
+            "ai": connections.public_profile(profile) if profile is not None else empty_profile(),
+            "connections": connections.public_rows(),
+            "active_connection_id": connections.active_id,
+            "connections_limit": MAX_CONNECTIONS,
+        }
+
+    def profile_options(values, request):
+        return {
+            "provider": values.provider,
+            "model": values.model,
+            "supplied_key": request.headers.get("x-port-light-model-key"),
+            "allowed_providers": allowed_providers,
+            "demo": demo,
+            "base_url": values.base_url,
+            "token_parameter": values.token_parameter,
+            "json_mode": values.json_mode,
         }
 
     def require_settings_writable():
@@ -170,8 +192,12 @@ def analysis_router(
                 allowed_providers=allowed_providers,
                 demo=demo,
             )
-            return profile.provider, profile.model, profile.key
-        return values.provider, values.model, request.headers.get("x-port-light-model-key", "")
+            return profile.provider, profile.model, profile.key, profile.connection()
+        if values.provider == "custom" and not providers.get("custom", {}).get("endpoint"):
+            raise AnalysisError("configuration_changed", "请先在 AI 设置中保存 API 地址。", 409)
+        key = request.headers.get("x-port-light-model-key", "")
+        settings_store.require_safe_model(values.model, key, check_saved_keys=not demo)
+        return values.provider, values.model, key, None
 
     @router.get("/settings")
     async def settings():
@@ -185,13 +211,50 @@ def analysis_router(
         try:
             values = await read_body(request, AISettingsInput)
             require_settings_writable()
-            settings_store.save(
-                provider=values.provider,
-                model=values.model,
-                supplied_key=request.headers.get("x-port-light-model-key"),
-                allowed_providers=allowed_providers,
-                demo=demo,
+            settings_store.save(**profile_options(values, request))
+            return settings_document()
+        except AnalysisError as error:
+            return failure(error)
+
+    @router.post("/settings/ai/connections")
+    async def create_connection(request: Request):
+        try:
+            values = await read_body(request, AISettingsInput)
+            require_settings_writable()
+            profile = settings_store.save_connection(**profile_options(values, request))
+            return JSONResponse({**settings_document(), "saved_connection_id": profile.identifier}, status_code=201)
+        except AnalysisError as error:
+            return failure(error)
+
+    @router.put("/settings/ai/connections/{identifier}")
+    async def update_connection(identifier: str, request: Request):
+        try:
+            values = await read_body(request, AISettingsEditInput)
+            require_settings_writable()
+            profile = settings_store.save_connection(
+                identifier=identifier, config_revision=values.config_revision, **profile_options(values, request),
             )
+            return {**settings_document(), "saved_connection_id": profile.identifier}
+        except AnalysisError as error:
+            return failure(error)
+
+    @router.delete("/settings/ai/connections/{identifier}")
+    async def delete_connection(identifier: str, request: Request):
+        try:
+            values = await read_body(request, AIProfileRevisionInput)
+            require_settings_writable()
+            settings_store.delete_connection(identifier, values.config_revision)
+            return settings_document()
+        except AnalysisError as error:
+            return failure(error)
+
+    @router.post("/settings/ai/active")
+    async def activate_connection(request: Request):
+        try:
+            values = await read_body(request, AIProfileSelectionInput)
+            require_settings_writable()
+            settings_store.activate(values.profile_id, values.config_revision,
+                                    allowed_providers=allowed_providers, demo=demo)
             return settings_document()
         except AnalysisError as error:
             return failure(error)
@@ -203,6 +266,35 @@ def analysis_router(
             require_settings_writable()
             settings_store.clear()
             return settings_document()
+        except AnalysisError as error:
+            return failure(error)
+
+    @router.post("/settings/ai/test")
+    async def test_settings_connection(request: Request):
+        try:
+            values = await read_body(request, AIConnectionTestInput)
+            if values.confirmed is not True:
+                raise AnalysisError(
+                    "confirmation_required", "请确认本次可能计费的连接测试。", 409
+                )
+            if demo:
+                raise AnalysisError("unsupported_provider", "演示模式不连接模型服务。", 422)
+            profile = settings_store.resolve_test(
+                values,
+                request.headers.get("x-port-light-model-key"),
+                allowed_providers=allowed_providers,
+            )
+            gate_id = "settings:" + secrets.token_urlsafe(16)
+            session = owner(request) or "settings:anonymous"
+            attempt_gate.acquire(gate_id, session)
+            try:
+                await connection_tester.probe(
+                    profile.provider, profile.model, profile.key, session_id=gate_id,
+                    **({"connection": profile.connection()} if profile.connection() else {}),
+                )
+            finally:
+                attempt_gate.release(gate_id)
+            return {"status": "connected", "config_revision": None if values.draft else profile.revision}
         except AnalysisError as error:
             return failure(error)
 
@@ -252,7 +344,7 @@ def analysis_router(
             if values.confirmed is not True:
                 raise AnalysisError("confirmation_required", "请先检查预览并确认本次发送。", 409)
             await readable_snapshot(identifier, request)
-            provider, model, key = resolve_connection(values, request)
+            provider, model, key, connection = resolve_connection(values, request)
             return JSONResponse(
                 analysis.start(
                     identifier,
@@ -260,6 +352,7 @@ def analysis_router(
                     provider,
                     model,
                     key,
+                    connection=connection,
                 ),
                 status_code=202,
             )

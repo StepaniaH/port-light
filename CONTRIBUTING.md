@@ -4,7 +4,14 @@ Contributions should keep the project focused on port occupancy and avoid unnece
 
 ## Scope
 
-Port-Light focuses on port occupancy. Container lifecycle management and log streaming are outside its scope. See [docs/roadmap.md](docs/roadmap.md) and [docs/architecture.md](docs/architecture.md).
+Port-Light focuses on port occupancy. See [docs/architecture.md](docs/architecture.md) for the current design.
+
+The following are outside its scope:
+
+- Container lifecycle management, log streaming, and image updates
+- Bookmark or home-page dashboards
+- Kubernetes control-plane operations
+- Hosted scanning of local Docker, `/proc`, or Compose data
 
 Open an issue first for new scanners (Podman, remote Docker), auth changes, or a frontend framework.
 
@@ -39,7 +46,9 @@ The fleet uses a local dashboard and three peers on automatically assigned loopb
 
 The single-machine preview binds to `127.0.0.1`, scans only generated Compose files, and removes its temporary directory on exit. Stop it with Ctrl-C. The `serve` command uses `./data` by default and accepts `--data-dir`; it does not load `.env` automatically.
 
-Python tests are grouped under `tests/api`, `tests/scanners`, `tests/client`, `tests/storage`, `tests/frontend`, and `tests/release`. Run a directory with `pytest tests/scanners` when working on one domain. Browser flows are `npm run smoke:browser` for the existing fleet/settings workflow, `npm run smoke:management` for grouping, rules, reservations, and mobile layout, and `npm run smoke:fleet` for adaptive card columns, multi-host navigation, the header menu, and management page themes.
+Use `serve` for feature acceptance. It runs the application backend with real scanners, persistent data, and configurable AI connections. It disables simulated AI even if `PORT_LIGHT_ANALYSIS_DEMO` is set in the shell. The preview commands provide example data for screenshots and dashboard checks.
+
+Python tests are grouped under `tests/api`, `tests/scanners`, `tests/client`, `tests/storage`, `tests/frontend`, and `tests/release`. Run a directory with `pytest tests/scanners` when working on one domain. Browser flows are `npm run smoke:analysis` for local troubleshooting and BYOK settings, `npm run smoke:browser` for the existing fleet/settings workflow, `npm run smoke:management` for grouping, rules, reservations, and mobile layout, and `npm run smoke:fleet` for adaptive card columns, multi-host navigation, the header menu, and management page themes.
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants `PORT_LIGHT_DATA_DIR=./data`. Set `PORT_LIGHT_SCANNERS=listen,compose` when Docker is intentionally absent, and point `COMPOSE_SCAN_DIR` to a readable directory. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
 
@@ -74,6 +83,8 @@ to copy the new keys into the other locale files, and translate the copied value
 `tests/frontend/test_i18n.py` enforces key parity, non-empty values, placeholder tokens, and
 rejects orphaned keys nobody references. `--untranslated` lists suspicious
 still-equal-to-English values per locale.
+
+Analysis copy lives under `analysis.messages` in the same locale files. After editing it, run `.venv/bin/python scripts/dev.py sync-locales` to regenerate `backend/analysis/static/messages.json`. The frontend tests check that the bundled messages match their source.
 
 ## Locales
 

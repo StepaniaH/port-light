@@ -145,8 +145,10 @@ test('activity summary resolves labels through the activity subtree', () => {
   };
   try {
     const html = automationCardsHtml(withEvents());
-    assert.match(html, /data-auto-summary>Calls: 2 · Active leases: 1 · Last used: \d+m</);
-    assert.doesNotMatch(html, /· settings\.auto\./);
+    assert.match(html, /<dt>Calls<\/dt><dd>2<\/dd>/);
+    assert.match(html, /<dt>Active leases<\/dt><dd>1<\/dd>/);
+    assert.match(html, /Last used: \d+m</);
+    assert.doesNotMatch(html, /<dt>settings\.auto\.activity\./);
   } finally {
     if (saved) globalThis.window.PortLightI18n = saved;
     else delete globalThis.window.PortLightI18n;
@@ -163,7 +165,7 @@ test('activity summary shows relative last-used time for recent use', () => {
   };
   try {
     const html = automationCardsHtml(withEvents());
-    assert.match(html, /data-auto-summary>[^<]*Last used: 5m</);
+    assert.match(html, /Last used: 5m</);
   } finally {
     if (saved) globalThis.window.PortLightI18n = saved;
     else delete globalThis.window.PortLightI18n;
@@ -184,7 +186,7 @@ test('activity summary falls back to never without last_used_at', () => {
     const events = withEvents().agent_events;
     events.last_used_at = null;
     const html = automationCardsHtml(Object.assign({}, base, { agent_events: events }));
-    assert.match(html, /data-auto-summary>[^<]*Last used: never</);
+    assert.match(html, /Last used: never</);
   } finally {
     if (saved) globalThis.window.PortLightI18n = saved;
     else delete globalThis.window.PortLightI18n;
@@ -208,8 +210,8 @@ test('lease rows show remaining time through the remaining key', () => {
   }
 });
 
-test('automation panel is registered between occupancy and advanced', () => {
-  assert.deepEqual(SETTINGS_PANELS, ['appearance', 'occupancy', 'automation', 'analysis', 'advanced']);
+test('settings categories separate machine setup from occupancy preferences', () => {
+  assert.deepEqual(SETTINGS_PANELS, ['appearance', 'occupancy', 'hosts', 'automation', 'analysis', 'advanced']);
   assert.deepEqual(parseHash('#/settings/automation'), { name: 'settings', section: 'automation' });
 });
 
@@ -275,19 +277,12 @@ test('system-mode palette refresh keeps readonly settings locked', () => {
   }
 });
 
-test('bind address switches omit repeated environment source hints', () => {
-  for (const key of ['show_bind_addresses', 'show_bind_ipv4', 'show_bind_ipv6']) {
-    const html = renderField({
-      key, type: 'bool', group: 'appearance', origin: 'env', env: key.toUpperCase(),
-      label: key, help: key,
-    }, true, false);
-    assert.doesNotMatch(html, /origin-hint/);
-  }
-  const ordinary = renderField({
+test('settings fields omit per-row source and reset controls', () => {
+  const html = renderField({
     key: 'show_status_text', type: 'bool', group: 'appearance', origin: 'env',
-    env: 'SHOW_STATUS_TEXT', label: 'Status', help: 'Status text',
+    env: 'SHOW_STATUS_TEXT', can_reset: true, label: 'Status', help: 'Status text',
   }, true, false);
-  assert.match(ordinary, /origin-hint/);
+  assert.doesNotMatch(html, /setting-meta|data-reset-setting|SHOW_STATUS_TEXT/);
 });
 
 test('local scanner field renders intent separately from runtime state', () => {
@@ -307,7 +302,7 @@ test('local scanner field renders intent separately from runtime state', () => {
   assert.match(html, /name="local_scanners" value="compose" checked/);
   assert.match(html, /scanner-state ok/);
   assert.match(html, /scanner-state failed/);
-  assert.equal((html.match(/origin-hint/g) || []).length, 1);
+  assert.doesNotMatch(html, /setting-meta|data-reset-setting/);
 });
 
 test('local name and discovery controls have accessible labels', () => {
@@ -319,7 +314,7 @@ test('local name and discovery controls have accessible labels', () => {
   }
 });
 
-test('appearance panel renders theme/language/layout sections in order', () => {
+test('appearance panel combines language and theme before card settings', () => {
   const { renderSettingsForm } = mod;
   const host = document.createElement('div');
   host.id = 'settings-fields';
@@ -351,7 +346,10 @@ test('appearance panel renders theme/language/layout sections in order', () => {
   });
   const panels = host.querySelectorAll('[data-settings-panel="appearance"] .settings-card > header h2');
   const titles = Array.from(panels).map((el) => el.getAttribute('data-i18n'));
-  assert.deepEqual(titles, ['settings.sections.language.title', 'settings.sections.theme.title', 'settings.cards.title']);
+  assert.deepEqual(titles, ['settings.groups.appearance.title', 'settings.cards.title']);
+  const localeRow = host.querySelector('[data-settings-panel="appearance"] [data-setting="locale"]');
+  const themeRow = host.querySelector('[data-settings-panel="appearance"] [data-setting="theme_mode"]');
+  assert.equal(localeRow.closest('.settings-card'), themeRow.closest('.settings-card'));
   const layoutRow = host.querySelector('[data-settings-panel="appearance"] [data-setting="host_layout"]');
   assert.ok(layoutRow, 'multi-machine layout belongs to Appearance');
   assert.equal(layoutRow.closest('.settings-card').querySelector('h2').getAttribute('data-i18n'), 'settings.cards.title');

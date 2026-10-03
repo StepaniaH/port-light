@@ -117,6 +117,11 @@ def _scope_requested(values: CaptureInput) -> dict:
     }
 
 
+def _language(request: Request) -> str:
+    language = request.headers.get("accept-language", "en").split(",")[0].strip()
+    return language if language in {"en", "zh-CN", "zh-TW", "de", "es", "fr", "ja"} else "en"
+
+
 def _requested_ports(scope) -> set[int] | None:
     if scope.kind == "all_known":
         return None
@@ -251,6 +256,7 @@ def workbench_router(
                 owner=session,
                 kind=values.kind,
                 scope_requested=_scope_requested(values),
+                language=_language(request),
             )
             return _session_response(
                 document, request, session, replace_session=not bool(existing_owner)
@@ -274,13 +280,14 @@ def workbench_router(
                     "confirmation_required", "请先检查发送内容并确认本次调用。", 409
                 )
             await readable_capture(identifier, request)
-            provider, model, key = resolve_connection(values, request)
+            provider, model, key, connection = resolve_connection(values, request)
             return workbench.start_ai(
                 identifier,
                 owner(request),
                 provider,
                 model,
                 key,
+                connection=connection,
             )
         except AnalysisError as error:
             return _failure(error)
@@ -407,6 +414,7 @@ def workbench_router(
                 problem_mode=previous["source_kind"],
                 comparison=comparison,
                 source_report_id=report["id"],
+                language=_language(request),
             )
             return JSONResponse(document, status_code=201)
         except AnalysisError as error:

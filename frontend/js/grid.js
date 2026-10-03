@@ -1,15 +1,15 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { groupPorts, portRuns } from './port-groups.js?v=103';
-import { S } from './state.js?v=103';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=103';
-import { KIND_MATCHERS } from './kinds.js?v=103';
-import { isLease } from './leases.js?v=103';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=103';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=103';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=103';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=103';
-import { api } from './api.js?v=103';
+import { groupPorts, portRuns } from './port-groups.js?v=121';
+import { S } from './state.js?v=121';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=121';
+import { KIND_MATCHERS } from './kinds.js?v=121';
+import { isLease } from './leases.js?v=121';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=121';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=121';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=121';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=121';
+import { api } from './api.js?v=121';
 
 const expandedRuns = new Set();
 const boardSizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
@@ -483,10 +483,8 @@ function sizeHostBoard(board) {
         if (retry) retry.disabled = !!S.hostRetrying[h.id];
       }
       if (map.data && map.data.summary && counts) {
-        counts.textContent = t('hosts.counts', {
-          used: map.data.summary.used,
-          configured: map.data.summary.configured,
-        });
+        counts.innerHTML = ['used', 'configured'].map(state => '<span>' +
+          escapeHtml(t('status.' + state)) + '<strong>' + escapeHtml(String(map.data.summary[state])) + '</strong></span>').join('');
       }
       if (pills) renderScanners(map.scanners || {}, pills, map.data);
       if (map.data && root) renderGrid(map.data.ports, root, map.data, h.id, restore);
@@ -723,8 +721,10 @@ function sizeHostBoard(board) {
           rootEl._portRuns.set(key, run);
           const open = opened.has(key) || expandedRuns.has(hostId + ':' + key) || run.some(p => p.port === S.selectedPort || String(p.port) === String(restorePort));
           return '<details class="port-run" data-run="' + escapeHtml(key) + '"' + (open ? ' open' : '') + '><summary>' +
-            run[0].port + '–' + run.at(-1).port + ' · ' + escapeHtml(t('manage.portCount', { count: run.length })) +
-            ' · ' + escapeHtml(t('status.' + run[0].status)) + (run[0].conflict ? ' · ' + escapeHtml(t('manage.conflicts')) : '') +
+            '<span class="port-run-heading"><strong>' + run[0].port + '–' + run.at(-1).port + '</strong><span>' +
+            escapeHtml(t('manage.portCount', { count: run.length })) + '</span><span class="port-run-state">' +
+            escapeHtml(t('status.' + run[0].status)) + '</span>' +
+            (run[0].conflict ? '<span class="port-run-conflict">' + escapeHtml(t('manage.conflicts')) + '</span>' : '') + '</span>' +
             '</summary><div class="group-ports">' + (open ? rootEl._renderPortRun(run) : '') + '</div></details>';
         }).join('') + '</div></section>').join('');
     } else rootEl.innerHTML = displayPorts.map(renderCell).join('');

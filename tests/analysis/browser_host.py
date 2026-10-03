@@ -64,6 +64,12 @@ def _install_workbench_fixture(main, app):
                     host_ip="0.0.0.0",
                 )
             )
+        if state["phase"] == "port_range":
+            ports.extend(ComposePort(
+                port=port, protocol="udp", compose_file="/synthetic/streaming/compose.yml",
+                project_dir="/synthetic/streaming", project_name="streaming", service_name="worker",
+                container_port=port, host_ip="0.0.0.0",
+            ) for port in range(20000, 20032))
         return ComposeScan(
             ports=ports,
             files_scanned=2 if state["phase"] == "resolved" else 3,
@@ -143,6 +149,7 @@ def _install_workbench_fixture(main, app):
             "changed",
             "resolved",
             "runtime_gap",
+            "port_range",
             "source_gap",
             "revoke_port_access",
             "restore_port_access",

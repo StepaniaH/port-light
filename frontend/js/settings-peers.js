@@ -1,6 +1,9 @@
 /* Peer editor and payload serialization. */
-import { S } from './state.js?v=103';
-import { t, escapeHtml } from './text.js?v=103';
+import { S } from './state.js?v=121';
+import { t, escapeHtml } from './text.js?v=121';
+import { api } from './api.js?v=121';
+
+const testRevisions = new WeakMap();
 
   export function renderPeersEditor(readonly, syncRefreshCapacity = () => {}) {
     const host = document.getElementById('settings-peers');
@@ -34,21 +37,34 @@ import { t, escapeHtml } from './text.js?v=103';
         '<input type="password" data-peer-field="password" autocomplete="new-password" value="' +
         escapeHtml(row.password || '') + '"' + keep + disabled + '></label>' +
         '<div class="peer-row-actions">' +
+        '<button type="button" class="btn-secondary" data-peer-test data-i18n="hosts.test"' + (row.url ? '' : ' disabled') + '>' +
+        escapeHtml(t('hosts.test')) + '</button>' +
         (row.has_auth && !row.clear_auth
-          ? '<button type="button" class="btn-secondary" data-peer-clear-auth' + disabled + '>' +
+          ? '<button type="button" class="btn-secondary" data-peer-clear-auth data-i18n="hosts.clearAuth"' + disabled + '>' +
             escapeHtml(t('hosts.clearAuth')) + '</button>'
           : '') +
-        '<button type="button" class="btn-secondary" data-peer-remove' + disabled + '>' +
-        escapeHtml(t('hosts.remove')) + '</button></div></div></details>';
+        '<button type="button" class="btn-secondary" data-peer-remove data-i18n="hosts.remove"' + disabled + '>' +
+        escapeHtml(t('hosts.remove')) + '</button></div>' +
+        '<p class="peer-test-status action-status" data-peer-test-status role="status" aria-live="polite" hidden></p>' +
+        '</div></details>';
     }).join('');
     const maxPeers = Number(S.hostCatalog.max_peers) || 32;
     const canAdd = !locked && S.peersDraft.length < maxPeers;
-    host.innerHTML = '<div class="peer-list">' + rows + '</div>' +
+    host.innerHTML = '<div class="peer-list">' + rows + '</div><div class="peer-editor-footer"><div class="peer-editor-help">' +
       '<p class="field-help" data-peer-limit>' + escapeHtml(t('hosts.max', { count: maxPeers })) + '</p>' +
       '<p class="field-help" data-i18n="hosts.dockerHint">' + escapeHtml(t('hosts.dockerHint')) + '</p>' +
-      '<button type="button" class="btn-secondary" id="peer-add"' + (canAdd ? '' : ' disabled') + '>' +
-      escapeHtml(t('hosts.add')) + '</button>';
+      '</div><button type="button" class="btn-secondary" id="peer-add" data-i18n="hosts.add"' + (canAdd ? '' : ' disabled') + '>' +
+      escapeHtml(t('hosts.add')) + '</button></div>';
+    host.querySelectorAll('.peer-row').forEach(function (row) {
+      row.addEventListener('input', function () {
+        testRevisions.set(row, (testRevisions.get(row) || 0) + 1);
+        row.querySelector('[data-peer-test-status]').hidden = true;
+        const test = row.querySelector('[data-peer-test]');
+        test.disabled = !!test.dataset.testing || !row.querySelector('[data-peer-field="url"]').value.trim();
+      });
+    });
     syncRefreshCapacity();
+    if (window.PortLightI18n?.applySampleCopies) window.PortLightI18n.applySampleCopies();
   }
 
   export function readPeersDraftFromForm() {
@@ -125,4 +141,54 @@ import { t, escapeHtml } from './text.js?v=103';
         row.querySelector('.peer-row-actions').insertBefore(button, row.querySelector('[data-peer-remove]'));
       }
     });
+  }
+
+  export async function testPeerConnection(row) {
+    const button = row.querySelector('[data-peer-test]');
+    if (!button || button.disabled || button.dataset.testing) return;
+    const status = row.querySelector('[data-peer-test-status]');
+    const value = field => row.querySelector('[data-peer-field="' + field + '"]').value;
+    const index = Number(row.getAttribute('data-peer-index'));
+    const body = {
+      id: row.getAttribute('data-peer-id') || '', url: value('url').trim(),
+      username: value('username').trim(), clear_auth: !!S.peersDraft[index]?.clear_auth,
+    };
+    if (value('password')) body.password = value('password');
+    const revision = testRevisions.get(row) || 0;
+    button.dataset.testing = '1';
+    button.disabled = true;
+    button.textContent = t('hosts.testing');
+    button.setAttribute('data-i18n', 'hosts.testing');
+    status.hidden = false;
+    status.className = 'peer-test-status action-status';
+    status.textContent = t('hosts.testing');
+    let result;
+    try {
+      const response = await api('/api/hosts/test', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
+      });
+      result = await response.json();
+      if (!response.ok && !result.code) result = { code: 'peer_unreachable' };
+    } catch (error) {
+      result = { code: error?.name === 'TimeoutError' ? 'peer_timeout' : 'peer_unreachable' };
+    } finally {
+      delete body.password;
+    }
+    if (!row.isConnected) return;
+    delete button.dataset.testing;
+    button.disabled = !value('url').trim();
+    button.textContent = t('hosts.test');
+    button.setAttribute('data-i18n', 'hosts.test');
+    if ((testRevisions.get(row) || 0) !== revision) return;
+    const connected = result?.status === 'connected' && typeof result.version === 'string';
+    const errors = {
+      peer_auth: 'testAuth', peer_timeout: 'testTimeout', peer_unreachable: 'testUnreachable',
+      peer_incompatible: 'testIncompatible', credentials_required: 'testCredentials',
+      invalid_url: 'testURL', invalid_input: 'testURL',
+    };
+    status.className = 'peer-test-status action-status ' + (connected ? 'is-ok' : 'is-error');
+    status.textContent = connected ? t('hosts.testConnected', { version: result.version })
+      : t('hosts.' + (errors[result?.code] || 'testUnreachable'));
+    status.hidden = false;
   }

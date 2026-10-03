@@ -1,7 +1,7 @@
 /* Setup diagnostics page. Rendering is fed only the sanitized Doctor API. */
 
-import { fetchDoctor } from './api.js?v=103';
-import { escapeHtml, t } from './text.js?v=103';
+import { fetchDoctor } from './api.js?v=121';
+import { escapeHtml, t } from './text.js?v=121';
 
 function statusLabel(status) {
   return t('doctor.status.' + status);
@@ -34,21 +34,29 @@ export function renderDoctor(document) {
   const host = window.document.getElementById('doctor-results');
   if (!host || !document) return;
   const counts = document.counts || {};
-  const checks = (document.checks || []).map(function (check) {
+  function checkHtml(check) {
     const evidence = evidenceText(check);
     return '<article class="doctor-check is-' + escapeHtml(check.status) + '">' +
       '<div class="doctor-check-main"><span class="doctor-dot" aria-hidden="true"></span>' +
-      '<div><h2>' + escapeHtml(t('doctor.check.' + check.id)) + '</h2>' +
+      '<div><h3>' + escapeHtml(t('doctor.check.' + check.id)) + '</h3>' +
       '<p>' + escapeHtml(t('doctor.detail.' + check.detail)) + '</p>' +
       (evidence ? '<p class="field-help">' + escapeHtml(evidence) + '</p>' : '') +
       (check.remediation ? '<p class="doctor-remediation">' + escapeHtml(t('doctor.remediation.' + check.remediation)) + '</p>' : '') +
       '</div></div><span class="doctor-badge">' + escapeHtml(statusLabel(check.status)) + '</span></article>';
-  }).join('');
+  }
+  const attention = (document.checks || []).filter(check => ['fail', 'warning'].includes(check.status))
+    .sort((a, b) => Number(b.status === 'fail') - Number(a.status === 'fail'));
+  const routine = (document.checks || []).filter(check => !['fail', 'warning'].includes(check.status));
+  const checks = (attention.length ? '<section class="doctor-group"><h2>' + escapeHtml(t('doctor.attention')) +
+    '</h2><div class="doctor-checks">' + attention.map(checkHtml).join('') + '</div></section>' : '') +
+    (routine.length ? '<details class="doctor-routine"' + (attention.length ? '' : ' open') + '><summary>' +
+      escapeHtml(t('doctor.otherChecks', { count: routine.length })) + '</summary><div class="doctor-checks">' +
+      routine.map(checkHtml).join('') + '</div></details>' : '');
   host.innerHTML = '<section class="doctor-summary is-' + escapeHtml(document.overall) + '">' +
     '<div><h2>' + escapeHtml(t('doctor.overall.' + document.overall)) + '</h2>' +
-    '<p>' + escapeHtml(t('doctor.summary', {
-      pass: counts.pass || 0, warning: counts.warning || 0, fail: counts.fail || 0,
-    })) + '</p></div></section><div class="doctor-checks">' + checks + '</div>' +
+    '<dl class="doctor-counts">' + ['pass', 'warning', 'fail'].map(state =>
+      '<div><dt>' + escapeHtml(statusLabel(state)) + '</dt><dd>' + (counts[state] || 0) + '</dd></div>'
+    ).join('') + '</dl></div></section>' + checks +
     '<details class="doctor-report-preview"><summary>' + escapeHtml(t('doctor.preview')) +
     '</summary><pre>' + escapeHtml(document.report || '') + '</pre></details>';
 }

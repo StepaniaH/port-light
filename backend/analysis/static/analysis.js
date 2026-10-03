@@ -23,10 +23,10 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   const LEGACY_REPORT_KEY = 'port-light-analysis-report-id';
   const state = {
     capture: null, report: null, sourceReport: null, legacy: null, options: null,
-    task: 'triage', selectedPorts: [], busy: false, enabled: false, reportsAvailable: false,
+    task: 'triage', selectedPorts: [], busy: false, initializing: true, capturing: false, enabled: false, reportsAvailable: false,
     demo: false, settings: null, settingsError: null, consentedRevision: null, dirty: false, generation: 0, timer: null,
     visibleSelected: 40, visibleProblems: 12, visibleFacts: 20, remainingOpen: false,
-    reports: [], reportsCursor: null, legacyReports: [], restoring: null, pollFailures: 0, aiUncertain: false, liveCapture: false, payloadKey: null,
+    reports: [], reportsCursor: null, legacyReports: [], restoring: null, pollFailures: 0, aiUncertain: false, liveCapture: false, payloadKey: null, aiResultKey: null,
   };
 
   signal.addEventListener('abort', () => {
@@ -60,7 +60,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   }
   function action(body, extra = {}) {
     return {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Port-Light-Analysis': '1', ...extra },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Port-Light-Analysis': '1', 'Accept-Language': locale, ...extra },
       body: JSON.stringify(body),
     };
   }
@@ -140,7 +140,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   }
   function restoreForm(saved) {
     if (saved) {
-      if (saved.task === 'changes') state.task = 'changes';
+      state.task = saved.task === 'changes' ? 'changes' : 'triage';
       if (['all_known', 'selected_ports', 'port_range', 'single_port'].includes(saved.scopeKind)) byId('scope-kind').value = saved.scopeKind;
       state.selectedPorts = Array.isArray(saved.selectedPorts) ? [...new Set(saved.selectedPorts.filter(isPort))].sort((a, b) => a - b).slice(0, 1024) : [];
       byId('single-port').value = isPort(Number(saved.singlePort)) ? saved.singlePort : '';
@@ -149,7 +149,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       safeSet(byId('protocol'), saved.protocol, 'all');
       safeSet(byId('history-hours'), saved.historyHours, '24');
     }
-    if (isPort(port)) {
+    if (isPort(port) && saved?.routePort !== port) {
       state.task = 'triage';
       byId('scope-kind').value = 'single_port';
       byId('single-port').value = String(port);
@@ -163,9 +163,11 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     byId('window-fields').hidden = state.task !== 'changes';
     byId('task-triage').setAttribute('aria-pressed', String(state.task === 'triage'));
     byId('task-changes').setAttribute('aria-pressed', String(state.task === 'changes'));
+    setText('task-hint', t(state.task === 'changes' ? 'task_changes_hint' : 'task_triage_hint'));
     byId('capture-button').textContent = t(state.dirty && (state.capture || state.legacy) ? 'recapture' : 'capture');
     const note = state.options?.known_ports_complete === false ? t('known_ports_truncated') : t('known_ports_complete');
     setText('known-ports-note', note);
+    byId('known-ports-note').hidden = kind !== 'selected_ports';
     renderSelectedPorts();
     enhanceSelects(root);
   }
@@ -218,8 +220,21 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     state.generation += 1;
     byId('consent').checked = false;
     state.consentedRevision = null;
-    state.dirty = Boolean(state.capture || state.legacy);
-    applyScopeFields(); renderResults(); renderAI(); controls(); saveVisit();
+    updateDirtyState();
+    applyScopeFields(); renderScopeNotice(); renderAI(); controls(); saveVisit();
+  }
+  function updateDirtyState() {
+    try {
+      state.dirty = Boolean(state.legacy || state.capture && !display.matchesCaptureRequest(state.capture, {
+        kind: state.task, scope: currentScope(), protocol: byId('protocol').value,
+        history_hours: Number(byId('history-hours').value),
+      }));
+    } catch (_) { state.dirty = Boolean(state.capture || state.legacy); }
+  }
+  function renderScopeNotice() {
+    byId('scope-changed').hidden = !state.dirty;
+    setText('scope-changed-text', t('scope_changed', { scope: selectedScopeSummary() }));
+    byId('restore-scope').hidden = !state.capture;
   }
   function setTask(task) {
     if (task === state.task || state.busy || state.capture?.status === 'running') return;
@@ -277,17 +292,12 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const requested = Number.isInteger(coverage.requested_count) ? coverage.requested_count : 0;
     const observed = Number.isInteger(coverage.observed_count) ? coverage.observed_count : 0;
     const omitted = Math.max(0, requested - observed);
-    const summary = capture.summary || {};
     const statusKey = ['complete', 'partial', 'empty'].includes(capture.data_status) ? capture.data_status : 'partial';
     const cards = [
       makeCoverageCard(t('coverage_requested'), String(requested)),
       makeCoverageCard(t('coverage_observed'), String(observed)),
       makeCoverageCard(t('coverage_omitted'), String(omitted)),
       makeCoverageCard(t('coverage_status'), t('data_' + statusKey)),
-      makeCoverageCard(t('coverage_model'), t('coverage_model_value', {
-        sent: Number.isInteger(summary.model_sent_count) ? summary.model_sent_count : 0,
-        omitted: Number.isInteger(summary.model_omitted_count) ? summary.model_omitted_count : 0,
-      })),
     ];
     const limitations = Array.isArray(coverage.limitations) ? coverage.limitations : [];
     if (limitations.length) {
@@ -307,6 +317,57 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     else if (content) value.append(content);
     list.append(term, value);
   }
+  function fieldList(fields, className) {
+    const list = document.createElement('dl'); list.className = className;
+    for (const field of fields) {
+      const row = document.createElement('div');
+      const value = document.createElement('span');
+      for (const part of Array.isArray(field.value) ? field.value : [field.value]) {
+        const segment = document.createElement('span'); segment.textContent = String(part); value.append(segment);
+      }
+      appendDetailRow(row, field.label, value); list.append(row);
+    }
+    return list;
+  }
+  function resourceLinks(resources) {
+    const list = document.createElement('div'); list.className = 'resource-links';
+    const label = (ports, protocol) => {
+      const fragment = document.createDocumentFragment();
+      const number = document.createElement('span'); number.className = 'resource-port';
+      number.textContent = ports.length === 1 ? String(ports[0]) : ports[0] + '–' + ports.at(-1);
+      const transport = document.createElement('span'); transport.className = 'resource-protocol';
+      transport.textContent = display.protocolText(protocol, t);
+      fragment.append(number, document.createTextNode(' '), transport); return fragment;
+    };
+    const portLink = (port, protocol) => {
+      const link = document.createElement('a'); link.className = 'port-resource-link'; link.href = '#/port/' + port;
+      link.setAttribute('aria-label', t('port_detail', { port }) + ', ' + display.protocolText(protocol, t));
+      link.append(label([port], protocol)); return link;
+    };
+    const entries = [];
+    for (const { protocol, ports } of display.resourceGroups(resources)) {
+      if (ports.length < 4) {
+        entries.push(...ports.map(port => ({ node: portLink(port, protocol), count: 1 })));
+        continue;
+      }
+      const group = document.createElement('details'); group.className = 'resource-range';
+      const summary = document.createElement('summary'); summary.append(label(ports, protocol));
+      const count = document.createElement('span'); count.className = 'resource-count'; count.textContent = t('port_count', { count: ports.length });
+      summary.append(document.createTextNode(' '), count);
+      const members = document.createElement('div'); members.className = 'resource-links';
+      members.replaceChildren(...ports.map(port => portLink(port, protocol)));
+      group.append(summary, members); entries.push({ node: group, count: ports.length });
+    }
+    list.append(...entries.slice(0, 8).map(item => item.node));
+    if (entries.length > 8) {
+      const more = document.createElement('details'); more.className = 'resource-more';
+      const summary = document.createElement('summary');
+      summary.textContent = t('show_more_count', { count: entries.slice(8).reduce((sum, item) => sum + item.count, 0) });
+      const rest = document.createElement('div'); rest.className = 'resource-links'; rest.append(...entries.slice(8).map(item => item.node));
+      more.append(summary, rest); list.append(more);
+    }
+    return list;
+  }
   function portsText(values) {
     const ports = [...new Set((Array.isArray(values) ? values : []).filter(isPort))];
     if (!ports.length) return t('no_related_ports');
@@ -320,14 +381,18 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const text = values.map(item => display.resourceText(item, t)).join(', ');
     return all.length > values.length ? t('ports_truncated', { ports: text, count: all.length - values.length }) : text;
   }
-  function evidenceText(values, capture = state.capture) {
+  function evidenceList(values, capture = state.capture) {
     const facts = factsById(capture);
+    const list = document.createElement('ul'); list.className = 'evidence-list';
     const items = (Array.isArray(values) ? values : []).slice(0, 6).map(item => {
       const fact = facts.get(item?.id);
-      return fact ? factLabel(fact) : t('fact_observed', { time: item?.observed_at ? date(item.observed_at) : t('unknown_time') });
+      const row = document.createElement('li');
+      if (fact) row.append(factHeading(fact));
+      else row.textContent = t('fact_observed', { time: item?.observed_at ? date(item.observed_at) : t('unknown_time') });
+      return row;
     });
     if (!items.length) return t('no_evidence');
-    return items.join(' · ');
+    list.append(...items); return list;
   }
   function factsList(capture) {
     if (Array.isArray(capture?.facts)) return capture.facts;
@@ -344,7 +409,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const values = [...new Set((Array.isArray(ids) ? ids : []).slice(0, 6).map(id => {
       const fact = facts.get(id); return fact ? t('fact_observed', { time: factTime(fact) }) : t('unknown_time');
     }))];
-    return values.length ? values.join(' · ') : t('no_evidence');
+    return values.length ? values.join(', ') : t('no_evidence');
   }
   function beforeAfterCard(evidence) {
     const facts = factsById(state.capture);
@@ -369,27 +434,33 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const title = document.createElement('h4'); title.textContent = display.problemText(problem, t);
     const priority = document.createElement('span'); priority.className = 'priority-tag'; priority.textContent = t('priority_' + priorityValue(problem?.priority));
     header.append(title, priority);
-    const details = document.createElement('dl');
-    const problemResources = Array.isArray(problem?.resources) ? problem.resources : [];
-    if (problemResources.length) appendDetailRow(details, t('resources'), resourcesText(problemResources));
-    else appendDetailRow(details, t('related_ports'), portsText(problem?.related_ports));
-    const grouped = [display.relationText(problem?.relation, t), display.groupText(problem?.relation?.group, t)].filter(Boolean).join(' ');
-    appendDetailRow(details, t('why_grouped'), grouped);
-    appendDetailRow(details, t('first_check'), actionNode(problem?.first_check));
-    appendDetailRow(details, t('confirm'), actionNode(problem?.confirm));
-    appendDetailRow(details, t('evidence'), evidenceText(problem?.evidence));
-    const links = document.createElement('div'); links.className = 'detail-links';
-    const resources = Array.isArray(problem?.resources) ? problem.resources : [];
-    const visiblePorts = [...new Set(resources.map(item => item?.port).filter(isPort))].slice(0, 12);
-    for (const value of visiblePorts) {
-      const detail = document.createElement('a'); detail.href = '#/port/' + value; detail.textContent = t('port_detail', { port: value });
-      const deep = document.createElement('a'); deep.href = '#/workspace/port-analysis/port/' + value; deep.textContent = t('port_focus', { port: value });
-      links.append(detail, deep);
+    const checks = document.createElement('ul'); checks.className = 'problem-checks';
+    const seen = new Set();
+    for (const check of [problem?.first_check, problem?.confirm]) {
+      if (!check?.action || seen.has(check.action + ':' + check.purpose)) continue;
+      seen.add(check.action + ':' + check.purpose);
+      const item = document.createElement('li'); item.append(actionNode(check)); checks.append(item);
     }
-    card.append(header, details);
+    const { affected, related } = display.problemResources(problem, state.capture);
+    const resourceLine = document.createElement('div'); resourceLine.className = 'problem-resources';
+    if (affected.length) resourceLine.append(resourceLinks(affected));
+    else if (related.length || problem?.related_ports?.some(isPort)) resourceLine.textContent = related.length ? t('no_resources') : portsText(problem.related_ports);
+    else resourceLine.hidden = true;
+    const basis = document.createElement('details'); basis.className = 'problem-basis';
+    const basisTitle = document.createElement('summary'); basisTitle.textContent = t('problem_details');
+    const basisRows = document.createElement('dl');
+    const grouped = [display.relationText(problem?.relation, t), display.groupText(problem?.relation?.group, t)].filter(Boolean).join(' ');
+    appendDetailRow(basisRows, t('why_grouped'), grouped);
+    if (related.length) appendDetailRow(basisRows, t('related_ports'), resourceLinks(related));
+    appendDetailRow(basisRows, t('evidence'), evidenceList(problem?.evidence));
+    basis.append(basisTitle, basisRows);
+    const evidence = document.createElement('button'); evidence.type = 'button'; evidence.className = 'evidence-jump'; evidence.textContent = t('view_evidence');
+    evidence.addEventListener('click', () => openCurrentFacts(problem?.evidence?.map(item => item.id)), { signal });
+    if (problem?.evidence?.length) basis.append(evidence);
+    card.append(header, resourceLine, checks);
     const beforeAfter = beforeAfterCard(problem?.evidence);
-    if (beforeAfter) card.append(beforeAfter);
-    if (links.childElementCount) card.append(links);
+    if (beforeAfter) basis.append(beforeAfter);
+    card.append(basis);
     return card;
   }
   function renderProblems(capture) {
@@ -399,7 +470,8 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const priority = queued.length ? queued : all.slice(0, 5);
     const remaining = all.filter(problem => !queueIds.has(problem?.id) && !priority.includes(problem));
     setText('priority-intro', priority.length ? t('priority_intro', { count: priority.length }) : t('priority_empty'));
-    setText('queue-meta', t('queue_meta', { shown: priority.length, total: Number.isInteger(capture.summary?.queue_count) ? capture.summary.queue_count : priority.length }));
+    byId('priority-intro').hidden = priority.length > 0;
+    setText('queue-meta', priority.length === all.length ? t('problem_count', { count: all.length }) : t('queue_meta', { shown: priority.length, total: all.length }));
     byId('priority-queue').replaceChildren(...priority.map(problemCard));
     const section = byId('remaining-section');
     section.hidden = remaining.length === 0;
@@ -417,9 +489,26 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   function factTime(fact) {
     return fact?.observed_at ? date(fact.observed_at) : t('unknown_time');
   }
-  function factLabel(fact) {
+  function factHeading(fact) {
+    const heading = document.createElement('span'); heading.className = 'fact-heading';
     const summary = display.factSummary(fact, t);
-    return t('fact_card_title', { fact: summary.title, time: factTime(fact) });
+    const name = document.createElement('span'); name.className = 'fact-name'; name.textContent = summary.title;
+    const time = document.createElement('time'); time.className = 'fact-time'; time.textContent = factTime(fact);
+    time.setAttribute('aria-label', t('fact_observed', { time: factTime(fact) }));
+    heading.append(name, time); return heading;
+  }
+  function factContent(fact) {
+    const body = document.createElement('div'); body.className = 'fact-summary';
+    for (const section of display.factSummary(fact, t).sections) {
+      const group = document.createElement('section'); group.className = 'fact-section';
+      if (section.title) {
+        const title = document.createElement('h5'); title.textContent = section.title; group.append(title);
+      }
+      if (section.fields.length) group.append(fieldList(section.fields, 'fact-fields'));
+      else { const empty = document.createElement('p'); empty.textContent = t('fact_no_value'); group.append(empty); }
+      body.append(group);
+    }
+    return body;
   }
   function appendRawFact(container, fact) {
     const raw = document.createElement('details'); raw.className = 'fact-raw';
@@ -437,10 +526,8 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       title.textContent = t('comparison_missing_fact'); detail.textContent = t('comparison_missing_fact');
       node.append(title, detail); return node;
     }
-    const summary = display.factSummary(fact, t);
-    title.textContent = t('fact_card_title', { fact: summary.title, time: factTime(fact) });
-    detail.textContent = summary.text;
-    node.append(title, detail); appendRawFact(node, fact);
+    title.append(factHeading(fact));
+    node.append(title, factContent(fact)); appendRawFact(node, fact);
     return node;
   }
   function comparisonFactBlock(labelKey, ids, capture, side) {
@@ -460,9 +547,8 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     byId('facts').replaceChildren(...shown.map(fact => {
       const item = document.createElement('details'); item.className = 'fact-card';
       if (typeof fact?.id === 'string') item.dataset.evidenceId = fact.id;
-      const title = document.createElement('summary'); title.textContent = factLabel(fact);
-      const text = document.createElement('p'); text.className = 'fact-summary'; text.textContent = display.factSummary(fact, t).text;
-      item.append(title, text); appendRawFact(item, fact); return item;
+      const title = document.createElement('summary'); title.append(factHeading(fact));
+      item.append(title, factContent(fact)); appendRawFact(item, fact); return item;
     }));
     const more = byId('show-more-facts');
     more.hidden = shown.length >= all.length;
@@ -488,10 +574,10 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       const changes = display.currentFactChanges(before, after, t);
       summaries.push(t('comparison_change_resource', {
         resource: display.resourceText(before.resource, t),
-        changes: changes.length ? changes.join(' · ') : t('comparison_no_field_change'),
+        changes: changes.length ? changes.join('; ') : t('comparison_no_field_change'),
       }));
     }
-    return summaries.length ? t('comparison_change_summary', { changes: summaries.join(' · ') }) : '';
+    return summaries.length ? t('comparison_change_summary', { changes: summaries.join('\n') }) : '';
   }
   function openCurrentFacts(ids = []) {
     const details = root.querySelector('.facts-details');
@@ -505,8 +591,11 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       renderFacts(state.capture);
     }
     const target = [...details.querySelectorAll('[data-evidence-id]')].find(item => requested.includes(item.dataset.evidenceId));
-    if (target) { target.open = true; target.scrollIntoView({ block: 'nearest' }); }
-    else details.scrollIntoView({ block: 'nearest' });
+    if (target) {
+      target.open = true;
+      target.querySelector('summary').focus({ preventScroll: true });
+      target.scrollIntoView({ block: 'nearest' });
+    } else { details.querySelector('summary').focus({ preventScroll: true }); details.scrollIntoView({ block: 'nearest' }); }
   }
   function comparisonItem(value, current, previous, stateName) {
     const id = typeof value === 'string' ? value : value?.problem_id;
@@ -549,7 +638,6 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     if (!comparison) return;
     const previous = state.sourceReport?.capture?.problems || [];
     const current = capture.problems || [];
-    setText('comparison-meta', t('comparison_meta'));
     const replace = (target, ids, stateName) => {
       const values = Array.isArray(ids) ? ids : [];
       const shown = values.slice(0, 20);
@@ -581,21 +669,35 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     return Boolean(state.capture && state.report?.id && state.report.source_workbench_id === state.capture.id &&
       state.report.result_revision === state.capture.result_revision);
   }
-  function renderResults() {
+  function renderResults({ refreshEvidence = true } = {}) {
     const capture = state.capture;
     byId('results').hidden = !capture && !state.legacy;
     byId('empty-result').hidden = Boolean(capture || state.legacy);
+    byId('report-actions').hidden = !capture && !state.legacy;
     if (!capture && !state.legacy) {
       setText('result-state', t('waiting')); return;
     }
-    byId('scope-changed').hidden = !state.dirty;
-    setText('scope-changed', t('scope_changed', { scope: selectedScopeSummary() }));
+    renderScopeNotice();
+    const historical = Boolean(state.report && !state.liveCapture);
+    byId('report-context').hidden = !historical;
+    setText('report-context', historical ? t('report_context', { time: date(state.report.created_at) }) : '');
     if (state.legacy) return renderLegacy();
-    setText('result-state', display.captureStateText(capture.status, t));
+    setText('result-state', historical ? t('report_saved_short') : display.captureStateText(capture.status === 'interrupted' ? 'interrupted' : 'ready', t));
     setText('conclusion', display.conclusionText(capture, t));
+    const mode = capture.source_kind === 'changes' ? 'changes' : 'triage';
+    byId('result-scope').hidden = false;
+    byId('result-scope').replaceChildren(fieldList([
+      { label: t('scope'), value: scopeSummary(capture.scope_requested) },
+      { label: t('protocol'), value: display.protocolText(capture.protocol, t) },
+      ...(mode === 'changes' ? [{ label: t('history_window'), value: t('history_' + capture.history_hours) }] : []),
+    ], 'result-meta'));
+    byId('observations-summary').hidden = false;
+    byId('observations-summary').replaceChildren(fieldList(display.observationCounts(capture, t), 'observation-counts'));
     const kind = ['triage', 'changes', 'recheck'].includes(capture.kind) ? capture.kind : 'triage';
-    setText('capture-meta', t('capture_meta', { time: date(capture.captured_at), kind: t('capture_kind_' + kind) }));
-    renderCoverage(capture); renderComparison(capture); renderProblems(capture); renderFacts(capture);
+    const captureKind = document.createElement('span'); captureKind.textContent = t('capture_kind_' + kind);
+    const captureTime = document.createElement('time'); captureTime.textContent = date(capture.captured_at);
+    byId('capture-meta').replaceChildren(captureKind, captureTime);
+    if (refreshEvidence) { renderCoverage(capture); renderComparison(capture); renderProblems(capture); renderFacts(capture); }
     byId('save-report').hidden = false;
     byId('save-report').textContent = currentRevisionSaved() ? t('report_saved_short') : t('save_report');
     byId('export-link').hidden = !currentRevisionSaved();
@@ -607,10 +709,13 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const view = display.legacyPresentation(state.legacy.document, t);
     setText('result-state', t('legacy_report'));
     setText('conclusion', view.conclusion);
-    setText('capture-meta', view.summary + (view.capturedAt ? ' · ' + date(view.capturedAt) : ''));
+    byId('result-scope').hidden = true;
+    byId('observations-summary').hidden = true;
+    setText('capture-meta', view.capturedAt ? date(view.capturedAt) : '');
     byId('coverage').replaceChildren(makeCoverageCard(t('coverage_status'), t('legacy_coverage')));
     byId('comparison-section').hidden = true;
     byId('priority-intro').textContent = t('legacy_problem_intro');
+    byId('priority-intro').hidden = false;
     byId('queue-meta').textContent = '';
     const cards = [];
     const claimCard = (titleText, values) => {
@@ -618,7 +723,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       const card = document.createElement('article'); card.className = 'problem-card';
       const title = document.createElement('h4'); title.textContent = titleText; card.append(title);
       for (const value of values) {
-        const text = document.createElement('p'); text.textContent = value.text || value;
+        const text = document.createElement('p'); text.className = 'legacy-claim'; text.textContent = value.text || value;
         const refs = value.evidence_ids?.length ? document.createElement('span') : null;
         if (refs) { refs.className = 'references'; refs.textContent = t('recommendation_refs', { refs: value.evidence_ids.join(', ') }); text.append(refs); }
         if (value.missing_evidence?.length) {
@@ -630,10 +735,9 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     };
     claimCard(t('summary'), [{ text: view.summary, evidence_ids: view.structured.interpretation?.summary?.evidence_ids || [] }]);
     claimCard(t('hypotheses'), view.structured.interpretation?.hypotheses || []);
-    claimCard(t('unknowns'), view.structured.interpretation?.unknowns || []);
     const checks = view.structured.interpretation?.checks || [];
     if (checks.length) {
-      const checkValues = checks.map(check => ({ text: t('check_' + check.action) + ' · ' + t('check_' + check.action + '_detail'), evidence_ids: check.evidence_ids || [] }));
+      const checkValues = checks.map(check => ({ text: t('check_' + check.action) + '\n' + t('check_' + check.action + '_detail'), evidence_ids: check.evidence_ids || [] }));
       claimCard(t('checks_heading'), checkValues);
     }
     claimCard(t('legacy_observations'), view.structured.observed || []);
@@ -660,13 +764,16 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   function savedConnection() {
     if (state.demo) return { demo: true, provider: 'demo', model: 'synthetic-demo', revision: 'demo' };
     const ai = state.settings?.ai;
-    if (!settingsEnableAI() || ai?.configured !== true || typeof ai.revision !== 'string' || !ai.revision) return null;
+    if (!settingsEnableAI() || ai?.configured !== true || typeof ai.model !== 'string' || !ai.model ||
+        typeof ai.revision !== 'string' || !ai.revision) return null;
+    if (!(state.settings?.providers || []).some(provider => provider?.id === ai.provider)) return null;
+    if (ai.provider === 'custom' && !ai.base_url) return null;
     return ai;
   }
   function connectionProvider(connection) {
     if (connection?.demo) return t('demo_provider');
     const provider = (state.settings?.providers || []).find(item => item?.id === connection?.provider);
-    return provider?.name || connection?.provider || t('provider');
+    return connection?.provider === 'custom' ? t('custom_provider') : provider?.name || connection?.provider || t('provider');
   }
   function resetConsent() {
     byId('consent').checked = false;
@@ -690,7 +797,8 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const empty = byId('ai-empty'); const emptyAction = byId('ai-empty-action'); const content = byId('ai-content');
     if (!capture || state.legacy) {
       empty.hidden = false; content.hidden = true;
-      empty.textContent = state.legacy ? t('ai_legacy') : t('ai_empty');
+      empty.textContent = state.legacy ? t('ai_legacy') : state.settingsError ? t('ai_settings_unavailable')
+        : !savedConnection() && !state.demo ? t('ai_connection_missing') : t('ai_empty');
       emptyAction.hidden = state.demo;
       setText('ai-state', ''); return;
     }
@@ -701,6 +809,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const enabled = settingsEnableAI();
     const settingsUnavailable = !state.demo && Boolean(state.settingsError);
     setText('ai-state', display.aiStateText(ai.status, t));
+    byId('ai-state').classList.toggle('is-ok', ai.status === 'completed');
     const eligible = enabled && !settingsUnavailable && Boolean(connection) && state.liveCapture && preview.eligible === true && !state.dirty && capture.status === 'ready';
     let eligibility = t('ai_not_eligible');
     if (state.dirty) eligibility = t('ai_scope_changed');
@@ -708,11 +817,15 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     else if (capture.status === 'interrupted') eligibility = t('ai_interrupted_capture');
     else if (settingsUnavailable) eligibility = t('ai_settings_unavailable');
     else if (!connection) eligibility = t('ai_connection_missing');
-    else if (eligible) eligibility = t('ai_eligible');
     setText('ai-eligibility', eligibility);
+    byId('ai-eligibility').hidden = ai.status !== 'not_started' || eligible || (!connection && !settingsUnavailable && state.liveCapture && !state.dirty);
+    const aiError = ai.error || capture.error;
+    byId('ai-error').hidden = !aiError;
+    setText('ai-error', aiError ? display.failureText(aiError, t) : '');
     const payload = byId('ai-payload-details'); const payloadSummary = byId('ai-payload-summary');
     payload.hidden = !eligible;
     payloadSummary.hidden = !eligible;
+    byId('ai-payload-omitted').hidden = true;
     if (eligible) {
       // The exact object remains available for consent, but should not bury the
       // consent controls under a large technical document on a new capture.
@@ -727,23 +840,34 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       const omitted = Number.isInteger(sent.problem_summary?.omitted_count)
         ? sent.problem_summary.omitted_count : 0;
       setText('ai-payload-summary', t('payload_summary', {
-        scope: scopeSummary(capture.scope_requested), problems: sentProblems, facts: sentFacts, omitted,
+        scope: scopeSummary(capture.scope_requested), problems: sentProblems, facts: sentFacts,
+        resources: sent.resource_summary?.sent_count || 0,
       }));
+      const omittedResources = sent.resource_summary?.omitted_count || 0;
+      byId('ai-payload-omitted').hidden = !omitted && !omittedResources;
+      setText('ai-payload-omitted', t('payload_omitted', { resources: omittedResources, problems: omitted }));
       byId('ai-payload').textContent = JSON.stringify(sent, null, 2);
       setText('ai-payload-meta', t('payload_meta', {
         bytes: display.formatBytes(preview.input_bytes, locale), max: display.formatBytes(preview.max_input_bytes, locale),
       }));
     }
     const canStart = eligible && ai.status === 'not_started' && capture.status === 'ready';
+    const canRecover = enabled && state.liveCapture && ['failed', 'cancelled'].includes(ai.status);
+    byId('retry-ai').hidden = !canRecover;
     const connected = byId('ai-connection');
-    connected.hidden = !state.liveCapture || (!enabled && ai.status !== 'running');
+    connected.hidden = (!state.liveCapture || !enabled) && ai.status === 'not_started';
     if (!connected.hidden) {
-      setText('ai-connection-summary', connection?.demo
+      const shownConnection = !state.demo && ai.status !== 'not_started' && capture.provider && capture.model
+        ? { provider: capture.provider, model: capture.model } : connection;
+      setText('ai-connection-summary', shownConnection?.demo
         ? t('ai_demo_connection')
-        : connection ? t('ai_connection_saved', { provider: connectionProvider(connection), model: connection.model || '—' })
+        : shownConnection ? t('ai_connection_saved', { provider: connectionProvider(shownConnection), model: shownConnection.model || '—' })
           : settingsUnavailable ? t('ai_settings_unavailable') : t('ai_connection_missing'));
-      byId('ai-connection-action').hidden = state.demo || !enabled;
-      byId('manage-ai-settings').hidden = state.demo || !enabled;
+      byId('ai-destination').hidden = !shownConnection?.base_url;
+      setText('ai-destination', shownConnection?.base_url ? t('ai_destination', { url: shownConnection.base_url }) : '');
+      const canManage = !state.demo && enabled && state.liveCapture && (ai.status === 'not_started' || canRecover);
+      byId('ai-connection-action').hidden = !canManage;
+      byId('manage-ai-settings').hidden = !canManage;
       setText('consent-label', state.demo ? t('consent_demo') : t('consent_saved', { provider: connectionProvider(connection) }));
     }
     const consent = byId('consent');
@@ -751,32 +875,54 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     const start = byId('start-ai'); const cancel = byId('cancel-ai');
     start.hidden = !canStart; cancel.hidden = ai.status !== 'running';
     consent.disabled = state.busy || !canStart;
+    byId('ai-explanation').hidden = ai.status !== 'completed';
+    const resultKey = capture.id + ':' + capture.result_revision;
+    if (ai.status === 'completed' && state.aiResultKey !== resultKey) {
+      state.aiResultKey = resultKey;
+      byId('ai-conclusion-evidence').open = false;
+      const conclusion = ai.conclusion;
+      setText('ai-conclusion', typeof conclusion?.text === 'string' ? conclusion.text : t('ai_conclusion_unavailable'));
+      const ids = Array.isArray(conclusion?.evidence_ids) ? conclusion.evidence_ids.slice(0, 64) : [];
+      byId('ai-conclusion-evidence').hidden = !ids.length;
+      setText('ai-conclusion-evidence-title', t('ai_conclusion_evidence', { count: ids.length }));
+      const facts = factsById(capture);
+      byId('ai-conclusion-facts').replaceChildren(...ids.map(id => frozenFactNode(facts.get(id), 'current')));
+      renderRecommendations(ai.recommendations || [], capture.problems || []);
+    }
     byId('ai-recommendations').hidden = ai.status !== 'completed' || !Array.isArray(ai.recommendations);
-    if (ai.status === 'completed') renderRecommendations(ai.recommendations, capture.problems || []);
+    byId('ai-recommendations-empty').hidden = ai.status !== 'completed' || ai.recommendations?.length !== 0;
   }
   function renderRecommendations(recommendations, problems) {
-    byId('ai-recommendation-list').replaceChildren(...recommendations.slice(0, 10).map(item => {
+    const distinct = display.distinctRecommendations(recommendations, state.capture);
+    byId('ai-recommendation-list').replaceChildren(...distinct.slice(0, 10).map(item => {
       const row = document.createElement('div'); row.className = 'recommendation';
       const problem = (problems || []).find(value => value?.id === item?.problem_id);
       row.textContent = t('recommendation', {
         problem: problem ? display.problemText(problem, t) : t('comparison_unknown_problem'),
         action: display.actionText(item?.action, t),
       });
-      const refs = document.createElement('span'); refs.className = 'references';
-      refs.textContent = t('recommendation_refs', { refs: (Array.isArray(item?.evidence_ids) ? item.evidence_ids : []).join(', ') || '—' });
-      row.append(refs); return row;
+      const { affected } = display.problemResources(problem, state.capture);
+      if (affected.length) {
+        row.append(resourceLinks(affected));
+      }
+      const refs = comparisonFactBlock(t('view_evidence'), item?.evidence_ids, state.capture, 'current');
+      if (refs) row.append(refs);
+      return row;
     }));
   }
   function controls() {
-    const running = state.busy || state.capture?.status === 'running';
+    const running = state.initializing || state.busy || state.capture?.status === 'running';
     for (const id of ['scope-kind', 'single-port', 'known-port', 'add-known-port', 'manual-port', 'add-manual-port', 'bulk-ports', 'add-bulk-ports', 'range-start', 'range-end', 'protocol', 'history-hours', 'task-triage', 'task-changes']) {
       byId(id).disabled = running;
     }
     byId('capture-button').disabled = running || !state.enabled;
+    byId('capture-button').textContent = t(state.capturing ? 'capturing' : state.dirty && (state.capture || state.legacy) ? 'recapture' : 'capture');
+    byId('capture-form').setAttribute('aria-busy', String(state.capturing));
     byId('show-more-selected').disabled = running;
+    for (const button of byId('selected-ports').querySelectorAll('button')) button.disabled = running;
     const saveable = ['ready', 'completed', 'failed', 'cancelled'].includes(state.capture?.status) && state.liveCapture;
     byId('save-report').disabled = running || !saveable || !state.reportsAvailable || currentRevisionSaved();
-    byId('recheck').disabled = running || !state.enabled || !currentRevisionSaved();
+    byId('recheck').disabled = running || !state.enabled || !currentRevisionSaved() || state.dirty;
     const ai = state.capture?.ai || { status: 'not_started' };
     const preview = state.capture?.ai_preview || {};
     const connection = savedConnection();
@@ -784,25 +930,31 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       Boolean(connection) && state.consentedRevision === connection.revision;
     byId('start-ai').disabled = !canStart;
     byId('cancel-ai').disabled = state.busy || ai.status !== 'running';
+    byId('retry-ai').disabled = running || !state.enabled || !state.liveCapture || state.dirty || !['failed', 'cancelled'].includes(ai.status);
     byId('consent').disabled = running || !connection || !settingsEnableAI() || ai.status !== 'not_started';
     for (const button of root.querySelectorAll('#analysis-report-list button, #analysis-legacy-report-list button')) button.disabled = running;
     enhanceSelects(root);
   }
-  function updateCapture(capture, { report = state.report, sourceReport = state.sourceReport, focus = false, live = true } = {}) {
+  function updateCapture(capture, { report = state.report, sourceReport = state.sourceReport, focus = false, live = true, resetView = false } = {}) {
     if (signal.aborted || !capture) return;
+    const changed = resetView || state.capture?.id !== capture.id || Boolean(state.legacy);
     clearTimeout(state.timer);
     resetConsent();
-    syncCaptureScope(capture, report, sourceReport);
+    if (changed) syncCaptureScope(capture, report, sourceReport);
     state.capture = capture; state.report = report; state.sourceReport = sourceReport; state.legacy = null; state.pollFailures = 0; state.aiUncertain = false; state.liveCapture = live;
-    state.dirty = false; state.remainingOpen = false; state.visibleProblems = 12; state.visibleFacts = 20;
-    error(); status(); renderResults(); renderAI(); controls(); saveVisit();
+    updateDirtyState();
+    if (changed) {
+      state.remainingOpen = false; state.visibleProblems = 12; state.visibleFacts = 20; state.aiResultKey = null;
+      root.querySelector('.facts-details').open = false;
+    }
+    error(); status(); renderResults({ refreshEvidence: changed }); renderAI(); syncReportSelection(); controls(); saveVisit();
     if (live && capture.status === 'running') schedulePoll(capture.id, state.generation);
     if (focus) { byId('conclusion').focus(); byId('results-panel').scrollIntoView({ block: 'start' }); }
   }
   function discardUnavailableCapture(item) {
     clearTimeout(state.timer); state.capture = null; state.report = null; state.sourceReport = null; state.legacy = null; state.liveCapture = false;
     state.dirty = false; state.pollFailures = 0; state.aiUncertain = false; resetConsent();
-    renderResults(); renderAI(); controls(); saveVisit(); error(display.failureText(item, t));
+    renderResults(); renderAI(); syncReportSelection(); controls(); saveVisit(); error(display.failureText(item, t));
   }
   function schedulePoll(identifier, generation, delay = 1200) {
     clearTimeout(state.timer);
@@ -827,7 +979,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     }, delay);
   }
   async function capture() {
-    if (!state.enabled || state.busy || state.capture?.status === 'running') return;
+    if (state.initializing || !state.enabled || state.busy || state.capture?.status === 'running') return;
     let body;
     try {
       body = {
@@ -835,13 +987,13 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
         history_hours: Number(byId('history-hours').value),
       };
     } catch (item) { error(display.failureText(item, t)); return; }
-    state.busy = true; state.generation += 1; const generation = state.generation; error(); status(t('capturing')); controls();
+    state.busy = true; state.capturing = true; state.generation += 1; const generation = state.generation; error(); status(t('capturing')); controls();
     try {
       const next = await api('/analysis/api/workbench/captures', action(body));
       if (signal.aborted || generation !== state.generation) return;
       updateCapture(next, { report: null, sourceReport: null, focus: true });
     } catch (item) { if (!signal.aborted && generation === state.generation) error(display.failureText(item, t)); }
-    finally { state.busy = false; status(); controls(); }
+    finally { state.busy = false; state.capturing = false; status(); controls(); }
   }
   async function startAI() {
     const current = state.capture;
@@ -891,10 +1043,24 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   function renderReportList() {
     byId('saved-empty').hidden = state.reports.length > 0;
     byId('report-list').replaceChildren(...state.reports.map(report => {
-      const row = document.createElement('li'); const button = document.createElement('button'); button.type = 'button'; button.textContent = reportLabel(report);
+      const row = document.createElement('li'); const button = document.createElement('button'); button.type = 'button';
+      button.dataset.reportId = report.id; button.setAttribute('aria-label', reportLabel(report));
+      const title = document.createElement('span'); title.className = 'report-title';
+      const kind = ['triage', 'changes', 'recheck'].includes(report.kind) ? report.kind : 'triage';
+      title.textContent = t('capture_kind_' + kind);
+      const scope = document.createElement('span'); scope.className = 'report-scope'; scope.textContent = scopeSummary(report.scope_summary);
+      const time = document.createElement('span'); time.className = 'report-time'; time.textContent = date(report.created_at);
+      button.append(title, scope, time);
       button.addEventListener('click', () => loadReport(report.id), { signal }); row.append(button); return row;
     }));
+    syncReportSelection();
     byId('load-more-reports').hidden = !state.reportsCursor;
+  }
+  function syncReportSelection() {
+    for (const button of byId('report-list').querySelectorAll('button')) {
+      if (button.dataset.reportId === state.report?.id) button.setAttribute('aria-current', 'true');
+      else button.removeAttribute('aria-current');
+    }
   }
   async function loadReports(reset = false) {
     const cursor = reset ? null : state.reportsCursor;
@@ -911,7 +1077,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       const report = await api('/analysis/api/workbench/reports/' + encodeURIComponent(identifier));
       if (signal.aborted) return;
       const source = report.source_report_id ? await loadSourceReport(report.source_report_id).catch(() => null) : null;
-      updateCapture(report.capture, { report, sourceReport: source, focus: true, live: false });
+      updateCapture(report.capture, { report, sourceReport: source, focus: true, live: false, resetView: true });
       return true;
     } catch (item) {
       if (!signal.aborted) error(display.failureText(item, t));
@@ -967,7 +1133,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       if (signal.aborted) return;
       state.capture = null; state.report = null; state.sourceReport = null; state.liveCapture = false;
       state.legacy = { reportId: document.id, document, exportPath: '/analysis/api/reports/' + encodeURIComponent(document.id) + '/export' };
-      state.dirty = false; renderResults(); renderAI(); controls(); saveVisit();
+      state.dirty = false; renderResults(); renderAI(); syncReportSelection(); controls(); saveVisit();
     } catch (item) { if (!signal.aborted) error(display.failureText(item, t)); }
     finally { state.busy = false; controls(); }
   }
@@ -977,7 +1143,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       if (signal.aborted) return false;
       state.capture = null; state.report = null; state.sourceReport = null; state.liveCapture = false;
       state.legacy = { reportId: null, document, exportPath: '/analysis/api/analysis/' + encodeURIComponent(identifier) + '/report' };
-      state.dirty = false; renderResults(); renderAI(); controls(); return true;
+      state.dirty = false; renderResults(); renderAI(); syncReportSelection(); controls(); return true;
     } catch (_) { return false; }
   }
   async function restoreResult(saved) {
@@ -1029,6 +1195,12 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   on('capture-form', 'submit', event => { event.preventDefault(); capture(); });
   on('task-triage', 'click', () => setTask('triage'));
   on('task-changes', 'click', () => setTask('changes'));
+  on('restore-scope', 'click', () => {
+    if (!state.capture || state.busy) return;
+    syncCaptureScope(state.capture, state.report, state.sourceReport);
+    markScopeChanged();
+    byId('capture-button').focus({ preventScroll: true });
+  });
   for (const id of ['scope-kind', 'single-port', 'range-start', 'range-end', 'protocol', 'history-hours']) on(id, 'input', markScopeChanged);
   on('add-known-port', 'click', () => { if (!byId('known-port').disabled) addPorts([Number(byId('known-port').value)]); });
   on('add-manual-port', 'click', () => {
@@ -1058,6 +1230,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     controls();
   });
   on('start-ai', 'click', startAI); on('cancel-ai', 'click', cancelAI);
+  on('retry-ai', 'click', () => { if (!byId('retry-ai').disabled) capture(); });
   on('save-report', 'click', saveReport); on('recheck', 'click', recheck);
   on('load-more-reports', 'click', () => loadReports(false).catch(item => error(display.failureText(item, t))));
 
@@ -1073,8 +1246,14 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     setText('report-storage-note', state.reportsAvailable ? t('storage_note') : t('error_storage'));
     configureOptions(options); renderAI(); controls();
     await Promise.allSettled([state.reportsAvailable ? loadReports(true) : Promise.resolve(), loadLegacyReports(), restoreResult(saved)]);
+    if (saved && state.capture && saved.captureId === state.capture.id && state.capture.status !== 'running' &&
+        (!isPort(port) || saved.routePort === port)) {
+      restoreForm(saved); markScopeChanged();
+    }
+    state.initializing = false;
     controls();
   }
+  controls();
   await init().catch(item => { if (!signal.aborted) error(display.failureText(item, t)); });
   return () => { clearTimeout(state.timer); };
 }

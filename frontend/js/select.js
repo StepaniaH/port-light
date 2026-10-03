@@ -62,8 +62,10 @@ function enhance(select) {
     }
     const active = list.querySelector('[data-index="' + index + '"]');
     if (active) {
-      button.setAttribute('aria-activedescendant', active.id);
-      active.scrollIntoView({ block: 'nearest' });
+      setAttribute(button, 'aria-activedescendant', active.id);
+      const bottom = active.offsetTop + active.offsetHeight;
+      if (active.offsetTop < list.scrollTop) list.scrollTop = active.offsetTop;
+      else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
     } else button.removeAttribute('aria-activedescendant');
   }
   function close() {
@@ -100,11 +102,11 @@ function enhance(select) {
     setAttribute(button, 'aria-invalid', select.getAttribute('aria-invalid') || 'false');
     const description = select.getAttribute('aria-describedby');
     if (description) setAttribute(button, 'aria-describedby', description);
-    else button.removeAttribute('aria-describedby');
+    else if (button.hasAttribute('aria-describedby')) button.removeAttribute('aria-describedby');
     if (select.disabled || select.hidden || !select.isConnected) close();
     if (opened === control) {
       const current = JSON.stringify([...select.options].map(option => [option.label, option.value, option.disabled, option.hidden, option.selected, option.parentElement?.disabled, option.parentElement?.label]));
-      if (signature !== current) { signature = current; rows(); highlight(select.selectedIndex); position(); }
+      if (signature !== current) { signature = current; rows(); position(); highlight(select.selectedIndex); }
     }
   }
   function open() {
@@ -122,7 +124,7 @@ function enhance(select) {
     const changed = select.selectedIndex !== index;
     select.selectedIndex = index;
     close();
-    button.focus();
+    button.focus({ preventScroll: true });
     if (changed) {
       select.dispatchEvent(new Event('input', { bubbles: true }));
       select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -131,6 +133,11 @@ function enhance(select) {
   }
   const control = { sync, close, button, list, position };
   controls.set(select, control);
+  button.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    button.focus({ preventScroll: true });
+  });
   button.addEventListener('click', event => { event.preventDefault(); sync(); if (opened === control) close(); else open(); });
   button.addEventListener('keydown', event => {
     const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'Escape'];
@@ -160,7 +167,7 @@ function enhance(select) {
     }
   });
   button.addEventListener('blur', close);
-  select.addEventListener('focus', () => button.focus());
+  select.addEventListener('focus', () => button.focus({ preventScroll: true }));
   select.addEventListener('input', sync);
   select.addEventListener('change', sync);
   select.addEventListener('invalid', event => { event.preventDefault(); button.focus(); setAttribute(button, 'aria-invalid', 'true'); });
@@ -177,10 +184,29 @@ export function enhanceSelects(root = document) {
 
 export function observeSelects(root) {
   enhanceSelects(root);
+  let scheduled = 0;
   const observer = new MutationObserver(records => {
-    if (records.some(record => record.target.closest?.('select, label') ||
-        [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === 1 && (node.matches('select, option, optgroup') || node.querySelector('select'))))) {
-      enhanceSelects(root);
+    // New controls must be ready before their first paint. Batch later changes
+    // without briefly exposing a native select that is about to be replaced.
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node.nodeType !== 1 || node.closest('.pl-select-trigger, .pl-select-options')) continue;
+        if (node.matches('select') && !controls.has(node)) enhance(node);
+        for (const select of node.querySelectorAll('select')) {
+          if (!controls.has(select)) enhance(select);
+        }
+      }
+    }
+    const sourceChanged = records.some(record => {
+      const target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+      if (target?.closest('.pl-select-trigger, .pl-select-options')) return false;
+      return target?.closest('select, label') ||
+        [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === 1 &&
+          !node.matches('.pl-select, .pl-select-trigger, .pl-select-options') &&
+          (node.matches('select, option, optgroup') || node.querySelector('select')));
+    });
+    if (sourceChanged && !scheduled) {
+      scheduled = requestAnimationFrame(() => { scheduled = 0; enhanceSelects(root); });
     }
   });
   observer.observe(root, { subtree: true, childList: true, characterData: true, attributes: true,
@@ -193,6 +219,7 @@ export function observeSelects(root) {
   root.addEventListener('reset', () => requestAnimationFrame(() => enhanceSelects(root)));
   return () => {
     observer.disconnect(); opened?.close();
+    if (scheduled) cancelAnimationFrame(scheduled);
     document.removeEventListener('pointerdown', outside);
     window.removeEventListener('resize', position);
     document.removeEventListener('scroll', position, true);

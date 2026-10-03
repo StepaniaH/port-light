@@ -1,18 +1,18 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=103';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=103';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=103';
-import { trapTab } from './a11y.js?v=103';
-import { api } from './api.js?v=103';
-import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=103';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=103';
+import { S, saveView } from './state.js?v=121';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=121';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=121';
+import { trapTab } from './a11y.js?v=121';
+import { api } from './api.js?v=121';
+import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=121';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=121';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=103';
-import { closeModals, modalOpen, openModal } from './modal.js?v=103';
+} from './grid.js?v=121';
+import { closeModals, modalOpen, openModal } from './modal.js?v=121';
 
 let tick;
 let loadPorts;
@@ -485,11 +485,13 @@ export function configureDetail(actions) {
         const time = new Date(ev.ts * 1000).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
         const stateKey = HISTORY_STATE_KEYS[ev.state];
         const stateText = stateKey ? t(stateKey) : ev.state;
-        const who = (ev.holders && ev.holders.length) ? ' · ' + ev.holders.join(', ') : '';
-        return '<div class="history-event">' + escapeHtml(time + ' — ' + stateText + who) + '</div>';
+        const who = (ev.holders && ev.holders.length)
+          ? '<span class="history-holders">' + escapeHtml(ev.holders.join(', ')) + '</span>' : '';
+        return '<div class="history-event"><time datetime="' + new Date(ev.ts * 1000).toISOString() + '">' +
+          escapeHtml(time) + '</time><span>' + escapeHtml(stateText) + '</span>' + who + '</div>';
       }).join('');
       host.innerHTML = '<h3 class="history-title">' + escapeHtml(t('history.title')) + '</h3>' + items;
       host.hidden = false;
     } catch (err) { /* history is best-effort */ }
   }
-import { portUiLinksHtml } from './ui-links.js?v=103';
+import { portUiLinksHtml } from './ui-links.js?v=121';

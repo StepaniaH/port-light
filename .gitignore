@@ -27,3 +27,7 @@ custom_ports.json
 AGENTS.local.md
 playwright-report/
 test-results/
+
+# Private development notes.
+/docs/superpowers/
+/docs/research/

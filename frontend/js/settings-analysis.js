@@ -1,8 +1,8 @@
 /* The local AI connection panel owns its requests and clears keys on exit. */
-import { S } from './state.js?v=103';
-import { t } from './text.js?v=103';
-import { enhanceSelects } from './select.js?v=103';
-import { settingsAssets } from './extension-assets.js?v=103';
+import { S } from './state.js?v=121';
+import { t } from './text.js?v=121';
+import { enhanceSelects } from './select.js?v=121';
+import { settingsAssets } from './extension-assets.js?v=121';
 
 let active;
 export function closeAnalysisSettings() {

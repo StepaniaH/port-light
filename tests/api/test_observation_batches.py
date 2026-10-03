@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from backend import main
@@ -113,3 +114,35 @@ def test_batch_hides_currently_hidden_event_ports(empty_scan, monkeypatch):
     assert all(port["port"] != 45001 for port in body["ports"])
     assert all(event["port"] != 45001 for event in body["events"])
     assert "hidden_withheld" in body["coverage"]["limitations"]
+
+
+@pytest.mark.parametrize("sequence", [9, 99])
+@pytest.mark.parametrize("persisted", [False, True])
+def test_batch_event_limit_keeps_newest_same_second_capture(empty_scan, monkeypatch, sequence, persisted):
+    from backend import history
+
+    with TestClient(main.app) as client:
+        snap, _ = main._monitor.latest_with_observation_events(main._values(), allow_hidden=False)
+        snap = {**snap, "capture_id": f"obs-0123456789ab-{sequence + 1}"}
+        events = [
+            {
+                "event_id": f"event-obs-0123456789ab-{number}-45000",
+                "observation_id": f"obs-0123456789ab-{number}",
+                "observed_at": snap["captured_at"],
+                "port": 45000,
+                "protocol": "all",
+                "kind": "state_changed",
+                "before": {}, "after": {}, "evidence_refs": [],
+                "source_quality": "complete",
+            }
+            for number in (sequence, sequence + 1)
+        ]
+        monkeypatch.setattr(history, "enabled", lambda: persisted)
+        monkeypatch.setattr(history, "query_observation_events_batch", lambda *_a, **_kw: (events[:1], False))
+        live_events = events[1:] if persisted else events
+        monkeypatch.setattr(main._monitor, "latest_with_observation_events", lambda *_a, **_kw: (snap, live_events))
+        response = _batch(client, {"kind": "ports", "ports": [45000]}, event_limit=1)
+    assert response.status_code == 200
+    body = response.json()
+    assert [event["event_id"] for event in body["events"]] == [events[-1]["event_id"]]
+    assert body["event_coverage"]["truncated"] is True

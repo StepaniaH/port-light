@@ -37,3 +37,7 @@ docs/*
 .ruff_cache
 playwright-report
 test-results
+
+# Private development notes.
+/docs/superpowers/
+/docs/research/

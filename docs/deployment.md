@@ -4,7 +4,7 @@ Published image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/por
 
 | Tag | Meaning |
 |-----|---------|
-| `v0.8.4` (and other `v*`) | Release built from that git tag |
+| `v0.8.5` (and other `v*`) | Release built from that git tag |
 | `latest` | Most recently published version image |
 
 The Release workflow publishes version and `latest` tags only after the tagged commit passes CI on `main`. Manual branch builds no longer update the legacy `dev` image tag; use a version tag or build from source for development.
@@ -16,7 +16,7 @@ Pin a version tag or digest for reproducible deployments.
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.8.4
+    image: stepaniah/port-light:v0.8.5
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -55,7 +55,7 @@ docker run -d \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  stepaniah/port-light:v0.8.4
+  stepaniah/port-light:v0.8.5
 ```
 
 ## Build from this repo
@@ -93,7 +93,7 @@ services:
       - internal
 
   port-light:
-    image: stepaniah/port-light:v0.8.4
+    image: stepaniah/port-light:v0.8.5
     restart: unless-stopped
     ports:
       - "2100:2100"
@@ -160,7 +160,7 @@ podman run -d --name port-light --restart unless-stopped \
   -v /path/to/your/compose-stacks:/compose:ro \
   -v port-light-data:/data \
   -e COMPOSE_SCAN_DIR=/compose \
-  docker.io/stepaniah/port-light:v0.8.4
+  docker.io/stepaniah/port-light:v0.8.5
 ```
 
 Rootless socket is typically `$XDG_RUNTIME_DIR/podman/podman.sock`. SELinux hosts often need `:z` (or `:Z`) on the volume flags.
@@ -179,7 +179,7 @@ If a Quadlet or rootless snippet works on your machine, open an issue or PR with
 
 For an interactive setup check, open `#/doctor`. It combines current snapshot state with settings storage, host-listener trust, Docker access, and Compose mount checks without starting another scan. The page can copy or download an allowlisted diagnostic report; see [Troubleshooting](troubleshooting.md#run-setup--doctor-first).
 
-All three sources are enabled by default. If this deployment intentionally has no Docker or Compose source, select only those in use in Settings → Occupancy or set `PORT_LIGHT_SCANNERS=listen` on a native host. Unavailable enabled sources are failures, never empty successful scans. Free-port planning, suggestions, and batch reservations return `503` until enabled sources recover. Disabling a source means its occupancy is not checked.
+All three sources are enabled by default. If this deployment intentionally has no Docker or Compose source, select only those in use in Settings → Machines & scanning or set `PORT_LIGHT_SCANNERS=listen` on a native host. Unavailable enabled sources are failures, never empty successful scans. Free-port planning, suggestions, and batch reservations return `503` until enabled sources recover. Disabling a source means its occupancy is not checked.
 
 `PORT_LIGHT_SCAN_TIMEOUT_S` bounds waiting for a background refresh (default 10 seconds, range 1–60). Timed-out scans retain old data and cannot publish a late result. A stuck filesystem call cannot be forcibly interrupted; its worker slot remains occupied until it exits, keeping thread usage bounded. Restore the mount/daemon or restart the service if it stays blocked.
 
@@ -187,7 +187,7 @@ If `port_light.json` becomes unreadable or invalid, fix its permissions or resto
 
 ## Settings (Compose and Web UI)
 
-Non-secret options (theme, language, range, refresh, local machine name, scanner selection, Compose discovery, `URL_HOST`, …) can be set as environment variables **or** on the Settings page (`#/settings`). Changes save automatically into `/data/port_light.json`; only changed fields are written, and a saved override can be removed to restore its environment/default value. Mounts, socket permissions, absolute paths, and secrets remain deployment-only.
+Non-secret options (theme, language, range, refresh, local machine name, scanner selection, Compose discovery, `URL_HOST`, …) can be set as environment variables **or** on the Settings page (`#/settings`). Changes save automatically into `/data/port_light.json`; only changed fields are written. To remove a saved override and restore its environment/default value, send `null` for that field to `PUT /api/settings`. Mounts, socket permissions, absolute paths, and secrets remain deployment-only.
 
 To keep GitOps / Compose as the only source:
 
@@ -199,7 +199,7 @@ environment:
   URL_HOST: nas.lan
 ```
 
-Other machines: add them on Settings → Occupancy, or set `PORT_LIGHT_PEERS` (JSON) when the source is `env`. Each peer still runs its own Port-Light; this instance only pulls occupancy JSON. Keep those URLs on LAN or Tailscale.
+Other machines: add them on Settings → Machines & scanning, or set `PORT_LIGHT_PEERS` (JSON) when the source is `env`. Each peer still runs its own Port-Light; this instance only pulls occupancy JSON. Keep those URLs on LAN or Tailscale.
 
 Up to 32 peers are supported. Choose the multi-machine layout under Settings → Appearance → Cards: waterfall displays all machines, while tabs display one at a time. The refresh slider under Occupancy offers 5-second to 5-minute intervals with advisory peer capacities. Intervals of 30 seconds or more reach the 32-peer limit; longer intervals reduce polling traffic, not the limit. Local event notifications update only the hub; peers refresh on the selected interval or an explicit refresh.
 

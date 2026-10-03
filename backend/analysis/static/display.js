@@ -1,4 +1,4 @@
-/* Render only local language and the closed workbench contract. */
+/* Format the validated workbench contract and localized labels. */
 export function translator(catalogs, locale, namespace = 'workbench') {
   const messages = catalogs[locale] || catalogs.en || {};
   const fallback = catalogs.en || {};
@@ -24,19 +24,91 @@ export function protocolText(protocol, t) {
   return t('protocol_' + (known(protocol, ['tcp', 'udp', 'all']) || 'all'));
 }
 
+export function matchesCaptureRequest(capture, request) {
+  const saved = capture?.scope_requested;
+  if (!saved || !request) return false;
+  const mode = capture.source_kind || (capture.kind === 'changes' ? 'changes' : 'triage');
+  if (mode !== request.kind || (capture.protocol ?? saved.protocol) !== request.protocol) return false;
+  if (mode === 'changes' && Number(capture.history_hours ?? saved.history_hours) !== request.history_hours) return false;
+  const before = saved.scope || saved;
+  const after = request.scope;
+  if (!after || before.kind !== after.kind) return false;
+  if (after.kind === 'all_known') return true;
+  if (after.kind === 'single_port') return before.port === after.port;
+  if (after.kind === 'port_range') return before.start === after.start && before.end === after.end;
+  if (after.kind !== 'selected_ports') return false;
+  const ports = values => [...new Set(values || [])].sort((a, b) => a - b).join(',');
+  return ports(before.ports) === ports(after.ports);
+}
+
+export function problemResources(problem, capture) {
+  const resources = Array.isArray(problem?.resources) ? problem.resources : [];
+  if (problem?.kind !== 'project_declaration_without_live_mapping') return { affected: resources, related: [] };
+  const facts = Array.isArray(capture?.facts) ? capture.facts : Object.values(capture?.facts || {});
+  const affected = resources.filter(resource => facts.some(fact => fact?.kind === 'current' &&
+    fact.resource?.port === resource.port && fact.resource?.protocol === resource.protocol &&
+    fact.data?.compose_relation === 'declared_without_live_mapping'));
+  return { affected, related: resources.filter(resource => !affected.includes(resource)) };
+}
+
+export function distinctRecommendations(recommendations, capture) {
+  const seen = new Set();
+  return (recommendations || []).filter(item => {
+    const problem = (capture?.problems || []).find(value => value?.id === item?.problem_id);
+    if (!problem) return true;
+    const { affected } = problemResources(problem, capture);
+    const signature = JSON.stringify([problem.kind, item.action, item.relation,
+      affected.map(resource => resource.port + ':' + resource.protocol).sort(),
+      [...(item.evidence_ids || [])].sort()]);
+    if (seen.has(signature)) return false;
+    seen.add(signature); return true;
+  });
+}
+
 export function conclusionText(captureOrCode, t) {
   const capture = captureOrCode && typeof captureOrCode === 'object' ? captureOrCode : null;
+  if (capture?.data_status === 'empty') return t('conclusion_empty');
   const code = capture?.conclusion || captureOrCode;
   const value = known(code, [
     'action_required', 'limited_coverage', 'no_actionable_problem', 'changes_recorded',
   ]) || 'limited_coverage';
+  if (value === 'no_actionable_problem' && capture?.source_kind === 'changes') return t('conclusion_no_changes');
   if (value !== 'action_required' || !capture) return t('conclusion_' + value);
   const summaryCount = Number.isInteger(capture.summary?.problem_count) ? capture.summary.problem_count : null;
   const problems = Array.isArray(capture.problems) ? capture.problems : [];
   const count = summaryCount ?? problems.length;
-  const queue = Array.isArray(capture.priority_queue) ? capture.priority_queue : [];
-  const first = queue[0] || problems[0];
-  return t('conclusion_action_required', { count, category: problemText(first, t) });
+  return t('conclusion_action_required', { count });
+}
+
+export function observationCounts(capture, t) {
+  const entries = Object.values(capture.facts || {}).filter(fact => fact?.kind === 'current');
+  const count = (key, field) => Number.isInteger(capture.summary?.[key])
+    ? capture.summary[key] : entries.filter(fact => fact.data?.[field] === true).length;
+  const values = [
+    { label: t('fact_label_listener'), value: count('listening_count', 'listening') },
+    { label: t('fact_label_docker'), value: count('mapped_count', 'docker_live') },
+    { label: t('fact_label_compose'), value: count('declared_count', 'compose_declared') },
+  ];
+  if (capture.source_kind === 'changes') {
+    values.unshift({ label: t('observations_events'), value: Number.isInteger(capture.summary?.event_count) ? capture.summary.event_count
+      : Object.values(capture.facts || {}).filter(fact => fact?.kind === 'event').length });
+  }
+  return values;
+}
+
+/** Keep protocols separate and make every member of a displayed range available. */
+export function resourceGroups(resources) {
+  const groups = [];
+  for (const protocol of ['tcp', 'udp', 'all']) {
+    const ports = [...new Set((resources || []).filter(item => item?.protocol === protocol &&
+      Number.isInteger(item.port) && item.port >= 1 && item.port <= 65535).map(item => item.port))].sort((a, b) => a - b);
+    for (const port of ports) {
+      const previous = groups.at(-1);
+      if (previous?.protocol === protocol && previous.ports.at(-1) === port - 1) previous.ports.push(port);
+      else groups.push({ protocol, ports: [port] });
+    }
+  }
+  return groups;
 }
 
 export function problemText(problem, t) {
@@ -112,46 +184,44 @@ function composeRelationText(value, t) {
   return t('fact_relation_' + (relation || 'not_declared'));
 }
 
-function bindingText(binding, t) {
+function bindingFields(binding, t) {
   const family = known(binding?.family, ['ipv4', 'ipv6', 'unknown']);
   const source = known(binding?.source, ['listen', 'docker', 'compose', 'manual']);
   const scope = known(binding?.scope, ['all_interfaces', 'loopback', 'specific_interface', 'unknown']);
-  return t('fact_binding_item', {
-    family: t('fact_family_' + (family || 'unknown')),
-    source: source === 'listen' ? t('source_listening')
+  return {
+    label: t('fact_family_' + (family || 'unknown')),
+    value: [source === 'listen' ? t('source_listening')
       : source === 'docker' ? t('source_docker_live')
         : source === 'compose' ? t('source_compose_declared')
           : source === 'manual' ? t('source_manual') : t('fact_no_value'),
-    scope: scope ? t('scope_' + scope) : t('fact_no_value'),
-  });
+    scope ? t('scope_' + scope) : t('fact_no_value')],
+  };
 }
 
-function eventSideText(side, t) {
+function eventSideFields(side, t) {
   const values = [];
   if (known(side?.status, ['used', 'configured', 'free', 'unknown'])) {
-    values.push(t('fact_event_state', { state: stateText(side.status, t) }));
+    values.push({ label: t('fact_label_state'), value: stateText(side.status, t) });
   }
   if (Object.prototype.hasOwnProperty.call(side || {}, 'bind_scope')) {
     const scope = known(side.bind_scope, ['public', 'lan', 'link', 'localhost']);
     const binding = scope ? t('bind_' + scope) : t('fact_no_value');
-    values.push(t('fact_event_binding', { binding }));
+    values.push({ label: t('fact_label_binding'), value: binding });
   }
   if (typeof side?.compose_conflict === 'boolean') {
-    values.push(t('fact_event_conflict', { conflict: booleanText(side.compose_conflict, t) }));
+    values.push({ label: t('fact_label_conflict'), value: booleanText(side.compose_conflict, t) });
   }
   if (known(side?.quality, ['complete', 'degraded'])) {
-    values.push(t('fact_event_quality', { quality: t('fact_quality_' + side.quality) }));
+    values.push({ label: t('fact_label_quality'), value: t('fact_quality_' + side.quality) });
   }
-  return values.length ? values.join(' · ') : t('fact_no_value');
+  return values;
 }
 
-function sourceText(source, t) {
+function sourceFields(source, t) {
   const name = known(source?.name, ['listen', 'docker', 'compose', 'manual', 'occupancy']);
   const state = known(source?.state, ['ok', 'failed', 'disabled', 'unknown']);
-  return t('fact_scan_source', {
-    source: name ? t('fact_source_' + name) : t('fact_no_value'),
-    state: t('fact_source_' + (state || 'unknown')),
-  });
+  return { label: name ? t('fact_source_' + name) : t('fact_no_value'),
+    value: t('fact_source_' + (state || 'unknown')) };
 }
 
 /** Render only the frozen, closed fact shapes supplied by the workbench API. */
@@ -159,20 +229,17 @@ export function factSummary(fact, t) {
   const kind = known(fact?.kind, ['scan', 'current', 'event']);
   const data = fact?.data && typeof fact.data === 'object' ? fact.data : {};
   if (kind === 'current') {
-    const bindings = Array.isArray(data.bind) ? data.bind.slice(0, 8).map(binding => bindingText(binding, t)) : [];
+    const bindings = Array.isArray(data.bind) ? data.bind.slice(0, 8).map(binding => bindingFields(binding, t)) : [];
     return {
       title: resourceText(fact.resource, t),
-      text: [
-        t('fact_current_summary', {
-          state: stateText(data.status, t),
-          listener: booleanText(data.listening, t),
-          docker: booleanText(data.docker_live, t),
-          compose: booleanText(data.compose_declared, t),
-        }),
-        t('fact_current_relation', { relation: composeRelationText(data.compose_relation, t) }),
-        t('fact_current_conflict', { conflict: booleanText(data.compose_conflict, t) }),
-        bindings.length ? t('fact_binding_summary', { bindings: bindings.join(', ') }) : t('fact_no_binding'),
-      ].join(' '),
+      sections: [{ fields: [
+        { label: t('fact_label_state'), value: stateText(data.status, t) },
+        { label: t('fact_label_listener'), value: booleanText(data.listening, t) },
+        { label: t('fact_label_docker'), value: booleanText(data.docker_live, t) },
+        { label: t('fact_label_compose'), value: booleanText(data.compose_declared, t) },
+        { label: t('fact_label_relation'), value: composeRelationText(data.compose_relation, t) },
+        { label: t('fact_label_conflict'), value: booleanText(data.compose_conflict, t) },
+      ] }, ...(bindings.length ? [{ title: t('fact_label_bindings'), fields: bindings }] : [])],
     };
   }
   if (kind === 'event') {
@@ -182,26 +249,26 @@ export function factSummary(fact, t) {
     ]);
     return {
       title: fact.resource ? resourceText(fact.resource, t) : t('fact_scan'),
-      text: t('fact_event_summary', {
-        kind: event ? t('event_' + event) : t('fact_unknown'),
-        before: eventSideText(data.before, t),
-        after: eventSideText(data.after, t),
-      }),
+      sections: [
+        { fields: [{ label: t('fact_label_event'), value: event ? t('event_' + event) : t('fact_unknown') }] },
+        { title: t('fact_before'), fields: eventSideFields(data.before, t) },
+        { title: t('fact_after'), fields: eventSideFields(data.after, t) },
+      ],
     };
   }
   if (kind === 'scan') {
-    const sources = Array.isArray(data.sources) ? data.sources.slice(0, 8).map(source => sourceText(source, t)) : [];
+    const sources = Array.isArray(data.sources) ? data.sources.slice(0, 8).map(source => sourceFields(source, t)) : [];
+    const status = (value, yes, no) => typeof value === 'boolean' ? t(value ? yes : no) : t('fact_no_value');
     return {
       title: t('fact_scan'),
-      text: [
-        t('fact_scan_summary', {
-          ready: booleanText(data.ready, t), complete: booleanText(data.complete, t), stale: booleanText(data.stale, t),
-        }),
-        sources.length ? t('fact_scan_sources', { sources: sources.join(' · ') }) : '',
-      ].filter(Boolean).join(' '),
+      sections: [{ fields: [
+        { label: t('fact_label_scan'), value: status(data.ready, 'fact_ready', 'fact_not_ready') },
+        { label: t('fact_label_coverage'), value: status(data.complete, 'fact_complete', 'fact_incomplete') },
+        { label: t('fact_label_freshness'), value: status(data.stale, 'fact_stale', 'fact_fresh') },
+      ] }, ...(sources.length ? [{ title: t('fact_label_sources'), fields: sources }] : [])],
     };
   }
-  return { title: t('fact_unknown'), text: t('fact_unknown') };
+  return { title: t('fact_unknown'), sections: [] };
 }
 
 /** Compare only closed current-fact fields; callers keep the frozen records available separately. */
@@ -241,17 +308,17 @@ export function presentation(snapshot, t) {
   const rules = snapshot?.baseline;
   const observed = [];
   if (!observation?.current?.entries) return {
-    observed, conclusion: t('legacy'), limitations: [t('limit_legacy')], interpretation: null, eligibility: t('legacy'),
+    observed, conclusion: t('legacy'), interpretation: null,
   };
   const state = value => t('status_' + value);
   const sources = { listen: 'listening', docker: 'docker_live', compose: 'compose_declared', manual: 'manual' };
   for (const entry of observation.current.entries) {
     const flags = ['listening', 'docker_live', 'compose_declared', 'manual', 'reservation'].filter(flag => entry[flag]);
-    let text = [entry.protocol?.toUpperCase() || '—', state(entry.status), flags.length ? flags.map(flag => t('source_' + flag)).join(', ') : t('no_sources')].join(' · ');
+    let text = [entry.protocol?.toUpperCase() || '—', state(entry.status), flags.length ? flags.map(flag => t('source_' + flag)).join(', ') : t('no_sources')].join(' / ');
     if (entry.compose_conflict) text += '. ' + t('conclusion_configuration_conflict');
     if (entry.compose_relation === 'declared_without_live_mapping') text += '. ' + t('conclusion_declaration_without_mapping');
     for (const binding of entry.bind || []) {
-      text += ' · ' + [binding.family === 'unknown' ? state('unknown') : binding.family === 'ipv4' ? 'IPv4' : 'IPv6',
+      text += '\n' + [binding.family === 'unknown' ? state('unknown') : binding.family === 'ipv4' ? 'IPv4' : 'IPv6',
         sources[binding.source] ? t('source_' + sources[binding.source]) : t('state'),
         binding.scope === 'unknown' ? state('unknown') : t('scope_' + binding.scope)].join(' / ');
     }
@@ -267,24 +334,22 @@ export function presentation(snapshot, t) {
         text += ': ' + bind(before.bind_scope) + ' → ' + bind(after.bind_scope);
       }
       if (event.kind === 'configuration_mismatch') text += ': ' + t(before.compose_conflict ? 'yes' : 'no') + ' → ' + t(after.compose_conflict ? 'yes' : 'no');
-      observed.push({ text: text + ' · ' + t('event_scope'), evidence_ids: [event.event_id], observed_at: event.observed_at });
+      observed.push({ text, evidence_ids: [event.event_id], observed_at: event.observed_at });
     }
   }
   const changes = (observation.events || []).filter(event => ['state_changed', 'bind_scope_changed', 'configuration_mismatch'].includes(event.kind));
   const conclusion = rules?.version === 'port-rules.v1' ? t('conclusion_' + rules.conclusion.code, { count: changes.length }) : t('legacy');
-  const limitations = (evidence.limitation_codes || ['sources', 'declarations', 'health', 'legacy']).map(code => t('limit_' + code, { count: evidence.history_record_limit }));
   let interpretation = null;
   const selection = snapshot?.interpretation;
   if (snapshot?.interpretation_version === 'port-interpretation.v1' && selection?.schema_version === 1) {
     const text = selection.summary_kind === 'current_occupancy' ? conclusion : observed.filter(item => item.evidence_ids.every(id => selection.evidence_ids.includes(id))).map(item => item.text).join(' ');
     interpretation = {
-      summary: { text: t('port') + ' ' + evidence.port + ' · ' + text, evidence_ids: selection.evidence_ids },
+      summary: { text: t('port') + ' ' + evidence.port + '\n' + text, evidence_ids: selection.evidence_ids },
       hypotheses: (selection.hypotheses || []).map(item => ({ text: t('hypothesis_' + item.kind), evidence_ids: item.evidence_ids, missing_evidence: (item.missing_evidence || []).map(kind => t('missing_' + kind)) })),
-      unknowns: (selection.unknowns || []).map(item => ({ text: t('unknown_' + item.kind), evidence_ids: item.evidence_ids })),
       checks: selection.checks || [],
     };
   }
-  return { observed, conclusion, limitations, interpretation, eligibility: rules ? t('ai_' + rules.ai.reason) : t('legacy') };
+  return { observed, conclusion, interpretation };
 }
 
 export function legacyPresentation(snapshot, t) {
@@ -315,13 +380,14 @@ export function failureText(failure, t) {
     invalid_scope: 'scope', scope_too_large: 'scope_too_large', access_restricted: 'access',
     core_unavailable: 'core', confirmation_required: 'confirm', not_ready: 'not_ready',
     configuration_changed: 'configuration_changed',
-    capture_expired: 'expired', report_not_found: 'report_missing',
+    capture_expired: 'expired', not_found: 'expired', report_not_found: 'report_missing',
     invalid_input: 'scope', invalid_action: 'access', invalid_origin: 'access',
     unsupported_provider: 'provider', invalid_key: 'provider_key',
-    provider_auth: 'provider_key', provider_limit: 'provider_limit', provider_timeout: 'provider',
+    provider_auth: 'provider_key', provider_limit: 'provider_limit', provider_timeout: 'provider_timeout',
     provider_error: 'provider', provider_connection: 'provider', provider_unavailable: 'provider',
-    invalid_output: 'output', incomplete_output: 'output', cancelled: 'stopped', interrupted: 'stopped',
+    invalid_output: 'output', incomplete_output: 'incomplete_output', cancelled: 'stopped', interrupted: 'stopped',
     report_storage_unavailable: 'storage', report_too_large: 'storage_full', report_limit: 'storage_full',
+    receipt_unavailable: 'receipt',
   };
   const key = aliases[failure?.code] || ([401, 403].includes(failure?.status) ? 'access' : 'request');
   return t('error_' + key);

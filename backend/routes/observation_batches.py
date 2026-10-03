@@ -175,7 +175,7 @@ def _history_events(
         limitations.append("hidden_withheld")
     events = sorted(
         (event for event in by_id.values() if visible_in_current_snapshot(event)),
-        key=lambda event: (event["observed_at"], event["event_id"]),
+        key=history.observation_event_order,
     )
     if len(events) > input.event_limit:
         events = events[-input.event_limit:]

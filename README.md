@@ -26,7 +26,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.8.4
+    image: stepaniah/port-light:v0.8.5
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -70,15 +70,15 @@ The dashboard lists occupied and configured ports. Searching for a port number a
 | Configured | Declared in Compose or a manual entry, with no listener detected |
 | Free | Available within the current scan scope |
 
-## Local troubleshooting (unreleased)
+## Local troubleshooting
 
 The troubleshooting workspace suggests checks, shows recent port changes, and
 saves reports for later comparison. These checks run locally without a model key.
 
 Optional AI assistance uses your own provider and key, configured in **Settings → AI**.
+Choose a preset or add a custom OpenAI-compatible API address.
 Review the selected evidence and confirm each request; the provider bills your key.
 See [troubleshooting and BYOK](docs/analysis.md) for limits, storage and privacy.
-These additions are not included in the v0.8.4 image shown above.
 
 ## Work with an AI assistant
 
@@ -132,7 +132,7 @@ With Basic Auth or `HIDDEN_UNLOCK_PASSWORD` enabled, hidden ports require unlock
 | `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. Env only. Both values must be nonempty; partial/blank configuration returns 503. Unset both to disable. |
 | `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. Env only. |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI values override env defaults. `env`: Compose is the only source and the Settings page is read-only. |
-| `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. Also configurable under Settings → Occupancy. |
+| `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. Also configurable under Settings → Machines & scanning. |
 | `PORT_LIGHT_HOST_DESCRIPTION` | empty | Optional plain-text note under this machine's name in the multi-host view, up to 120 characters. |
 | `PORT_LIGHT_PEERS` | unset | JSON array of up to 32 `{name, url, description?, username?, password?}` entries, used when the data file has no `peers` key or when `PORT_LIGHT_SETTINGS_SOURCE=env`. Descriptions are optional plain text, up to 120 characters.  |
 | `PORT_LIGHT_LOG_LEVEL` | `warning` | Backend log level (`debug` / `info` / `warning` / `error`). Degraded scans (Docker unreachable, unreadable Compose file, …) log one line and show up in `/api/health` under `degradations`. Env-only. |
@@ -159,7 +159,7 @@ Settings, labels, and history are stored in the data volume. `port_light.json` m
 - [Port management](docs/port-management.md): grouping, conflicts, reservations, and range rules
 - [Deployment](docs/deployment.md) and [troubleshooting](docs/troubleshooting.md)
 - [CLI](docs/cli.md), [API and MCP](docs/integrations.md); OpenAPI documentation is available at `/docs` on a running instance
-- [Architecture](docs/architecture.md), [roadmap](docs/roadmap.md), and [contributing](CONTRIBUTING.md)
+- [Architecture](docs/architecture.md) and [contributing](CONTRIBUTING.md)
 
 ## Tech stack
 
