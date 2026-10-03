@@ -2,6 +2,12 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## Unreleased
+
+### Changed
+
+- Raise the minimum versions of Uvicorn to 0.54.0, Ruff to 0.16.9, and build to 1.6.1.
+
 ## 0.8.5 — 2026-10-03
 
 ### Added
