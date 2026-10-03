@@ -168,7 +168,7 @@ The Nord, Dracula, and Tokyo Night light palettes adapt colors from [Navidrome S
 
 ## Why not Kubernetes / remote Docker
 
-Remote `DOCKER_HOST`, Swarm, and Kubernetes need a different agent. See [roadmap.md](roadmap.md).
+Remote `DOCKER_HOST`, Swarm, and Kubernetes need a different agent. See [project scope](../CONTRIBUTING.md#scope).
 
 ## Allocation and authentication failure boundaries
 
@@ -204,3 +204,10 @@ UTF-8 bytes, including Unicode passwords and hidden-unlock credentials.
 Allocation resolves the selected rule before scanning its range and validates it again while holding the store write lock. Explicit start/end must stay within that rule. Idempotent retries use their saved receipt even after the rule is changed or deleted. Existing reservations are not moved or released by rule edits. Rule writes invalidate classified responses so range violations and ETags reflect changes.
 
 The browser stores its request key before sending a reservation POST and retains returned release tokens in session storage. These values are never included in list responses. Closing the tab loses that browser’s recovery state, so permanent reservations need an exported release command or a persistent CLI client.
+
+## Local application navigation
+
+Applications composed with the FastAPI app can register links to their own
+local pages using the [UI navigation hook](ui-extensions.md). The core owns the
+shared toolbar, localization, and instance authentication; the composed app
+registers and implements its own routes.

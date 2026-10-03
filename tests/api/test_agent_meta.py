@@ -65,6 +65,8 @@ def test_meta_advertises_client_capabilities():
         "idempotent_reservations": 1,
         "reservation_release": 1,
         "scope_all": 1,
+        "port_observation": 1,
+        "batch_port_observation": 1,
     }
 
 

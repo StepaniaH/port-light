@@ -1,26 +1,29 @@
 /* Port-Light frontend */
 
-import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=99';
-import { errorText, escapeHtml, t } from './text.js?v=99';
-import { moveChipFocus, trapTab } from './a11y.js?v=99';
+import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=121';
+import { errorText, escapeHtml, t } from './text.js?v=121';
+import { moveChipFocus, trapTab } from './a11y.js?v=121';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=99';
-import { openModal, closeModals, modalOpen } from './modal.js?v=99';
-import { applyRoute as updateRoute } from './router.js?v=99';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=99';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=99';
-import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=99';
-import { refreshFleet } from './fleet.js?v=99';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=99';
-import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=99';
-import { mountManagementPage } from './management.js?v=99';
-import { mountActionMenu } from './action-menu.js?v=99';
-import { mountDoctorPage } from './doctor.js?v=99';
+} from './dom.js?v=121';
+import { openModal, closeModals, modalOpen } from './modal.js?v=121';
+import { applyRoute as updateRoute } from './router.js?v=121';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=121';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=121';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=121';
+import { refreshFleet } from './fleet.js?v=121';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=121';
+import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=121';
+import { mountManagementPage } from './management.js?v=121';
+import { mountActionMenu } from './action-menu.js?v=121';
+import { mountDoctorPage } from './doctor.js?v=121';
+import { renderUiLinks } from './ui-links.js?v=121';
+import { mountWorkspacePage } from './workspace.js?v=121';
+import { observeSelects, enhanceSelects } from './select.js?v=121';
 
 (function () {
   'use strict';
@@ -40,9 +43,11 @@ import { mountDoctorPage } from './doctor.js?v=99';
   let settingsPage = null;
   let doctorPage = null;
   let managementPage = null;
+  const workspacePage = mountWorkspacePage(document.getElementById('workspace-page'));
 
   function applyRoute() {
-    updateRoute({ render, refresh: tick, settingsPage, doctorPage, managementPage });
+    updateRoute({ render, refresh: tick, settingsPage, doctorPage, managementPage, workspacePage });
+    syncEventStream();
   }
 
   async function updateHostHealth(hostId) {
@@ -56,7 +61,7 @@ import { mountDoctorPage } from './doctor.js?v=99';
   let loadGeneration = 0;
 
   function onWorkspacePage() {
-    return ['settings', 'doctor', 'manage'].includes(S.route.name);
+    return ['settings', 'doctor', 'manage', 'workspace'].includes(S.route.name);
   }
 
   async function loadAllOccupancy(opts, generation) {
@@ -210,16 +215,23 @@ import { mountDoctorPage } from './doctor.js?v=99';
   let eventStream = null;
 
   function startEventStream() {
-    if (!window.EventSource || eventStream) return;
+    if (!window.EventSource || eventStream || document.hidden || onWorkspacePage() || !S.settings.auto_refresh) return;
     eventStream = new EventSource('/api/events');
     eventStream.addEventListener('refresh', function () {
       if (S.settings.auto_refresh && !onWorkspacePage() && !modalOpen()) tick({ localOnly: true });
     });
   }
 
+  function syncEventStream() {
+    if (document.hidden || onWorkspacePage() || !S.settings.auto_refresh) {
+      if (eventStream) eventStream.close();
+      eventStream = null;
+    } else startEventStream();
+  }
+
   function setupRefresh() {
     if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
-    if (!eventStream) startEventStream();
+    syncEventStream();
     if (S.settings.auto_refresh) {
       tick();
       S.refreshTimer = setInterval(tick, S.settings.refresh_ms || 5000);
@@ -233,6 +245,9 @@ import { mountDoctorPage } from './doctor.js?v=99';
   settingsPage = mountSettingsPage(document.getElementById('settings-form'), {
     onSaved: setupRefresh,
     onLocaleApplied() {
+      renderUiLinks(S.meta.ui_links);
+      if (S.route.name === 'workspace') workspacePage.open(S.route);
+      enhanceSelects(document);
       syncHiddenButton();
       if (S.currentData) render();
       syncHeaderHeight();
@@ -243,6 +258,7 @@ import { mountDoctorPage } from './doctor.js?v=99';
   const groupSelect = document.getElementById('group-mode');
   groupSelect.addEventListener('change', () => { S.groupMode = groupSelect.value; saveView(); render(); });
   doctorPage = mountDoctorPage(document.getElementById('doctor-page'));
+  observeSelects(document.body);
 
   hydrateCachedAppearance();
   try {
@@ -276,6 +292,7 @@ import { mountDoctorPage } from './doctor.js?v=99';
     if (S.route.name === 'settings') return document.getElementById('settings-form');
     if (S.route.name === 'doctor') return document.getElementById('doctor-page');
     if (S.route.name === 'manage') return document.getElementById('management-page');
+    if (S.route.name === 'workspace') return document.getElementById('workspace-page');
     if (hasPeers()) {
       return document.getElementById('host-grid-' + S.focusHostId)
         || document.querySelector('.host-grid')
@@ -710,13 +727,16 @@ import { mountDoctorPage } from './doctor.js?v=99';
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
+      syncEventStream();
       return;
     }
     if (S.settings.auto_refresh) setupRefresh();
+    else syncEventStream();
   });
 
   function startApp() {
     sortSelect.value = S.sortMode;
+    enhanceSelects(document);
     rangeStartInput.value = S.rangeStart;
     rangeEndInput.value = S.rangeEnd;
     syncFilterUI();
@@ -724,6 +744,7 @@ import { mountDoctorPage } from './doctor.js?v=99';
     fetchMeta()
       .then(function (meta) {
         if (meta) S.meta = meta;
+        if (window.PortLightI18n?.setSampleCopies) PortLightI18n.setSampleCopies(meta?.preview?.samples);
         const ver = document.getElementById('app-version');
         if (ver && S.meta.version) ver.textContent = 'v' + S.meta.version;
         return fetchSettings();
@@ -741,6 +762,7 @@ import { mountDoctorPage } from './doctor.js?v=99';
       })
       .then(function () {
         if (window.PortLightI18n) PortLightI18n.applyDom();
+        renderUiLinks(S.meta.ui_links);
         if (S.showHidden && S.meta.hidden_unlock_required && !S.hiddenUnlock) {
           S.showHidden = false;
           S.kindFilters.delete('hidden');
@@ -748,7 +770,6 @@ import { mountDoctorPage } from './doctor.js?v=99';
         syncHiddenButton();
         syncFilterUI();
         applyRoute();
-        startEventStream();
         setupRefresh();
         syncHeaderHeight();
       });

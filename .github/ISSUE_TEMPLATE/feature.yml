@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Container start/stop, logs, and image updates are out of scope (see `docs/roadmap.md`).
+        Container start/stop, logs, and image updates are out of scope (see `CONTRIBUTING.md`).
   - type: textarea
     id: problem
     attributes:

@@ -31,7 +31,7 @@ test('warning provides upgrade guidance without exposing raw diagnostic data', (
   assert.match(html, /<summary/);
   assert.match(html, /scanner\.diagnostics\.docker/);
   assert.match(html, /scanner\.diagnostics\.upgrade/);
-  assert.match(html, /#\/settings\/occupancy/);
+  assert.match(html, /#\/settings\/hosts/);
   assert.doesNotMatch(html, /secret|private\/config/);
   const remote = scanWarningMarkup({ scan_complete: false }, 'peer0001', 'board');
   assert.match(remote, /scanner\.diagnostics\.remote/);

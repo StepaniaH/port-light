@@ -4,11 +4,45 @@
   'use strict';
 
   var SUPPORTED = ['en', 'fr', 'de', 'es', 'zh-CN', 'zh-TW', 'ja'];
-  var CACHE_BUST = '99';
+  var CACHE_BUST = '121';
   var cache = {};
   var dict = {};
   var locale = 'en';
   var fallback = {};
+  var sampleKeys = new Map();
+
+  function setSampleCopies(catalogs) {
+    sampleKeys.clear();
+    if (!catalogs || !catalogs.en) return;
+    Object.keys(catalogs).forEach(function (code) {
+      Object.keys(catalogs[code]).forEach(function (key) {
+        var value = catalogs[code][key];
+        if (typeof value === 'string' && typeof catalogs.en[key] === 'string') sampleKeys.set(value, key);
+      });
+    });
+    applySampleCopies();
+  }
+
+  function sampleText(value) {
+    return sampleKeys.has(value) ? t('preview.' + sampleKeys.get(value)) : value;
+  }
+
+  function applySampleCopies() {
+    if (!sampleKeys.size) return;
+    // Preview examples follow the locale; arbitrary user text stays untouched.
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node.parentElement.closest('script, style, code, pre, select')) continue;
+      var value = node.textContent.trim();
+      var translated = sampleText(value);
+      if (translated !== value) node.textContent = node.textContent.replace(value, translated);
+    }
+    document.querySelectorAll('[name="host_name"], [name="host_description"], [data-peer-field="name"], [data-peer-field="description"], [name="label"]').forEach(function (input) {
+      var translated = sampleText(input.value);
+      if (translated !== input.value) input.value = translated;
+    });
+  }
 
   function lookup(tree, key) {
     if (!tree) return undefined;
@@ -101,6 +135,7 @@
     document.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
       el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
     });
+    applySampleCopies();
     document.documentElement.setAttribute('data-i18n-ready', '');
   }
 
@@ -150,6 +185,9 @@
     load: load,
     t: t,
     applyDom: applyDom,
+    setSampleCopies: setSampleCopies,
+    sampleText: sampleText,
+    applySampleCopies: applySampleCopies,
     locale: function () { return locale; },
   };
 })(window);

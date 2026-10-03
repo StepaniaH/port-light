@@ -50,9 +50,12 @@ may be processed or retained by the AI provider under that tool's settings.
 The copied setup prompt includes the instance URL. Review the target and the AI
 tool's data settings before sharing details from a private environment.
 
-Port-Light does not send data to an AI provider on its own. A public setup guide
-does not grant network access or bypass instance authentication. Use a client
-environment that can reach the instance without exposing it publicly.
+Connecting an external AI tool does not trigger model calls in Port-Light. The
+bundled BYOK workspace separately sends selected sanitized evidence only after an
+explicit confirmation. Saved keys remain on the Hub in an owner-only file and are
+not returned by the API. See [BYOK data handling](docs/analysis.md). A public
+setup guide does not grant network access or bypass instance authentication.
+Use a client environment that can reach the instance without exposing it publicly.
 
 MCP `reserve_ports` saves release tokens locally and omits them from its result.
 Legacy `suggest_ports` reservation results and CLI reservation JSON still include

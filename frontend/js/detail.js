@@ -1,18 +1,18 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=99';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=99';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=99';
-import { trapTab } from './a11y.js?v=99';
-import { api } from './api.js?v=99';
-import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=99';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=99';
+import { S, saveView } from './state.js?v=121';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=121';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=121';
+import { trapTab } from './a11y.js?v=121';
+import { api } from './api.js?v=121';
+import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=121';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=121';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=99';
-import { closeModals, modalOpen, openModal } from './modal.js?v=99';
+} from './grid.js?v=121';
+import { closeModals, modalOpen, openModal } from './modal.js?v=121';
 
 let tick;
 let loadPorts;
@@ -276,6 +276,9 @@ export function configureDetail(actions) {
       else if (active.hasAttribute('data-label-input')) keep = 'label';
     }
 
+    if ((!S.selectedHostId || S.selectedHostId === 'local') && !p._pending && !p._unavailable && !p._missing) {
+      html += '<div class="action-row">' + portUiLinksHtml(S.meta.ui_links, p.port, window.PortLightI18n?.locale() || 'en') + '</div>';
+    }
     if (!p._pending && !p._unavailable && p.status !== 'unknown' && !p._missing) html += '<section id="detail-history" hidden></section>';
     detailContent.innerHTML = html;
     if (!p._pending && !p._unavailable && p.status !== 'unknown' && !p._missing) {
@@ -482,10 +485,13 @@ export function configureDetail(actions) {
         const time = new Date(ev.ts * 1000).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
         const stateKey = HISTORY_STATE_KEYS[ev.state];
         const stateText = stateKey ? t(stateKey) : ev.state;
-        const who = (ev.holders && ev.holders.length) ? ' · ' + ev.holders.join(', ') : '';
-        return '<div class="history-event">' + escapeHtml(time + ' — ' + stateText + who) + '</div>';
+        const who = (ev.holders && ev.holders.length)
+          ? '<span class="history-holders">' + escapeHtml(ev.holders.join(', ')) + '</span>' : '';
+        return '<div class="history-event"><time datetime="' + new Date(ev.ts * 1000).toISOString() + '">' +
+          escapeHtml(time) + '</time><span>' + escapeHtml(stateText) + '</span>' + who + '</div>';
       }).join('');
       host.innerHTML = '<h3 class="history-title">' + escapeHtml(t('history.title')) + '</h3>' + items;
       host.hidden = false;
     } catch (err) { /* history is best-effort */ }
   }
+import { portUiLinksHtml } from './ui-links.js?v=121';

@@ -1,8 +1,8 @@
 /* Host catalog, occupancy selectors, and route URLs. */
 
-import { S } from './state.js?v=99';
-import { t } from './text.js?v=99';
-import { usesFocusedFleet } from './fleet.js?v=99';
+import { S } from './state.js?v=121';
+import { t } from './text.js?v=121';
+import { usesFocusedFleet } from './fleet.js?v=121';
 
   export function hasPeers() {
     return !!(S.hostCatalog.peers && S.hostCatalog.peers.length);
@@ -28,7 +28,8 @@ import { usesFocusedFleet } from './fleet.js?v=99';
   }
   export function hostName(id) {
     const row = hostById(id);
-    return (row && row.name) || id || t('hosts.thisMachine');
+    const name = (row && row.name) || id || t('hosts.thisMachine');
+    return window.PortLightI18n?.sampleText ? window.PortLightI18n.sampleText(name) : name;
   }
   export function occupancyUrl(hostId) {
     const q = 'range_start=' + S.rangeStart + '&range_end=' + S.rangeEnd + '&include_hidden=' + S.showHidden;

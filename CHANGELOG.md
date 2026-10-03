@@ -2,6 +2,32 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## 0.8.5 — 2026-10-03
+
+### Added
+
+- A local troubleshooting workspace with port checks, scan history, saved reports, JSON export, and comparisons against earlier reports.
+- Optional AI explanations linked to captured evidence, with a payload preview before each request and support for all seven interface languages.
+- Saved AI connections for OpenAI, DeepSeek, OpenCode Go, and custom OpenAI-compatible services. Each connection can be edited, tested, selected, or deleted independently.
+- TCP/UDP observation snapshots and change events for troubleshooting and report comparisons.
+- A UI navigation hook for applications that add pages to the dashboard.
+
+### Changed
+
+- Organize settings by topic, group machine controls, and adapt the custom palette editor to the available width.
+- Show port-management lists before editors and keep navigation visible. Prioritize failed and warning diagnostics above routine checks.
+- Group consecutive ports, separate affected ports from related project ports, and show scan details as labeled fields.
+- Shorten troubleshooting copy, localize sample values, and use green for successful connection and save results.
+- Improve Automation setup, report actions, and layouts on smaller screens.
+
+### Fixed
+
+- Keep browser session credentials out of provider requests and reject keys mistakenly entered as model IDs.
+- Preserve pending check conditions and expanded records during navigation and AI analysis; offer a retry when startup requests fail.
+- Honor explicit proxy settings for provider connections and reserve OpenCode Go DeepSeek Flash output capacity for complete answers.
+- Report incomplete model responses separately, remove internal source pointers from model input, and combine duplicate AI check suggestions.
+- Preserve numeric capture order when limiting events recorded within the same second.
+
 ## 0.8.4 — 2026-09-13
 
 ### Added

@@ -95,6 +95,12 @@ def test_markup_i18n_keys_exist_in_english():
             js += path.read_text(encoding="utf-8")
     keys = set(re.findall(r'data-i18n(?:-placeholder|-title|-aria)?="([a-zA-Z0-9_.]+)"', html + js))
     keys |= set(re.findall(r"""\bt\(\s*['"]([a-zA-Z0-9_.]+)['"]""", js))
+    for prefix in sorted(key[:-1] for key in keys if key.endswith('.')):
+        namespace = english
+        for part in prefix.split('.'):
+            assert isinstance(namespace, dict) and part in namespace, prefix
+            namespace = namespace[part]
+        assert isinstance(namespace, dict), prefix
     keys = {key for key in keys if key and not key.endswith('.')}
     assert "filter.udp" in keys
     assert "filter.localhost" in keys
@@ -117,6 +123,8 @@ _DYNAMIC_PREFIXES = (
     "localeNative.",
     "settings.editor.vars.",
     "settings.source.",
+    "analysis.messages.",  # Exported into the bundled module's closed translation namespaces.
+    "preview.",  # Synthetic sample values translated by the disposable preview server.
 )
 
 

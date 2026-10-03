@@ -112,6 +112,20 @@ def get_peer(host_id: str) -> dict | None:
     return None
 
 
+def connection_test_peer(values: dict) -> dict:
+    """Resolve the current form without saving it or exposing saved passwords."""
+    previous = get_peer(values.get("id", "")) or {}
+    url = origin_url(values["url"])
+    if (previous.get("password") and previous.get("url") != url
+            and not values.get("password") and not values.get("clear_auth")):
+        raise HostsError("credentials_required")
+    return {
+        "url": url,
+        "username": "" if values.get("clear_auth") else values.get("username", previous.get("username", "")),
+        "password": "" if values.get("clear_auth") else values.get("password", previous.get("password", "")),
+    }
+
+
 def origin_url(url: str) -> str:
     parsed = _parse_peer_url(url)
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
@@ -167,7 +181,11 @@ def fetch_peer_json(
             raw = exc.read(MAX_BODY + 1)
         except Exception:
             return status, None, etag
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+    except TimeoutError:
+        return 504, None, None
+    except urllib.error.URLError as exc:
+        return (504 if isinstance(exc.reason, TimeoutError) else 502), None, None
+    except (OSError, ValueError):
         return 502, None, None
     if status in _REDIRECTS:
         return 502, None, None
@@ -279,6 +297,10 @@ def _normalize_peers(raw_peers, existing: list[dict]) -> list[dict]:
             host_id = secrets.token_hex(4)
         seen_ids.add(host_id)
         prev = by_id.get(host_id, {})
+        if (prev.get("password") and prev.get("url") != url
+                and not item.get("password")
+                and not (item.get("username") == "" and item.get("password") == "")):
+            raise HostsError("credentials_required")
         if "description" not in item:
             description = str(prev.get("description") or "").strip()
         else:

@@ -26,7 +26,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.8.4
+    image: stepaniah/port-light:v0.8.5
     container_name: port-light
     restart: unless-stopped
     ports:
@@ -69,6 +69,16 @@ docker compose up -d
 | 占用 | 存在监听进程或运行中的容器映射 |
 | 已配置 | 已在 Compose 或手动条目中登记，尚未检测到监听 |
 | 空闲 | 当前扫描范围内可用 |
+
+## 本地排障
+
+排障工作台可列出建议检查项、查看近期端口变化、保存报告并复查。
+这些检查在本机运行，无需模型 Key。
+
+可选的 AI 辅助在 **设置 → AI** 中配置自己的供应商、模型和 Key。
+可选择预设，也可填写兼容 OpenAI 的自定义 API 地址。
+每次调用前预览数据并明确确认，费用由你的模型供应商向该 Key 计收。
+使用限制、存储和隐私说明见[排障与 BYOK 文档](docs/analysis.md)。
 
 ## 和 AI 一起使用
 
@@ -120,7 +130,7 @@ AI 的运行环境需要能访问实例。MCP、CLI + Skill、Docker 与更新�
 | `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 两项都必须非空；缺一项或空值会返回 503。完全取消两项环境变量才会关闭认证。 |
 | `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。只能用环境变量。 |
 | `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页的值覆盖 env 默认值。`env`：只认 Compose，设置页只读。 |
-| `PORT_LIGHT_HOST_NAME` | 主机名 | 多机器视图中本机占用图的名称。也可在设置 → 占用图中修改。 |
+| `PORT_LIGHT_HOST_NAME` | 主机名 | 多机器视图中本机占用图的名称。也可在设置 → 机器与扫描中修改。 |
 | `PORT_LIGHT_HOST_DESCRIPTION` | 空 | 多机器视图中本机名称下方的可选纯文本短描述，最多 120 字。 |
 | `PORT_LIGHT_PEERS` | 未设置 | 最多 32 个 `{name, url, description?, username?, password?}` 条目的 JSON 数组。短描述为可选纯文本，最多 120 字。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。 |
 | `PORT_LIGHT_LOG_LEVEL` | `warning` | 后端日志级别（`debug` / `info` / `warning` / `error`）。扫描器降级（Docker 不可达、Compose 文件解析失败等）会记一条日志，并出现在 `/api/health` 的 `degradations` 里。只能用环境变量。 |
@@ -136,7 +146,7 @@ AI 的运行环境需要能访问实例。MCP、CLI + Skill、Docker 与更新�
 
 ## 数据与隐私
 
-Port-Light 无遥测。出站 HTTP 请求用于已配置的实例查询和 Webhook；Webhook 发送 `{event, port}`。
+Port-Light 无遥测。出站 HTTP 请求用于已配置的实例查询、Webhook，以及用户明确确认的 BYOK 模型请求。Webhook 发送 `{event, port}`；模型请求将选定的脱敏证据发送到用户配置的供应商。
 
 扫描结果、机器描述和端口规则可由页面及 API 用户读取，多机汇总实例也会接收这些数据。Compose 的 `.env` 在本地用于变量替换。Doctor 报告提供脱敏后的汇总信息。
 
@@ -147,7 +157,7 @@ Port-Light 无遥测。出站 HTTP 请求用于已配置的实例查询和 Webho
 - [端口管理](docs/port-management.md)：分组、冲突、预留与范围规则
 - [部署](docs/deployment.md)与[故障排查](docs/troubleshooting.md)
 - [CLI](docs/cli.md)、[API 与 MCP](docs/integrations.md)；运行实例的 `/docs` 提供 OpenAPI 文档
-- [架构](docs/architecture.md)、[路线图](docs/roadmap.md)与[贡献指南](CONTRIBUTING.md)
+- [架构](docs/architecture.md)与[贡献指南](CONTRIBUTING.md)
 
 ## 技术栈
 

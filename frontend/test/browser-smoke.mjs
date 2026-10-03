@@ -26,7 +26,7 @@ async function unusedPort() {
   return port;
 }
 
-async function startHost(name, peers = [], scanners = 'listen,compose') {
+async function startHost(name, peers = [], scanners = 'listen,compose', auth = {}) {
   const data = join(temporary, name);
   const compose = join(data, 'compose');
   await mkdir(compose, { recursive: true });
@@ -50,7 +50,7 @@ async function startHost(name, peers = [], scanners = 'listen,compose') {
   const child = spawn(python, ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(port)], {
     cwd: root, env: { ...env, PORT_LIGHT_DATA_DIR: data, COMPOSE_SCAN_DIR: compose,
       PORT_LIGHT_SCANNERS: scanners, PORT_LIGHT_SETTINGS_SOURCE: 'file', PORT_LIGHT_HOST_NAME: name, PORT_LIGHT_PORT: String(port),
-      DOCKER_HOST: 'unix://' + join(data, 'no-docker.sock'), HISTORY_RETENTION_DAYS: '7' },
+      DOCKER_HOST: 'unix://' + join(data, 'no-docker.sock'), HISTORY_RETENTION_DAYS: '7', ...auth },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   processes.push(child);
@@ -73,7 +73,7 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   assert.equal((await fetch(peer + '/api/ports/suggest')).status, 503);
-  await page.goto(peer + '/#/settings/occupancy');
+  await page.goto(peer + '/#/settings/hosts');
   await expect(page.locator('[data-i18n="settings.scanners.invalid"]')).toBeVisible();
   await expect(page.locator('input[name="local_scanners"]:checked')).toHaveCount(0);
   await page.locator('input[name="local_scanners"][value="listen"]').check();
@@ -108,9 +108,11 @@ try {
     id: 'peer000' + (i + 1), name: 'Peer ' + (i + 1), url,
   }));
   const hub = await startHost('Hub', peerRows);
+  let expectedPeerTestFailure = false;
   page.on('console', message => {
     const expectedConflict = message.location().url === hub + '/api/manual-ports/batch' && message.text().includes('409');
-    if (message.type() === 'error' && !expectedConflict) errors.push(message.text());
+    const expectedProbe = expectedPeerTestFailure && message.location().url === hub + '/api/hosts/test';
+    if (message.type() === 'error' && !expectedConflict && !expectedProbe) errors.push(message.text());
   });
   await page.goto(hub);
   await expect(page.locator('.host-board')).toHaveCount(8);
@@ -135,7 +137,7 @@ try {
   assert.equal(saved.manual_label, 'Updated service');
   await page.keyboard.press('Escape');
 
-  await page.goto(hub + '/#/settings/occupancy');
+  await page.goto(hub + '/#/settings/hosts');
   await expect(page.locator('input[name="host_name"]')).toHaveValue('Hub');
   let releaseSave;
   let saveHeld = false;
@@ -153,7 +155,7 @@ try {
     await expect.poll(() => saveHeld).toBe(true);
     await page.getByRole('link', { name: /^Port-Light/ }).click();
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
-    await page.getByRole('tab', { name: 'Occupancy', exact: true }).click();
+    await page.getByRole('tab', { name: 'Machines & scanning', exact: true }).click();
     await expect(page.locator('input[name="host_name"]')).toHaveValue('Pending hub name');
   } finally {
     releaseSave();
@@ -164,6 +166,33 @@ try {
   await page.locator('input[name="host_name"]').fill('Hub');
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   const peerRow = page.locator('details.peer-row').first();
+  await peerRow.locator('summary').click();
+  await peerRow.locator('[data-peer-test]').click();
+  await expect(peerRow.locator('[data-peer-test-status]')).toContainText('Connected (Port-Light');
+
+  // Test an unsaved machine using its actual Basic Auth middleware.
+  const protectedPeer = await startHost('Protected peer', [], 'listen,compose', {
+    AUTH_USER: 'fixture-user', AUTH_PASSWORD: 'fixture-peer-password',
+  });
+  await page.locator('#peer-add').click();
+  const draftPeer = page.locator('details.peer-row').last();
+  await expect(draftPeer.locator('[data-peer-test]')).toBeDisabled();
+  await draftPeer.locator('[data-peer-field="url"]').fill(protectedPeer);
+  await draftPeer.locator('[data-peer-field="username"]').fill('fixture-user');
+  await draftPeer.locator('[data-peer-field="password"]').fill('wrong-fixture-password');
+  expectedPeerTestFailure = true;
+  await draftPeer.locator('[data-peer-test]').click();
+  await expect(draftPeer.locator('[data-peer-test-status]')).toContainText('Authentication failed');
+  expectedPeerTestFailure = false;
+  await draftPeer.locator('[data-peer-field="password"]').fill('fixture-peer-password');
+  await expect(draftPeer.locator('[data-peer-test-status]')).toBeHidden();
+  await draftPeer.locator('[data-peer-test]').click();
+  await expect(draftPeer.locator('[data-peer-test-status]')).toContainText('Connected (Port-Light');
+  assert.equal((await (await fetch(hub + '/api/hosts')).json()).peers.length, peerRows.length,
+    'Testing an unnamed draft does not add the machine');
+  await draftPeer.locator('[data-peer-remove]').click();
+  await expect(page.locator('details.peer-row')).toHaveCount(peerRows.length);
+  await expect(page.locator('#peers-status')).toHaveClass(/is-ok/);
   await peerRow.locator('summary').click();
   await peerRow.locator('[data-peer-field="username"]').fill('smoke-user');
   const peerPassword = peerRow.locator('[data-peer-field="password"]');
@@ -189,6 +218,11 @@ try {
   await expect(page.locator('.scanner-option .scanner-state.disabled')).toHaveCount(1);
   await expect(page.locator('details.peer-row')).toHaveCount(7);
   await expect(page.locator('details.peer-row[open]')).toHaveCount(0);
+  await expect(page.locator('#settings-nav')).toHaveAttribute('aria-orientation', 'vertical');
+  await page.getByRole('tab', { name: 'Machines & scanning', exact: true }).press('ArrowUp');
+  await expect(page.getByRole('tab', { name: 'Occupancy', exact: true })).toBeFocused();
+  await expect(page.locator('input[name="host_name"]')).toBeHidden();
+  await page.getByRole('tab', { name: 'Occupancy', exact: true }).click();
   const refreshSlider = page.locator('[data-refresh-slider]');
   await expect(refreshSlider).toBeVisible();
   await refreshSlider.click();
@@ -341,7 +375,7 @@ try {
   await expect(families).toBeVisible();
   await expect(showV4).toBeChecked();
   await expect(showV6).toBeChecked();
-  await expect(page.locator('[data-setting^="show_bind_"] .origin-hint')).toHaveCount(0);
+  await expect(page.locator('#settings-fields .setting-meta')).toHaveCount(0);
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await page.goto(hub);
   const boundCell = page.locator('#host-grid-local .port-cell[data-port="42008"]');
@@ -351,7 +385,6 @@ try {
   await expect(localCell.locator('.bind-address-row')).toHaveCount(0);
 
   await page.goto(hub + '/#/settings/appearance');
-  await expect(page.locator('[data-setting^="show_bind_"] .origin-hint')).toHaveCount(0);
   await showV4.uncheck();
   await showV6.uncheck();
   await expect(showBinds).toBeChecked();
@@ -402,7 +435,7 @@ try {
   await expect(detail.locator('[data-label-form]')).toHaveCount(0);
 
   // Enable the intentionally unavailable Docker source to exercise real warnings.
-  await page.goto(hub + '/#/settings/occupancy');
+  await page.goto(hub + '/#/settings/hosts');
   await page.locator('input[name="local_scanners"][value="docker"]').check();
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await page.goto(hub);
@@ -432,10 +465,23 @@ try {
   assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
 
   await page.goto(hub + '/#/doctor');
-  await expect(page.locator('#doctor-page h1')).toHaveText('Setup / Doctor');
+  await expect(page.locator('#doctor-page h1')).toHaveText('Setup diagnostics');
   await expect(page.locator('.doctor-check')).toHaveCount(6);
+  await expect(page.locator('.doctor-group .doctor-check').first()).toBeVisible();
+  await expect(page.locator('.doctor-routine')).not.toHaveAttribute('open', '');
+  await page.locator('.doctor-routine summary').click();
+  await expect(page.locator('.doctor-routine .doctor-check').first()).toBeVisible();
   await expect(page.locator('#doctor-copy')).toBeEnabled();
   await expect(page.locator('#doctor-download')).toHaveAttribute('href', '/api/doctor/report');
+  const copyBounds = await page.locator('#doctor-copy').boundingBox();
+  const downloadBounds = await page.locator('#doctor-download').boundingBox();
+  assert.equal(downloadBounds.height, copyBounds.height);
+  assert.equal(downloadBounds.y, copyBounds.y);
+  assert.ok(await page.locator('#doctor-download').evaluate(el => {
+    const text = document.createRange(); text.selectNodeContents(el);
+    const label = text.getBoundingClientRect(), button = el.getBoundingClientRect();
+    return Math.abs((label.top + label.bottom - button.top - button.bottom) / 2) <= 2;
+  }), 'The download label must be centered vertically, like the copy button.');
   await expect(page.locator('.doctor-report-preview')).toContainText('"schema_version": 1');
   const diagnosticReport = await (await fetch(hub + '/api/doctor/report')).text();
   assert.doesNotMatch(diagnosticReport, /smoke-user|smoke-password|Local ·|Tailscale ·/);
@@ -443,7 +489,7 @@ try {
   assert.ok(!diagnosticReport.includes(hub));
 
   await page.locator('#btn-settings').click();
-  await page.getByRole('tab', { name: 'Occupancy', exact: true }).click();
+  await page.getByRole('tab', { name: 'Machines & scanning', exact: true }).click();
   await expect(page.locator('input[name="host_name"]')).toBeVisible();
   assert.deepEqual(errors, []);
   console.log('Browser smoke passed: adaptive waterfall, independent settings and peer saves, draft theme feedback, mobile waterfall, persisted machine descriptions, slider focus and capacity guidance, keyboard host switch, invalid scanner recovery, detail, saved label, all light palettes, saved/system appearance, mixed bind addresses, batch conflict and retry, scan guidance, Doctor checks and sanitized report.');

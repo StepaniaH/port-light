@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -45,6 +46,23 @@ def test_records_transitions_and_queries(monkeypatch):
     assert used == []  # no transition for 8080
 
 
+def test_data_directory_change_restarts_history_baseline(monkeypatch, tmp_path):
+    from backend import history
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(first))
+    history.record(_rows((4320, "used", ())))
+
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(second))
+    history.record([])
+    assert history.query(4320) == []
+    history.record(_rows((4320, "used", ())))
+    assert [event["state"] for event in history.query(4320)] == ["used"]
+
+
 def test_disabled_by_retention_zero(monkeypatch):
     from backend import history
 
@@ -52,6 +70,84 @@ def test_disabled_by_retention_zero(monkeypatch):
     assert history.enabled() is False
     assert history.record(_rows((8080, "used", ()))) == 0
     assert history.query(8080) == []
+
+
+def _observation_event(*, capture: int, port: int, hidden: bool = False) -> dict:
+    observation_id = f"obs-0123456789ab-{capture}"
+    return {
+        "event_id": f"{observation_id}:state_changed:{port}",
+        "observation_id": observation_id,
+        "observed_at": int(time.time()),
+        "port": port,
+        "kind": "state_changed",
+        "before": {
+            "status": "configured",
+            "protocols": ["tcp"],
+            "bind_scope": "localhost",
+            "compose_conflict": False,
+        },
+        "after": {
+            "status": "used",
+            "protocols": ["tcp"],
+            "bind_scope": "public",
+            "compose_conflict": False,
+        },
+        "source_quality": "complete",
+        "requires_hidden_access": hidden,
+    }
+
+
+def test_observation_events_are_idempotent_sanitized_and_visibility_bound():
+    from backend import history
+
+    visible = _observation_event(capture=1, port=4317)
+    hidden = _observation_event(capture=2, port=4318, hidden=True)
+    invalid = {
+        **_observation_event(capture=3, port=4319),
+        "before": {**visible["before"], "holder": "private-service"},
+    }
+    assert history.record_observation_events([visible, hidden, invalid]) == 2
+    assert history.record_observation_events([visible, hidden]) == 0
+
+    assert history.query_observation_events(4318) == []
+    visible_events = history.query_observation_events(4317)
+    assert len(visible_events) == 1
+    assert visible_events[0]["evidence_refs"] == [f"history:{visible['event_id']}"]
+    assert "requires_hidden_access" not in visible_events[0]
+    assert "private-service" not in str(visible_events)
+    assert history.query_observation_events(4318, allow_hidden=True)[0]["event_id"] == hidden["event_id"]
+
+
+def test_batch_observation_history_fences_a_future_same_second_capture(monkeypatch):
+    from backend import history
+
+    now = int(time.time())
+    future = _observation_event(capture=2, port=4317)
+    future["observed_at"] = now
+    assert history.record_observation_events([future]) == 1
+    events, truncated = history.query_observation_events_batch(
+        {4317},
+        1,
+        capture_id="obs-0123456789ab-1",
+        captured_at=now,
+    )
+    assert events == []
+    assert truncated is False
+
+
+def test_batch_observation_history_keeps_the_newest_numeric_same_second_capture():
+    from backend import history
+
+    now = int(time.time())
+    earlier = _observation_event(capture=9, port=4317)
+    latest = _observation_event(capture=10, port=4317)
+    earlier["observed_at"] = latest["observed_at"] = now
+    assert history.record_observation_events([earlier, latest]) == 2
+    events, truncated = history.query_observation_events_batch(
+        {4317}, 1, limit=1, capture_id="obs-0123456789ab-10", captured_at=now
+    )
+    assert [event["event_id"] for event in events] == [latest["event_id"]]
+    assert truncated is True
 
 
 def test_history_endpoint_404_when_disabled(monkeypatch):
@@ -178,3 +274,21 @@ def test_partial_scan_keeps_history_baseline_and_refuses_reservation(monkeypatch
         setattr(scan, flag, False)
         main._monitor.refresh()
         assert [row["state"] for row in history.query(42000)] == ["free"]
+
+
+def test_existing_history_database_keeps_its_events_after_upgrade(tmp_path):
+    import sqlite3
+    from backend import history
+
+    now = int(time.time())
+    with sqlite3.connect(tmp_path / "history.db") as database:
+        database.execute("CREATE TABLE events (ts INTEGER NOT NULL, port INTEGER NOT NULL, "
+                         "state TEXT NOT NULL, holders TEXT NOT NULL DEFAULT '[]')")
+        database.execute("INSERT INTO events VALUES (?, ?, ?, ?)",
+                         (now, 8080, "used", '["existing-app"]'))
+    assert history.query(8080)[0]["state"] == "used"
+    assert history.record_observation_events([_observation_event(capture=1, port=8080)]) == 1
+    with sqlite3.connect(tmp_path / "history.db") as database:
+        assert database.execute("SELECT * FROM events").fetchall() == [
+            (now, 8080, "used", '["existing-app"]')]
+        assert database.execute("SELECT COUNT(*) FROM observation_events").fetchone() == (1,)

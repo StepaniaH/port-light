@@ -97,7 +97,7 @@ that completes with no rows is `ok`; a source that cannot be read is `failed`.
 Omitting a source explicitly marks it `disabled` and excludes its occupancy
 from the checks. At least one source must remain enabled.
 
-The same selection is editable as one set under **Settings → Occupancy** and
+The same selection is editable as one set under **Settings → Machines & scanning** and
 through `PUT /api/settings` with `local_scanners: ["listen", "docker"]`.
 Saved values override environment defaults unless settings are locked to the
 environment. Changes apply to subsequent scans without a container restart.
@@ -152,6 +152,34 @@ curl -s "http://127.0.0.1:2100/api/ports/5432"
 Returns the full row (status, source type, containers, Compose configs,
 guessed URLs). If occupancy cannot be confirmed and no occupied/configured row is known, the response is `503`. Hidden rows are withheld unless the request carries
 `X-Hidden-Unlock` and the instance has `HIDDEN_UNLOCK_PASSWORD` or Basic Auth.
+
+### Read a port observation
+
+```bash
+curl -s "http://127.0.0.1:2100/api/observations/ports/5432?protocol=all"
+```
+
+This is the evidence-oriented counterpart to the full port row. It returns one
+captured local snapshot with a `capture_id`, scan quality, a separate `tcp` and
+`udp` entry, broad bind categories, local state history, and recent
+deterministic changes. It deliberately excludes service names, container names,
+paths, URLs, raw IP addresses, process details, and manual labels. Consumers
+must keep `evidence_refs` with any explanation they produce.
+
+`protocol` accepts `tcp`, `udp`, or `all`. `all` never combines TCP and UDP
+into one occupancy claim. A scan that is incomplete or stale still returns its
+known facts and marks the limitation; it does not imply that an unobserved
+protocol is free. `history.resolution` is currently `port_state_only`, so its
+entries cannot establish a past owner, protocol, or bind scope. Recent
+`events` include recent deterministic changes. When history is enabled they
+are stored in the same local retention window as state transitions, so a
+report can retain evidence across a restart.
+
+Hidden ports return `404` unless `include_hidden=true` accompanies the same
+current hidden-unlock authorization used by the normal port API. A caller that
+cannot see a hidden port also cannot receive its observation events. An
+authorized hidden response includes `requires_hidden_access: true`; report
+stores use it to require the same current visibility on later reads.
 
 ### Poll efficiently
 

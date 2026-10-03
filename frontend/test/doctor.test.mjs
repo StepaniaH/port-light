@@ -23,6 +23,16 @@ test('doctor renders every sanitized check and its aggregate state', () => {
   assert.match(host.innerHTML, /doctor\.check\.snapshot/);
   assert.match(host.innerHTML, /doctor\.check\.docker/);
   assert.match(host.innerHTML, /schema_version/);
+  assert.ok(host.innerHTML.indexOf('doctor.check.docker') < host.innerHTML.indexOf('doctor.check.snapshot'));
+  assert.ok(host.innerHTML.indexOf('doctor.check.snapshot') < host.innerHTML.indexOf('doctor.check.settings_store'));
+  assert.match(host.innerHTML, /class="doctor-routine"><summary>/);
+});
+
+test('healthy diagnostics keep the routine checks visible', () => {
+  const host = document.getElementById('doctor-results');
+  renderDoctor({ overall: 'healthy', checks: [{ id: 'snapshot', status: 'pass', detail: 'fresh' }] });
+  assert.match(host.innerHTML, /class="doctor-routine" open/);
+  assert.doesNotMatch(host.innerHTML, /class="doctor-group"/);
 });
 
 test('doctor report preview escapes markup', () => {

@@ -4,7 +4,14 @@ Contributions should keep the project focused on port occupancy and avoid unnece
 
 ## Scope
 
-Port-Light focuses on port occupancy. Container lifecycle management and log streaming are outside its scope. See [docs/roadmap.md](docs/roadmap.md) and [docs/architecture.md](docs/architecture.md).
+Port-Light focuses on port occupancy. See [docs/architecture.md](docs/architecture.md) for the current design.
+
+The following are outside its scope:
+
+- Container lifecycle management, log streaming, and image updates
+- Bookmark or home-page dashboards
+- Kubernetes control-plane operations
+- Hosted scanning of local Docker, `/proc`, or Compose data
 
 Open an issue first for new scanners (Podman, remote Docker), auth changes, or a frontend framework.
 
@@ -39,11 +46,14 @@ The fleet uses a local dashboard and three peers on automatically assigned loopb
 
 The single-machine preview binds to `127.0.0.1`, scans only generated Compose files, and removes its temporary directory on exit. Stop it with Ctrl-C. The `serve` command uses `./data` by default and accepts `--data-dir`; it does not load `.env` automatically.
 
-Python tests are grouped under `tests/api`, `tests/scanners`, `tests/client`, `tests/storage`, `tests/frontend`, and `tests/release`. Run a directory with `pytest tests/scanners` when working on one domain. Browser flows are `npm run smoke:browser` for the existing fleet/settings workflow, `npm run smoke:management` for grouping, rules, reservations, and mobile layout, and `npm run smoke:fleet` for adaptive card columns, multi-host navigation, the header menu, and management page themes.
+Use `serve` for feature acceptance. It runs the application backend with real scanners, persistent data, and configurable AI connections. It disables simulated AI even if `PORT_LIGHT_ANALYSIS_DEMO` is set in the shell. The preview commands provide example data for screenshots and dashboard checks.
+
+Python tests are grouped under `tests/api`, `tests/scanners`, `tests/client`, `tests/storage`, `tests/frontend`, and `tests/release`. Run a directory with `pytest tests/scanners` when working on one domain. Browser flows are `npm run smoke:analysis` for local troubleshooting and BYOK settings, `npm run smoke:browser` for the existing fleet/settings workflow, `npm run smoke:management` for grouping, rules, reservations, and mobile layout, and `npm run smoke:fleet` for adaptive card columns, multi-host navigation, the header menu, and management page themes.
 
 `PORT_LIGHT_DATA_DIR` (default `/data`) must be writable by the process. Local uvicorn usually wants `PORT_LIGHT_DATA_DIR=./data`. Set `PORT_LIGHT_SCANNERS=listen,compose` when Docker is intentionally absent, and point `COMPOSE_SCAN_DIR` to a readable directory. If `./data` is a leftover Docker bind owned by `nobody`, pick another directory instead of sharing that volume.
 
-`npm run smoke:browser` starts a temporary eight-instance local fleet and checks startup, recovery from invalid scanner configuration, default waterfall and saved tab layouts, independent settings and peer saves, custom-theme feedback, persisted machine descriptions, slider focus and refresh-capacity guidance, detail, a saved label, local scanner settings, warning disclosures, bind-address rendering, atomic batch reservation with a conflicting writer and retry, keyboard/mobile host switching, and the sanitized Doctor report in Chromium. It removes its data and stops every server on exit. Set `PYTHON` to override the Python executable.
+`npm run smoke:browser` starts a temporary eight-instance fleet and removes its
+data and processes on exit. Set `PYTHON` to override the Python executable.
 
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 
@@ -74,6 +84,8 @@ to copy the new keys into the other locale files, and translate the copied value
 rejects orphaned keys nobody references. `--untranslated` lists suspicious
 still-equal-to-English values per locale.
 
+Analysis copy lives under `analysis.messages` in the same locale files. After editing it, run `.venv/bin/python scripts/dev.py sync-locales` to regenerate `backend/analysis/static/messages.json`. The frontend tests check that the bundled messages match their source.
+
 ## Locales
 
 UI copy lives in `frontend/locales/{en,fr,de,es,zh-CN,zh-TW,ja}.json`. English is the source tree; the other six files must use the same keys (`tests/frontend/test_i18n.py` checks this). `frontend/i18n.js` resolves `auto` from `navigator.languages`, sets `html lang`, and interpolates `{name}` placeholders. Do not concatenate translated fragments. Language names in `choice.*` stay in their own script in every file.
@@ -101,7 +113,7 @@ Maintain technical documentation under `docs/` in English. Keep the existing Sim
 
 ## Release (maintainers)
 
-Development branches such as `dev` stay local; this repository keeps only `main` on the remote. External contributions can use pull requests from forks.
+Submit pull requests against `main`.
 
 [CI](.github/workflows/ci.yml) runs on pushes to `main` and pull requests targeting `main`, not on version tags. It tests Python 3.11–3.13 and the frontend, including the Chromium smoke flow. Ruff runs once, on Python 3.13. A newer push cancels an older CI run for the same branch or pull request.
 
@@ -109,7 +121,7 @@ Development branches such as `dev` stay local; this repository keeps only `main`
 2. Bump `__version__` in `port_light_client/__init__.py`; the backend, CLI,
    MCP server, package metadata, and release check all read that one value.
 3. Update pinned image examples in both READMEs, `docs/deployment.md`, and `deploy/unraid/port-light.xml`. Remove the development-only notice when these features are included in the release.
-4. Merge the local development branch into `main`, push only `main`, and wait for its CI to pass.
+4. Merge the release changes into `main` and wait for its CI to pass.
 5. Tag that tested commit `vX.Y.Z` and push the tag. [Release](.github/workflows/release.yml) verifies that the tagged commit belongs to `main` and has a successful `main` push run of `ci.yml`. It waits up to 15 minutes if CI has not finished; a failed, cancelled, or timed-out check blocks publication.
 6. Release verifies that the backend, CLI, and tag versions match, then builds
    amd64+arm64 images for Docker Hub and GHCR plus a platform-independent CLI
@@ -120,3 +132,15 @@ Development branches such as `dev` stay local; this repository keeps only `main`
 If publication is blocked by CI, fix or rerun the failing CI check first, then rerun the failed Release jobs in Actions. If a code change is needed, release a new tested commit; do not move an existing version tag. Manual branch builds no longer publish a `dev` image tag.
 
 The release workflow also updates the Docker Hub description from the tagged README, resolving relative documentation and screenshot URLs to that tag. Preview the output with `python scripts/dockerhub_description.py --ref main --output /tmp/port-light-dockerhub.md`. The update uses `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. Updating the repository description requires a personal access token with **Read, Write & Delete** permission and repository admin access; a token that can push images may still be rejected for this operation. If the description job returns 403, check these permissions and update the Actions secret, then rerun the failed job. Successful image and GitHub Release jobs do not need to be rerun. Community Applications submission details are in [deploy/unraid/README.md](deploy/unraid/README.md).
+
+## Troubleshooting workspace
+
+The bundled runtime and its static assets live in `backend/analysis/`. Its host
+owns startup and teardown separately from scanning. Keep model calls explicit and
+keep local checks available when no model provider is configured.
+
+Run `pytest tests/analysis tests/api/test_observation_batches.py
+tests/api/test_port_observations.py` for the evidence and storage contracts,
+`npm test` for display and localization, and `npm run smoke:analysis` for the
+synthetic browser flow. The browser test does not call a real model. Runtime
+assets use a content hash for cache invalidation.

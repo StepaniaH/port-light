@@ -7,7 +7,7 @@ import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
 const { goSettingsPanel, isAutosavedSetting, loadSettingsPage, markDirty, markPeersDirty, peersPayload, refreshThemeChoices,
-  renderPeersEditor, restoreInheritedSetting, savePeersPage, saveSettingsFields, saveSettingsPage,
+  renderPeersEditor, savePeersPage, saveSettingsFields, saveSettingsPage,
   syncSavedPeerRows, syncSettingsMetadata } =
   await import('../js/settings.js?v=' + version);
 const { S } = await import('../js/state.js?v=' + version);
@@ -18,7 +18,6 @@ async function withSettingsState(run) {
     settingsConfirmed: { ...S.settingsConfirmed },
     settingsDraft: { ...S.settingsDraft },
     settingsDirtyKeys: new Set(S.settingsDirtyKeys),
-    settingsResetKeys: new Set(S.settingsResetKeys),
     settingsSubmittingKeys: new Set(S.settingsSubmittingKeys),
     settingsKeyRevisions: { ...S.settingsKeyRevisions },
   };
@@ -93,6 +92,27 @@ test('a settings load cannot replace an edit made while the request was in fligh
   });
 });
 
+test('an older settings response cannot rebuild the current panel', async () => {
+  await withSettingsState(async () => {
+    S.settingsDirty = false;
+    S.settingsPanel = 'appearance';
+    S.route = { name: 'settings', section: 'appearance' };
+    const pending = [];
+    globalThis.fetch = url => String(url) === '/api/settings'
+      ? new Promise(resolve => pending.push(resolve))
+      : Promise.resolve({ ok: true, status: 200, json: async () => ({ peers: [] }) });
+    const first = loadSettingsPage();
+    const second = loadSettingsPage();
+    const newer = { fields: [], values: { host_name: 'Newer' }, custom_themes: [] };
+    pending[1]({ ok: true, status: 200, json: async () => newer });
+    await second;
+    pending[0]({ ok: true, status: 200, json: async () => ({ ...newer, values: { host_name: 'Older' } }) });
+    await first;
+    assert.equal(S.settingsDoc, newer);
+    assert.equal(S.settingsDraft.host_name, 'Newer');
+  });
+});
+
 test('ordinary settings saves send only the dirty field', async () => {
   await withSettingsState(async form => {
     const fields = [
@@ -106,7 +126,6 @@ test('ordinary settings saves send only the dirty field', async () => {
     S.settingsDoc = { readonly: false, fields, values: { host_name: 'Old host', theme_mode: 'dark' }, custom_themes: [] };
     S.settingsDraft = { host_name: 'Old host', theme_mode: 'dark' };
     S.settingsDirtyKeys = new Set();
-    S.settingsResetKeys = new Set();
     S.settingsSubmittingKeys = new Set();
     S.settingsKeyRevisions = {};
     markDirty(form.elements.host_name);
@@ -131,7 +150,6 @@ test('changing a setting back to its confirmed value clears the dirty key', asyn
     S.settingsConfirmed = { host_name: 'Old host' };
     S.settingsDraft = { host_name: 'Old host' };
     S.settingsDirtyKeys = new Set();
-    S.settingsResetKeys = new Set();
     S.settingsSubmittingKeys = new Set();
     S.settingsKeyRevisions = {};
 
@@ -154,7 +172,6 @@ test('reverting while the same key is in flight remains dirty for a follow-up sa
     S.settingsConfirmed = { host_name: 'Old host' };
     S.settingsDraft = { host_name: 'New host' };
     S.settingsDirtyKeys = new Set(['host_name']);
-    S.settingsResetKeys = new Set();
     S.settingsSubmittingKeys = new Set(['host_name']);
     S.settingsKeyRevisions = { host_name: 10 };
     S.settingsRevision = 10;
@@ -178,36 +195,6 @@ test('switching settings panels resets the page scroll position', async () => {
   });
 });
 
-test('restoring an inherited setting submits null and adopts the resolved value', async () => {
-  await withSettingsState(async form => {
-    const savedField = {
-      key: 'host_name', type: 'str', origin: 'file', can_reset: true,
-      inherited_value: 'Environment host', inherited_origin: 'env', env: 'PORT_LIGHT_HOST_NAME',
-    };
-    form.elements = { host_name: { name: 'host_name', value: 'Saved host' } };
-    S.settingsDoc = { readonly: false, fields: [savedField], values: { host_name: 'Saved host' }, custom_themes: [] };
-    S.settingsDraft = { host_name: 'Saved host' };
-    S.settingsDirtyKeys = new Set();
-    S.settingsResetKeys = new Set();
-    S.settingsSubmittingKeys = new Set();
-    S.settingsKeyRevisions = {};
-    let submitted;
-    globalThis.fetch = async (_url, opts) => {
-      submitted = JSON.parse(opts.body);
-      return { ok: true, status: 200, json: async () => ({
-        readonly: false,
-        fields: [{ ...savedField, origin: 'env', can_reset: false, inherited_value: 'Environment host' }],
-        values: { host_name: 'Environment host' }, custom_themes: [],
-      }) };
-    };
-    assert.equal(restoreInheritedSetting('host_name'), true);
-    assert.equal(form.elements.host_name.value, 'Environment host');
-    assert.equal(await saveSettingsFields(), true);
-    assert.deepEqual(submitted, { host_name: null });
-    assert.equal(S.settingsDraft.host_name, 'Environment host');
-  });
-});
-
 test('settings and machine saves keep independent success and failure state', async () => {
   await withSettingsState(async form => {
     const field = { key: 'host_name', type: 'str', origin: 'default' };
@@ -215,7 +202,6 @@ test('settings and machine saves keep independent success and failure state', as
     S.settingsDoc = { readonly: false, fields: [field], values: { host_name: 'Old host' }, custom_themes: [] };
     S.settingsDraft = { host_name: 'Old host' };
     S.settingsDirtyKeys = new Set();
-    S.settingsResetKeys = new Set();
     S.settingsSubmittingKeys = new Set();
     S.settingsKeyRevisions = {};
     markDirty(form.elements.host_name);
@@ -303,7 +289,6 @@ test('an overlapping settings response does not restore an older custom-theme ca
     S.customThemes = [];
     S.settingsDraft = { theme_palette: '' };
     S.settingsDirtyKeys = new Set(['theme_palette']);
-    S.settingsResetKeys = new Set();
     S.settingsSubmittingKeys = new Set();
     S.settingsKeyRevisions = { theme_palette: 10 };
     S.settingsDirty = true;
@@ -320,7 +305,7 @@ test('an overlapping settings response does not restore an older custom-theme ca
   });
 });
 
-test('saved metadata updates scanner badges and source hints without replacing controls', async () => {
+test('saved metadata updates scanner badges without replacing controls', async () => {
   await withSettingsState(async (_form, fields) => {
     fields.innerHTML = '<div data-setting="host_name"><div class="setting-control"><input name="host_name"></div></div>' +
       '<label class="scanner-option"><input value="ss"><span class="scanner-copy"><span class="scanner-remediation"></span></span>' +
@@ -334,7 +319,7 @@ test('saved metadata updates scanner badges and source hints without replacing c
     syncSettingsMetadata({ fields: [{ key: 'host_name', origin: 'file', env: 'PORT_LIGHT_HOST_NAME' }],
       local_scanning: { scanners: [{ id: 'ss', state: 'ok' }] } });
     assert.equal(fields.querySelector('input[name="host_name"]'), name);
-    assert.equal(fields.querySelector('.origin-hint').getAttribute('data-i18n'), 'settings.origin.saved');
+    assert.equal(fields.querySelector('.setting-meta'), null);
     assert.equal(fields.querySelector('.scanner-state').className, 'scanner-state ok');
     assert.equal(fields.querySelector('.scanner-remediation'), null);
   });

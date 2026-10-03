@@ -7,11 +7,50 @@ from fastapi import APIRouter
 from .diagnostics import health
 from .occupancy import get_ports, get_port, port_history
 from types import ModuleType
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+import re
 
 # Bound by the application after its monitor and services are initialized.
 runtime: ModuleType | None = None
 
 router = APIRouter()
+
+
+class PeerConnectionTest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(default="", pattern=r"^(?:[a-z0-9]{8,16})?$")
+    url: str = Field(min_length=1, max_length=2048)
+    username: str | None = Field(default=None, max_length=hosts.MAX_USER)
+    password: str | None = Field(default=None, max_length=hosts.MAX_PASSWORD)
+    clear_auth: bool = False
+
+
+@router.post("/api/hosts/test")
+def test_host_connection(body: dict = Body(...)) -> Response:
+    try:
+        values = PeerConnectionTest.model_validate(body).model_dump(exclude_none=True)
+        peer = hosts.connection_test_peer(values)
+    except ValidationError:
+        return JSONResponse({"status": "failed", "code": "invalid_input"}, status_code=422)
+    except (hosts.HostsError, ValueError) as exc:
+        code = "credentials_required" if str(exc) == "credentials_required" else "invalid_url"
+        return JSONResponse({"status": "failed", "code": code}, status_code=422)
+    status, data, _ = hosts.fetch_peer_json(peer, "/api/meta", {})
+    if status in (401, 403):
+        code = "peer_auth"
+    elif status == 504:
+        code = "peer_timeout"
+    elif status != 200:
+        code = "peer_unreachable"
+    elif (not isinstance(data, dict) or not isinstance(data.get("version"), str)
+          or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?", data["version"])
+          or len(data["version"]) > 64
+          or not isinstance(data.get("capabilities"), dict)
+          or data["capabilities"].get("port_observation") != 1):
+        code = "peer_incompatible"
+    else:
+        return JSONResponse({"status": "connected", "version": data["version"]})
+    return JSONResponse({"status": "failed", "code": code}, status_code=502)
 
 @router.get("/api/hosts")
 def get_hosts() -> dict:

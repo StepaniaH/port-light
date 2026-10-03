@@ -1,6 +1,8 @@
 import './helpers/env.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
 import { groupPorts, portRuns } from '../js/port-groups.js';
 import { composeSnippet, releaseCommand } from '../js/management.js';
 
@@ -50,8 +52,8 @@ test('quoted names remain text in attributes and grouped range identifiers', asy
 });
 
 test('status sorting puts used ports first, then configured and free', async () => {
-  const { S } = await import('../js/state.js?v=99');
-  const { sortPorts } = await import('../js/grid.js?v=99');
+  const { S } = await import('../js/state.js?v=' + version);
+  const { sortPorts } = await import('../js/grid.js?v=' + version);
   const original = S.sortMode;
   try {
     S.sortMode = 'status';
@@ -60,8 +62,8 @@ test('status sorting puts used ports first, then configured and free', async () 
 });
 
 test('grouped runs respect name and status sorting across noncontiguous ports', async () => {
-  const { S } = await import('../js/state.js?v=99');
-  const { sortPortRuns } = await import('../js/grid.js?v=99');
+  const { S } = await import('../js/state.js?v=' + version);
+  const { sortPortRuns } = await import('../js/grid.js?v=' + version);
   const original = S.sortMode;
   const entries = [
     { port: 8080, status: 'configured', manual_label: 'Zulu', source_type: 'manual' },

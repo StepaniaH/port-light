@@ -1,16 +1,30 @@
 /* Automation examples, activity, and lease controls. */
-import { S } from './state.js?v=99';
-import { t, escapeHtml } from './text.js?v=99';
-import { api } from './api.js?v=99';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=99';
-import { settingsCard, kvRow } from './settings-format.js?v=99';
+import { S } from './state.js?v=121';
+import { t, escapeHtml } from './text.js?v=121';
+import { api } from './api.js?v=121';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=121';
+import { settingsCard, kvRow } from './settings-format.js?v=121';
+
+  function copyButton(id, labelKey, primary = false) {
+    const label = escapeHtml(t(labelKey));
+    return '<button type="button" class="' + (primary ? 'btn-primary' : 'btn-secondary') +
+      '" data-copy="' + id + '" data-label="' + label + '">' + label + '</button>';
+  }
 
   function snippetBlock(captionKey, id, code) {
-    return '<div class="snippet"><p class="snippet-cap">' + escapeHtml(t(captionKey)) + '</p>' +
-      '<div class="snippet-body"><pre id="' + id + '">' + escapeHtml(code) + '</pre>' +
-      '<button type="button" class="btn-secondary" data-copy="' + id + '" data-label="' +
-      escapeHtml(t('settings.auto.connect.copy')) + '">' +
-      escapeHtml(t('settings.auto.connect.copy')) + '</button></div></div>';
+    return '<div class="snippet"><div class="snippet-head"><p class="snippet-cap">' +
+      escapeHtml(t(captionKey)) + '</p>' + copyButton(id, 'settings.auto.connect.copy') +
+      '</div><pre id="' + id + '">' + escapeHtml(code) + '</pre></div>';
+  }
+
+  function setupStep(number, titleKey, id, code, hintKey, copyKey, extra = '') {
+    return '<section class="auto-step"><span class="auto-step-number" aria-hidden="true">' +
+      number + '</span><div class="auto-step-content"><h3>' + escapeHtml(t(titleKey)) +
+      '</h3><p class="auto-help">' + escapeHtml(t(hintKey)) +
+      '</p><div class="auto-step-actions">' + copyButton(id, copyKey, number === '1') + extra +
+      '</div><details class="auto-prompt"><summary>' +
+      escapeHtml(t('settings.auto.connect.showPrompt')) + '</summary><pre id="' + id + '">' +
+      escapeHtml(code) + '</pre></details></div></section>';
   }
 
   export function automationCardsHtml(a) {
@@ -57,13 +71,15 @@ import { settingsCard, kvRow } from './settings-format.js?v=99';
       cli + 'mcp-config --client claude-code\n' + cli + 'verify';
 
     const connect =
-      snippetBlock('settings.auto.connect.promptTitle', 'al-setup-prompt',
-        t('settings.auto.connect.prompt', { guide, publicGuide, url: base })) +
-      '<p class="muted">' + escapeHtml(t('settings.auto.connect.promptHint')) + '</p>' +
-      '<a href="' + escapeHtml(guide) + '" target="_blank" rel="noopener">' +
-      escapeHtml(t('settings.auto.connect.guide')) + '</a>' +
-      snippetBlock('settings.auto.connect.tryTitle', 'al-try-prompt', t('settings.auto.connect.tryPrompt')) +
-      '<p class="muted">' + escapeHtml(t('settings.auto.connect.verifyHint')) + '</p>' +
+      '<div class="auto-connect">' +
+      setupStep('1', 'settings.auto.connect.promptTitle', 'al-setup-prompt',
+        t('settings.auto.connect.prompt', { guide, publicGuide, url: base }),
+        'settings.auto.connect.promptHint', 'settings.auto.connect.copySetup',
+        '<a class="auto-guide" href="' + escapeHtml(guide) + '" target="_blank" rel="noopener">' +
+          escapeHtml(t('settings.auto.connect.guide')) + '<span aria-hidden="true"> ↗</span></a>') +
+      setupStep('2', 'settings.auto.connect.tryTitle', 'al-try-prompt',
+        t('settings.auto.connect.tryPrompt'), 'settings.auto.connect.verifyHint',
+        'settings.auto.connect.copyTask') +
       '<details class="auto-manual"><summary>' + escapeHtml(t('settings.auto.connect.manual')) + '</summary>' +
       '<p class="muted">' + escapeHtml(t('settings.auto.connect.manualHint')) + '</p>' +
       snippetBlock('settings.auto.connect.commands', 'al-setup-commands', setupCommands) +
@@ -75,7 +91,7 @@ import { settingsCard, kvRow } from './settings-format.js?v=99';
       '<p class="muted">' + escapeHtml(t('settings.auto.connect.skillHint')) + '</p>' +
       snippetBlock('settings.auto.connect.curl', 'al-curl', curl) +
       (a.agent_token ? '<p class="muted">' + escapeHtml(t('settings.auto.connect.curlToken')) + '</p>' : '') +
-      '</details>';
+      '</details></div>';
 
     const statusRows = [
       kvRow('settings.auto.agentToken',
@@ -90,13 +106,13 @@ import { settingsCard, kvRow } from './settings-format.js?v=99';
 
     const ev = a.agent_events || null;
     const activity = ev
-      ? '<p class="auto-summary" data-auto-summary>' +
-        escapeHtml(t('settings.auto.activity.total')) + ': ' + ev.total + ' · ' +
-        escapeHtml(t('settings.auto.activity.activeLeases')) + ': ' + (ev.active_leases || 0) + ' · ' +
-        escapeHtml(t('settings.auto.activity.lastUsed', {
+      ? '<div class="auto-summary" data-auto-summary><dl>' +
+        '<div><dt>' + escapeHtml(t('settings.auto.activity.total')) + '</dt><dd>' + ev.total + '</dd></div>' +
+        '<div><dt>' + escapeHtml(t('settings.auto.activity.activeLeases')) + '</dt><dd>' + (ev.active_leases || 0) + '</dd></div>' +
+        '</dl><p>' + escapeHtml(t('settings.auto.activity.lastUsed', {
           time: ev.last_used_at ? formatAgo(ev.last_used_at) : t('settings.auto.activity.never'),
-        })) + '</p>' +
-        '<table class="auto-table"><thead><tr>' +
+        })) + '</p></div>' +
+        ((ev.recent || []).length ? '<div class="auto-table-scroll"><table class="auto-table"><thead><tr>' +
         ['thTime', 'thCount', 'thScope', 'thLabel', 'thLeased']
           .map(k => '<th>' + escapeHtml(t('settings.auto.activity.' + k)) + '</th>').join('') +
         '</tr></thead><tbody>' +
@@ -104,7 +120,8 @@ import { settingsCard, kvRow } from './settings-format.js?v=99';
           '<tr><td>' + new Date(r.ts * 1000).toLocaleString() + '</td><td>' + r.count +
           '</td><td>' + escapeHtml(r.scope) + '</td><td>' + escapeHtml(r.label || '—') +
           '</td><td>' + (r.leased ? '✓' : '—') + '</td></tr>').join('') +
-        '</tbody></table>'
+        '</tbody></table></div>' : '<p class="auto-empty">' +
+          escapeHtml(t('settings.auto.activity.empty')) + '</p>')
       : '<p class="muted" data-auto="activity-disabled">' +
         escapeHtml(t('settings.auto.activity.disabled')) + '</p>';
 
@@ -117,10 +134,11 @@ import { settingsCard, kvRow } from './settings-format.js?v=99';
         '<button type="button" class="btn-delete" data-release-port="' + l.port +
         '" data-reservation="' + !!l.is_reservation + '">' +
         escapeHtml(t('settings.auto.leases.release')) + '</button></div>').join('')
-      : '<p class="muted">' + escapeHtml(t('settings.auto.leases.none')) + '</p>';
+      : '<p class="auto-empty">' + escapeHtml(t('settings.auto.leases.none')) + '</p>';
 
     return settingsCard('settings.auto.connect.title', 'settings.auto.connect.blurb', connect) +
-      settingsCard('settings.auto.status.title', 'settings.auto.status.blurb', statusRows) +
+      settingsCard('settings.auto.status.title', 'settings.auto.status.blurb',
+        '<div class="auto-status">' + statusRows + '</div>') +
       settingsCard('settings.auto.activity.title', 'settings.auto.activity.blurb', activity) +
       settingsCard('settings.auto.leases.title', 'settings.auto.leases.blurb', leases);
   }

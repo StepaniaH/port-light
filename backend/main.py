@@ -38,8 +38,18 @@ from .port_scanner import (
     scan_listening_ports,
 )
 
-from .routes import configuration, claims, occupancy, peers, diagnostics
+from .routes import (
+    configuration,
+    claims,
+    occupancy,
+    peers,
+    diagnostics,
+    observations,
+    observation_batches,
+)
 from .routes.diagnostics import _event_lines as _event_lines
+
+from .analysis_host import AnalysisDispatcher, analysis_lifespan
 
 VERSION = __version__
 
@@ -56,7 +66,8 @@ _monitor: OccupancyMonitor
 async def _lifespan(_app: FastAPI):
     await _monitor.start()
     try:
-        yield
+        async with analysis_lifespan(_app, VERSION):
+            yield
     finally:
         await _monitor.stop()
 
@@ -97,7 +108,7 @@ async def security_headers_middleware(request: Request, call_next):
         "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     )
-    if request.url.path.startswith("/api/"):
+    if request.url.path.startswith(("/api/", "/analysis")):
         response.headers.setdefault("Cache-Control", "no-store")
     elif request.url.path.startswith("/static/js/"):
         # ES module chunks: revalidate so an upgrade never mixes generations.
@@ -484,6 +495,7 @@ def agent_skill() -> FileResponse:
     )
 
 
+app.mount("/analysis", AnalysisDispatcher(app), name="analysis")
 app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
 
 
@@ -491,6 +503,14 @@ app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
 
 
 # Register static allocation paths before the parameterized /api/ports/{port}.
-for domain in (configuration, claims, occupancy, peers, diagnostics):
+for domain in (
+    configuration,
+    claims,
+    occupancy,
+    peers,
+    diagnostics,
+    observations,
+    observation_batches,
+):
     domain.runtime = sys.modules[__name__]
     app.include_router(domain.router)

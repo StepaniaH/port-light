@@ -1,7 +1,7 @@
 import globals from 'globals';
 
 export default [{
-  files: ['frontend/js/**/*.js', 'frontend/i18n.js'],
+  files: ['frontend/js/**/*.js', 'frontend/i18n.js', 'backend/analysis/static/*.js'],
   languageOptions: {
     sourceType: 'module',
     globals: { ...globals.browser, PortLightI18n: 'readonly' },

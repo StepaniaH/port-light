@@ -14,6 +14,16 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def sync_analysis_messages() -> int:
+    catalogs = {
+        locale: json.loads((ROOT / 'frontend' / 'locales' / f'{locale}.json').read_text())['analysis']['messages']
+        for locale in ('en', 'zh-CN', 'zh-TW', 'de', 'es', 'fr', 'ja')
+    }
+    (ROOT / 'backend' / 'analysis' / 'static' / 'messages.json').write_text(
+        json.dumps(catalogs, ensure_ascii=False, indent=2) + '\n')
+    return 0
+
+
 def demo_data(root: Path) -> Path:
     compose = root / 'compose'
     for name, ports in (
@@ -34,6 +44,20 @@ def demo_data(root: Path) -> Path:
     return compose
 
 
+def configure_ai_proxy(env: dict) -> None:
+    """Keep an explicit choice, or use the HTTP proxy for local development."""
+    if 'PORT_LIGHT_AI_PROXY' in env:
+        return
+    if 'PORT_LIGHT_AI_PROXY' in os.environ:
+        env['PORT_LIGHT_AI_PROXY'] = os.environ['PORT_LIGHT_AI_PROXY']
+        return
+    for name in ('HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'):
+        proxy = env.get(name, '').strip()
+        if proxy.lower().startswith(('http://', 'https://')):
+            env['PORT_LIGHT_AI_PROXY'] = proxy
+            return
+
+
 def serve(args, data: Path, compose: Path, *, demo: bool = False) -> int:
     data.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
@@ -42,10 +66,14 @@ def serve(args, data: Path, compose: Path, *, demo: bool = False) -> int:
             if key.startswith(('PORT_LIGHT_', 'AUTH_', 'AGENT_', 'HIDDEN_', 'COMPOSE_', 'WEBHOOK_', 'HISTORY_', 'PORT_RANGE_')):
                 env.pop(key)
     env.update(PORT_LIGHT_DATA_DIR=str(data.resolve()), COMPOSE_SCAN_DIR=str(compose.resolve()),
-               PORT_LIGHT_PORT=str(args.port))
+               PORT_LIGHT_PORT=str(args.port), PORT_LIGHT_ANALYSIS_DEMO='0')
+    configure_ai_proxy(env)
     if demo:
         env.update(PORT_LIGHT_SCANNERS='compose', PORT_LIGHT_SETTINGS_SOURCE='file', HISTORY_RETENTION_DAYS='0')
     command = [sys.executable, '-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', str(args.port)]
+    if demo:
+        command[3] = 'scripts.preview_fleet:create_app'
+        command.append('--factory')
     if getattr(args, 'reload', False):
         command.append('--reload')
     print(f'http://127.0.0.1:{args.port}/' + (' (demo data; removed on exit)' if demo else ''), flush=True)
@@ -77,12 +105,15 @@ def main() -> int:
     preview.add_argument('--port', type=int, default=2100)
     check = commands.add_parser('test', help='run Python and frontend checks')
     check.add_argument('--browser', action='store_true')
+    commands.add_parser('sync-locales', help='generate the bundled analysis messages from frontend locales')
     args = parser.parse_args()
+    if args.command == 'sync-locales':
+        return sync_analysis_messages()
     if args.command == 'test':
         steps = [[sys.executable, '-m', 'ruff', 'check', 'backend', 'tests', 'mcp', 'port_light_client', 'scripts/dev.py', 'scripts/preview_fleet.py', 'scripts/check_release_ci.py', 'scripts/check_ai_install.py', 'scripts/dockerhub_description.py'],
                  [sys.executable, '-m', 'pytest', '-q'], ['npm', 'run', 'lint'], ['npm', 'test']]
         if args.browser:
-            steps += [['npm', 'run', 'smoke:browser'], ['npm', 'run', 'smoke:management'], ['npm', 'run', 'smoke:fleet']]
+            steps += [['npm', 'run', 'smoke:browser'], ['npm', 'run', 'smoke:management'], ['npm', 'run', 'smoke:fleet'], ['npm', 'run', 'smoke:analysis']]
         for command in steps:
             result = subprocess.run(command, cwd=ROOT)
             if result.returncode:
@@ -93,7 +124,8 @@ def main() -> int:
     if args.command == 'serve':
         return serve(args, args.data_dir, args.compose_dir)
     if args.fleet:
-        from preview_fleet import run_fleet
+        sys.path.insert(0, str(ROOT))
+        from scripts.preview_fleet import run_fleet
         return run_fleet(args.port)
     with tempfile.TemporaryDirectory(prefix='port-light-preview-') as directory:
         data = Path(directory)

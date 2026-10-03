@@ -10,7 +10,7 @@
 | [cli.md](cli.md) | Install and use the command-line client |
 | [ai-setup.md](ai-setup.md) | AI-assisted installation, updates and connection verification |
 | [integrations.md](integrations.md) | HTTP API, metrics, webhooks, and MCP setup |
-| [roadmap.md](roadmap.md) | Upcoming work and out of scope |
+| [analysis.md](analysis.md) | Local troubleshooting, reports, rechecks, and optional BYOK requests |
 | [../SECURITY.md](../SECURITY.md) | Trust model and how to report issues |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Development, contribution and release workflow |
 | [../CHANGELOG.md](../CHANGELOG.md) | Release notes |
