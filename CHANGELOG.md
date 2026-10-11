@@ -8,6 +8,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 - Raise the minimum versions of Uvicorn to 0.54.0, Ruff to 0.16.9, and build to 1.6.1.
 
+### Fixed
+
+- Make Compose scanning optional in the Unraid template, omit empty Basic Auth variables, and use the current theme settings. Document installation checks and upgrades for pinned image versions.
+
 ## 0.8.5 — 2026-10-03
 
 ### Added

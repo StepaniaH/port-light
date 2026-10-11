@@ -131,19 +131,21 @@ port.home.arpa {
 
 ## Unraid
 
-A Docker template lives at [`deploy/unraid/port-light.xml`](../deploy/unraid/port-light.xml). In Unraid you can:
+A Docker template lives at [`deploy/unraid/port-light.xml`](../deploy/unraid/port-light.xml). Review it and load it through **Docker → Add Container**; the [Unraid guide](../deploy/unraid/README.md) covers installation, authentication, and upgrades.
 
-1. Docker → Add Container → fill the fields from that file, or
-2. Point a template URL at the raw GitHub copy once you trust it.
+The template enables host-listener and Docker scanning by default (`PORT_LIGHT_SCANNERS=listen,docker`). Compose files are optional.
 
 Required mappings:
 
-- Host path of your compose stacks → `/compose` (read-only)
 - `/var/run/docker.sock` → `/var/run/docker.sock` (read-only)
 - `/proc` → `/host/proc` (read-only). This is the Unraid host proc; the grid is empty without it in a bridge container.
 - Appdata → `/data` (read-write)
 
-Use a `v*` tag, not `latest`. Do not enable privileged mode. Optional: `AUTH_USER` / `AUTH_PASSWORD` / `HIDDEN_UNLOCK_PASSWORD`.
+To scan Compose projects, map their host directory to `/compose` read-only and enable Compose in **Settings → Machines & scanning**. Saved scanner choices override the environment default.
+
+The template omits `AUTH_USER` and `AUTH_PASSWORD`. To enable Basic Auth, add both as non-empty variables and mask the password. To disable it, remove both entries instead of leaving them blank. Use unauthenticated access only on a trusted network or behind an authenticated proxy.
+
+Use a `v*` tag, not `latest`, and keep privileged mode off. Upgrading a pinned installation requires changing its **Repository** tag; refreshing the public template does not migrate existing container settings. Follow the [upgrade and backup procedure](../deploy/unraid/README.md#upgrades-and-existing-installations) and [installation checks](../deploy/unraid/TESTING.md).
 
 The repository also includes `ca_profile.xml` for Community Applications submission. The app is not yet listed; see [the template and submission instructions](../deploy/unraid/README.md).
 

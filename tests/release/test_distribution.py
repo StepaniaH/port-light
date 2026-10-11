@@ -25,7 +25,7 @@ def test_unraid_template_and_profile_have_installation_metadata():
     fields = {node.attrib['Target']: node for node in template.findall('Config')}
     assert fields['/data'].attrib['Mode'] == 'rw'
     assert fields['/host/proc'].text == '/proc'
-    assert fields['AUTH_PASSWORD'].attrib['Mask'] == 'true'
+    assert fields['/compose'].attrib['Required'] == 'false'
     assert fields['AGENT_TOKEN'].attrib['Mask'] == 'true'
 
 
