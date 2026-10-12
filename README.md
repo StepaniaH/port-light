@@ -10,10 +10,11 @@ A self-hosted dashboard for host port occupancy. It shows host listeners, Docker
 [![Docker Hub](https://img.shields.io/docker/v/stepaniah/port-light?label=docker%20hub&sort=semver)](https://hub.docker.com/r/stepaniah/port-light)
 [![Docker Pulls](https://img.shields.io/docker/pulls/stepaniah/port-light)](https://hub.docker.com/r/stepaniah/port-light)
 [![GitHub release](https://img.shields.io/github/v/tag/StepaniaH/port-light?label=version)](https://github.com/StepaniaH/port-light/tags)
+[![Unraid Community Apps](https://img.shields.io/badge/Unraid-Community_Apps-F15A2C?logo=unraid&logoColor=white)](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml)
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-[Quick start](#quick-start) · [Unraid](docs/deployment.md#unraid) · [Documentation](docs/port-management.md)
+[Quick start](#quick-start) · [Unraid](#unraid) · [Documentation](docs/port-management.md)
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Port-Light dashboard showing two adaptive host boards">
@@ -50,6 +51,12 @@ Open `http://localhost:2100`.
 The Docker socket grants Docker API access, including write operations. Use a [socket proxy](docs/deployment.md#docker-socket-proxy) to restrict access. See the [deployment guide](docs/deployment.md) for Unraid, Podman, and reverse proxy setup.
 
 All three scanners are enabled by default. For installations without Docker, set `PORT_LIGHT_SCANNERS=listen,compose`. Failed scans or stale data produce a warning and suspend port allocation. See [troubleshooting](docs/troubleshooting.md#occupancy-scan-warning).
+
+## Unraid
+
+Port-Light is available in [Unraid Community Applications](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml). Open **Apps** on your Unraid server, search for `port-light`, and install the entry from **StepaniaH's Repository**.
+
+The template scans host listeners and Docker containers by default; Compose scanning is optional. See the [Unraid guide](deploy/unraid/README.md) for storage paths, authentication, and upgrades.
 
 ## Features
 

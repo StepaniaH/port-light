@@ -10,10 +10,11 @@
 [![Docker Hub](https://img.shields.io/docker/v/stepaniah/port-light?label=docker%20hub&sort=semver)](https://hub.docker.com/r/stepaniah/port-light)
 [![Docker Pulls](https://img.shields.io/docker/pulls/stepaniah/port-light)](https://hub.docker.com/r/stepaniah/port-light)
 [![GitHub release](https://img.shields.io/github/v/tag/StepaniaH/port-light?label=version)](https://github.com/StepaniaH/port-light/tags)
+[![Unraid Community Apps](https://img.shields.io/badge/Unraid-Community_Apps-F15A2C?logo=unraid&logoColor=white)](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml)
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-[快速开始](#快速开始) · [Unraid](docs/deployment.md#unraid) · [使用文档](docs/port-management.md)
+[快速开始](#快速开始) · [Unraid](#unraid) · [使用文档](docs/port-management.md)
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Port-Light 双主机自适应端口看板">
@@ -50,6 +51,12 @@ docker compose up -d
 挂载 Docker socket 会授予 Docker API 访问权限，包括修改操作。可通过 [socket proxy](docs/deployment.md#docker-socket-proxy) 限制权限。Unraid、Podman 和反向代理配置见[部署文档](docs/deployment.md)。
 
 默认启用监听、Docker 和 Compose 三种扫描来源。无 Docker 的部署可设置 `PORT_LIGHT_SCANNERS=listen,compose`。扫描失败或数据过期时，页面会显示警告，端口分配暂停；排查方法见[故障排查](docs/troubleshooting.md#occupancy-scan-warning)。
+
+## Unraid
+
+Port-Light 已上架 [Unraid Community Applications](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml)。在 Unraid 服务器中打开 **Apps（应用）**，搜索 `port-light`，安装 **StepaniaH's Repository** 提供的条目。
+
+模板默认扫描主机监听和 Docker 容器，Compose 扫描可选。存储路径、认证和升级方法见 [Unraid 安装指南](deploy/unraid/README.md)。
 
 ## 功能
 

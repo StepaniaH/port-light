@@ -4,7 +4,7 @@
 
 ## Installation
 
-Review the template, then load it through **Docker → Add Container**. For local template installation before catalog submission, follow the [installation checks](TESTING.md#load-a-local-template).
+Port-Light is listed in [Unraid Community Applications](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml). Open **Apps** on your Unraid server, search for `port-light`, and install the entry from **StepaniaH's Repository**. For manual installation or testing template changes, follow the [local template instructions](TESTING.md#load-a-local-template).
 
 The default installation scans host listeners and Docker containers (`PORT_LIGHT_SCANNERS=listen,docker`). Compose files are not required. Check these mappings before applying:
 
@@ -67,15 +67,10 @@ Template-only corrections can be applied to the existing image. They do not requ
 
 Follow [installation and upgrade checks](TESTING.md) on an Unraid host. Local automated tests verify the template's application configuration; they do not replace Docker Manager installation and upgrade checks.
 
-## Community Applications submission
+## Community Applications listing
 
-The repository contains the application template, root `ca_profile.xml`, MIT license, icon, project URL, and issue tracker URL required for review. It is not yet listed in Community Applications.
+The [catalog entry](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml) uses `deploy/unraid/port-light.xml` and the root `ca_profile.xml` from this repository's public `main` branch. Keep the image reference, icon, project URL, and support link current.
 
-After these files are available on the public `main` branch:
+When changing the template, run Validate and Scan in the [Community Apps submission portal](https://ca.unraid.net/submit/new) and follow the [installation and upgrade checks](TESTING.md). Local XML validation and catalog acceptance do not replace testing on an Unraid host.
 
-1. Sign in at the [Community Apps submission portal](https://ca.unraid.net/submit/new).
-2. Select `https://github.com/StepaniaH/port-light` as the repository.
-3. Run Validate and Scan. Check that `deploy/unraid/port-light.xml` is the application entry and `ca_profile.xml` supplies the repository profile.
-4. Review the preview, complete the installation and upgrade checks on an Unraid host, and submit it for review.
-
-The portal’s [submission guide](https://ca.unraid.net/submit/help), [template format](https://ca.unraid.net/submit/help/repository-xml), and [repository profile format](https://ca.unraid.net/submit/help/repository-info-xml) describe the current requirements. A local XML check cannot verify an Unraid installation or guarantee catalog acceptance.
+The portal’s [submission guide](https://ca.unraid.net/submit/help), [template format](https://ca.unraid.net/submit/help/repository-xml), and [repository profile format](https://ca.unraid.net/submit/help/repository-info-xml) describe the current requirements.

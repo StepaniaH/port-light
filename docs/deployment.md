@@ -131,7 +131,7 @@ port.home.arpa {
 
 ## Unraid
 
-A Docker template lives at [`deploy/unraid/port-light.xml`](../deploy/unraid/port-light.xml). Review it and load it through **Docker → Add Container**; the [Unraid guide](../deploy/unraid/README.md) covers installation, authentication, and upgrades.
+Port-Light is listed in [Unraid Community Applications](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml). Open **Apps** on your Unraid server, search for `port-light`, and install the entry from **StepaniaH's Repository**. The [Unraid guide](../deploy/unraid/README.md) covers installation, authentication, and upgrades.
 
 The template enables host-listener and Docker scanning by default (`PORT_LIGHT_SCANNERS=listen,docker`). Compose files are optional.
 
@@ -147,7 +147,7 @@ The template omits `AUTH_USER` and `AUTH_PASSWORD`. To enable Basic Auth, add bo
 
 Use a `v*` tag, not `latest`, and keep privileged mode off. Upgrading a pinned installation requires changing its **Repository** tag; refreshing the public template does not migrate existing container settings. Follow the [upgrade and backup procedure](../deploy/unraid/README.md#upgrades-and-existing-installations) and [installation checks](../deploy/unraid/TESTING.md).
 
-The repository also includes `ca_profile.xml` for Community Applications submission. The app is not yet listed; see [the template and submission instructions](../deploy/unraid/README.md).
+The template source is [`deploy/unraid/port-light.xml`](../deploy/unraid/port-light.xml). For manual installation or testing template changes, follow the [local template instructions](../deploy/unraid/TESTING.md#load-a-local-template).
 
 ## Podman
 

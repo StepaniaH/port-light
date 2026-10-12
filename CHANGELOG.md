@@ -4,6 +4,10 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ## Unreleased
 
+### Added
+
+- Link the Unraid Community Applications listing from both READMEs and deployment guides, with an installation badge and Apps-tab instructions.
+
 ### Changed
 
 - Raise the minimum versions of Uvicorn to 0.54.0, Ruff to 0.16.9, and build to 1.6.1.
