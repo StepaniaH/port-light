@@ -10,7 +10,7 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
 ### Changed
 
-- Raise the minimum versions of Uvicorn to 0.54.0, Ruff to 0.16.9, and build to 1.6.1.
+- Raise the minimum versions of FastAPI to 0.162.0, Pydantic to 2.14.2, Uvicorn to 0.54.0, pytest to 9.2.0, Ruff to 0.17.3, and build to 1.6.1.
 
 ### Fixed
 
