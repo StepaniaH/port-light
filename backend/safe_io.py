@@ -34,12 +34,19 @@ def _is_private_data_entry(real_path: str, data_real: str) -> bool:
     return False
 
 
-def is_blocked_path(
+def is_within_root(
     path: str | os.PathLike[str],
-    *,
-    allow_data_dir: bool = False,
+    root: str | os.PathLike[str],
 ) -> bool:
-    real = os.path.realpath(path)
+    try:
+        real_path = os.path.realpath(path)
+        real_root = os.path.realpath(root)
+        return os.path.commonpath([real_path, real_root]) == real_root
+    except (TypeError, ValueError, OSError):
+        return False
+
+
+def _is_blocked_real(real: str, *, allow_data_dir: bool = False) -> bool:
     for tree in _SENSITIVE_TREES:
         if _within_tree(real, tree) or _within_tree(real, os.path.realpath(tree)):
             return True
@@ -62,21 +69,38 @@ def is_blocked_path(
     return False
 
 
+def is_blocked_path(
+    path: str | os.PathLike[str],
+    *,
+    allow_data_dir: bool = False,
+) -> bool:
+    return _is_blocked_real(os.path.realpath(path), allow_data_dir=allow_data_dir)
+
+
 def read_regular_bytes(
     path: str | os.PathLike[str],
     *,
     max_bytes: int,
     allow_data_dir: bool = False,
+    allowed_root: str | os.PathLike[str] | None = None,
 ) -> bytes:
     target = os.fspath(path)
-    if is_blocked_path(target, allow_data_dir=allow_data_dir):
+    real = os.path.realpath(target)
+    if _is_blocked_real(real, allow_data_dir=allow_data_dir):
         raise PermissionError(errno.EACCES, "blocked path", target)
-    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
-    fd = os.open(target, flags)
+    if allowed_root is not None and not is_within_root(real, allowed_root):
+        raise PermissionError(errno.EACCES, "blocked path", target)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | nofollow
+    fd = os.open(real, flags)
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             raise OSError(errno.EINVAL, "not a regular file", target)
+        if not nofollow:
+            lst = os.lstat(real)
+            if not stat.S_ISREG(lst.st_mode) or not os.path.samestat(st, lst):
+                raise OSError(errno.ELOOP, "symlink race detected", target)
         if st.st_size > max_bytes:
             raise ValueError(f"file exceeds {max_bytes} bytes")
         chunks: list[bytes] = []
@@ -100,8 +124,12 @@ def read_regular_text(
     *,
     max_bytes: int,
     allow_data_dir: bool = False,
+    allowed_root: str | os.PathLike[str] | None = None,
     errors: str = "replace",
 ) -> str:
     return read_regular_bytes(
-        path, max_bytes=max_bytes, allow_data_dir=allow_data_dir,
+        path,
+        max_bytes=max_bytes,
+        allow_data_dir=allow_data_dir,
+        allowed_root=allowed_root,
     ).decode("utf-8", errors=errors)

@@ -74,6 +74,7 @@ def parse_port_entry(entry) -> list[dict]:
                 "container_port": cp,
                 "protocol": proto,
                 "host_ip": host_ip,
+                **({"mode": mode} if mode in ("host", "ingress") else {}),
             }
             for hp, cp in zip(host_ports, container_ports, strict=True)
             if 1 <= hp <= 65535

@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+from backend.classification import classify
 from backend.compose_scanner import (
     ComposeWouldFail,
     _find_compose_files,
@@ -1229,12 +1230,12 @@ def test_compose_multidoc_and_long_syntax_edges(tmp_path):
 
 
 def test_include_project_directory_and_nested_env(tmp_path):
-    project = tmp_path / "project"
-    lib = tmp_path / "lib"
-    app = tmp_path / "app"
-    commons = tmp_path / "commons"
-    for d in (project, lib, app, commons):
-        d.mkdir()
+    c1 = tmp_path / "case1"
+    project = c1 / "project"
+    lib = c1 / "lib"
+    app = c1 / "app"
+    for d in (project, lib, app):
+        d.mkdir(parents=True)
     (project / "local.env").write_text("PORT=7002\n", encoding="utf-8")
     (lib / "local.env").write_text("PORT=9999\n", encoding="utf-8")
     (lib / "svc.yml").write_text(
@@ -1245,8 +1246,13 @@ def test_include_project_directory_and_nested_env(tmp_path):
         "include:\n  - path: ../lib/svc.yml\n    project_directory: ../project\n",
         encoding="utf-8",
     )
-    assert {p.port for p in scan_compose_files(str(app))} == {7002}
+    assert {p.port for p in scan_compose_files(str(c1))} == {7002}
 
+    c2 = tmp_path / "case2"
+    commons = c2 / "commons"
+    other = c2 / "other"
+    for d in (commons, other):
+        d.mkdir(parents=True)
     (commons / "stack.env").write_text("P=7103\n", encoding="utf-8")
     (commons / "ports.yml").write_text(
         "services:\n  nested:\n    ports:\n      - '${P}:80'\n",
@@ -1256,25 +1262,28 @@ def test_include_project_directory_and_nested_env(tmp_path):
         "include:\n  - ports.yml\n",
         encoding="utf-8",
     )
-    other = tmp_path / "other"
-    other.mkdir()
     (other / "compose.yml").write_text(
         "include:\n  - path: ../commons/stack.yml\n    env_file: ../commons/stack.env\n",
         encoding="utf-8",
     )
-    assert 7103 in {p.port for p in scan_compose_files(str(other))}
+    assert 7103 in {p.port for p in scan_compose_files(str(c2))}
 
-    (app / ".env").write_text("PORT=2222\n", encoding="utf-8")
-    (commons / ".env").write_text("OTHER=9999\n", encoding="utf-8")
-    (commons / "only.yml").write_text(
+    c3 = tmp_path / "case3"
+    app3 = c3 / "app"
+    commons3 = c3 / "commons"
+    for d in (app3, commons3):
+        d.mkdir(parents=True)
+    (app3 / ".env").write_text("PORT=2222\n", encoding="utf-8")
+    (commons3 / ".env").write_text("OTHER=9999\n", encoding="utf-8")
+    (commons3 / "only.yml").write_text(
         "services:\n  x:\n    ports:\n      - '${PORT}:80'\n",
         encoding="utf-8",
     )
-    (app / "compose.yml").write_text(
+    (app3 / "compose.yml").write_text(
         "include:\n  - path: ../commons/only.yml\n    project_directory: .\n",
         encoding="utf-8",
     )
-    assert {p.port for p in scan_compose_files(str(app))} == {2222}
+    assert {p.port for p in scan_compose_files(str(c3))} == {2222}
 
 
 def test_project_directory_reroots_nested_include_and_extends(tmp_path):
@@ -1308,7 +1317,7 @@ def test_project_directory_reroots_nested_include_and_extends(tmp_path):
         "include:\n  - path: ../lib/stack.yml\n    project_directory: ../project\n",
         encoding="utf-8",
     )
-    assert {p.port for p in scan_compose_files(str(app))} == {8101, 8102}
+    assert {p.port for p in scan_compose_files(str(tmp_path))} == {8101, 8102}
 
 
 def test_services_override_and_reset_tags(tmp_path):
@@ -1409,6 +1418,52 @@ def test_env_comments_and_plus_interpolation(tmp_path):
     assert substitute_vars("ports: '${OUTER:-${INNER}}:80'", {"INNER": "7070"}) == "ports: '7070:80'"
     assert substitute_vars("ports: '${FLAG+9090}:80'", {"FLAG": ""}) == "ports: '9090:80'"
     assert substitute_vars("ports: '${FLAG+9090}:80'", {}) == "ports: ':80'"
+    # Nested error/alt operators and literal ?/+ inside defaults must not short-circuit outer variable names.
+    assert substitute_vars(
+        "ports: '${PORT:-${FALLBACK:?provide FALLBACK}}:80'",
+        {"PORT": "18080", "FALLBACK": "19090"},
+    ) == "ports: '18080:80'"
+    assert substitute_vars(
+        "ports: '${PORT:-${FALLBACK:?provide FALLBACK}}:80'",
+        {"PORT": "18080"},
+    ) == "ports: '18080:80'"
+    assert substitute_vars(
+        "ports: '${PORT:-${FALLBACK:?provide FALLBACK}}:80'",
+        {"PORT": "", "FALLBACK": "19090"},
+    ) == "ports: '19090:80'"
+    with pytest.raises(ComposeWouldFail):
+        substitute_vars("ports: '${PORT:-${FALLBACK:?provide FALLBACK}}:80'", {})
+    assert substitute_vars("ports: '${A:-${B:+8080}}:80'", {"B": "1"}) == "ports: '8080:80'"
+    assert substitute_vars("url: '${URL-http://host?k=v}'", {}) == "url: 'http://host?k=v'"
+    assert substitute_vars("expr: '${EXPR-1+2}'", {}) == "expr: '1+2'"
+    assert substitute_vars("x: '${FLAG:+ok?yes}'", {"FLAG": "1"}) == "x: 'ok?yes'"
+
+    nested_app = tmp_path / "nested_fallback"
+    nested_app.mkdir()
+    (nested_app / ".env").write_text("PORT=18080\nFALLBACK=19090\n", encoding="utf-8")
+    (nested_app / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - '${PORT:-${FALLBACK:?provide FALLBACK}}:80'\n",
+        encoding="utf-8",
+    )
+    nested_scan = scan_compose_tree(str(nested_app))
+    assert nested_scan.incomplete is False
+    assert [p.port for p in nested_scan.ports] == [18080]
+
+    host_mode_entry = parse_port_entry({"published": 8080, "target": 80, "mode": "host"})
+    assert host_mode_entry[0]["mode"] == "host"
+    swarm_app = tmp_path / "swarm_mode"
+    swarm_app.mkdir()
+    (swarm_app / "compose.yml").write_text(
+        "services:\n  web:\n    ports:\n      - target: 80\n        published: 8080\n        mode: host\n",
+        encoding="utf-8",
+    )
+    swarm_ports = scan_compose_files(str(swarm_app))
+    assert swarm_ports[0].publish_mode == "host"
+    classified_swarm = classify(
+        [], [], swarm_ports, [], hidden_ports=[],
+        range_start=8080, range_end=8080, include_hidden=False, hidden_locked=False,
+    )
+    assert classified_swarm["ports"][0]["compose_configs"][0]["publish_mode"] == "host"
 
 
 def test_compose_override_reset_replaces_base_ports(tmp_path):
@@ -2101,7 +2156,7 @@ def test_override_with_extends_preserves_reset_and_override_tags(tmp_path):
         "      - '15353:5353/udp'\n",
         encoding="utf-8",
     )
-    ports = scan_compose_files(str(reset_app))
+    ports = scan_compose_files(str(tmp_path))
     by_svc: dict[str, set[int]] = {}
     for row in ports:
         by_svc.setdefault(row.service_name, set()).add(row.port)
@@ -2127,7 +2182,10 @@ def test_override_with_extends_preserves_reset_and_override_tags(tmp_path):
         "      - '9443:8443'\n",
         encoding="utf-8",
     )
-    layered_ports = {p.port for p in scan_compose_files(str(layered)) if p.service_name == "web"}
+    layered_ports = {
+        p.port for p in scan_compose_files(str(tmp_path))
+        if p.project_dir == "layered" and p.service_name == "web"
+    }
     assert layered_ports == {8082, 8443, 9443}
 
 
@@ -2174,7 +2232,7 @@ def test_override_overlays_extends_and_env_file_and_multihop_extends_env(tmp_pat
         "      - '17004:83'\n",
         encoding="utf-8",
     )
-    assert {p.port for p in scan_compose_files(str(tier_a))} == {17001, 17002, 17003, 17004}
+    assert {p.port for p in scan_compose_files(str(tmp_path))} == {17001, 17002, 17003, 17004}
 
     broken = tmp_path / "broken-override-env"
     broken.mkdir()
@@ -2218,3 +2276,230 @@ def test_compose_subdir_under_data_dir_reads_stacks_while_blocking_private_state
     escaped_scan = scan_compose_tree(str(compose_dir))
     assert escaped_scan.incomplete is True
     assert 19999 not in {p.port for p in escaped_scan.ports}
+
+
+def test_compose_confines_include_env_file_project_dir_and_extends_to_scan_dir(tmp_path):
+    from backend import degradations
+
+    outside = tmp_path / "outside"
+    stacks = tmp_path / "stacks"
+    outside.mkdir()
+    stacks.mkdir()
+    (outside / "secret.env").write_text("SECRET=leaked-val\nPORT=19001\n", encoding="utf-8")
+    (outside / ".env").write_text("PORT=19003\n", encoding="utf-8")
+    (outside / "inc.yml").write_text(
+        "services:\n  inc:\n    ports: ['19002:80']\n", encoding="utf-8",
+    )
+    (outside / "ext.yml").write_text(
+        "services:\n  base:\n    ports: ['19004:80']\n", encoding="utf-8",
+    )
+
+    good = stacks / "good"
+    good.mkdir()
+    (good / "compose.yml").write_text(
+        "services:\n  ok:\n    ports: ['18999:80']\n", encoding="utf-8",
+    )
+
+    case_env = stacks / "case-env"
+    case_env.mkdir()
+    (case_env / "compose.yml").write_text(
+        "name: '${SECRET:-safe}'\n"
+        "env_file:\n  - path: ../../outside/secret.env\n    required: false\n"
+        "services:\n  s:\n    ports: ['${PORT:-18901}:80']\n",
+        encoding="utf-8",
+    )
+
+    case_inc = stacks / "case-inc"
+    case_inc.mkdir()
+    (case_inc / "compose.yml").write_text(
+        "include:\n  - ../../outside/inc.yml\n", encoding="utf-8",
+    )
+
+    case_glob = stacks / "case-glob"
+    case_glob.mkdir()
+    (case_glob / "compose.yml").write_text(
+        "include:\n  - ../../outside/*.yml\n", encoding="utf-8",
+    )
+
+    case_proj = stacks / "case-proj"
+    case_proj.mkdir()
+    (case_proj / "local.yml").write_text(
+        "services:\n  p:\n    ports: ['${PORT:-18903}:80']\n", encoding="utf-8",
+    )
+    (case_proj / "compose.yml").write_text(
+        "include:\n  - path: local.yml\n    project_directory: ../../outside\n",
+        encoding="utf-8",
+    )
+
+    case_ext = stacks / "case-ext"
+    case_ext.mkdir()
+    (case_ext / "compose.yml").write_text(
+        "services:\n  web:\n    extends:\n      file: ../../outside/ext.yml\n      service: base\n",
+        encoding="utf-8",
+    )
+
+    case_sym = stacks / "case-sym"
+    case_sym.mkdir()
+    os.symlink(outside / "secret.env", case_sym / "linked.env")
+    (case_sym / "compose.yml").write_text(
+        "env_file: linked.env\n"
+        "services:\n  s:\n    ports: ['${PORT:-18905}:80']\n",
+        encoding="utf-8",
+    )
+
+    degradations.reset()
+    try:
+        scan = scan_compose_tree(str(stacks))
+        assert scan.incomplete is True
+        assert {p.port for p in scan.ports} == {18999}
+        assert all("leaked-val" not in (p.project_name or "") for p in scan.ports)
+        assert degradations.recent(20)
+    finally:
+        degradations.reset()
+
+
+def test_compose_include_glob_respects_max_files_budget(tmp_path):
+    good = tmp_path / "good"
+    huge = tmp_path / "huge"
+    sub = huge / "sub"
+    good.mkdir()
+    sub.mkdir(parents=True)
+    (good / "compose.yml").write_text(
+        "services:\n  ok:\n    ports: ['8000:80']\n", encoding="utf-8",
+    )
+    for idx in range(5):
+        (sub / f"f{idx}.yml").write_text(
+            f"services:\n  s{idx}:\n    ports: ['{8100 + idx}:80']\n", encoding="utf-8",
+        )
+    (huge / "compose.yml").write_text(
+        "include:\n  - sub/*.yml\n", encoding="utf-8",
+    )
+
+    capped = scan_compose_tree(str(tmp_path), max_files=4)
+    assert capped.truncated is True
+    assert capped.incomplete is True
+    assert {p.port for p in capped.ports} == {8000}
+
+    full = scan_compose_tree(str(tmp_path), max_files=10)
+    assert full.truncated is False
+    assert full.incomplete is False
+    assert {p.port for p in full.ports} == {8000, 8100, 8101, 8102, 8103, 8104}
+
+
+def test_substitute_vars_linear_time_and_output_cap():
+    unclosed = "${" * 10_000
+    assert substitute_vars(unclosed, {}) == unclosed
+    assert substitute_vars("${unclosed ${OK:-42}", {}) == "${unclosed 42"
+    assert substitute_vars("$a" * 5_000, {"a": "1"}) == "1" * 5_000
+
+    with pytest.raises(ComposeWouldFail):
+        substitute_vars("${BIG}" * 10, {"BIG": "x" * 100}, max_output=500)
+
+    nested = "${A:-" * 40 + "1" + "}" * 40
+    with pytest.raises(ComposeWouldFail):
+        substitute_vars(nested, {})
+
+
+def test_compose_multidoc_yaml_enforces_cumulative_node_budget(tmp_path, monkeypatch):
+    from backend import compose_documents
+
+    monkeypatch.setattr(compose_documents, "MAX_YAML_NODES", 100)
+    doc = "x-pad: [" + ", ".join(str(i) for i in range(25)) + "]\n"
+    payload = "---\n".join([doc] * 5) + "\nservices:\n  web:\n    ports: ['18300:80']\n"
+    app = tmp_path / "multi"
+    app.mkdir()
+    (app / "compose.yml").write_text(payload, encoding="utf-8")
+
+    scan = scan_compose_tree(str(tmp_path))
+    assert scan.incomplete is True
+    assert scan.ports == []
+
+
+def test_safe_io_read_regular_bytes_uses_o_nofollow_and_blocks_race(tmp_path, monkeypatch):
+    import errno
+    from backend import safe_io
+
+    real_file = tmp_path / "real.env"
+    real_file.write_text("PORT=8080\n", encoding="utf-8")
+    link_file = tmp_path / "link.env"
+    os.symlink(real_file, link_file)
+
+    seen_opens: list[tuple[str, int]] = []
+    real_open = os.open
+
+    def recording_open(path, flags, *args, **kwargs):
+        seen_opens.append((os.fspath(path), flags))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(safe_io.os, "open", recording_open)
+    assert safe_io.read_regular_bytes(link_file, max_bytes=1024) == b"PORT=8080\n"
+    assert len(seen_opens) == 1
+    opened_path, opened_flags = seen_opens[0]
+    assert opened_path == os.path.realpath(real_file)
+    if hasattr(os, "O_NOFOLLOW"):
+        assert opened_flags & os.O_NOFOLLOW
+
+        monkeypatch.setattr(safe_io.os, "open", real_open)
+        real_realpath = os.path.realpath
+
+        def raced_realpath(p):
+            if os.fspath(p) == str(real_file):
+                return str(link_file)
+            return real_realpath(p)
+
+        monkeypatch.setattr(safe_io.os.path, "realpath", raced_realpath)
+        with pytest.raises(OSError) as caught:
+            safe_io.read_regular_bytes(real_file, max_bytes=1024)
+        assert caught.value.errno == errno.ELOOP
+
+
+def test_proc_helpers_never_fallback_to_container_proc_when_host_proc_exists(monkeypatch):
+    from backend import port_scanner as ps
+
+    listed: list[str] = []
+
+    def fake_listdir(path):
+        listed.append(path)
+        raise PermissionError("host pid unreadable")
+
+    monkeypatch.setattr(ps.os.path, "exists", lambda p: p == "/host/proc")
+    monkeypatch.setattr(ps.os, "listdir", fake_listdir)
+    assert ps.socket_inodes_for_pid(42) == set()
+    assert ps._read_children(42, "/host/proc") == []
+    assert listed == ["/host/proc/42/fd", "/host/proc/42/task"]
+
+    listed.clear()
+    monkeypatch.setattr(ps.os.path, "exists", lambda _p: False)
+    assert ps.socket_inodes_for_pid(42) == set()
+    assert ps._read_children(42, "/host/proc") == []
+    assert listed == ["/proc/42/fd", "/proc/42/task"]
+
+
+def test_scan_listening_ports_follows_source_priority_without_spurious_ss_degradation(monkeypatch):
+    import sys
+    from backend import degradations, port_scanner as ps
+
+    degradations.reset()
+    try:
+        def forbid_ss():
+            raise AssertionError("ss must not be called")
+
+        monkeypatch.setattr(ps, "_scan_with_ss", forbid_ss)
+
+        monkeypatch.setattr(sys, "platform", "darwin")
+        monkeypatch.setattr(ps.os.path, "exists", lambda _p: False)
+        monkeypatch.setattr(ps.shutil, "which", lambda name: "/usr/sbin/lsof" if name == "lsof" else None)
+        expected_mac = [ListeningPort(port=3000, protocol="tcp", ip="127.0.0.1")]
+        monkeypatch.setattr(ps, "_scan_with_lsof", lambda: expected_mac)
+        assert ps.scan_listening_ports() == expected_mac
+        assert degradations.recent(20) == []
+
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(ps.os.path, "exists", lambda p: p == "/proc/net/tcp")
+        monkeypatch.setattr(ps.shutil, "which", lambda _name: None)
+        expected_proc = [ListeningPort(port=22, protocol="tcp", ip="0.0.0.0")]
+        monkeypatch.setattr(ps, "_scan_with_proc", lambda prefer_pids=None: expected_proc)
+        assert ps.scan_listening_ports() == expected_proc
+        assert degradations.recent(20) == []
+    finally:
+        degradations.reset()

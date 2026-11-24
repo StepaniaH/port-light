@@ -14,7 +14,6 @@ class _ComposeLoader(yaml.SafeLoader):
         self._node_weights: dict[int, int] = {}
 
     def compose_document(self):
-        self._node_count = 0
         self._node_weights.clear()
         return super().compose_document()
 

@@ -15,7 +15,7 @@ from .compose_ports import (_norm_proto as _norm_proto, _normalize_host_ip as _n
 from .compose_documents import (_unwrap_compose as _unwrap_compose, _service_map as _service_map, _port_entries as _port_entries, _overlay_port_fields as _overlay_port_fields, _overlay_compose_docs as _overlay_compose_docs, _load_yaml as _load_yaml, _ComposeTag as _ComposeTag)
 
 from .port_scanner import is_host_netns_mode
-from .safe_io import MAX_COMPOSE_BYTES, MAX_ENV_BYTES, is_blocked_path, read_regular_text
+from .safe_io import MAX_COMPOSE_BYTES, MAX_ENV_BYTES, is_blocked_path, is_within_root, read_regular_text
 from . import degradations
 
 _SKIP_DIRS = frozenset({
@@ -24,6 +24,9 @@ _SKIP_DIRS = frozenset({
 })
 _MAX_RANGE = 4096
 _MAX_SCAN_PORTS = 65536
+_MAX_EXPANDED_CHARS = MAX_COMPOSE_BYTES * 2
+_MAX_INTERP_DEPTH = 32
+_VAR_NAME_RE = re.compile(r"\w+")
 
 _COMPOSE_PREFIXES = ("compose.", "docker-compose.")
 _COMPOSE_SUFFIXES = (".yml", ".yaml")
@@ -33,6 +36,45 @@ _AUTO_OVERRIDE_NAMES = frozenset({
     "compose.override.yml", "compose.override.yaml",
     "docker-compose.override.yml", "docker-compose.override.yaml",
 })
+
+
+class _ComposeFileLimit(ComposeWouldFail):
+    """Raised when Compose include expansion exceeds the scan file budget."""
+
+
+@dataclass
+class _FileBudget:
+    limit: int
+    seen: set[str] = field(default_factory=set)
+    truncated: bool = False
+
+    def admit(self, path: str | os.PathLike[str]) -> bool:
+        real = os.path.realpath(path)
+        if real in self.seen:
+            return True
+        if len(self.seen) >= self.limit:
+            self.truncated = True
+            return False
+        self.seen.add(real)
+        return True
+
+
+def _confined_within(path: str | os.PathLike[str], scan_root: str | None) -> bool:
+    if scan_root is None:
+        return True
+    return is_within_root(path, scan_root)
+
+
+def _glob_prefix(pattern: str) -> str:
+    parts = Path(pattern).parts
+    prefix_parts: list[str] = []
+    for part in parts:
+        if any(ch in part for ch in "*?["):
+            break
+        prefix_parts.append(part)
+    if not prefix_parts:
+        return ""
+    return str(Path(*prefix_parts))
 
 
 def _parse_entry(entry, parser, filepath: str):
@@ -49,22 +91,30 @@ def _macvlan_names_tree(
     chain: frozenset[str],
     env_base: Path | None = None,
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
+    file_budget: _FileBudget | None = None,
 ) -> set[str]:
     real = os.path.realpath(filepath)
     if real in chain:
         return set()
     data, _env_vars, parent = _compose_doc(
         filepath, extra_env, env_base, apply_override=False, cache=cache,
+        scan_root=scan_root,
     )
     names = _macvlan_network_names(data)
     nested = chain | {real}
     spec_root = env_base if env_base is not None else parent
-    for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root, owner_file=filepath):
+    for group, inc_env, inc_base in _include_specs(
+        data.get("include"), spec_root, owner_file=filepath,
+        scan_root=scan_root, file_budget=file_budget,
+    ):
         nested_env = {**(extra_env or {}), **inc_env}
         nested_base = inc_base if inc_base is not None else env_base
         for inc_path in group:
             names |= _macvlan_names_tree(
                 str(inc_path), nested_env, nested, nested_base, cache=cache,
+                scan_root=scan_root, file_budget=file_budget,
             )
     return names
 
@@ -77,9 +127,12 @@ def _extends_macvlan_names(
     chain: frozenset[tuple[str, str]],
     work_dir: Path | None = None,
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
+    file_budget: _FileBudget | None = None,
 ) -> set[str]:
     names: set[str] = set()
-    ref = _extends_ref(svc_cfg.get("extends"), filepath, work_dir)
+    ref = _extends_ref(svc_cfg.get("extends"), filepath, work_dir, scan_root=scan_root)
     if ref is None:
         return names
     ref_file, ref_svc = ref
@@ -94,22 +147,32 @@ def _extends_macvlan_names(
         next_env = env_vars
     else:
         other_path = ref_file
-        other_local, other_env = _services_from_file(ref_file, env_vars, cache=cache)
+        other_local, other_env = _services_from_file(
+            ref_file, env_vars, cache=cache, scan_root=scan_root,
+        )
         next_env = {**other_env, **env_vars}
-        names |= _macvlan_names_tree(ref_file, env_vars, frozenset(), cache=cache)
+        names |= _macvlan_names_tree(
+            ref_file, env_vars, frozenset(), cache=cache,
+            scan_root=scan_root, file_budget=file_budget,
+        )
         other = other_local.get(ref_svc)
         nested_dir = Path(ref_file).parent
     if isinstance(other, dict):
         names |= _extends_macvlan_names(
             other, other_path, next_env, other_local, chain | {cycle_key},
-            nested_dir, cache=cache,
+            nested_dir, cache=cache, scan_root=scan_root, file_budget=file_budget,
         )
     return names
 
 
-def _read_text(path: Path, max_bytes: int = MAX_COMPOSE_BYTES) -> str | None:
+def _read_text(
+    path: Path,
+    max_bytes: int = MAX_COMPOSE_BYTES,
+    *,
+    allowed_root: str | None = None,
+) -> str | None:
     try:
-        text = read_regular_text(path, max_bytes=max_bytes)
+        text = read_regular_text(path, max_bytes=max_bytes, allowed_root=allowed_root)
     except (OSError, ValueError):
         return None
     if text.startswith("\ufeff"):
@@ -210,6 +273,7 @@ class ComposePort:
     host_ip: str | None = None
     network_mode: str | None = None
     project_name: str | None = None
+    publish_mode: str | None = None
 
     def __post_init__(self):
         _consume_ports(1, emitted=True, filepath=self.compose_file)
@@ -266,15 +330,25 @@ def _scan_compose_tree(
     except OSError:
         degradations.report("compose", "scan root", "directory unreadable")
         return ComposeScan(incomplete=True)
+    scan_root = os.path.realpath(scan_dir)
+    file_budget = _FileBudget(limit=files_cap, seen={os.path.realpath(p) for p in files})
     included_abs: set[str] = set()
     included_real: set[str] = set()
+    limit_failed_abs: set[str] = set()
     incomplete = False
     cache: dict = {}
     for filepath in files:
         try:
-            inc_abs, inc_real = _included_paths(filepath, cache=cache)
+            inc_abs, inc_real = _included_paths(
+                filepath, cache=cache, scan_root=scan_root, file_budget=file_budget,
+            )
             included_abs |= inc_abs
             included_real |= inc_real
+        except _ComposeFileLimit as exc:
+            truncated = True
+            incomplete = True
+            limit_failed_abs.add(os.path.abspath(filepath))
+            degradations.report("compose", _degradation_scope(scan_dir, exc, filepath), "compose file limit reached")
         except ComposeWouldFail as exc:
             incomplete = True
             degradations.report("compose", _degradation_scope(scan_dir, exc, filepath), "invalid compose file")
@@ -284,13 +358,20 @@ def _scan_compose_tree(
     for filepath in files:
         abs_path = os.path.abspath(filepath)
         real = os.path.realpath(filepath)
-        if abs_path in seen_walk or abs_path in included_abs:
+        if abs_path in seen_walk or abs_path in included_abs or abs_path in limit_failed_abs:
             continue
         if not os.path.islink(filepath) and real in included_real:
             continue
         seen_walk.add(abs_path)
         try:
-            ports.extend(_parse_compose_file(filepath, scan_dir, frozenset(), cache=cache))
+            ports.extend(_parse_compose_file(
+                filepath, scan_dir, frozenset(), cache=cache,
+                scan_root=scan_root, file_budget=file_budget,
+            ))
+        except _ComposeFileLimit as exc:
+            truncated = True
+            incomplete = True
+            degradations.report("compose", _degradation_scope(scan_dir, exc, filepath), "compose file limit reached")
         except ComposeWouldFail as exc:
             incomplete = True
             relative = _degradation_scope(scan_dir, exc, filepath)
@@ -304,7 +385,7 @@ def _scan_compose_tree(
                 break
     return ComposeScan(
         ports=ports,
-        truncated=truncated,
+        truncated=truncated or file_budget.truncated,
         incomplete=incomplete,
         files_scanned=len(seen_walk),
         diagnostics=diagnostics,
@@ -401,6 +482,8 @@ def _compose_doc(
     env_base: Path | None = None,
     apply_override: bool = True,
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
 ) -> tuple[dict, dict[str, str], Path]:
     """Load one Compose file: project env, top-level env_file, optional sibling override.
 
@@ -421,14 +504,19 @@ def _compose_doc(
             os.path.abspath(os.path.dirname(filepath)) if apply_override else None,
             bool(apply_override),
             None if extra_env is None else tuple(sorted(extra_env.items())),
+            scan_root,
         )
         hit = cache.get(key)
         if hit is not None:
             return hit
-        result = _compose_doc_uncached(filepath, extra_env, env_base, apply_override)
+        result = _compose_doc_uncached(
+            filepath, extra_env, env_base, apply_override, scan_root=scan_root,
+        )
         cache[key] = result
         return result
-    return _compose_doc_uncached(filepath, extra_env, env_base, apply_override)
+    return _compose_doc_uncached(
+        filepath, extra_env, env_base, apply_override, scan_root=scan_root,
+    )
 
 
 def _compose_doc_uncached(
@@ -436,13 +524,19 @@ def _compose_doc_uncached(
     extra_env: dict[str, str] | None,
     env_base: Path | None,
     apply_override: bool,
+    *,
+    scan_root: str | None = None,
 ) -> tuple[dict, dict[str, str], Path]:
-    raw = _read_text(Path(filepath))
+    raw = _read_text(Path(filepath), allowed_root=None if apply_override else scan_root)
     if raw is None:
         raise ComposeWouldFail(str(filepath))
     parent = Path(filepath).parent
     env_root = env_base if env_base is not None else parent
-    env_vars = {**_load_env_file(env_root, owner_file=str(filepath)), **(extra_env or {})}
+    env_scan_root = scan_root if (env_base is not None or not apply_override) else None
+    env_vars = {
+        **_load_env_file(env_root, owner_file=str(filepath), scan_root=env_scan_root),
+        **(extra_env or {}),
+    }
     interpolated = substitute_vars(raw, env_vars, required=False)
     try:
         data = _load_yaml(interpolated)
@@ -452,7 +546,9 @@ def _compose_doc_uncached(
         data = {}
     if not isinstance(data, dict):
         raise ComposeWouldFail(str(filepath))
-    extra_file_env = _require_env_files(env_root, data.get("env_file"), owner_file=str(filepath))
+    extra_file_env = _require_env_files(
+        env_root, data.get("env_file"), owner_file=str(filepath), scan_root=scan_root,
+    )
     if extra_file_env:
         env_vars = {**env_vars, **extra_file_env}
     interpolated = substitute_vars(raw, env_vars, required=True)
@@ -476,7 +572,10 @@ def _compose_doc_uncached(
             except yaml.YAMLError as exc:
                 raise ComposeWouldFail(str(filepath)) from exc
             if isinstance(ov_data, dict):
-                ov_env = _require_env_files(env_root, ov_data.get("env_file"), owner_file=str(filepath))
+                ov_env = _require_env_files(
+                    env_root, ov_data.get("env_file"), owner_file=str(filepath),
+                    scan_root=scan_root,
+                )
                 if ov_env:
                     env_vars = {**env_vars, **ov_env}
                 data = _overlay_compose_docs(data, ov_data)
@@ -492,6 +591,9 @@ def _included_paths(
     env_base: Path | None = None,
     apply_override: bool = True,
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
+    file_budget: _FileBudget | None = None,
 ) -> tuple[set[str], set[str]]:
     """Paths and realpaths reached via ``include:`` (not scanned as their own stack)."""
     real = os.path.realpath(filepath)
@@ -499,12 +601,16 @@ def _included_paths(
         return set(), set()
     data, env_vars, parent = _compose_doc(
         filepath, extra_env, env_base, apply_override=apply_override, cache=cache,
+        scan_root=scan_root,
     )
     out_abs: set[str] = set()
     out_real: set[str] = set()
     nested_chain = chain | {real}
     spec_root = env_base if env_base is not None else parent
-    for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root, owner_file=filepath):
+    for group, inc_env, inc_base in _include_specs(
+        data.get("include"), spec_root, owner_file=filepath,
+        scan_root=scan_root, file_budget=file_budget,
+    ):
         nested_env = {**env_vars, **inc_env}
         nested_base = inc_base if inc_base is not None else env_base
         for inc_path in group:
@@ -513,6 +619,7 @@ def _included_paths(
             sub_abs, sub_real = _included_paths(
                 str(inc_path), nested_env, nested_chain, nested_base,
                 apply_override=False, cache=cache,
+                scan_root=scan_root, file_budget=file_budget,
             )
             out_abs |= sub_abs
             out_real |= sub_real
@@ -530,16 +637,21 @@ def _parse_compose_file(
     apply_override: bool = True,
     extra_macvlan: set[str] | None = None,
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
+    file_budget: _FileBudget | None = None,
 ) -> list[ComposePort]:
     real = os.path.realpath(filepath)
     if real in chain:
         return []
     data, env_vars, parent = _compose_doc(
         filepath, extra_env, env_base, apply_override=apply_override, cache=cache,
+        scan_root=scan_root,
     )
     return _parse_compose_data(
         data, filepath, parent, env_vars, scan_dir, chain | {real},
         extra_env, project_dir, project_name, env_base, extra_macvlan, cache,
+        scan_root=scan_root, file_budget=file_budget,
     )
 
 
@@ -553,6 +665,9 @@ def _parse_include_group(
     env_base: Path | None,
     extra_macvlan: set[str] | None,
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
+    file_budget: _FileBudget | None = None,
 ) -> list[ComposePort]:
     files = [path for path in paths if path.is_file()]
     if len(files) != len(paths):
@@ -567,7 +682,7 @@ def _parse_include_group(
             str(files[0]), scan_dir, chain, extra_env,
             project_dir=project_dir, project_name=project_name,
             env_base=env_base, apply_override=False, extra_macvlan=extra_macvlan,
-            cache=cache,
+            cache=cache, scan_root=scan_root, file_budget=file_budget,
         )
     merged = None
     env_vars = extra_env or {}
@@ -576,6 +691,7 @@ def _parse_include_group(
     for path in files:
         data, env_vars, parent = _compose_doc(
             str(path), extra_env, env_base, apply_override=False, cache=cache,
+            scan_root=scan_root,
         )
         merged = data if merged is None else _overlay_compose_docs(merged, data)
     if merged is None:
@@ -583,6 +699,7 @@ def _parse_include_group(
     return _parse_compose_data(
         merged, first, parent, env_vars, scan_dir, chain | extra_chain,
         extra_env, project_dir, project_name, env_base, extra_macvlan, cache,
+        scan_root=scan_root, file_budget=file_budget,
     )
 
 
@@ -599,6 +716,9 @@ def _parse_compose_data(
     env_base: Path | None,
     extra_macvlan: set[str] | None,
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
+    file_budget: _FileBudget | None = None,
 ) -> list[ComposePort]:
     ports: list[ComposePort] = []
     this_dir = project_dir if project_dir is not None else _project_dir_key(parent, scan_dir)
@@ -608,7 +728,10 @@ def _parse_compose_data(
     this_name = _project_display_name(data.get("name"), project_name or fallback_name)
 
     spec_root = env_base if env_base is not None else parent
-    specs = _include_specs(data.get("include"), spec_root, owner_file=filepath)
+    specs = _include_specs(
+        data.get("include"), spec_root, owner_file=filepath,
+        scan_root=scan_root, file_budget=file_budget,
+    )
     macvlan_names = set(extra_macvlan or ()) | _macvlan_network_names(data)
     for group, inc_env, inc_base in specs:
         nested_env = {**env_vars, **inc_env}
@@ -616,6 +739,7 @@ def _parse_compose_data(
         for inc_path in group:
             macvlan_names |= _macvlan_names_tree(
                 str(inc_path), nested_env, chain, nested_base, cache=cache,
+                scan_root=scan_root, file_budget=file_budget,
             )
     for group, inc_env, inc_base in specs:
         nested_env = {**env_vars, **inc_env}
@@ -623,6 +747,7 @@ def _parse_compose_data(
         ports.extend(_parse_include_group(
             group, scan_dir, chain, nested_env,
             this_dir, this_name, nested_base, macvlan_names, cache,
+            scan_root=scan_root, file_budget=file_budget,
         ))
 
     local_services = _service_map(data.get("services"))
@@ -630,14 +755,14 @@ def _parse_compose_data(
     work_dir = spec_root
 
     for svc_name, svc_cfg in local_services.items():
-        _require_env_files(work_dir, svc_cfg.get("env_file"), owner_file=filepath)
+        _require_env_files(work_dir, svc_cfg.get("env_file"), owner_file=filepath, scan_root=scan_root)
         lan_names = macvlan_names | _extends_macvlan_names(
             svc_cfg, filepath, env_vars, local_services, frozenset(), work_dir,
-            cache=cache,
+            cache=cache, scan_root=scan_root, file_budget=file_budget,
         )
         svc_cfg = _resolve_extends(
             svc_cfg, filepath, env_vars, frozenset(), local_services, work_dir,
-            cache=cache,
+            cache=cache, scan_root=scan_root,
         )
         net = str(_unwrap_compose(svc_cfg.get("network_mode")) or "").strip().lower() or None
         if _is_shared_netns(net):
@@ -660,6 +785,7 @@ def _parse_compose_data(
                     protocol=p.get("protocol", "tcp"),
                     host_ip=p.get("host_ip"),
                     network_mode=net,
+                    publish_mode=p.get("mode"),
                     mapping_source=source,
                 ))
         if _is_host_network(net):
@@ -722,7 +848,12 @@ def _parse_compose_data(
 
 
 def _include_specs(
-    include, parent: Path, owner_file: str = "",
+    include,
+    parent: Path,
+    owner_file: str = "",
+    *,
+    scan_root: str | None = None,
+    file_budget: _FileBudget | None = None,
 ) -> list[tuple[list[Path], dict[str, str], Path | None]]:
     if not include:
         return []
@@ -739,15 +870,22 @@ def _include_specs(
         if isinstance(item, str):
             paths = [item]
         elif isinstance(item, dict):
-            extra = _require_env_files(parent, item.get("env_file"), owner_file=scope)
+            extra = _require_env_files(
+                parent, item.get("env_file"), owner_file=scope, scan_root=scan_root,
+            )
             proj = item.get("project_directory")
             if isinstance(proj, str) and proj.strip():
                 try:
                     proj_dir = Path(os.path.normpath(os.path.join(str(parent), proj)))
                 except (TypeError, ValueError, OSError):
-                    proj_dir = None
-                if proj_dir is not None and proj_dir.is_dir():
-                    extra = {**_load_env_file(proj_dir), **extra}
+                    raise ComposeWouldFail(scope) from None
+                if not _confined_within(proj_dir, scan_root) or is_blocked_path(proj_dir):
+                    raise ComposeWouldFail(scope)
+                if proj_dir.is_dir():
+                    extra = {
+                        **_load_env_file(proj_dir, owner_file=scope, scan_root=scan_root),
+                        **extra,
+                    }
                     env_base = proj_dir
             raw_path = item.get("path")
             if isinstance(raw_path, str):
@@ -761,15 +899,38 @@ def _include_specs(
             try:
                 if any(ch in path for ch in "*?["):
                     pattern = os.path.normpath(os.path.join(str(parent), path))
-                    candidates = sorted(Path(os.path.normpath(p)) for p in _glob.glob(pattern))
+                    prefix = _glob_prefix(pattern)
+                    if scan_root is not None and (not prefix or not _confined_within(prefix, scan_root)):
+                        raise ComposeWouldFail(scope)
+                    candidates: list[Path] = []
+                    new_reals: set[str] = set()
+                    for match in _glob.iglob(pattern):
+                        cand = Path(os.path.normpath(match))
+                        if not _confined_within(cand, scan_root) or is_blocked_path(cand):
+                            raise ComposeWouldFail(scope)
+                        if not cand.is_file():
+                            continue
+                        if file_budget is not None:
+                            real = os.path.realpath(cand)
+                            if real not in file_budget.seen:
+                                new_reals.add(real)
+                                if len(file_budget.seen) + len(new_reals) > file_budget.limit:
+                                    file_budget.truncated = True
+                                    raise _ComposeFileLimit(scope)
+                        candidates.append(cand)
+                    candidates.sort()
                 else:
                     candidates = [Path(os.path.normpath(os.path.join(str(parent), path)))]
+            except ComposeWouldFail:
+                raise
             except (TypeError, ValueError, OSError):
                 raise ComposeWouldFail(scope) from None
             for cand in candidates:
-                if is_blocked_path(cand):
+                if not _confined_within(cand, scan_root) or is_blocked_path(cand):
                     raise ComposeWouldFail(scope)
                 if cand.is_file():
+                    if file_budget is not None and not file_budget.admit(cand):
+                        raise _ComposeFileLimit(scope)
                     group.append(cand)
         if paths and not group:
             raise ComposeWouldFail(scope)
@@ -812,7 +973,13 @@ def _env_file_specs(env_file) -> list[tuple[str, bool]]:
     return names
 
 
-def _require_env_files(parent: Path, env_file, owner_file: str = "") -> dict[str, str]:
+def _require_env_files(
+    parent: Path,
+    env_file,
+    owner_file: str = "",
+    *,
+    scan_root: str | None = None,
+) -> dict[str, str]:
     merged: dict[str, str] = {}
     scope = owner_file or "env_file"
     for name, required in _env_file_specs(env_file):
@@ -820,12 +987,16 @@ def _require_env_files(parent: Path, env_file, owner_file: str = "") -> dict[str
             candidate = Path(os.path.normpath(os.path.join(str(parent), name)))
         except (TypeError, ValueError, OSError) as exc:
             raise ComposeWouldFail(scope) from exc
+        if not _confined_within(candidate, scan_root) or is_blocked_path(candidate):
+            raise ComposeWouldFail(scope)
         if not os.path.lexists(candidate):
             if required:
                 raise ComposeWouldFail(scope)
             continue
         try:
-            text = read_regular_text(candidate, max_bytes=MAX_ENV_BYTES)
+            text = read_regular_text(
+                candidate, max_bytes=MAX_ENV_BYTES, allowed_root=scan_root,
+            )
         except FileNotFoundError as exc:
             if required:
                 raise ComposeWouldFail(scope) from exc
@@ -836,13 +1007,25 @@ def _require_env_files(parent: Path, env_file, owner_file: str = "") -> dict[str
     return merged
 
 
-def _load_env_file(directory: Path, owner_file: str = "") -> dict[str, str]:
-    return _read_env_file(directory / ".env", owner_file=owner_file)
+def _load_env_file(
+    directory: Path,
+    owner_file: str = "",
+    *,
+    scan_root: str | None = None,
+) -> dict[str, str]:
+    return _read_env_file(directory / ".env", owner_file=owner_file, scan_root=scan_root)
 
 
-def _read_env_file(path: Path, owner_file: str = "") -> dict[str, str]:
+def _read_env_file(
+    path: Path,
+    owner_file: str = "",
+    *,
+    scan_root: str | None = None,
+) -> dict[str, str]:
+    if scan_root is not None and os.path.lexists(path) and not _confined_within(path, scan_root):
+        raise ComposeWouldFail(owner_file or "env_file")
     try:
-        text = read_regular_text(path, max_bytes=MAX_ENV_BYTES)
+        text = read_regular_text(path, max_bytes=MAX_ENV_BYTES, allowed_root=scan_root)
     except FileNotFoundError:
         return {}
     except (OSError, ValueError) as exc:
@@ -878,7 +1061,13 @@ def _parse_env_text(text: str) -> dict[str, str]:
     return env
 
 
-def _extends_ref(ext, filepath: str, work_dir: Path | None = None) -> tuple[str, str] | None:
+def _extends_ref(
+    ext,
+    filepath: str,
+    work_dir: Path | None = None,
+    *,
+    scan_root: str | None = None,
+) -> tuple[str, str] | None:
     ext = _unwrap_compose(ext)
     if isinstance(ext, str) and ext.strip():
         return os.path.abspath(filepath), ext.strip()
@@ -898,7 +1087,7 @@ def _extends_ref(ext, filepath: str, work_dir: Path | None = None) -> tuple[str,
         cand = Path(os.path.normpath(os.path.join(str(base), f)))
     except (TypeError, ValueError, OSError):
         raise ComposeWouldFail(str(filepath)) from None
-    if is_blocked_path(cand) or not cand.is_file():
+    if not _confined_within(cand, scan_root) or is_blocked_path(cand) or not cand.is_file():
         raise ComposeWouldFail(str(filepath))
     return str(cand), svc
 
@@ -907,6 +1096,8 @@ def _services_from_file(
     filepath: str,
     env_vars: dict[str, str],
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
 ) -> tuple[dict, dict[str, str]]:
     loaded = _compose_doc(
         filepath,
@@ -914,6 +1105,7 @@ def _services_from_file(
         env_base=None,
         apply_override=False,
         cache=cache,
+        scan_root=scan_root,
     )
     if loaded is None:
         raise ComposeWouldFail(str(filepath))
@@ -929,8 +1121,10 @@ def _resolve_extends(
     local_services: dict,
     work_dir: Path | None = None,
     cache: dict | None = None,
+    *,
+    scan_root: str | None = None,
 ) -> dict:
-    ref = _extends_ref(svc_cfg.get("extends"), filepath, work_dir)
+    ref = _extends_ref(svc_cfg.get("extends"), filepath, work_dir, scan_root=scan_root)
     if ref is None:
         return svc_cfg
     ref_file, ref_svc = ref
@@ -945,7 +1139,9 @@ def _resolve_extends(
         next_env = env_vars
     else:
         other_path = ref_file
-        other_local, other_env = _services_from_file(ref_file, env_vars, cache=cache)
+        other_local, other_env = _services_from_file(
+            ref_file, env_vars, cache=cache, scan_root=scan_root,
+        )
         next_env = {**other_env, **env_vars}
         other = other_local.get(ref_svc)
         nested_dir = Path(ref_file).parent
@@ -955,12 +1151,157 @@ def _resolve_extends(
         nested_dir if nested_dir is not None else Path(other_path).parent,
         other.get("env_file"),
         owner_file=filepath,
+        scan_root=scan_root,
     )
     base = _resolve_extends(
         other, other_path, next_env, chain | {cycle_key}, other_local, nested_dir,
-        cache=cache,
+        cache=cache, scan_root=scan_root,
     )
     return _overlay_port_fields(base, svc_cfg)
+
+
+def _brace_pairs(text: str) -> dict[int, int]:
+    """Map each opening '{' index to its matching '}' index in O(len(text))."""
+    pairs: dict[int, int] = {}
+    stack: list[int] = []
+    for idx, ch in enumerate(text):
+        if ch == "{":
+            stack.append(idx)
+        elif ch == "}" and stack:
+            pairs[stack.pop()] = idx
+    return pairs
+
+
+def _substitute_vars_inner(
+    text: str,
+    env_vars: dict[str, str],
+    *,
+    required: bool,
+    budget: list[int],
+    depth: int,
+) -> str:
+    if depth > _MAX_INTERP_DEPTH:
+        raise ComposeWouldFail("variable expansion limit")
+
+    def _charge(size: int) -> None:
+        budget[0] -= size
+        if budget[0] < 0:
+            raise ComposeWouldFail("variable expansion limit")
+
+    def _expand_name(name: str) -> str:
+        m = _VAR_NAME_RE.match(name)
+        if m:
+            var = m.group(0)
+            rest = name[m.end():]
+            if not rest:
+                if var in env_vars:
+                    val = env_vars[var]
+                    _charge(len(val))
+                    return val
+                literal = "${" + name + "}"
+                _charge(len(literal))
+                return literal
+            if rest.startswith(":?"):
+                val = env_vars.get(var)
+                if val is None or val == "":
+                    if required:
+                        raise ComposeWouldFail("${" + var + ":?}")
+                    return ""
+                _charge(len(val))
+                return val
+            if rest.startswith(":+"):
+                val = env_vars.get(var)
+                if val is None or val == "":
+                    return ""
+                return _substitute_vars_inner(
+                    rest[2:], env_vars, required=required, budget=budget, depth=depth + 1,
+                )
+            if rest.startswith(":-"):
+                val = env_vars.get(var)
+                if val is None or val == "":
+                    return _substitute_vars_inner(
+                        rest[2:], env_vars, required=required, budget=budget, depth=depth + 1,
+                    )
+                _charge(len(val))
+                return val
+            if rest.startswith("?"):
+                if var not in env_vars:
+                    if required:
+                        raise ComposeWouldFail("${" + var + "?}")
+                    return ""
+                val = env_vars[var]
+                _charge(len(val))
+                return val
+            if rest.startswith("+"):
+                if var not in env_vars:
+                    return ""
+                return _substitute_vars_inner(
+                    rest[1:], env_vars, required=required, budget=budget, depth=depth + 1,
+                )
+            if rest.startswith("-"):
+                if var in env_vars:
+                    val = env_vars[var]
+                    _charge(len(val))
+                    return val
+                return _substitute_vars_inner(
+                    rest[1:], env_vars, required=required, budget=budget, depth=depth + 1,
+                )
+        literal = "${" + name + "}"
+        _charge(len(literal))
+        return literal
+
+    out: list[str] = []
+    pairs: dict[int, int] | None = None
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] != "$":
+            nxt_dollar = text.find("$", i)
+            if nxt_dollar == -1:
+                chunk = text[i:]
+                _charge(len(chunk))
+                out.append(chunk)
+                break
+            chunk = text[i:nxt_dollar]
+            _charge(len(chunk))
+            out.append(chunk)
+            i = nxt_dollar
+            continue
+        if i + 1 >= n:
+            _charge(1)
+            out.append("$")
+            break
+        nxt = text[i + 1]
+        if nxt == "$":
+            _charge(1)
+            out.append("$")
+            i += 2
+            continue
+        if nxt == "{":
+            if pairs is None:
+                pairs = _brace_pairs(text)
+            close = pairs.get(i + 1)
+            if close is None:
+                _charge(1)
+                out.append("$")
+                i += 1
+                continue
+            inner = text[i + 2:close]
+            out.append(_expand_name(inner))
+            i = close + 1
+            continue
+        m = _VAR_NAME_RE.match(text, i + 1)
+        if m:
+            name = m.group(0)
+            piece = env_vars[name] if name in env_vars else "$" + name
+            _charge(len(piece))
+            out.append(piece)
+            i = m.end()
+            continue
+        _charge(1)
+        out.append("$")
+        i += 1
+    return "".join(out)
 
 
 def substitute_vars(
@@ -968,6 +1309,7 @@ def substitute_vars(
     env_vars: dict[str, str],
     *,
     required: bool = True,
+    max_output: int = _MAX_EXPANDED_CHARS,
 ) -> str:
     """Interpolate Compose ``$VAR`` / ``${VAR}`` from the *project* env only.
 
@@ -976,92 +1318,6 @@ def substitute_vars(
     ``required=False`` is the first YAML pass so ``env_file`` can still load
     ``${VAR:?}`` values; the second pass is strict (Compose would abort).
     """
-
-    def _braced(s: str, start: int) -> tuple[str, int] | None:
-        depth = 1
-        j = start
-        while j < len(s):
-            if s[j] == "{":
-                depth += 1
-            elif s[j] == "}":
-                depth -= 1
-                if depth == 0:
-                    return s[start:j], j + 1
-            j += 1
-        return None
-
-    def _expand_name(name: str) -> str:
-        if ":?" in name:
-            var, _, _err = name.partition(":?")
-            val = env_vars.get(var)
-            if val is None or val == "":
-                if required:
-                    raise ComposeWouldFail("${" + var + ":?}")
-                return ""
-            return val
-        if ":+" in name:
-            var, _, alt = name.partition(":+")
-            val = env_vars.get(var)
-            if val is None or val == "":
-                return ""
-            return substitute_vars(alt, env_vars, required=required)
-        if ":-" in name:
-            var, _, default = name.partition(":-")
-            val = env_vars.get(var)
-            if val is None or val == "":
-                return substitute_vars(default, env_vars, required=required)
-            return val
-        if "?" in name:
-            var, _, _err = name.partition("?")
-            if var not in env_vars:
-                if required:
-                    raise ComposeWouldFail("${" + var + "?}")
-                return ""
-            return env_vars[var]
-        if "+" in name:
-            var, _, alt = name.partition("+")
-            if var not in env_vars:
-                return ""
-            return substitute_vars(alt, env_vars, required=required)
-        if "-" in name:
-            var, _, default = name.partition("-")
-            if var in env_vars:
-                return env_vars[var]
-            return substitute_vars(default, env_vars, required=required)
-        if name in env_vars:
-            return env_vars[name]
-        return "${" + name + "}"
-
-    out: list[str] = []
-    i = 0
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch != "$" or i + 1 >= n:
-            out.append(ch)
-            i += 1
-            continue
-        nxt = text[i + 1]
-        if nxt == "$":
-            out.append("$")
-            i += 2
-            continue
-        if nxt == "{":
-            parsed = _braced(text, i + 2)
-            if parsed is None:
-                out.append(ch)
-                i += 1
-                continue
-            inner, end = parsed
-            out.append(_expand_name(inner))
-            i = end
-            continue
-        m = re.match(r"\w+", text[i + 1:])
-        if m:
-            name = m.group(0)
-            out.append(env_vars[name] if name in env_vars else "$" + name)
-            i += 1 + len(name)
-            continue
-        out.append(ch)
-        i += 1
-    return "".join(out)
+    return _substitute_vars_inner(
+        text, env_vars, required=required, budget=[max_output], depth=0,
+    )

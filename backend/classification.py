@@ -174,6 +174,7 @@ def classify(
             "host_ip": cp.host_ip,
             "network_mode": cp.network_mode,
             "mapping_source": cp.mapping_source,
+            **({"publish_mode": cp.publish_mode} if cp.publish_mode else {}),
         })
 
     manual_map: dict[int, dict] = {}

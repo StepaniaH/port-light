@@ -114,23 +114,41 @@ def scan_listening_ports(
         degradations.report("listen", "host", "untrusted listen table")
         raise ScanUnavailable("host listen table unavailable")
 
-    try:
-        return _scan_with_ss()
-    except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        degradations.report("listen", "ss", "scan failed")
+    source = listen_scan_source()
+    candidates: list[str] = []
+    if source in ("lsof", "ss", "proc"):
+        candidates.append(source)
+    if sys.platform == "darwin" and shutil.which("lsof") and "lsof" not in candidates:
+        candidates.append("lsof")
+    if shutil.which("ss") and "ss" not in candidates:
+        candidates.append("ss")
+    if os.path.exists("/proc/net/tcp") and "proc" not in candidates:
+        candidates.append("proc")
 
-    if sys.platform == "darwin" and shutil.which("lsof"):
-        try:
-            return _scan_with_lsof()
-        except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            degradations.report("listen", "lsof", "scan failed")
-
-    try:
-        return _scan_with_proc(prefer_pids=prefer_pids)
-    except (FileNotFoundError, OSError):
-        pass
+    for candidate in candidates:
+        if candidate == "lsof":
+            try:
+                return _scan_with_lsof()
+            except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                degradations.report("listen", "lsof", "scan failed")
+        elif candidate == "ss":
+            try:
+                return _scan_with_ss()
+            except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                degradations.report("listen", "ss", "scan failed")
+        elif candidate == "proc":
+            try:
+                return _scan_with_proc(prefer_pids=prefer_pids)
+            except (FileNotFoundError, OSError):
+                pass
 
     raise ScanUnavailable("all listen scanners failed")
+
+
+def _resolve_proc_root(proc_root: str) -> str:
+    if proc_root == "/host/proc" and not os.path.exists("/host/proc"):
+        return "/proc"
+    return proc_root
 
 
 def socket_inodes_for_pid(pid: int, proc_root: str = "/host/proc") -> set[int]:
@@ -138,15 +156,12 @@ def socket_inodes_for_pid(pid: int, proc_root: str = "/host/proc") -> set[int]:
     inodes: set[int] = set()
     if pid <= 0:
         return inodes
-    fd_dir = os.path.join(proc_root, str(pid), "fd")
+    root = _resolve_proc_root(proc_root)
+    fd_dir = os.path.join(root, str(pid), "fd")
     try:
         names = os.listdir(fd_dir)
     except OSError:
-        fd_dir = os.path.join("/proc", str(pid), "fd")
-        try:
-            names = os.listdir(fd_dir)
-        except OSError:
-            return inodes
+        return inodes
     for name in names:
         try:
             target = os.readlink(os.path.join(fd_dir, name))
@@ -197,28 +212,24 @@ def socket_inodes_for_tree(
 
 def _read_children(pid: int, proc_root: str) -> list[int]:
     children: list[int] = []
-    roots = [proc_root]
-    if proc_root != "/proc":
-        roots.append("/proc")
-    for root in roots:
-        task = os.path.join(root, str(pid), "task")
+    root = _resolve_proc_root(proc_root)
+    task = os.path.join(root, str(pid), "task")
+    try:
+        tids = os.listdir(task)
+    except OSError:
+        return children
+    for tid in tids:
+        path = os.path.join(task, tid, "children")
         try:
-            tids = os.listdir(task)
+            with open(path) as fh:
+                text = fh.read()
         except OSError:
             continue
-        for tid in tids:
-            path = os.path.join(task, tid, "children")
+        for part in text.split():
             try:
-                with open(path) as fh:
-                    text = fh.read()
-            except OSError:
+                children.append(int(part))
+            except ValueError:
                 continue
-            for part in text.split():
-                try:
-                    children.append(int(part))
-                except ValueError:
-                    continue
-        break
     return children
 
 
