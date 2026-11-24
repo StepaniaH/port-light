@@ -107,9 +107,49 @@ def test_occupancy_user_state_is_one_snapshot(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     port_store.add_manual_port(9, "lab")
     port_store.add_hidden_port(22)
-    manuals, hidden = port_store.occupancy_user_state()
+    port_store.set_port_rules([{"name": "web", "start": 8000, "end": 8099}])
+    state = port_store.occupancy_user_state()
+    manuals, hidden = state
     assert manuals[0]["port"] == 9
     assert hidden == [22]
+    assert state.rules[0]["name"] == "web"
+
+
+def test_manual_port_field_bounds_and_entry_cap(empty_scan, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend import main
+
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    with pytest.raises(ValueError):
+        port_store.add_manual_port(4100, label="x" * 257)
+    with pytest.raises(ValueError):
+        port_store.add_manual_port(4100, machine="m" * 65)
+
+    (tmp_path / "port_light.json").write_text(json.dumps({
+        "manual_ports": [
+            {"port": p, "label": "cap", "machine": "localhost"}
+            for p in range(1, port_store.MAX_MANUAL_PORTS + 1)
+        ]
+    }), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        port_store.add_manual_port(50000, "overflow")
+
+    updated = port_store.add_manual_port(1, "in-place-update")
+    assert updated["label"] == "in-place-update"
+
+    with TestClient(main.app) as client:
+        assert client.post("/api/manual-ports", json={"port": 50001, "label": "x" * 257}).status_code == 422
+        assert client.post("/api/manual-ports", json={"port": 50001, "machine": "m" * 65}).status_code == 422
+        assert client.patch("/api/manual-ports/1", json={"label": "x" * 257}).status_code == 422
+        assert client.post("/api/manual-ports/batch", json={"start": 50001, "end": 50002, "label": "x" * 257}).status_code == 422
+        assert client.post("/api/manual-ports", json={"port": 50001, "label": "overflow"}).status_code in (400, 409)
+        assert client.post("/api/manual-ports/batch", json={"start": 50001, "end": 50002}).status_code in (400, 409)
+        assert client.post(
+            "/api/reservations",
+            json={"start": 50001, "end": 50002, "require_count": False},
+            headers={"Idempotency-Key": secrets.token_urlsafe(32)},
+        ).status_code in (400, 409)
 
 
 def test_hidden_port_rejects_out_of_range(tmp_path, monkeypatch):

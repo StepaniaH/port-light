@@ -215,3 +215,21 @@ def test_suggest_token_failure_not_recorded(monkeypatch):
                      params={"count": 1, "start": 7200, "end": 7209})
     assert res.status_code == 403
     assert agent_events.recent() == []
+
+
+def test_suggest_self_scope_scans_local_snapshot_once(monkeypatch):
+    import backend.main as main
+
+    calls = 0
+    real_scanned = main._scanned_ports
+
+    def counted_scanned(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_scanned(*args, **kwargs)
+
+    monkeypatch.setattr(main, "_scanned_ports", counted_scanned)
+    client = TestClient(app)
+    res = client.get("/api/ports/suggest", params={"count": 1, "start": 7300, "end": 7310})
+    assert res.status_code == 200
+    assert calls == 1

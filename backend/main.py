@@ -118,6 +118,24 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 
+_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+async def csrf_middleware(request: Request, call_next):
+    if (request.method in _MUTATING_METHODS
+            and (request.url.path == "/api" or request.url.path.startswith("/api/"))):
+        sec_fetch_site = (request.headers.get("sec-fetch-site") or "").strip().lower()
+        origin = request.headers.get("origin")
+        expected_origin = str(request.base_url.replace(path="/")).rstrip("/")
+        if sec_fetch_site == "cross-site" or (origin is not None and origin != expected_origin):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "cross-origin requests are not allowed"},
+            )
+    return await call_next(request)
+
+
+app.middleware("http")(csrf_middleware)
 app.middleware("http")(basic_auth_middleware)
 app.middleware("http")(security_headers_middleware)
 
@@ -267,13 +285,16 @@ def _allocation_snapshot(values: dict) -> dict:
 
 def _scanned_ports(snap: dict, values: dict, lo: int, hi: int) -> set[int]:
     # Stored claims and hidden ports are re-read under the store's write lock.
-    result = _classify_snapshot({**snap, "user_state": ([], [])}, values, lo, hi)
+    result = _classify_snapshot(
+        {**snap, "user_state": port_store.UserState(([], []), [])}, values, lo, hi,
+    )
     return {row["port"] for row in result["ports"]}
 
 
 def _classify_snapshot(snap: dict, values: dict, start: int, end: int,
                        show_hidden: bool = True, hidden_locked: bool = False) -> dict:
-    manuals, hidden = snap["user_state"]
+    user_state = snap["user_state"]
+    manuals, hidden = user_state
     result = classify(
         snap["listening"],
         snap["containers"],
@@ -287,7 +308,10 @@ def _classify_snapshot(snap: dict, values: dict, start: int, end: int,
         options=values,
     )
 
-    port_rules.annotate(result["ports"], port_store.get_port_rules())
+    rules = getattr(user_state, "rules", None)
+    if rules is None:
+        rules = port_store.get_port_rules()
+    port_rules.annotate(result["ports"], rules)
     if not hidden_locked:
         result["summary"]["compose_diagnostics"] = snap["compose_scan"].diagnostics
     if not complete(snap):
@@ -419,27 +443,33 @@ async def _suggest(count: int, start: int | None, end: int | None, label: str,
                     "peer occupancy unavailable or incomplete")
                 raise HTTPException(status_code=503, detail="peer occupancy unavailable or incomplete")
         scope_label = f"all:{reachable}/{len(peers)}"
-    # Peer I/O may outlast the local snapshot. Revalidate it before claiming.
-    values = _values()
-    taken.update(_scanned_ports(_allocation_snapshot(values), values, lo, hi))
-    if request_key is not None:
-        parameters = {"count": count, "start": start, "end": end, "label": label,
-                      "ttl": ttl, "scope": scope, "require_count": require_count}
-        if rule is not None:
-            parameters["rule"] = rule
-        result, created = await asyncio.to_thread(
-            port_store.allocate_reservation, taken, lo, hi, parameters, request_key, scope_label)
-        if not created:
-            return result
-        picks, reservations = result["ports"], result["reservations"]
-    else:
-        picks, reservations = await asyncio.to_thread(
-            port_store.allocate_ports, taken, lo, hi, count, label, None, False, require_count)
+        # Peer I/O may outlast the local snapshot. Revalidate it before claiming.
+        values = _values()
+        taken.update(_scanned_ports(_allocation_snapshot(values), values, lo, hi))
+    try:
+        if request_key is not None:
+            parameters = {"count": count, "start": start, "end": end, "label": label,
+                          "ttl": ttl, "scope": scope, "require_count": require_count}
+            if rule is not None:
+                parameters["rule"] = rule
+            result, created = await asyncio.to_thread(
+                port_store.allocate_reservation, taken, lo, hi, parameters, request_key, scope_label)
+            if not created:
+                return result
+            picks, reservations = result["ports"], result["reservations"]
+        else:
+            picks, reservations = await asyncio.to_thread(
+                port_store.allocate_ports, taken, lo, hi, count, label, None, False, require_count)
+    except ValueError as exc:
+        status_code = 409 if "at most" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     if reservations:
         await asyncio.to_thread(_monitor.state_changed)
     reserved = [entry["port"] for entry in reservations]
     try:
-        agent_events.record(len(picks), scope_label, label, bool(reserved))
+        await asyncio.to_thread(
+            agent_events.record, len(picks), scope_label, label, bool(reserved),
+        )
     except sqlite3.Error:
         # The reservation is already durable: still return its release token.
         degradations.report("history", "agent", "could not record allocation event")

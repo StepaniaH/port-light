@@ -19,20 +19,20 @@ router = APIRouter()
 
 class ManualPortCreate(BaseModel):
     port: int = Field(ge=1, le=65535)
-    label: str = ""
-    machine: str = "localhost"
+    label: str = Field(default="", max_length=256)
+    machine: str = Field(default="localhost", max_length=64)
     ttl: int | None = Field(default=None, ge=60, le=604800)
 
 
 class ManualPortBatch(BaseModel):
     start: int = Field(ge=1, le=65535)
     end: int = Field(ge=1, le=65535)
-    label: str = ""
+    label: str = Field(default="", max_length=256)
 
 
 class ManualPortUpdate(BaseModel):
-    label: str = ""
-    machine: str = "localhost"
+    label: str = Field(default="", max_length=256)
+    machine: str = Field(default="localhost", max_length=64)
 
 
 class ReservationCreate(BaseModel):
@@ -54,7 +54,7 @@ async def suggest_ports(
     start: int | None = Query(default=None, ge=1, le=65535),
     end: int | None = Query(default=None, ge=1, le=65535),
     reserve: bool = Query(default=False),
-    label: str = Query(default=""),
+    label: str = Query(default="", max_length=256),
     ttl: int | None = Query(default=None, ge=60, le=604800),
     scope: str = Query(default="self", pattern="^(self|all)$"),
     require_count: bool = Query(default=False),
@@ -123,10 +123,18 @@ def list_manual_ports(request: Request) -> dict:
                              if entry["port"] not in hidden]}
 
 
+def _raise_manual_error(exc: ValueError) -> None:
+    status = 409 if "at most" in str(exc) else 400
+    raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
 @router.post("/api/manual-ports")
 def add_manual_port(body: ManualPortCreate, request: Request) -> dict:
     runtime._require_hidden_write(request, body.port)
-    entry = port_store.add_manual_port(body.port, body.label, body.machine, body.ttl)
+    try:
+        entry = port_store.add_manual_port(body.port, body.label, body.machine, body.ttl)
+    except ValueError as exc:
+        _raise_manual_error(exc)
     runtime._monitor.state_changed()
     return {"status": "ok", "entry": entry}
 
@@ -137,8 +145,11 @@ def reserve_manual_range(body: ManualPortBatch) -> dict:
         raise HTTPException(status_code=422, detail="select between 1 and 64 contiguous ports")
     values = runtime._values()
     snap = runtime._allocation_snapshot(values)
-    picks = port_store.reserve_manual_range(
-        runtime._scanned_ports(snap, values, body.start, body.end), body.start, body.end, body.label)
+    try:
+        picks = port_store.reserve_manual_range(
+            runtime._scanned_ports(snap, values, body.start, body.end), body.start, body.end, body.label)
+    except ValueError as exc:
+        _raise_manual_error(exc)
     runtime._monitor.state_changed()
     return {"status": "ok", "ports": picks}
 
@@ -146,7 +157,10 @@ def reserve_manual_range(body: ManualPortBatch) -> dict:
 @router.patch("/api/manual-ports/{port}")
 def patch_manual_port(port: int, body: ManualPortUpdate, request: Request) -> dict:
     runtime._require_hidden_write(request, port)
-    entry = port_store.update_manual_port(port, body.label, body.machine)
+    try:
+        entry = port_store.update_manual_port(port, body.label, body.machine)
+    except ValueError as exc:
+        _raise_manual_error(exc)
     if not entry:
         raise HTTPException(status_code=404, detail="not found")
     runtime._monitor.state_changed()
@@ -154,7 +168,11 @@ def patch_manual_port(port: int, body: ManualPortUpdate, request: Request) -> di
 
 
 @router.delete("/api/manual-ports/{port}")
-def del_manual_port(port: int, request: Request, machine: str = Query(default="localhost")) -> dict:
+def del_manual_port(
+    port: int,
+    request: Request,
+    machine: str = Query(default="localhost", max_length=64),
+) -> dict:
     runtime._require_hidden_write(request, port)
     removed = port_store.remove_manual_port(port, machine)
     if not removed:

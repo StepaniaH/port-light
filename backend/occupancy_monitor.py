@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import json
 import os
+import queue
 import sqlite3
 import threading
 import time
@@ -20,7 +21,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import replace
 
-from . import degradations, history, webhooks
+from . import degradations, history, port_store, webhooks
 
 
 def _interval(values: dict) -> float:
@@ -65,6 +66,8 @@ class OccupancyMonitor:
         self._publish_lock = threading.Lock()
         self._observation_lock = threading.Lock()
         self._pending_observations: deque[tuple[list[dict] | None, list[dict]]] = deque(maxlen=128)
+        self._work_queue: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
+        self._worker: threading.Thread | None = None
         self._job: Future | None = None
         self._running = False
         self._epoch = 0
@@ -84,6 +87,21 @@ class OccupancyMonitor:
         self._task: asyncio.Task | None = None
         self._stopping = False
 
+    def _ensure_worker(self) -> None:
+        with self._lock:
+            if self._worker is not None and self._worker.is_alive():
+                return
+            worker = threading.Thread(
+                target=self._worker_loop, name="occupancy-scan", daemon=True,
+            )
+            worker.start()
+            self._worker = worker
+
+    def _worker_loop(self) -> None:
+        while True:
+            fn = self._work_queue.get()
+            fn()
+
     async def start(self) -> None:
         if self._running:
             return
@@ -99,6 +117,8 @@ class OccupancyMonitor:
     async def stop(self) -> None:
         self._stopping = True
         self._epoch += 1
+        if self._change_event is not None:
+            self._change_event.set()
         if self._task is not None:
             self._task.cancel()
             try:
@@ -138,7 +158,8 @@ class OccupancyMonitor:
             except Exception as exc:
                 job.set_exception(exc)
 
-        threading.Thread(target=scan, name="occupancy-scan", daemon=True).start()
+        self._ensure_worker()
+        self._work_queue.put(scan)
         try:
             # asyncio.wait leaves the worker's future intact on cancellation.
             wrapped = asyncio.wrap_future(job)
@@ -234,7 +255,7 @@ class OccupancyMonitor:
                 if self._is_stale(snap, values):
                     snap["stale"] = True
                     self.wake()
-                self._accept(snap, values)
+                self._accept(snap, values, scanned=False)
             self.wake()
         except Exception:
             # The write has committed. A publication error must not discard an
@@ -246,6 +267,7 @@ class OccupancyMonitor:
                 valid: Callable[[], bool] | None = None, scanned: bool = False) -> bool:
         snap["max_age"] = max(4.0, _interval(values) * 2.0)
         full = self._classify(snap, values, 1, 65535)
+        snap["_full"] = full
         rows = full["ports"]
         compose_scan = snap["compose_scan"]
         fingerprint_body = {
@@ -277,7 +299,7 @@ class OccupancyMonitor:
                 self._fingerprint = digest
                 self._sequence += 1
                 changed = True
-            new_events = self._record_observation_events(snap, event_rows, changed)
+            new_events = self._record_observation_events(snap, event_rows, changed, scanned=scanned)
             self._latest = snap
         if changed:
             self._signal_waiters()
@@ -336,13 +358,19 @@ class OccupancyMonitor:
         self._observation_events.append(event)
         return event
 
-    def _record_observation_events(self, snap: dict, rows: dict[int, dict], changed: bool) -> list[dict]:
+    def _record_observation_events(
+        self, snap: dict, rows: dict[int, dict], changed: bool, *, scanned: bool = True,
+    ) -> list[dict]:
         created: list[dict] = []
         quality = "complete" if complete(snap) else "degraded"
+        if quality == "degraded" and not scanned:
+            return created
         if self._event_quality is None:
             self._event_quality = quality
-            self._event_baseline = rows if quality == "complete" else None
+            if quality == "complete":
+                self._event_baseline = rows
             return created
+        recovered = False
         if quality != self._event_quality:
             created.append(self._append_observation_event(
                 snap,
@@ -352,11 +380,17 @@ class OccupancyMonitor:
                 after={"quality": quality},
             ))
             self._event_quality = quality
-            self._event_baseline = rows if quality == "complete" else None
+            if quality != "complete":
+                return created
+            recovered = True
+        if quality != "complete":
             return created
-        if quality != "complete" or not changed:
+        if self._event_baseline is None:
+            self._event_baseline = rows
             return created
-        previous = self._event_baseline or {}
+        if not recovered and not changed and rows == self._event_baseline:
+            return created
+        previous = self._event_baseline
         free = {
             "status": "free",
             "protocols": (),
@@ -460,9 +494,16 @@ class OccupancyMonitor:
             return self.refresh()
         if snap.get("key") != self._scan_key(values) and not self._running:
             return self.refresh()
-        if snap.get("state_key") != self._state_key():
+        now = port_store._now()
+        manuals = snap.get("user_state", ([], []))[0]
+        has_expired = any(
+            isinstance(entry.get("expires_at"), (int, float)) and entry["expires_at"] <= now
+            for entry in manuals
+        )
+        if snap.get("state_key") != self._state_key() or has_expired:
             self.state_changed()
-            snap = self._latest or snap
+            with self._lock:
+                snap = self._latest or snap
         if self._is_stale(snap, values):
             self.wake()
             return {**snap, "stale": True}
@@ -477,15 +518,17 @@ class OccupancyMonitor:
         if wake is None:
             await asyncio.sleep(min(timeout, 0.5))
             return self.sequence(), self.sequence() > after
-        while self.sequence() <= after:
+        while not self._stopping and self.sequence() <= after:
             wake.clear()
-            if self.sequence() > after:
+            if self._stopping or self.sequence() > after:
                 break
             try:
                 await asyncio.wait_for(wake.wait(), timeout=timeout)
             except TimeoutError:
                 return self.sequence(), False
-        return self.sequence(), True
+        if self._stopping and self.sequence() <= after:
+            return self.sequence(), False
+        return self.sequence(), self.sequence() > after
 
     def reset(self) -> None:
         """Test hook: discard snapshots and observation fingerprints."""
@@ -500,6 +543,7 @@ class OccupancyMonitor:
             self._event_baseline = None
             self._event_quality = None
             self._failed = False
+            self._stopping = False
 
     def observation_events(self, port: int, *, allow_hidden: bool) -> list[dict]:
         """Recent deterministic events for one visible port and global scan quality."""
@@ -551,6 +595,73 @@ class OccupancyMonitor:
                            if key != "requires_hidden_access"})
         return snap, result
 
+    @staticmethod
+    def _slice_full(
+        snap: dict,
+        full: dict,
+        start: int,
+        end: int,
+        show_hidden: bool,
+        hidden_locked: bool,
+    ) -> dict:
+        is_complete = complete(snap)
+        full_ports = full["ports"]
+        full_summary = full["summary"]
+        ports = [
+            ({**row, "status": "unknown"} if not is_complete and row["status"] == "free" else row)
+            for row in full_ports
+            if show_hidden or not row.get("is_hidden")
+        ]
+        used = 0
+        configured = 0
+        for row in ports:
+            port = row["port"]
+            if start <= port <= end:
+                status = row["status"]
+                if status == "used":
+                    used += 1
+                elif status == "configured":
+                    configured += 1
+        in_range_total = 0
+        hidden = 0
+        for row in full_ports:
+            port = row["port"]
+            if start <= port <= end:
+                in_range_total += 1
+                if row.get("is_hidden"):
+                    hidden += 1
+        if hidden_locked:
+            hidden_ports: list[int] = []
+            hidden_occupancy: list[dict] = []
+        else:
+            hidden_ports = list(full_summary.get("hidden_ports", []))
+            hidden_occupancy = [
+                ({**item, "status": "unknown"} if not is_complete and item["status"] == "free" else item)
+                for item in full_summary.get("hidden_occupancy", [])
+            ]
+        compose_scan = snap["compose_scan"]
+        summary: dict = {
+            "used": used,
+            "configured": configured,
+            "free": max(0, end - start + 1 - in_range_total) if is_complete else None,
+            "hidden": hidden,
+            "hidden_locked": bool(hidden_locked),
+            "hidden_ports": hidden_ports,
+            "hidden_occupancy": hidden_occupancy,
+            "range_start": start,
+            "range_end": end,
+            "scan_complete": is_complete,
+            "sources": snap.get("sources", {}),
+            "compose_truncated": compose_scan.truncated,
+            "compose_incomplete": compose_scan.incomplete,
+            "compose_files": compose_scan.files_scanned,
+        }
+        if not hidden_locked:
+            summary["compose_diagnostics"] = compose_scan.diagnostics
+        if snap.get("stale"):
+            summary["stale"] = True
+        return {"ports": ports, "summary": summary}
+
     def packed(self, values: dict, start: int, end: int,
                show_hidden: bool, hidden_locked: bool) -> tuple[dict, str, str]:
         """Classify and serialize a range from the latest completed scan."""
@@ -560,16 +671,20 @@ class OccupancyMonitor:
             cached = snap["packed"].get(key)
         if cached is not None and not snap.get("stale"):
             return cached
-        result = self._classify(snap, values, start, end, show_hidden, hidden_locked)
-        result["summary"].update({
-            "scan_complete": complete(snap),
-            "sources": snap.get("sources", {}),
-            "compose_truncated": snap["compose_scan"].truncated,
-            "compose_incomplete": snap["compose_scan"].incomplete,
-            "compose_files": snap["compose_scan"].files_scanned,
-        })
-        if snap.get("stale"):
-            result["summary"]["stale"] = True
+        full = snap.get("_full")
+        if full is not None:
+            result = self._slice_full(snap, full, start, end, show_hidden, hidden_locked)
+        else:
+            result = self._classify(snap, values, start, end, show_hidden, hidden_locked)
+            result["summary"].update({
+                "scan_complete": complete(snap),
+                "sources": snap.get("sources", {}),
+                "compose_truncated": snap["compose_scan"].truncated,
+                "compose_incomplete": snap["compose_scan"].incomplete,
+                "compose_files": snap["compose_scan"].files_scanned,
+            })
+            if snap.get("stale"):
+                result["summary"]["stale"] = True
         body = json.dumps(result, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         etag = '"' + hashlib.sha256(body.encode("utf-8")).hexdigest()[:16] + '"'
         packed = (result, body, etag)

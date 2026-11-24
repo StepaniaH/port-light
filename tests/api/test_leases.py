@@ -65,3 +65,30 @@ def test_ttl_bounds_on_suggest():
     client = TestClient(app)
     low = client.post("/api/reservations", json={"require_count": False, **{"count": 1, "ttl": 30}}, headers={"Idempotency-Key": secrets.token_urlsafe(32)})
     assert low.status_code == 422
+
+
+def test_expired_lease_stops_showing_configured_even_on_readonly_store(monkeypatch):
+    from backend import port_store
+
+    clock = {"now": 1_000_000}
+    monkeypatch.setattr(port_store, "_now", lambda: clock["now"])
+
+    client = TestClient(app)
+    assert client.post("/api/manual-ports", json={"port": 7300, "label": "temp", "ttl": 60}).status_code == 200
+    assert client.get("/api/ports/7300").json()["status"] == "configured"
+
+    def readonly_save(_data):
+        raise port_store.StoreWriteError("cannot write /data/port_light.json (permission denied)")
+
+    monkeypatch.setattr(port_store, "_save", readonly_save)
+    clock["now"] += 61
+
+    detail = client.get("/api/ports/7300")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "free"
+    ports_res = client.get("/api/ports")
+    assert ports_res.status_code == 200
+    assert all(row["port"] != 7300 for row in ports_res.json()["ports"])
+    meta_res = client.get("/api/meta")
+    assert meta_res.status_code == 200
+    assert meta_res.json()["automation"]["agent_events"]["lease_rows"] == []

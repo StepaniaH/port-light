@@ -420,3 +420,135 @@ def test_health_hides_scopes_until_configured_gate_is_unlocked(monkeypatch, auth
             assert opened['degradations'][0]['scope'] == 'private/project/compose.yaml'
     finally:
         degradations.reset()
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Sec-Fetch-Site": "cross-site"},
+        {"Origin": "https://attacker.example.invalid"},
+        {"Origin": "null"},
+    ],
+)
+def test_mutating_api_endpoints_reject_cross_origin_requests(monkeypatch, tmp_path, headers):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    for name in ("AUTH_USER", "AUTH_PASSWORD", "HIDDEN_UNLOCK_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    client = TestClient(app)
+    for method, path, body in (
+        ("POST", "/api/manual-ports", {"port": 42000, "label": "csrf"}),
+        ("PUT", "/api/hosts", {"peers": []}),
+        ("PATCH", "/api/manual-ports/42000", {"label": "csrf"}),
+        ("DELETE", "/api/manual-ports/42000", None),
+    ):
+        res = client.request(method, path, json=body, headers=headers)
+        assert res.status_code == 403
+        assert res.json() == {"detail": "cross-origin requests are not allowed"}
+    assert port_store.get_manual_ports() == []
+    assert client.get("/api/ports", headers=headers).status_code == 200
+
+
+def test_mutating_api_allows_same_origin_and_headless_clients(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    for name in ("AUTH_USER", "AUTH_PASSWORD", "HIDDEN_UNLOCK_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    client = TestClient(app)
+    browser_ok = client.post(
+        "/api/manual-ports",
+        json={"port": 42010, "label": "ui"},
+        headers={"Origin": "http://testserver", "Sec-Fetch-Site": "same-origin"},
+    )
+    assert browser_ok.status_code == 200
+    cli_ok = client.post("/api/manual-ports", json={"port": 42011, "label": "cli"})
+    assert cli_ok.status_code == 200
+
+
+def test_two_stage_packed_occupancy_matches_direct_classification_without_reclassifying(
+    monkeypatch, tmp_path
+):
+    import backend.main as main
+    from backend.compose_scanner import ComposeScan
+    from backend.port_scanner import ListeningPort
+
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("HIDDEN_UNLOCK_PASSWORD", "unlock-secret")
+    for name in ("AUTH_USER", "AUTH_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+
+    port_store.add_manual_port(3000, "web")
+    port_store.add_manual_port(9000, "hidden-cfg")
+    port_store.add_hidden_port(8096)
+    port_store.add_hidden_port(9000)
+    port_store.add_hidden_port(42424)
+    port_store.set_port_rules([{"name": "apps", "start": 2000, "end": 4000}])
+
+    calls = 0
+    real_classify = main.classify
+
+    def counted_classify(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_classify(*args, **kwargs)
+
+    monkeypatch.setattr(main, "scan_containers", lambda: [])
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [
+        ListeningPort(port=80, ip="0.0.0.0", protocol="tcp"),
+        ListeningPort(port=8096, ip="127.0.0.1", protocol="tcp"),
+    ])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_k: ComposeScan(
+        diagnostics=[{"code": "port_range", "file": "compose.yaml", "range": "1-2", "limit": 4096}],
+    ))
+    monkeypatch.setattr(main, "classify", counted_classify)
+    main._monitor.reset()
+
+    client = TestClient(app)
+    r1 = client.get("/api/ports", params={"range_start": 1000, "range_end": 9500})
+    assert r1.status_code == 200
+    assert calls == 1
+
+    r2 = client.get(
+        "/api/ports",
+        params={"range_start": 1, "range_end": 50000, "include_hidden": True},
+        headers={"X-Hidden-Unlock": "unlock-secret"},
+    )
+    assert r2.status_code == 200
+    assert calls == 1
+
+    r3 = client.get(
+        "/api/ports",
+        params={"range_start": 1, "range_end": 50000, "include_hidden": False},
+        headers={"X-Hidden-Unlock": "unlock-secret"},
+    )
+    assert r3.status_code == 200
+    assert calls == 1
+
+    values = main._values()
+    snap = main._monitor.latest(values)
+    for response, start, end, show_hidden, hidden_locked in (
+        (r1, 1000, 9500, False, True),
+        (r2, 1, 50000, True, False),
+        (r3, 1, 50000, False, False),
+    ):
+        expected = real_classify(
+            snap["listening"],
+            snap["containers"],
+            snap["compose_scan"].ports,
+            snap["user_state"][0],
+            snap["user_state"][1],
+            start,
+            end,
+            show_hidden,
+            hidden_locked=hidden_locked,
+            options=values,
+        )
+        main.port_rules.annotate(expected["ports"], port_store.get_port_rules())
+        if not hidden_locked:
+            expected["summary"]["compose_diagnostics"] = snap["compose_scan"].diagnostics
+        expected["summary"].update({
+            "scan_complete": True,
+            "sources": snap["sources"],
+            "compose_truncated": False,
+            "compose_incomplete": False,
+            "compose_files": 0,
+        })
+        assert response.json() == expected

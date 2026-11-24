@@ -14,7 +14,7 @@ import sqlite3
 import threading
 import time
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
 _conn_path: str | None = None
 _primed = False
@@ -46,48 +46,65 @@ def _db_path() -> str:
     return os.path.join(data_dir, "history.db")
 
 
-def _connect() -> sqlite3.Connection | None:
+def db_lock() -> threading.RLock:
+    return _lock
+
+
+def connection() -> sqlite3.Connection | None:
     global _conn, _conn_path, _primed, _last_sig
-    if not enabled():
-        return None
-    path = _db_path()
-    if _conn is not None and _conn_path != path:
-        _conn.close()
-        _conn = None
-        _conn_path = None
-        _primed = False
-        _last_sig = {}
-    if _conn is None:
-        conn = None
-        try:
-            conn = sqlite3.connect(path, check_same_thread=False)
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS events ("
-                "ts INTEGER NOT NULL, port INTEGER NOT NULL, state TEXT NOT NULL,"
-                "holders TEXT NOT NULL DEFAULT '[]')"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_events_port_ts ON events(port, ts)"
-            )
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS observation_events ("
-                "event_id TEXT PRIMARY KEY, observation_id TEXT NOT NULL, "
-                "observed_at INTEGER NOT NULL, port INTEGER, kind TEXT NOT NULL, "
-                "before_json TEXT NOT NULL, after_json TEXT NOT NULL, "
-                "source_quality TEXT NOT NULL, requires_hidden_access INTEGER NOT NULL)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_observation_events_port_ts "
-                "ON observation_events(port, observed_at)"
-            )
-            conn.commit()
-        except sqlite3.Error:
-            if conn is not None:
-                conn.close()
-            raise
-        _conn = conn
-        _conn_path = path
-    return _conn
+    with _lock:
+        if not enabled():
+            return None
+        path = _db_path()
+        if _conn is not None and _conn_path != path:
+            _conn.close()
+            _conn = None
+            _conn_path = None
+            _primed = False
+            _last_sig = {}
+        if _conn is None:
+            conn = None
+            try:
+                conn = sqlite3.connect(path, check_same_thread=False)
+                with conn:
+                    conn.execute(
+                        "CREATE TABLE IF NOT EXISTS events ("
+                        "ts INTEGER NOT NULL, port INTEGER NOT NULL, state TEXT NOT NULL,"
+                        "holders TEXT NOT NULL DEFAULT '[]')"
+                    )
+                    conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_events_port_ts ON events(port, ts)"
+                    )
+                    conn.execute(
+                        "CREATE TABLE IF NOT EXISTS observation_events ("
+                        "event_id TEXT PRIMARY KEY, observation_id TEXT NOT NULL, "
+                        "observed_at INTEGER NOT NULL, port INTEGER, kind TEXT NOT NULL, "
+                        "before_json TEXT NOT NULL, after_json TEXT NOT NULL, "
+                        "source_quality TEXT NOT NULL, requires_hidden_access INTEGER NOT NULL)"
+                    )
+                    conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_observation_events_port_ts "
+                        "ON observation_events(port, observed_at)"
+                    )
+                    conn.execute(
+                        "CREATE TABLE IF NOT EXISTS agent_events ("
+                        "ts INTEGER NOT NULL, count INTEGER NOT NULL,"
+                        "scope TEXT NOT NULL, label TEXT NOT NULL DEFAULT '',"
+                        "leased INTEGER NOT NULL DEFAULT 0)"
+                    )
+                    conn.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_agent_events_ts ON agent_events(ts)"
+                    )
+            except sqlite3.Error:
+                if conn is not None:
+                    conn.close()
+                raise
+            _conn = conn
+            _conn_path = path
+        return _conn
+
+
+_connect = connection
 
 
 def reset() -> None:

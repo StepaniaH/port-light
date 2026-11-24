@@ -163,8 +163,10 @@ async def _event_lines():
     last = runtime._monitor.sequence()
     yield "retry: 3000\n\n"
     yield "event: hello\ndata: {}\n\n"
-    while True:
+    while not runtime._monitor._stopping:
         sequence, changed = await runtime._monitor.wait_for_change(last, timeout=15.0)
+        if runtime._monitor._stopping:
+            break
         if changed:
             last = sequence
             yield "event: refresh\ndata: {}\n\n"

@@ -1,14 +1,16 @@
 """Peers API."""
 from __future__ import annotations
-from fastapi import Body, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
-from .. import hosts
-from fastapi import APIRouter
-from .diagnostics import health
-from .occupancy import get_ports, get_port, port_history
-from types import ModuleType
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
 import re
+from types import ModuleType
+
+from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from .. import hosts
+from .diagnostics import health
+from .occupancy import get_port, get_ports, port_history
 
 # Bound by the application after its monitor and services are initialized.
 runtime: ModuleType | None = None
@@ -27,6 +29,8 @@ class PeerConnectionTest(BaseModel):
 
 @router.post("/api/hosts/test")
 def test_host_connection(body: dict = Body(...)) -> Response:
+    if hosts.hosts_readonly():
+        raise HTTPException(status_code=403, detail="peer configuration is read-only")
     try:
         values = PeerConnectionTest.model_validate(body).model_dump(exclude_none=True)
         peer = hosts.connection_test_peer(values)
@@ -52,6 +56,7 @@ def test_host_connection(body: dict = Body(...)) -> Response:
         return JSONResponse({"status": "connected", "version": data["version"]})
     return JSONResponse({"status": "failed", "code": code}, status_code=502)
 
+
 @router.get("/api/hosts")
 def get_hosts() -> dict:
     try:
@@ -72,61 +77,23 @@ def put_hosts(body: dict = Body(...)) -> dict:
     return hosts.catalog()
 
 
-@router.get("/api/hosts/{host_id}/health")
-def get_host_health(host_id: str, request: Request) -> Response:
-    if host_id == hosts.LOCAL_ID:
-        return JSONResponse(health(request))
-    return _proxy_peer(host_id, "/api/health", {})
-
-
-@router.get("/api/hosts/{host_id}/ports")
-def get_host_ports(
-    host_id: str,
-    request: Request,
-    range_start: int | None = Query(default=None, ge=1, le=65535),
-    range_end: int | None = Query(default=None, ge=1, le=65535),
-    include_hidden: bool = Query(default=False),
-) -> Response:
-    if host_id == hosts.LOCAL_ID:
-        return get_ports(request, range_start, range_end, include_hidden)
-    query: dict[str, str] = {"include_hidden": "true" if include_hidden else "false"}
-    if range_start is not None:
-        query["range_start"] = str(range_start)
-    if range_end is not None:
-        query["range_end"] = str(range_end)
-    return _proxy_peer(host_id, "/api/ports", query, request.headers.get("if-none-match"))
-
-
-@router.get("/api/hosts/{host_id}/ports/{port}")
-def get_host_port(
-    host_id: str,
-    port: int,
-    request: Request,
-    include_hidden: bool = Query(default=False),
-) -> Response:
-    if port < 1 or port > 65535:
-        raise HTTPException(status_code=400, detail="port out of range")
-    if host_id == hosts.LOCAL_ID:
-        return JSONResponse(get_port(port, request, include_hidden))
-    query = {"include_hidden": "true" if include_hidden else "false"}
-    return _proxy_peer(host_id, f"/api/ports/{port}", query, not_found_ok=True)
-
-
-def _proxy_peer(
-    host_id: str,
-    path: str,
-    query: dict[str, str],
-    if_none_match: str | None = None,
-    *,
-    not_found_ok: bool = False,
-) -> Response:
+def _resolve_peer(host_id: str) -> dict:
     try:
         peer = hosts.get_peer(host_id)
     except hosts.HostsError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not peer:
         raise HTTPException(status_code=404, detail="unknown host")
-    status, data, etag = hosts.fetch_peer_json(peer, path, query, if_none_match)
+    return peer
+
+
+def _peer_response(
+    status: int,
+    data: dict | None,
+    etag: str | None,
+    *,
+    not_found_ok: bool = False,
+) -> Response:
     headers = {}
     if etag:
         headers["ETag"] = etag
@@ -141,12 +108,125 @@ def _proxy_peer(
     raise HTTPException(status_code=502, detail="peer unreachable")
 
 
+@router.get("/api/hosts/{host_id}/health")
+def get_host_health(host_id: str, request: Request) -> Response:
+    if host_id == hosts.LOCAL_ID:
+        return JSONResponse(health(request))
+    peer = _resolve_peer(host_id)
+    status, data, etag = hosts.fetch_peer_json(peer, "/api/health", {}, None)
+    if status == 200 and isinstance(data, dict) and not runtime.request_may_see_hidden(request):
+        if isinstance(data.get("degradations"), list):
+            data = {
+                **data,
+                "degradations": [
+                    {key: value for key, value in event.items() if key != "scope"}
+                    if isinstance(event, dict) else event
+                    for event in data["degradations"]
+                ],
+            }
+        etag = None
+    return _peer_response(status, data, etag)
+
+
+@router.get("/api/hosts/{host_id}/ports")
+def get_host_ports(
+    host_id: str,
+    request: Request,
+    range_start: int | None = Query(default=None, ge=1, le=65535),
+    range_end: int | None = Query(default=None, ge=1, le=65535),
+    include_hidden: bool = Query(default=False),
+) -> Response:
+    if host_id == hosts.LOCAL_ID:
+        return get_ports(request, range_start, range_end, include_hidden)
+    may_see = runtime.request_may_see_hidden(request)
+    allow_hidden = bool(include_hidden and may_see)
+    query: dict[str, str] = {"include_hidden": "true" if allow_hidden else "false"}
+    if range_start is not None:
+        query["range_start"] = str(range_start)
+    if range_end is not None:
+        query["range_end"] = str(range_end)
+    peer = _resolve_peer(host_id)
+    if_none_match = request.headers.get("if-none-match") if may_see else None
+    status, data, etag = hosts.fetch_peer_json(peer, "/api/ports", query, if_none_match)
+    if status == 200 and isinstance(data, dict):
+        redacted = False
+        if not allow_hidden and isinstance(data.get("ports"), list):
+            filtered = [
+                row for row in data["ports"]
+                if not (isinstance(row, dict) and row.get("is_hidden"))
+            ]
+            if len(filtered) != len(data["ports"]):
+                redacted = True
+            data = {**data, "ports": filtered}
+        if not may_see:
+            redacted = True
+            if isinstance(data.get("summary"), dict):
+                summary = dict(data["summary"])
+                summary["hidden_ports"] = []
+                summary["hidden_occupancy"] = []
+                summary.pop("compose_diagnostics", None)
+                if runtime.hidden_ports_withheld():
+                    summary["hidden_locked"] = True
+                data = {**data, "summary": summary}
+        if redacted:
+            etag = None
+    return _peer_response(status, data, etag)
+
+
+@router.get("/api/hosts/{host_id}/ports/{port}")
+def get_host_port(
+    host_id: str,
+    port: int,
+    request: Request,
+    include_hidden: bool = Query(default=False),
+) -> Response:
+    if port < 1 or port > 65535:
+        raise HTTPException(status_code=400, detail="port out of range")
+    if host_id == hosts.LOCAL_ID:
+        return JSONResponse(get_port(port, request, include_hidden))
+    allow_hidden = bool(include_hidden and runtime.request_may_see_hidden(request))
+    query = {"include_hidden": "true" if allow_hidden else "false"}
+    peer = _resolve_peer(host_id)
+    status, data, etag = hosts.fetch_peer_json(peer, f"/api/ports/{port}", query, None)
+    if status == 200 and isinstance(data, dict) and not allow_hidden and data.get("is_hidden"):
+        raise HTTPException(status_code=404, detail="not found")
+    return _peer_response(status, data, etag, not_found_ok=True)
+
+
+def _proxy_peer(
+    host_id: str,
+    path: str,
+    query: dict[str, str],
+    if_none_match: str | None = None,
+    *,
+    not_found_ok: bool = False,
+) -> Response:
+    peer = _resolve_peer(host_id)
+    status, data, etag = hosts.fetch_peer_json(peer, path, query, if_none_match)
+    return _peer_response(status, data, etag, not_found_ok=not_found_ok)
+
+
 @router.get("/api/hosts/{host_id}/ports/{port}/history")
 def host_port_history(host_id: str, port: int, request: Request,
                       hours: int = Query(default=24, ge=1, le=720)) -> Response:
     if not 1 <= port <= 65535:
         raise HTTPException(status_code=400, detail="port out of range")
-    if host_id == "local":
+    if host_id == hosts.LOCAL_ID:
         return JSONResponse(port_history(port, hours, request))
-    return _proxy_peer(host_id, f"/api/ports/{port}/history", {"hours": str(hours)},
-                       not_found_ok=True)
+    peer = _resolve_peer(host_id)
+    if runtime.hidden_ports_withheld() and not runtime.request_may_see_hidden(request):
+        check_status, check_data, _ = hosts.fetch_peer_json(
+            peer, f"/api/ports/{port}", {"include_hidden": "false"}, None,
+        )
+        if check_status == 404:
+            raise HTTPException(status_code=404, detail="not found")
+        if check_status in (401, 403):
+            raise HTTPException(status_code=502, detail="peer authentication failed")
+        if check_status != 200 or not isinstance(check_data, dict):
+            raise HTTPException(status_code=502, detail="peer unreachable")
+        if check_data.get("is_hidden"):
+            raise HTTPException(status_code=404, detail="not found")
+    status, data, etag = hosts.fetch_peer_json(
+        peer, f"/api/ports/{port}/history", {"hours": str(hours)}, None,
+    )
+    return _peer_response(status, data, etag, not_found_ok=True)

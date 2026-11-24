@@ -245,3 +245,61 @@ def test_slow_observation_does_not_block_startup_or_event_loop(empty_scan, monke
     finally:
         release.set()
         job.result(timeout=1)
+
+
+def test_settings_change_state_update_does_not_emit_false_degradation_event(empty_scan, monkeypatch):
+    from backend import port_store
+
+    empty_scan.refresh()
+    port_store.update_stored_settings({"guess_urls": False})
+    port_store.add_manual_port(42010, "svc")
+    empty_scan.state_changed()
+    events = empty_scan.observation_events(42010, allow_hidden=True)
+    assert not any(event["kind"] == "observation_degraded" for event in events)
+
+
+def test_recovery_after_degraded_scan_records_port_transitions_from_baseline(empty_scan, monkeypatch):
+    from backend import port_scanner
+
+    listeners = [ListeningPort(port=42020, ip="127.0.0.1", protocol="tcp")]
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: list(listeners))
+    empty_scan.refresh()
+
+    monkeypatch.setattr(main, "scan_listening_ports", port_scanner.scan_listening_ports)
+    monkeypatch.setattr(port_scanner, "_scan_with_host_proc", lambda **_kw: None)
+    monkeypatch.setattr(port_scanner, "host_listen_trusted", lambda: False)
+    empty_scan.refresh()
+
+    listeners[:] = [ListeningPort(port=42021, ip="0.0.0.0", protocol="tcp")]
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: list(listeners))
+    empty_scan.refresh()
+
+    events_42020 = empty_scan.observation_events(42020, allow_hidden=True)
+    events_42021 = empty_scan.observation_events(42021, allow_hidden=True)
+    kinds_42020 = [(e["kind"], e["port"]) for e in events_42020]
+    kinds_42021 = [(e["kind"], e["port"]) for e in events_42021]
+    assert ("observation_degraded", None) in kinds_42020
+    assert ("observation_recovered", None) in kinds_42020
+    assert ("state_changed", 42020) in kinds_42020
+    assert ("state_changed", 42021) in kinds_42021
+
+
+def test_monitor_reuses_single_persistent_worker_thread_across_scans(empty_scan, monkeypatch):
+    worker_ids: set[int] = set()
+
+    def track_listen(**_kw):
+        worker_ids.add(threading.get_ident())
+        return []
+
+    monkeypatch.setattr(main, "scan_listening_ports", track_listen)
+
+    async def check():
+        await empty_scan.start()
+        try:
+            for _ in range(4):
+                await empty_scan._scan_once()
+        finally:
+            await empty_scan.stop()
+
+    asyncio.run(check())
+    assert len(worker_ids) == 1

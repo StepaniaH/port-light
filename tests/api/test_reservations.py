@@ -66,16 +66,26 @@ def test_request_and_claim_are_saved_atomically(monkeypatch, tmp_path):
     assert json.loads((tmp_path / "port_light.json").read_text()) == before
 
 
+@pytest.fixture
+def compose_dir():
+    from pathlib import Path
+    import tempfile
+
+    base = "/tmp" if Path("/tmp").is_dir() else None
+    with tempfile.TemporaryDirectory(dir=base) as directory:
+        yield Path(directory)
+
+
 @pytest.mark.parametrize("declaration", [
     'ports: ["20000-24096:20000-24096"]',
     'ports: [{published: "20000-24096", target: 80}]',
     'network_mode: host\n    expose: ["20000-24096"]',
 ])
-def test_oversized_compose_range_cannot_certify_free_ports(monkeypatch, tmp_path, declaration):
+def test_oversized_compose_range_cannot_certify_free_ports(monkeypatch, compose_dir, declaration):
     from backend.compose_scanner import scan_compose_tree
 
-    (tmp_path / "compose.yml").write_text("services:\n  sample:\n    " + declaration + "\n")
-    monkeypatch.setenv("COMPOSE_SCAN_DIR", str(tmp_path))
+    (compose_dir / "compose.yml").write_text("services:\n  sample:\n    " + declaration + "\n")
+    monkeypatch.setenv("COMPOSE_SCAN_DIR", str(compose_dir))
     monkeypatch.setattr(main, "scan_compose_tree", scan_compose_tree)
     with TestClient(main.app) as client:
         summary = client.get("/api/ports").json()["summary"]
@@ -222,10 +232,10 @@ def test_incomplete_peer_prevents_all_scope_claim(monkeypatch, summary):
     assert port_store.get_manual_ports() == []
 
 
-def test_large_valid_range_is_never_allocated(monkeypatch, tmp_path):
+def test_large_valid_range_is_never_allocated(monkeypatch, compose_dir):
     from backend.compose_scanner import scan_compose_tree
-    (tmp_path / 'compose.yaml').write_text('services:\n  demo:\n    ports: ["20000-20255:30000-30255"]\n')
-    monkeypatch.setenv('COMPOSE_SCAN_DIR', str(tmp_path))
+    (compose_dir / 'compose.yaml').write_text('services:\n  demo:\n    ports: ["20000-20255:30000-30255"]\n')
+    monkeypatch.setenv('COMPOSE_SCAN_DIR', str(compose_dir))
     monkeypatch.setattr(main, 'scan_compose_tree', scan_compose_tree)
     with TestClient(main.app) as client:
         summary = client.get('/api/ports').json()['summary']
@@ -234,10 +244,10 @@ def test_large_valid_range_is_never_allocated(monkeypatch, tmp_path):
         assert client.get('/api/ports/suggest?start=20128&end=20256').json()['ports'] == [20256]
 
 
-def test_limit_diagnostics_are_current_and_hidden_gate_safe(monkeypatch, tmp_path):
+def test_limit_diagnostics_are_current_and_hidden_gate_safe(monkeypatch, compose_dir):
     from backend.compose_scanner import scan_compose_tree
-    (tmp_path / 'compose.yaml').write_text('services:\n  demo:\n    ports: ["20000-24096:80"]\n')
-    monkeypatch.setenv('COMPOSE_SCAN_DIR', str(tmp_path))
+    (compose_dir / 'compose.yaml').write_text('services:\n  demo:\n    ports: ["20000-24096:80"]\n')
+    monkeypatch.setenv('COMPOSE_SCAN_DIR', str(compose_dir))
     monkeypatch.setattr(main, 'scan_compose_tree', scan_compose_tree)
     monkeypatch.setenv('HIDDEN_UNLOCK_PASSWORD', 'unlock')
     with TestClient(main.app) as client:

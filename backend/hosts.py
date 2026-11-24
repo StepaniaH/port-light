@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import errno
+import http.client
 import ipaddress
 import json
 import os
@@ -20,6 +22,7 @@ import urllib.request
 from urllib.parse import urlencode, urlparse, urlunparse
 
 from . import port_store, settings as app_settings
+from .netaddr import strip_zone
 
 LOCAL_ID = "local"
 MAX_PEERS = 32
@@ -54,6 +57,83 @@ class _PassThroughErrors(urllib.request.HTTPErrorProcessor):
         return response
 
     https_response = http_response
+
+
+def _connect_pinned(
+    addresses: list[tuple],
+    timeout: float | None,
+    source_address: tuple[str, int] | None = None,
+) -> socket.socket:
+    last_err: OSError | None = None
+    for af, socktype, proto, _canonname, sockaddr in addresses:
+        sock = None
+        try:
+            sock = socket.socket(af, socktype, proto)
+            if timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+                sock.settimeout(timeout)
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(sockaddr)
+            return sock
+        except OSError as exc:
+            last_err = exc
+            if sock is not None:
+                sock.close()
+    if last_err is not None:
+        raise last_err
+    raise OSError("no resolved addresses available")
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, host: str, *, addresses: list[tuple], **kwargs) -> None:
+        super().__init__(host, **kwargs)
+        self._addresses = addresses
+
+    def connect(self) -> None:
+        self.sock = _connect_pinned(self._addresses, self.timeout, self.source_address)
+        try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError as exc:
+            if exc.errno != errno.ENOPROTOOPT:
+                raise
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, host: str, *, addresses: list[tuple], **kwargs) -> None:
+        super().__init__(host, **kwargs)
+        self._addresses = addresses
+
+    def connect(self) -> None:
+        self.sock = _connect_pinned(self._addresses, self.timeout, self.source_address)
+        try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError as exc:
+            if exc.errno != errno.ENOPROTOOPT:
+                raise
+        self.sock = self._context.wrap_socket(
+            self.sock, server_hostname=strip_zone(self.host),
+        )
+
+
+class _PinnedHTTPHandler(urllib.request.HTTPHandler):
+    def __init__(self, addresses: list[tuple]) -> None:
+        super().__init__()
+        self._addresses = addresses
+
+    def http_open(self, req):
+        return self.do_open(_PinnedHTTPConnection, req, addresses=self._addresses)
+
+
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, addresses: list[tuple]) -> None:
+        super().__init__()
+        self._addresses = addresses
+
+    def https_open(self, req):
+        return self.do_open(
+            _PinnedHTTPSConnection, req,
+            context=self._context, addresses=self._addresses,
+        )
 
 
 def local_display_name() -> str:
@@ -131,21 +211,17 @@ def origin_url(url: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
 
 
-def fetch_peer_json(
+def _fetch_sync(
     peer: dict,
     path: str,
     query: dict[str, str],
     if_none_match: str | None = None,
 ) -> tuple[int, dict | None, str | None]:
-    """GET ``path`` on the peer. Returns ``(status, json_or_none, etag)``.
-
-    Redirects are not followed. 3xx and oversize bodies become 502.
-    """
     if not path.startswith("/api/"):
         return 502, None, None
     try:
         origin = _parse_peer_url(peer["url"])
-        _validate_addresses(origin)
+        addresses = _validate_addresses(origin)
     except (HostsError, OSError, ValueError):
         return 502, None, None
     url = urlunparse(origin) + path
@@ -164,7 +240,12 @@ def fetch_peer_json(
         token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
         req.add_header("Authorization", "Basic " + token)
     opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({}), _RefuseRedirect, _PassThroughErrors)
+        urllib.request.ProxyHandler({}),
+        _PinnedHTTPHandler(addresses),
+        _PinnedHTTPSHandler(addresses),
+        _RefuseRedirect,
+        _PassThroughErrors,
+    )
     try:
         with opener.open(req, timeout=FETCH_TIMEOUT_S) as resp:
             status = int(getattr(resp, "status", 200) or 200)
@@ -204,6 +285,19 @@ def fetch_peer_json(
     if not isinstance(data, dict):
         return 502, None, etag
     return status, data, etag
+
+
+def fetch_peer_json(
+    peer: dict,
+    path: str,
+    query: dict[str, str],
+    if_none_match: str | None = None,
+) -> tuple[int, dict | None, str | None]:
+    """GET ``path`` on the peer. Returns ``(status, json_or_none, etag)``.
+
+    Redirects are not followed. 3xx and oversize bodies become 502.
+    """
+    return _fetch_sync(peer, path, query, if_none_match)
 
 
 async def fetch_peers_json(
@@ -346,20 +440,17 @@ def _ip_allowed(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return bool(ip.is_private or ip.is_link_local)
 
 
-def _validate_addresses(parsed) -> None:
-    """Validate every current DNS answer before passing the URL to urllib.
-
-    urllib resolves again when connecting, so this does not pin the validated
-    addresses. Use literal private IPs or trusted DNS to prevent rebinding.
-    """
+def _validate_addresses(parsed) -> list[tuple]:
+    """Resolve and validate every current DNS answer for connection-level pinning."""
     host = parsed.hostname
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     if not addresses or any(
-        not _ip_allowed(ipaddress.ip_address(address[4][0]))
+        not _ip_allowed(ipaddress.ip_address(strip_zone(address[4][0])))
         for address in addresses
     ):
         raise HostsError("that host resolves to a disallowed address")
+    return list(addresses)
 
 
 def _parse_peer_url(url: str):
@@ -377,7 +468,7 @@ def _parse_peer_url(url: str):
     if host in _BLOCKED_HOSTS:
         raise HostsError("that host is not allowed")
     try:
-        ip = ipaddress.ip_address(host)
+        ip = ipaddress.ip_address(strip_zone(host))
     except ValueError:
         ip = None
     if ip is not None and not _ip_allowed(ip):

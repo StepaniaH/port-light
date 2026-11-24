@@ -36,8 +36,26 @@ from pathlib import Path
 from . import degradations
 
 MAX_PEER_DESCRIPTION = 120
+MAX_MANUAL_PORTS = 4096
+MAX_MANUAL_LABEL = 256
+MAX_MANUAL_MACHINE = 64
 REQUEST_RETENTION_S = 7 * 86400
 MAX_RESERVATION_REQUESTS = 4096
+
+
+class UserState(tuple):
+    """Atomic (manuals, hidden) pair carrying port_rules from the same read."""
+
+    rules: list[dict]
+
+    def __new__(
+        cls,
+        pair: tuple[list[dict], list[int]],
+        rules: list[dict] | None = None,
+    ) -> UserState:
+        instance = super().__new__(cls, pair)
+        instance.rules = list(rules) if rules is not None else []
+        return instance
 
 
 class StoreReadError(Exception):
@@ -204,6 +222,13 @@ def _hidden_port(value) -> int | None:
     return port
 
 
+def _validate_manual_fields(label: str, machine: str = "localhost") -> None:
+    if len(label) > MAX_MANUAL_LABEL:
+        raise ValueError(f"label must be at most {MAX_MANUAL_LABEL} characters")
+    if len(machine) > MAX_MANUAL_MACHINE:
+        raise ValueError(f"machine must be at most {MAX_MANUAL_MACHINE} characters")
+
+
 def _manuals_from(data: dict) -> list[dict]:
     out: list[dict] = []
     for entry in data.get("manual_ports") or []:
@@ -212,8 +237,8 @@ def _manuals_from(data: dict) -> list[dict]:
             continue
         item = {
             "port": port,
-            "label": str(entry.get("label") or ""),
-            "machine": _entry_machine(entry),
+            "label": str(entry.get("label") or "")[:MAX_MANUAL_LABEL],
+            "machine": _entry_machine(entry)[:MAX_MANUAL_MACHINE],
         }
         exp = entry.get("expires_at")
         if isinstance(exp, (int, float)):
@@ -240,7 +265,7 @@ def _now() -> int:
     return int(time.time())
 
 
-def _drop_expired_locked(data: dict) -> bool:
+def _drop_expired_locked(data: dict, *, allow_readonly: bool = False) -> bool:
     """Remove expired leases from data.manual_ports. Returns True if changed."""
     now = _now()
     mp = data.get("manual_ports", [])
@@ -257,23 +282,30 @@ def _drop_expired_locked(data: dict) -> bool:
         kept.append(entry)
     if changed:
         data["manual_ports"] = kept
-        _save(data)
+        try:
+            _save(data)
+        except StoreWriteError:
+            if not allow_readonly:
+                raise
     return changed
 
 
 def get_manual_ports() -> list[dict]:
     with _LOCK:
         data = _load()
-        _drop_expired_locked(data)
+        _drop_expired_locked(data, allow_readonly=True)
         return _manuals_from(data)
 
 
-def occupancy_user_state() -> tuple[list[dict], list[int]]:
-    """One locked snapshot so occupancy does not tear across two reads."""
+def occupancy_user_state() -> UserState:
+    """One locked snapshot so occupancy does not tear across reads."""
     with _LOCK:
         data = _load()
-        _drop_expired_locked(data)
-        return _manuals_from(data), _hidden_from(data)
+        _drop_expired_locked(data, allow_readonly=True)
+        return UserState(
+            (_manuals_from(data), _hidden_from(data)),
+            copy.deepcopy(data.get("port_rules", [])),
+        )
 
 
 def allocate_ports(taken: set[int], start: int, end: int, count: int,
@@ -284,6 +316,7 @@ def allocate_ports(taken: set[int], start: int, end: int, count: int,
     Scanner/peer observations are advisory; this transaction serializes claims
     in one Port-Light process, not operating-system socket binds.
     """
+    _validate_manual_fields(label)
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
@@ -298,8 +331,10 @@ def allocate_ports(taken: set[int], start: int, end: int, count: int,
             return [], []
         reservations = []
         if reserve and picks:
-            expires_at = _now() + ttl if ttl is not None else None
             entries = data.setdefault("manual_ports", [])
+            if len(entries) + len(picks) > MAX_MANUAL_PORTS:
+                raise ValueError(f"at most {MAX_MANUAL_PORTS} manual ports are allowed")
+            expires_at = _now() + ttl if ttl is not None else None
             for port in picks:
                 token = secrets.token_urlsafe(32)
                 entry = {"port": port, "label": label, "machine": "localhost",
@@ -388,6 +423,7 @@ def reservation_request(key: str, parameters: dict | None = None) -> dict | None
 def allocate_reservation(taken: set[int], start: int, end: int, parameters: dict,
                          key: str, scope: str) -> tuple[dict, bool]:
     """Commit the receipt and the entire claim in the same atomic replacement."""
+    _validate_manual_fields(str(parameters.get("label") or ""))
     with _LOCK:
         data = _load()
         existing = _request_result(data, key, parameters)
@@ -414,6 +450,9 @@ def allocate_reservation(taken: set[int], start: int, end: int, parameters: dict
         picks = [port for port in range(start, end + 1) if port not in occupied][:parameters["count"]]
         if parameters["require_count"] and len(picks) != parameters["count"]:
             picks = []
+        entries = data.setdefault("manual_ports", [])
+        if picks and len(entries) + len(picks) > MAX_MANUAL_PORTS:
+            raise ValueError(f"at most {MAX_MANUAL_PORTS} manual ports are allowed")
         ttl = parameters["ttl"]
         expires_at = _now() + ttl if ttl is not None and picks else None
         digest = _request_hash(key)
@@ -423,7 +462,7 @@ def allocate_reservation(taken: set[int], start: int, end: int, parameters: dict
                      "reservation_hash": hashlib.sha256(_request_token(key, port).encode()).hexdigest()}
             if expires_at is not None:
                 entry["expires_at"] = expires_at
-            data.setdefault("manual_ports", []).append(entry)
+            entries.append(entry)
         result = {"ports": picks, "reserved": picks, "failed": [], "expires_at": expires_at,
                   "scope": scope, "range": {"start": start, "end": end}}
         records[digest] = {"parameters": parameters, "result": result, "created_at": _now()}
@@ -437,13 +476,17 @@ def _occupied(data: dict, taken: set[int]) -> set[int]:
 
 def reserve_manual_range(taken: set[int], start: int, end: int, label: str) -> list[int]:
     """Claim every selected port in one store transaction, or change nothing."""
+    _validate_manual_fields(label)
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
         picks = list(range(start, end + 1))
         if _occupied(data, taken).intersection(picks):
             raise ReservationConflict("selected range is no longer free; find another range")
-        data.setdefault("manual_ports", []).extend(
+        entries = data.setdefault("manual_ports", [])
+        if len(entries) + len(picks) > MAX_MANUAL_PORTS:
+            raise ValueError(f"at most {MAX_MANUAL_PORTS} manual ports are allowed")
+        entries.extend(
             {"port": port, "label": label, "machine": "localhost"} for port in picks)
         _save(data)
         return picks
@@ -478,6 +521,9 @@ def add_manual_port(
     machine: str = "localhost",
     ttl: int | None = None,
 ) -> dict:
+    if type(port) is bool or not isinstance(port, int) or not (1 <= port <= 65535):
+        raise ValueError("port out of range")
+    _validate_manual_fields(label, machine)
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
@@ -490,6 +536,8 @@ def add_manual_port(
                 _require_manual(entry)
                 continue
             kept.append(entry)
+        if len(kept) >= MAX_MANUAL_PORTS:
+            raise ValueError(f"at most {MAX_MANUAL_PORTS} manual ports are allowed")
         entry = {"port": port, "label": label, "machine": machine}
         if ttl is not None:
             entry["expires_at"] = _now() + max(60, min(int(ttl), 604800))
@@ -559,6 +607,7 @@ def remove_hidden_port(port: int) -> bool:
 
 
 def update_manual_port(port: int, label: str, machine: str = "localhost") -> dict | None:
+    _validate_manual_fields(label, machine)
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)

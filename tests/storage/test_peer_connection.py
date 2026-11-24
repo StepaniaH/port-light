@@ -135,21 +135,20 @@ def test_peer_probe_rejects_invalid_forms_before_connecting(
     assert "password" not in response.text
 
 
-def test_saved_peer_can_be_tested_in_readonly_settings(tmp_path, monkeypatch):
-    client = _client(tmp_path, monkeypatch)
-    monkeypatch.setenv("PORT_LIGHT_SETTINGS_SOURCE", "env")
-    monkeypatch.setattr(
-        hosts,
-        "fetch_peer_json",
-        lambda *args: (
-            200,
-            {"version": "0.8.4", "capabilities": {"port_observation": 1}},
-            None,
-        ),
-    )
-    assert (
-        client.post(
-            "/api/hosts/test", json={"url": "http://127.0.0.1:2101"}
-        ).status_code
-        == 200
-    )
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"PORT_LIGHT_SETTINGS_SOURCE": "env"},
+        {"SETTINGS_READONLY": "true"},
+    ],
+)
+def test_peer_probe_rejected_when_hosts_are_readonly(tmp_path, monkeypatch, env):
+    client = _client(tmp_path, monkeypatch, **env)
+
+    def unexpected_fetch(*args):
+        pytest.fail("read-only instance must not probe network targets")
+
+    monkeypatch.setattr(hosts, "fetch_peer_json", unexpected_fetch)
+    response = client.post("/api/hosts/test", json={"url": "http://192.0.2.10:2101"})
+    assert response.status_code == 403
+    assert response.json() == {"detail": "peer configuration is read-only"}

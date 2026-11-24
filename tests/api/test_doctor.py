@@ -145,3 +145,16 @@ def test_doctor_current_access_failures_override_an_older_successful_scan():
     assert checks["docker"]["detail"] == "access_failed"
     assert checks["compose"]["status"] == "fail"
     assert checks["compose"]["detail"] == "access_failed"
+
+
+def test_doctor_preserves_observation_history_failure_reasons():
+    facts = _facts()
+    reasons = [
+        "port observation history read failed",
+        "port observation event history read failed",
+        "batch observation event history read failed",
+    ]
+    facts["degradations"] = [{"source": "history", "scope": "history.db", "reason": r} for r in reasons]
+    document = doctor.build_diagnostics(facts, generated_at="2026-09-04T00:00:00+00:00")
+    checks = {row["id"]: row for row in document["checks"]}
+    assert [e["reason"] for e in checks["degradations"]["evidence"]["events"]] == reasons

@@ -72,3 +72,15 @@ def test_label_truncated_to_120_chars():
 
     agent_events.record(1, "self", "x" * 500, False)
     assert len(agent_events.recent()[0]["label"]) == 120
+
+
+def test_history_and_agent_events_share_connection_without_forcing_wal():
+    from backend import agent_events, history
+
+    history.record([{"port": 8080, "status": "used"}])
+    agent_events.record(2, "self", "shared-db", True)
+    conn = history.connection()
+    assert conn is not None
+    mode = conn.execute("PRAGMA journal_mode").fetchone()[0].lower()
+    assert mode != "wal"
+    assert agent_events.summary()["total"] == 1

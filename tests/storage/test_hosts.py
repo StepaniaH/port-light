@@ -36,6 +36,7 @@ def _client(tmp_path, monkeypatch, **env):
         ("https://nas.lan:2100/foo", "https://nas.lan:2100"),
         ("http://127.0.0.1:2101", "http://127.0.0.1:2101"),
         ("http://[fd7a:115c:a1e0::1]:2100", "http://[fd7a:115c:a1e0::1]:2100"),
+        ("http://[fe80::1%eth0]:2100/api/ports", "http://[fe80::1%eth0]:2100"),
         ("http://10.0.0.2", "http://10.0.0.2"),
     ],
 )
@@ -56,6 +57,8 @@ def test_origin_url_strips_to_scheme_host_port(url, origin):
         "not-a-url",
         "http://",
         "http://[::ffff:169.254.169.254]/",
+        "http://[::ffff:169.254.169.254%eth0]/",
+        "http://[2606:4700:4700::1111%eth0]:2100",
     ],
 )
 def test_origin_url_rejects_ssrf_and_public_ips(url):
@@ -357,3 +360,200 @@ def test_hosts_put_unwritable_data_dir(tmp_path, monkeypatch):
     detail = res.json()["detail"].lower()
     assert "permission denied" in detail
     assert "writable" in detail
+
+
+def test_peer_connection_pins_validated_addresses_and_preserves_host_header(monkeypatch):
+    attempted: list[tuple] = []
+    request_wire = bytearray()
+    client_sock, server_sock = socket.socketpair()
+
+    def serve():
+        try:
+            while b"\r\n\r\n" not in request_wire:
+                chunk = server_sock.recv(4096)
+                if not chunk:
+                    break
+                request_wire.extend(chunk)
+            body = b'{"ports": []}'
+            server_sock.sendall(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: application/json\r\n"
+                b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n"
+                b"Connection: close\r\n\r\n" + body
+            )
+        finally:
+            server_sock.close()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+
+    class PinnedSocket:
+        def __init__(self):
+            self._connected = False
+
+        def settimeout(self, _timeout):
+            pass
+
+        def setsockopt(self, *_args):
+            pass
+
+        def connect(self, sockaddr):
+            attempted.append(sockaddr)
+            if sockaddr[0] == "192.0.2.10":
+                raise ConnectionRefusedError("primary unreachable")
+            self._connected = True
+
+        def sendall(self, data):
+            client_sock.sendall(data)
+
+        def makefile(self, *args, **kwargs):
+            return client_sock.makefile(*args, **kwargs)
+
+        def close(self):
+            if self._connected:
+                client_sock.close()
+
+    lookups = 0
+
+    def fake_getaddrinfo(host, resolved_port, *_args, **_kwargs):
+        nonlocal lookups
+        lookups += 1
+        if lookups > 1:
+            raise AssertionError("HTTP connection performed a second DNS lookup")
+        assert host == "peer.example.invalid"
+        assert resolved_port == 2100
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.10", 2100)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.2", 2100)),
+        ]
+
+    try:
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        monkeypatch.setattr(socket, "socket", lambda *_a, **_kw: PinnedSocket())
+        status, data, _ = hosts.fetch_peer_json(
+            {"url": "http://peer.example.invalid:2100"}, "/api/ports", {},
+        )
+    finally:
+        client_sock.close()
+        thread.join(timeout=1)
+
+    assert lookups == 1
+    assert attempted == [("192.0.2.10", 2100), ("10.0.0.2", 2100)]
+    assert status == 200
+    assert data == {"ports": []}
+    assert b"Host: peer.example.invalid:2100\r\n" in bytes(request_wire)
+
+
+def test_peer_ipv6_link_local_zone_id_preserves_scope_in_sockaddr(monkeypatch):
+    connected: list[tuple] = []
+
+    class FakeSocket:
+        def settimeout(self, _timeout):
+            pass
+
+        def setsockopt(self, *_args):
+            pass
+
+        def connect(self, sockaddr):
+            connected.append(sockaddr)
+            raise ConnectionRefusedError("offline fixture")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_a, **_kw: [
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fe80::1%eth0", 2100, 0, 7)),
+    ])
+    monkeypatch.setattr(socket, "socket", lambda *_a, **_kw: FakeSocket())
+    status, data, _ = hosts.fetch_peer_json(
+        {"url": "http://[fe80::1%eth0]:2100"}, "/api/ports", {},
+    )
+    assert status == 502
+    assert data is None
+    assert connected == [("fe80::1%eth0", 2100, 0, 7)]
+
+
+def test_peer_proxy_gates_hidden_ports_history_and_health_scopes(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch, HIDDEN_UNLOCK_PASSWORD="unlock-secret")
+    saved = client.put("/api/hosts", json={"peers": [{"name": "Peer", "url": "http://10.0.0.2:2100"}]})
+    peer_id = saved.json()["peers"][0]["id"]
+    seen_queries: list[tuple[str, dict]] = []
+
+    def fake_fetch(peer, path, query, if_none_match=None):
+        seen_queries.append((path, dict(query)))
+        if path == "/api/health":
+            return 200, {
+                "status": "degraded",
+                "degradations": [{"source": "compose", "scope": "secret/compose.yml", "reason": "invalid compose file"}],
+            }, '"health-etag"'
+        if path == "/api/ports":
+            return 200, {
+                "ports": [
+                    {"port": 8080, "status": "used", "is_hidden": False},
+                    {"port": 8096, "status": "used", "is_hidden": True},
+                ],
+                "summary": {
+                    "used": 2,
+                    "configured": 0,
+                    "free": 100,
+                    "hidden": 1,
+                    "hidden_locked": False,
+                    "hidden_ports": [8096],
+                    "hidden_occupancy": [{"port": 8096, "status": "used"}],
+                    "compose_diagnostics": [{"code": "port_range", "file": "compose.yaml"}],
+                },
+            }, '"ports-etag"'
+        if path == "/api/ports/8096":
+            if query.get("include_hidden") == "true":
+                return 200, {"port": 8096, "status": "used", "is_hidden": True}, None
+            return 404, None, None
+        if path == "/api/ports/8080":
+            return 200, {"port": 8080, "status": "used", "is_hidden": False}, None
+        if path == "/api/ports/8096/history":
+            return 200, {"port": 8096, "events": [{"state": "used"}]}, None
+        if path == "/api/ports/8080/history":
+            return 200, {"port": 8080, "events": [{"state": "used"}]}, None
+        return 404, None, None
+
+    monkeypatch.setattr(hosts, "fetch_peer_json", fake_fetch)
+
+    locked = client.get(f"/api/hosts/{peer_id}/ports", params={"include_hidden": True})
+    assert locked.status_code == 200
+    assert seen_queries[-1] == ("/api/ports", {"include_hidden": "false"})
+    assert [row["port"] for row in locked.json()["ports"]] == [8080]
+    assert locked.json()["summary"]["hidden_locked"] is True
+    assert locked.json()["summary"]["hidden_ports"] == []
+    assert locked.json()["summary"]["hidden_occupancy"] == []
+    assert "compose_diagnostics" not in locked.json()["summary"]
+
+    unlocked = client.get(
+        f"/api/hosts/{peer_id}/ports",
+        params={"include_hidden": True},
+        headers={"X-Hidden-Unlock": "unlock-secret"},
+    )
+    assert unlocked.status_code == 200
+    assert seen_queries[-1] == ("/api/ports", {"include_hidden": "true"})
+    assert [row["port"] for row in unlocked.json()["ports"]] == [8080, 8096]
+    assert unlocked.json()["summary"]["hidden_ports"] == [8096]
+
+    assert client.get(f"/api/hosts/{peer_id}/ports/8096", params={"include_hidden": True}).status_code == 404
+    assert client.get(
+        f"/api/hosts/{peer_id}/ports/8096",
+        params={"include_hidden": True},
+        headers={"X-Hidden-Unlock": "unlock-secret"},
+    ).status_code == 200
+
+    assert client.get(f"/api/hosts/{peer_id}/ports/8096/history").status_code == 404
+    assert client.get(f"/api/hosts/{peer_id}/ports/8080/history").status_code == 200
+    assert client.get(
+        f"/api/hosts/{peer_id}/ports/8096/history",
+        headers={"X-Hidden-Unlock": "unlock-secret"},
+    ).status_code == 200
+
+    anon_health = client.get(f"/api/hosts/{peer_id}/health").json()
+    assert "scope" not in anon_health["degradations"][0]
+    auth_health = client.get(
+        f"/api/hosts/{peer_id}/health",
+        headers={"X-Hidden-Unlock": "unlock-secret"},
+    ).json()
+    assert auth_health["degradations"][0]["scope"] == "secret/compose.yml"

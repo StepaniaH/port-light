@@ -30,6 +30,7 @@ def _safe_enum(value: Any, allowed: frozenset[str], fallback: str) -> str:
 
 
 _SAFE_REASONS = frozenset({
+    "batch observation event history read failed",
     "corrupt file quarantined",
     "could not record allocation event",
     "data file unreadable or invalid",
@@ -44,6 +45,8 @@ _SAFE_REASONS = frozenset({
     "occupancy source unavailable or incomplete",
     "peer occupancy unavailable or incomplete",
     "port expansion limit",
+    "port observation event history read failed",
+    "port observation history read failed",
     "queue full; intermediate changes omitted",
     "scan failed",
     "unknown value reset",
