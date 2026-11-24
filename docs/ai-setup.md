@@ -27,7 +27,9 @@ server. Keep existing server deployments and unrelated AI configuration intact.
 - GET `<instance>/api/health` identifies the running version and whether Basic
   Auth is required. Then GET `/api/meta` using the configured credentials to
   check capabilities. `PORT_LIGHT_AUTH=user:password` supplies Basic Auth;
-  `PORT_LIGHT_AGENT_TOKEN` supplies the separate `X-Agent-Token` gate. Preserve
+  `PORT_LIGHT_AGENT_TOKEN` supplies the separate `X-Agent-Token` gate (also
+  required for `verify`, suggestions, and reservations when `HIDDEN_UNLOCK_PASSWORD`
+  is enabled without Basic Auth; `check` on unhidden free ports requires Basic Auth, while explicitly hidden ports stay `404` unless unlocked). Preserve
   configured secret references; request missing secrets through the tool's
   secure configuration flow, not by putting them in the chat or a URL.
 
@@ -87,13 +89,17 @@ volume during updates. CA files must exist inside the client environment too.
 
 ## Register MCP and the collaboration skill
 
-The `mcp-config` and `verify` commands require v0.8.4 or later. Check
-`port-light --help` on older installations. Generate the configuration with
-the installed `port-light`:
+The `mcp-config` and `verify` commands require v0.8.4 or later (`--client codex`
+and `--client claude-code` in v0.8.4+; `--client cursor`, `--client vscode`, and
+`--client gemini-cli` in v0.9.0+, along with the `list` and `rules`
+CLI subcommands). Check `port-light --help` and `port-light mcp-config --help`
+on older installations. Generate the configuration with the installed
+`port-light`:
 
 ```bash
 port-light --url http://your-host:2100 mcp-config --client codex
 port-light --url http://your-host:2100 mcp-config --client claude-code
+# v0.9.0+:
 port-light --url http://your-host:2100 mcp-config --client cursor
 port-light --url http://your-host:2100 mcp-config --client vscode
 port-light --url http://your-host:2100 mcp-config --client gemini-cli
@@ -160,12 +166,15 @@ A tool with no local execution or LAN access needs a reachable execution environ
 The skill format is documented at <https://agentskills.io/specification>.
 MCP registration is client-specific; see the current tool's official documentation.
 
-For `cursor` and `gemini-cli`, `mcp-config` emits JSON under `mcpServers.port-light`;
-for `vscode`, it emits JSON under `servers.port-light` with `"type": "stdio"`.
-Unlike `codex` and `claude-code`, those three templates omit secret variable
-placeholders from `env` — supply `PORT_LIGHT_AUTH` or `PORT_LIGHT_AGENT_TOKEN`
-through the client's environment or secure secret mechanism without writing
-credential values into tracked project files.
+In v0.9.0+, `mcp-config` also provides templates for `cursor`,
+`vscode`, and `gemini-cli`: `cursor` and `gemini-cli` emit JSON under
+`mcpServers.port-light`, while `vscode` emits JSON under `servers.port-light`
+with `"type": "stdio"`. On v0.8.4–v0.8.5 clients, configure those editors using
+the installed `port-light-mcp` entry point (or `python -m port_light_client.mcp`)
+directly. Unlike `codex` and `claude-code`, those three templates omit secret
+variable placeholders from `env` — supply `PORT_LIGHT_AUTH` or
+`PORT_LIGHT_AGENT_TOKEN` through the client's environment or secure secret
+mechanism without writing credential values into tracked project files.
 
 ## Verify without reserving anything
 
@@ -179,8 +188,8 @@ credential values into tracked project files.
 2. For MCP, perform `initialize`, `notifications/initialized` and `tools/list`
    through the AI tool or a stdio test. Verify the tools actually exposed by the
    installed version. Releases since v0.8.4 include `doctor`, `reserve_ports`,
-   and `release_port` (with `list_rules` added in newer clients and checked by
-   `verify`); older adapters have `check_port` and `suggest_ports`.
+   and `release_port` (with `list_rules` added in v0.9.0+ and checked
+   by `verify`); older adapters have `check_port` and `suggest_ports`.
 3. Call MCP `doctor` if available. A healthy `/api/health` does not validate the
    agent token; if one is configured, a read-only `suggest_ports` call with no
    `reserve` or `ttl` verifies that gate. Never create a test reservation merely

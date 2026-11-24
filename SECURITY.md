@@ -13,7 +13,7 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Surface | Behavior |
 |---------|----------|
 | HTTP API | Unauthenticated only when both `AUTH_USER` and `AUTH_PASSWORD` are absent. Invalid partial configuration returns 503. State-changing requests enforce same-origin (`Origin` / `Sec-Fetch-Site`) checks when browser headers are present. `/api/health` is always open. |
-| Hidden ports | Display filter by default. With `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD`, local and proxied peer rows, hidden port history, and diagnostic scopes are withheld until Basic Auth or `X-Hidden-Unlock` succeeds. |
+| Hidden ports | Display filter by default. With `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD`, local and proxied peer rows, per-range hidden/free existence counts, single-port/history/observation lookups for non-visible ports, free-run/batch/manual-port writes, and diagnostic scopes are withheld until Basic Auth or `X-Hidden-Unlock` succeeds. |
 | Docker socket | Often mounted into the container. Read-only is not the same as safe. |
 | `/host/proc` | Read-only view of host network tables (and other `/proc` data for PID 1). |
 | Compose mount | Read-only view of the bind you set, including sibling `.env` files. |
@@ -57,11 +57,12 @@ not returned by the API. See [BYOK data handling](docs/analysis.md). A public
 setup guide does not grant network access or bypass instance authentication.
 Use a client environment that can reach the instance without exposing it publicly.
 
-MCP `reserve_ports` saves release tokens locally and omits them from its result.
-Legacy `suggest_ports` reservation results and CLI reservation JSON still include
-tokens for compatibility; keep that output private. Preserve the private state
-directory across client updates. `mcp-config` prints absolute local paths and the
-instance URL, so review generated configuration before committing or sharing it.
+Both MCP `reserve_ports` and `suggest_ports(reserve=true)` save release tokens
+locally and omit them from tool results. CLI JSON reservation output still
+includes tokens for compatibility; keep that output private. Preserve the private
+state directory across client updates. `mcp-config` prints absolute local paths
+and the instance URL, so review generated configuration before committing or
+sharing it.
 
 ## Recommendations
 
@@ -92,7 +93,7 @@ Unreadable or invalid `port_light.json` files block dependent reads and writes w
 
 ## Hidden ports
 
-Hide-from-grid only reduces what shows up in the UI (and, when secrets are set, in the API). It is not a confidentiality boundary for `docker.sock` or Compose `.env` files.
+Hide-from-grid only reduces what shows up in the UI on an open LAN. When `HIDDEN_UNLOCK_PASSWORD` (or `AUTH_*`) is set, locked callers receive zero per-range `summary.hidden` counts, `summary.free` computed solely from visible ports, uniform `404` responses for any non-visible port on `/api/ports/{port}`, `/api/ports/{port}/history`, and `/api/observations/ports/{port}`, uniform omission on `/api/observations/batch`, and `403` on `/api/free-runs`, `/api/manual-ports*`, and `/api/hidden/*` (plus `/api/ports/suggest` and `/api/reservations` when `AGENT_TOKEN` is unset) so hidden port existence cannot be enumerated without unlocking. It is still not a confidentiality boundary for `docker.sock` or Compose `.env` files.
 
 ## Supply chain
 

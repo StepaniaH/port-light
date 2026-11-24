@@ -61,7 +61,11 @@ Command options take precedence over environment variables.
 
 `PORT_LIGHT_AUTH` authenticates the whole UI/API when the server has Basic
 Auth enabled. `PORT_LIGHT_AGENT_TOKEN` is a separate server-side gate for port
-suggestions and reservations. A reservation token is a third secret
+suggestions and reservations. When `HIDDEN_UNLOCK_PASSWORD` is set without Basic
+Auth, pair the instance with `AGENT_TOKEN` (`PORT_LIGHT_AGENT_TOKEN`) for
+`verify` and `reserve`, or enable Basic Auth (`PORT_LIGHT_AUTH`) for CLI
+`check` access on unhidden free ports (explicitly hidden ports remain hidden
+until unlocked). A reservation token is a third secret
 returned for a particular port and required to release it. Credentials are not
 accepted as command-line arguments because process lists and shell history can
 expose them.
@@ -262,12 +266,15 @@ Reuse it after errors; choose a new key only for a deliberately new reservation.
 There is no local recovery journal in this mode.
 
 Pending files older than seven days refuse automatic resubmission because the
-server may have retired an inactive receipt. Use the explicit recovery commands:
+server may have retired an inactive receipt (inactive receipts are retained up
+to seven days or until evicted oldest-first at the 4,096-entry ledger limit;
+active receipts are never evicted). Use the explicit recovery commands:
 
 ```bash
 port-light --url http://localhost:2100 requests
 port-light --url http://localhost:2100 recover <request-id>
-# Both commands also accept --json.
+port-light --url http://localhost:2100 requests --discard <request-id>
+# All three commands also accept --json.
 ```
 
 `requests` reads local state only, filters by normalized server URL, and lists
@@ -281,6 +288,10 @@ A batch with some ports already released returns the remaining active ports and
 Deterministic server rejections during `reserve` and `not_found` responses during
 `recover` remove the uncommitted pending file so future requests with the same
 parameters are not blocked.
+
+Always run `recover <request-id>` before considering `requests --discard <request-id>`:
+`--discard` deletes only the local pending journal without contacting the server
+and will **not** release a reservation that already committed on the server.
 
 Keep the same URL and state directory when recovering. Older journals without
 metadata need one retry of the original command to attach that metadata without

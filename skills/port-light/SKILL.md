@@ -51,7 +51,7 @@ port. `list` inspects range occupancy (`--status`, `--conflicts`), and `rules`
 lists named allocation ranges. CLI reservations also default to one hour. Persistent claims require
 explicit `--no-expiry`. Release uses the saved token. `--json` supplies structured
 CLI output but reservation JSON contains secret tokens: keep it out of shared logs.
-The new MCP `reserve_ports` saves tokens and omits them from tool results.
+MCP `reserve_ports` and `suggest_ports(reserve=true)` save release tokens locally and omit them from tool results.
 
 ## Failures and scope
 

@@ -2,7 +2,7 @@
 
 ## Run Setup / Doctor first
 
-Open the pulse icon in the header (`#/doctor`). It reads the current monitor state without launching another scan and checks settings storage, snapshot freshness, host-listener trust, Docker access, Compose discovery completeness, and recent degraded events. Each warning includes a concrete setup direction.
+Open **Settings → Advanced** (`#/doctor`). It reads the current monitor state without launching another scan and checks settings storage, snapshot freshness, host-listener trust, Docker access, Compose discovery completeness, and recent degraded events. Each warning includes a concrete setup direction.
 
 The page can copy or download a diagnostic report for an issue. The report is built from an aggregate allowlist: it excludes machine and peer names, URLs, ports, bind addresses, paths, credentials, raw environment values, timestamps from degraded events, and degradation scopes. Unknown event sources or reasons are written as `unknown` / `redacted`. Review the report before sharing it.
 
@@ -14,7 +14,7 @@ Hover over the information icon, or focus or click the warning, to see guidance 
 
 ### Upgrading to v0.8.0 or later
 
-No configuration migration is required. Existing peers and saved settings are preserved. Settings now sends only changed fields, supports restoring an environment/default value, and reports settings and peer saves independently. Setup / Doctor is available from the pulse icon in the header.
+Generally no configuration migration is required: existing peers and saved settings are preserved. However, `v0.8.5` saved `"peers": []` into `/data/port_light.json` whenever any setting was updated; if you configure `PORT_LIGHT_PEERS` via environment variables in default `auto` mode and see `scope=all` report `all:0/0`, either set `PORT_LIGHT_SETTINGS_SOURCE=env`, remove the empty `"peers": []` key from `/data/port_light.json`, or save peers under **Settings → Machines & scanning**. Back up `/data` before upgrading because `analysis/state/analysis.sqlite3` migrates forward-only (schema v2 to v3 in `v0.9.0`), so downgrading requires restoring the pre-upgrade data backup for saved reports. Settings now sends only changed fields, supports restoring an environment/default value, and reports settings and peer saves independently. Setup / Doctor is available under **Settings → Advanced** (`#/doctor`).
 
 If your enabled scanners already work, updating the image and recreating the container is enough. Change a pinned image tag to the current release, such as `v0.8.5`, before running these commands; pulling an older version tag does not upgrade it. Deployments using `latest` can retain that tag:
 

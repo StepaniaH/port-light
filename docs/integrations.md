@@ -77,16 +77,21 @@ POST `/api/reservations` accepts the options above as JSON (without `reserve`)
 and defaults to `require_count=true`. `Idempotency-Key` must contain 43–128
 URL-safe characters; generate it randomly and keep it secret like a release token.
 The same key and parameters return the original active claim without rescanning;
-different parameters or partially/fully inactive claims return 409 and never reallocate.
+while the receipt is retained, different parameters or partially/fully inactive
+claims return 409 and never reallocate.
 GET `/api/reservations/request` with that header recovers still-active claims
-without creating anything (404 if absent, 409 if all original ports are inactive).
+without creating anything (503 if the original POST is still in progress, 404 if
+absent, 409 if all original ports are inactive). Once a receipt expires after
+seven days or is evicted oldest-first at the 4,096-entry capacity, a resubmitted
+POST could allocate again, so use the read-only GET when uncertain.
 For a partially released batch it returns the active subset and `inactive_ports`. Both endpoints enforce Basic Auth and the
 configured agent token. Neither recovery nor retries extend the original TTL.
 
-Active receipts are retained for the reservation lifetime; inactive receipts may
-be removed after seven days from creation. Never resubmit an old key after that
-window: use the recovery GET instead. The ledger permits at most 4096 receipts;
-when full it rejects new reservations instead of discarding active recovery data.
+Active receipts are retained for the reservation lifetime; inactive receipts are
+retained for up to seven days or until evicted oldest-first when the ledger
+reaches its 4,096-entry capacity. Never resubmit an old key after that window:
+use the recovery GET instead. Active receipts are never evicted; the ledger only
+rejects new reservations when all 4,096 entries are active.
 Existing reservations created before this change cannot gain lost credentials.
 
 ### Scanner selection and peer compatibility
@@ -126,6 +131,10 @@ running instances or published images.
 Set `AGENT_TOKEN` to require an `X-Agent-Token` header on
 `/api/ports/suggest`, POST `/api/reservations`, and GET
 `/api/reservations/request`. Basic Auth credentials continue to work alongside it.
+When `HIDDEN_UNLOCK_PASSWORD` is configured without Basic Auth, CLI and MCP
+suggestions/reservations require `AGENT_TOKEN` (`PORT_LIGHT_AGENT_TOKEN`), while
+single-port `check` on unhidden free ports requires Basic Auth (`PORT_LIGHT_AUTH`;
+explicitly hidden ports stay `404` unless unlocked).
 
 ### Largest contiguous runs
 
@@ -293,11 +302,13 @@ reservation. For explicit recovery use the companion CLI's `requests` / `recover
 commands. If release succeeds but local cleanup fails, the result includes
 `remote_released: true` and a warning.
 
-Legacy `suggest_ports(reserve=true, ...)` keeps its original behavior and token
-output. Use an explicit TTL with that path; without one it creates persistent
-reservations. Tool descriptions and initialization instructions explain the
-workflow, and annotations distinguish read-only tools from mutating tools.
-`suggest_ports` is marked potentially mutating because of its legacy options.
+`suggest_ports(reserve=true, ...)` also defaults `ttl` to `3600` seconds, saves
+release tokens privately, and omits plaintext tokens from its tool output. Use
+explicit `ttl` (60–604800 seconds) in MCP, or use the CLI with `--no-expiry`
+when persistent reservations are explicitly required. Tool descriptions and
+initialization instructions explain the workflow, and annotations distinguish
+read-only tools from mutating tools. `suggest_ports` is marked potentially
+mutating because of its legacy options.
 
 The published image ships the server at `/app/mcp/server.py`, so Docker
 deployments do not need a source checkout:
@@ -342,7 +353,8 @@ hosting Port-Light, not just a Docker installation on the agent’s computer.
 
 Point `PORT_LIGHT_URL` at a peer to query another machine; add
 `PORT_LIGHT_AUTH=user:password` when that instance uses Basic Auth, and add
-`PORT_LIGHT_AGENT_TOKEN=<token>` when it sets `AGENT_TOKEN`.
+`PORT_LIGHT_AGENT_TOKEN=<token>` when it sets `AGENT_TOKEN` (also required for
+MCP suggestions/reservations if `HIDDEN_UNLOCK_PASSWORD` is enabled without Basic Auth).
 `PORT_LIGHT_TIMEOUT=<seconds>` and `PORT_LIGHT_CA_FILE=/path/to/ca.pem` apply
 to the shared MCP/CLI HTTP client.
 

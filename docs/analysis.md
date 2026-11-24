@@ -101,8 +101,10 @@ parameter and JSON mode saved in their connection, or the environment options
 above for request-scoped calls.
 
 Provider requests do not follow redirects. Set `PORT_LIGHT_AI_PROXY` to an HTTP(S)
-proxy address when the Hub needs a proxy to reach the provider. Keep proxy
-credentials in the server environment. A directly launched Hub ignores ambient
+proxy address when the Hub needs a proxy to reach the provider; when set,
+outbound hostname resolution and egress policy are delegated to that proxy,
+whereas direct provider connections pin locally validated socket addresses.
+Keep proxy credentials in the server environment. A directly launched Hub ignores ambient
 proxy variables such as `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY`.
 For local development, `scripts/dev.py serve` uses an existing HTTP(S)
 `HTTPS_PROXY` or `HTTP_PROXY` (including lowercase names) unless

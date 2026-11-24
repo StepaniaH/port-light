@@ -14,7 +14,7 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-[快速开始](#快速开始) · [Unraid](#unraid) · [使用文档](docs/port-management.md)
+[快速开始](#快速开始) · [Unraid](#unraid) · [使用文档](docs/README.md)
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Port-Light 双主机自适应端口看板">
@@ -100,7 +100,7 @@ AI 会按说明安装或更新接入并验证连接。之后可让它检查项�
 > 我的实例地址是 `<你的实例地址>`。
 
 AI 的运行环境需要能访问实例。MCP、CLI + Skill、Docker 与更新方式见
-[AI 接入说明](docs/ai-setup.md)。接入页面和独立 MCP 安装入口从 v0.8.4 开始提供。
+[AI 接入说明](docs/ai-setup.md)。接入页面和独立 MCP 安装入口从 v0.8.4 开始提供（`v0.9.0+` 新增的客户端模板与命令版本要求见该指南）。
 
 ## 访问控制
 
@@ -127,16 +127,23 @@ AI 的运行环境需要能访问实例。MCP、CLI + Skill、Docker 与更新�
 | `THEME_PALETTE` | 内置 | 配色：`gruvbox`、`catppuccin`、`solarized`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`everforest`、`rose-pine`、`kanagawa`。留空使用内置颜色。 |
 | `LOCALE` | `auto` | `auto` / `en` / `fr` / `de` / `es` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
 | `GRID_DENSITY` | `standard` | 卡片密度预设：`loose`(宽松)、`standard`(标准)、`compact`(紧凑)。旧值 `comfortable` 视同 `standard`。 |
+| `SHOW_STATUS_TEXT` | `false` | 在卡片上显示简短的占用 / 已配置文字标签。 |
+| `SHOW_ACCESS_BADGE` | `true` | 标记常见浏览器访问端口徽标。 |
+| `SHOW_PROTOCOL_BADGE` | `true` | 在非纯 TCP 卡片上显示 `udp` / `tcp,udp` 协议徽标。 |
 | `SHOW_BIND_ADDRESSES` | `false` | 在已占用卡片上显示紧凑的绑定地址摘要。 |
 | `SHOW_BIND_IPV4` | `true` | 开启卡片绑定地址摘要时包含 IPv4 地址。 |
 | `SHOW_BIND_IPV6` | `true` | 开启卡片绑定地址摘要时包含 IPv6 地址。 |
+| `COPY_ON_CLICK` | `true` | 点击卡片时复制端口号到剪贴板。 |
+| `AUTO_REFRESH` | `true` | 按轮询间隔自动刷新端口占用图。 |
 | `REFRESH_MS` | `5000` | 看板轮询间隔（1,000–300,000 毫秒）。设置页提供 5 秒至 5 分钟选项，并提示建议的其他机器容量；本机后台扫描间隔仍不超过 30 秒。 |
 | `PORT_LIGHT_HOST_LAYOUT` | `waterfall` | 默认以响应式瀑布流展示全部机器；`tabs` 为逐台切换。桌面和移动端均遵循此选择。 |
+| `GUESS_URLS` | `true` | 为常见 Web / 访问端口生成猜测的 `http(s)://host:port` 链接。 |
 | `URL_HOST` | 空 | 猜测链接里用的主机名 |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
 | `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 两项都必须非空；缺一项或空值会返回 503。完全取消两项环境变量才会关闭认证。 |
-| `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里。只能用环境变量。 |
-| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页的值覆盖 env 默认值。`env`：只认 Compose，设置页只读。 |
+| `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里；未启用 Basic Auth 时，CLI/MCP 分配端口需配合 `AGENT_TOKEN`（`check` 查询未隐藏的空闲端口需启用 Basic Auth，已隐藏端口未解锁前仍返回 `404`）。只能用环境变量。 |
+| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页的值覆盖 env 默认值。`env`：只认 Compose，设置页只读。`file`：设置项未保存时仍回退到 env 默认值，但 `PORT_LIGHT_PEERS` 仅从数据文件读取、不回退到环境变量。 |
+| `SETTINGS_READONLY` | `0` | 设为 `1` 可在保留已保存文件读取的同时将设置页锁定为只读。只能用环境变量。 |
 | `PORT_LIGHT_HOST_NAME` | 主机名 | 多机器视图中本机占用图的名称。也可在设置 → 机器与扫描中修改。 |
 | `PORT_LIGHT_HOST_DESCRIPTION` | 空 | 多机器视图中本机名称下方的可选纯文本短描述，最多 120 字。 |
 | `PORT_LIGHT_PEERS` | 未设置 | 最多 32 个 `{name, url, description?, username?, password?}` 条目的 JSON 数组。短描述为可选纯文本，最多 120 字。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。 |
@@ -144,11 +151,13 @@ AI 的运行环境需要能访问实例。MCP、CLI + Skill、Docker 与更新�
 | `WEBHOOK_URL` | 未设置 | 可选 webhook 目标（仅 http/https）。配合 `WEBHOOK_EVENTS=new_listener,conflict`，在端口开始占用或发生冲突时 POST `{event, port}`。 |
 | `WEBHOOK_SECRET` | 未设置 | 以 `X-Port-Light-Secret` 头发送。 |
 | `WEBHOOK_EVENTS` | 未设置 | 逗号分隔：`new_listener`、`conflict`。 |
-| `WEBHOOK_COOLDOWN_S` | `0` | 可选的按事件与端口冷却秒数，端口退出占用或冲突状态后重新触发时防抖。只能用环境变量。 |
+| `WEBHOOK_COOLDOWN_S` | `0` | 可选的按事件与端口冷却秒数，端口退出占用或冲突状态后重新触发时防抖（`v0.9.0+`）。只能用环境变量。 |
+| `HISTORY_RETENTION_DAYS` | `7` | 本地 SQLite 端口占用历史保留天数（设为 `0` 禁用历史）。只能用环境变量。 |
+| `PORT_LIGHT_AI_PROXY` | 未设置 | BYOK AI 出站请求使用的可选 HTTP(S) 代理地址。只能用环境变量。 |
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
 | `AGENT_TOKEN` | 未设置 | 设置后，端口建议及预留创建、恢复接口需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
 
-多数选项也可在设置页修改，自动保存到 `/data/port_light.json`。超时、路径和密钥通过环境变量配置；`PORT_LIGHT_SETTINGS_SOURCE=env` 可将设置页设为只读。
+多数选项也可在设置页修改，自动保存到 `/data/port_light.json`。超时、路径和密钥通过环境变量配置；设置 `PORT_LIGHT_SETTINGS_SOURCE=env`（或 `SETTINGS_READONLY=1`）可将设置页设为只读。
 
 自定义端口名称可参考 [custom_ports.example.json](custom_ports.example.json)。挂载前请先创建对应文件。
 
@@ -162,9 +171,10 @@ Port-Light 无遥测。出站 HTTP 请求用于已配置的实例查询、Webhoo
 
 ## 文档
 
+- [完整文档索引](docs/README.md)：全部使用与维护文档清单
 - [端口管理](docs/port-management.md)：分组、冲突、预留与范围规则
-- [部署](docs/deployment.md)与[故障排查](docs/troubleshooting.md)
-- [CLI](docs/cli.md)、[API 与 MCP](docs/integrations.md)；运行实例的 `/docs` 提供 OpenAPI 文档
+- [部署](docs/deployment.md)、[故障排查](docs/troubleshooting.md)与[排障和 BYOK](docs/analysis.md)
+- [AI 接入说明](docs/ai-setup.md)、[CLI](docs/cli.md)与[API 与 MCP](docs/integrations.md)；运行实例的 `/docs` 提供 OpenAPI 文档
 - [架构](docs/architecture.md)与[贡献指南](CONTRIBUTING.md)
 
 ## 技术栈

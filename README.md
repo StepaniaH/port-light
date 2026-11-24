@@ -14,7 +14,7 @@ A self-hosted dashboard for host port occupancy. It shows host listeners, Docker
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-[Quick start](#quick-start) · [Unraid](#unraid) · [Documentation](docs/port-management.md)
+[Quick start](#quick-start) · [Unraid](#unraid) · [Documentation](docs/README.md)
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Port-Light dashboard showing two adaptive host boards">
@@ -102,7 +102,7 @@ For an assistant that can read GitHub, you can also use:
 
 The instance must be reachable from the AI's execution environment. See the
 [AI setup guide](docs/ai-setup.md) for MCP, CLI + skill, Docker and update details.
-AI setup and the packaged MCP entry point are available in v0.8.4 and later.
+AI setup and the packaged MCP entry point are available in v0.8.4 and later (see the guide for client templates and commands added in v0.9.0+).
 
 ## Access control
 
@@ -129,16 +129,23 @@ With Basic Auth or `HIDDEN_UNLOCK_PASSWORD` enabled, hidden ports require unlock
 | `THEME_PALETTE` | built-in | Palette: `gruvbox`, `catppuccin`, `solarized`, `nord`, `dracula`, `tokyo-night`, `one-dark`, `everforest`, `rose-pine`, `kanagawa`. Empty uses the built-in colors. |
 | `LOCALE` | `auto` | `auto` / `en` / `fr` / `de` / `es` / `zh-CN` / `zh-TW` / `ja`. Auto follows the browser. |
 | `GRID_DENSITY` | `standard` | Card-density preset: `loose`, `standard`, or `compact`. A stored legacy `comfortable` behaves as `standard`. |
+| `SHOW_STATUS_TEXT` | `false` | Show short in-use / configured labels on cards. |
+| `SHOW_ACCESS_BADGE` | `true` | Mark common browser-access ports on cards. |
+| `SHOW_PROTOCOL_BADGE` | `true` | Show `udp` / `tcp,udp` protocol badges on non-TCP-only cards. |
 | `SHOW_BIND_ADDRESSES` | `false` | Show compact bind-address summaries on occupied cards. |
 | `SHOW_BIND_IPV4` | `true` | Include IPv4 addresses when card bind summaries are enabled. |
 | `SHOW_BIND_IPV6` | `true` | Include IPv6 addresses when card bind summaries are enabled. |
+| `COPY_ON_CLICK` | `true` | Copy the port number to the clipboard when clicking a card. |
+| `AUTO_REFRESH` | `true` | Poll the occupancy map automatically on an interval. |
 | `REFRESH_MS` | `5000` | Dashboard polling interval (1,000–300,000 ms). Settings offers 5s–5m choices and shows the recommended peer capacity. The local background scanner remains capped at a 30s interval. |
 | `PORT_LIGHT_HOST_LAYOUT` | `waterfall` | Responsive waterfall showing all machines, or `tabs` showing one machine at a time. Both desktop and mobile honor this choice. |
+| `GUESS_URLS` | `true` | Add guessed `http(s)://host:port` links for known web/access ports. |
 | `URL_HOST` | empty | Hostname used in guessed `http(s)://` links |
 | `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
 | `AUTH_USER` / `AUTH_PASSWORD` | unset | Optional HTTP Basic Auth for the UI and API. `/api/health` stays open. Env only. Both values must be nonempty; partial/blank configuration returns 503. Unset both to disable. |
-| `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock. Env only. |
-| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI values override env defaults. `env`: Compose is the only source and the Settings page is read-only. |
+| `HIDDEN_UNLOCK_PASSWORD` | unset | If set (or if Basic Auth is set), hidden-from-grid ports are withheld from the API until you unlock; without Basic Auth, CLI/MCP allocation requires `AGENT_TOKEN` (`check` on unhidden free ports requires Basic Auth; hidden ports stay `404` unless unlocked). Env only. |
+| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`: Web UI values override env defaults. `env`: Compose is the only source and the Settings page is read-only. `file`: Web UI settings still fall back to env when unset, while `PORT_LIGHT_PEERS` is read only from the data file. |
+| `SETTINGS_READONLY` | `0` | Set to `1` to keep Settings read-only while still reading saved file values. Env-only. |
 | `PORT_LIGHT_HOST_NAME` | hostname | Label for this machine when other occupancy maps are shown. Also configurable under Settings → Machines & scanning. |
 | `PORT_LIGHT_HOST_DESCRIPTION` | empty | Optional plain-text note under this machine's name in the multi-host view, up to 120 characters. |
 | `PORT_LIGHT_PEERS` | unset | JSON array of up to 32 `{name, url, description?, username?, password?}` entries, used when the data file has no `peers` key or when `PORT_LIGHT_SETTINGS_SOURCE=env`. Descriptions are optional plain text, up to 120 characters.  |
@@ -146,11 +153,13 @@ With Basic Auth or `HIDDEN_UNLOCK_PASSWORD` enabled, hidden ports require unlock
 | `WEBHOOK_URL` | unset | Opt-in webhook target (`http(s)` only). With `WEBHOOK_EVENTS=new_listener,conflict`, Port-Light POSTs `{event, port}` JSON. |
 | `WEBHOOK_SECRET` | unset | Sent as `X-Port-Light-Secret`. |
 | `WEBHOOK_EVENTS` | unset | Comma list: `new_listener`, `conflict`. |
-| `WEBHOOK_COOLDOWN_S` | `0` | Optional per-event/port cooldown in seconds after a port leaves `used` or `conflict` and re-arms. Env-only. |
+| `WEBHOOK_COOLDOWN_S` | `0` | Optional per-event/port cooldown in seconds after a port leaves `used` or `conflict` and re-arms (`v0.9.0+`). Env-only. |
+| `HISTORY_RETENTION_DAYS` | `7` | Days of local port-occupancy history retained in SQLite (`0` disables history). Env-only. |
+| `PORT_LIGHT_AI_PROXY` | unset | Optional HTTP(S) proxy URL for outbound BYOK AI requests. Env-only. |
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
 | `AGENT_TOKEN` | unset | When set, suggestions and reservation creation/recovery require a matching `X-Agent-Token` header. Env-only. |
 
-Most options are also available in Settings and save automatically to `/data/port_light.json`. Configure timeout, paths, and secrets through environment variables. Set `PORT_LIGHT_SETTINGS_SOURCE=env` for read-only settings.
+Most options are also available in Settings and save automatically to `/data/port_light.json`. Configure timeout, paths, and secrets through environment variables. Set `PORT_LIGHT_SETTINGS_SOURCE=env` (or `SETTINGS_READONLY=1`) for read-only settings.
 
 Use [custom_ports.example.json](custom_ports.example.json) as a template for custom port names. Create the file before bind-mounting it.
 
@@ -164,9 +173,10 @@ Settings, labels, and history are stored in the data volume. `port_light.json` m
 
 ## Documentation
 
+- [Documentation index](docs/README.md): full list of user and maintainer guides
 - [Port management](docs/port-management.md): grouping, conflicts, reservations, and range rules
-- [Deployment](docs/deployment.md) and [troubleshooting](docs/troubleshooting.md)
-- [CLI](docs/cli.md), [API and MCP](docs/integrations.md); OpenAPI documentation is available at `/docs` on a running instance
+- [Deployment](docs/deployment.md), [troubleshooting](docs/troubleshooting.md), and [troubleshooting and BYOK](docs/analysis.md)
+- [AI setup](docs/ai-setup.md), [CLI](docs/cli.md), and [API and MCP](docs/integrations.md); OpenAPI documentation is available at `/docs` on a running instance
 - [Architecture](docs/architecture.md) and [contributing](CONTRIBUTING.md)
 
 ## Tech stack
