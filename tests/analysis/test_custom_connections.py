@@ -601,12 +601,12 @@ def test_denylisted_metadata_link_local_unspecified_and_multicast_targets_fail(
     with pytest.raises(AnalysisError) as caught:
         normalize_base_url(url)
     assert caught.value.status == 422
-    assert caught.value.code == "invalid_input"
+    assert caught.value.code == "invalid_base_url"
 
     with TestClient(host(tmp_path)) as client:
         rejected = save(client, base_url=url)
         assert rejected.status_code == 422
-        assert rejected.json()["error"]["code"] == "invalid_input"
+        assert rejected.json()["error"]["code"] == "invalid_base_url"
 
 
 @pytest.mark.parametrize(
@@ -631,7 +631,7 @@ def test_port_light_own_loopback_port_is_blocked_at_save_and_request_time(
     with pytest.raises(AnalysisError) as caught:
         normalize_base_url(blocked_url)
     assert caught.value.status == 422
-    assert caught.value.code == "invalid_input"
+    assert caught.value.code == "invalid_base_url"
 
     calls = []
     gateway = ChatGateway(
@@ -648,7 +648,7 @@ def test_port_light_own_loopback_port_is_blocked_at_save_and_request_time(
     with pytest.raises(AnalysisError) as post_caught:
         asyncio.run(gateway.probe("custom", "fixture-model", KEY))
     assert post_caught.value.status == 422
-    assert post_caught.value.code == "invalid_input"
+    assert post_caught.value.code == "invalid_base_url"
     assert calls == []
 
 

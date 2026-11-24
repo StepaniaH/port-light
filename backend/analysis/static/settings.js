@@ -189,21 +189,17 @@ export async function mountSettings({ root, locale, signal, enhanceSelects, revi
             disabled: state.busy, text: t('edit_connection') });
           edit.addEventListener('click', () => editConnection(profile.id), { signal });
           actions.append(edit);
-        }
-        if (data.analysis_mode === 'byok' && data.enabled) {
           const test = element('button', { type: 'button', className: 'btn-secondary',
             'data-connection-action': 'test', disabled: state.busy || !usableProfile(profile), text: t('test') });
           test.addEventListener('click', () => testConnection(profile), { signal });
           actions.append(test);
-        }
-        if (writable) {
           const remove = element('button', { type: 'button', className: 'btn-secondary',
             'data-connection-action': 'delete', disabled: state.busy, text: t('delete_connection') });
           remove.addEventListener('click', () => { state.deletingId = profile.id; renderConnections(); }, { signal });
           actions.append(remove);
         }
       }
-      row.append(actions);
+      if (actions.childNodes.length) row.append(actions);
       list.append(row);
     }
     panel.append(list);
@@ -337,7 +333,7 @@ export async function mountSettings({ root, locale, signal, enhanceSelects, revi
       );
     }
     if (test && model && key) {
-      test.disabled = !!state.busy || !selected || !model.value.trim() || !model.validity.valid ||
+      test.disabled = !!state.busy || state.document.readonly || !selected || !model.value.trim() || !model.validity.valid ||
         (custom && !baseURL) || !(key.value || keepsSavedKey);
     }
   }
@@ -500,7 +496,6 @@ export async function mountSettings({ root, locale, signal, enhanceSelects, revi
       body.append(element('p', { className: 'analysis-settings-notice', text: t('ai_disabled') }));
     } else if (data.readonly) {
       body.append(element('p', { className: 'analysis-settings-notice', text: t('ai_readonly') }));
-      if (data.connections.length) body.append(element('p', { className: 'analysis-settings-hint', text: t('test_note') }));
     } else if (!data.providers.length) {
       body.append(element('p', { className: 'analysis-settings-notice', text: t('provider_unavailable') }));
     } else {
@@ -646,7 +641,7 @@ export async function mountSettings({ root, locale, signal, enhanceSelects, revi
     const button = savedProfile
       ? root.querySelector('[data-connection-id="' + savedProfile.id + '"] [data-connection-action="test"]')
       : root.querySelector('#analysis-ai-test');
-    if (!data || state.busy || data.analysis_mode !== 'byok' ||
+    if (!data || state.busy || data.readonly || !data.enabled || data.analysis_mode !== 'byok' ||
         !button || button.disabled) return;
     const form = savedProfile ? null : root.querySelector('#analysis-ai-form');
     const headers = { 'Content-Type': 'application/json', 'X-Port-Light-Analysis': '1' };

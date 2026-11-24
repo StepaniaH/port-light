@@ -331,7 +331,7 @@ def workbench_router(
                 )
             visible = []
             scan_cursor = cursor
-            while len(visible) < limit:
+            while len(visible) <= limit:
                 records, raw_next_cursor = reports.list_workbench(
                     owner(request), limit=50, cursor=scan_cursor
                 )
@@ -346,11 +346,11 @@ def workbench_router(
                     visible.append(
                         {key: value for key, value in record.items() if key != "resources"}
                     )
-                    if len(visible) == limit:
+                    if len(visible) > limit:
                         # Resume after the last item actually revealed.  Any
                         # intervening hidden reports are rechecked on the next
                         # page and never become a count or a cursor signal.
-                        return {"reports": visible, "next_cursor": record["id"]}
+                        return {"reports": visible[:limit], "next_cursor": visible[limit - 1]["id"]}
                 if raw_next_cursor is None:
                     break
                 scan_cursor = raw_next_cursor

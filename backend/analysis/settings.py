@@ -197,7 +197,12 @@ def _storage_error() -> AnalysisError:
     return AnalysisError("settings_unavailable", "Local AI settings are unavailable.", 503)
 
 
+DEFAULT_HUB_PORT = 2100
 _METADATA_HOSTS = frozenset({"metadata.google.internal", "metadata.goog"})
+_METADATA_IPS = frozenset({
+    ipaddress.IPv4Address("100.100.100.200"),
+    ipaddress.IPv6Address("fd00:ec2::254"),
+})
 _IPV4_LINK_LOCAL = ipaddress.ip_network("169.254.0.0/16")
 _IPV6_LINK_LOCAL = ipaddress.ip_network("fe80::/10")
 _IPV4_MULTICAST = ipaddress.ip_network("224.0.0.0/4")
@@ -205,7 +210,12 @@ _IPV6_MULTICAST = ipaddress.ip_network("ff00::/8")
 
 
 def _parse_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
-    candidate = host.split("%", 1)[0]
+    candidate = host
+    if candidate.startswith("[") and candidate.endswith("]"):
+        candidate = candidate[1:-1]
+    candidate = candidate.split("%", 1)[0]
+    if not candidate:
+        return None
     try:
         return ipaddress.ip_address(candidate)
     except ValueError:
@@ -223,7 +233,7 @@ def _forbidden_ip(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> boo
     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
         if _forbidden_ip(address.ipv4_mapped):
             return True
-    if address.is_unspecified:
+    if address.is_unspecified or address in _METADATA_IPS:
         return True
     if isinstance(address, ipaddress.IPv4Address):
         return address in _IPV4_LINK_LOCAL or address in _IPV4_MULTICAST
@@ -242,34 +252,90 @@ def _is_loopback_host(
     return address.is_loopback
 
 
-def _configured_hub_port() -> int | None:
+def _configured_hub_port() -> int:
     raw = os.environ.get("PORT_LIGHT_PORT", "").strip()
     if not raw:
-        return None
+        return DEFAULT_HUB_PORT
     try:
         port = int(raw)
     except ValueError:
-        return None
-    return port if 1 <= port <= 65535 else None
+        return DEFAULT_HUB_PORT
+    return port if 1 <= port <= 65535 else DEFAULT_HUB_PORT
 
 
-def validate_target_url(value: str, *, check_runtime_port: bool = True) -> None:
+def _validate_ip_target(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    effective_port: int,
+    *,
+    check_runtime_port: bool,
+) -> None:
+    if _forbidden_ip(address):
+        raise AnalysisError("invalid_base_url", "Target base URL is not allowed.", 422)
+    if check_runtime_port and _is_loopback_host("", address):
+        if effective_port == _configured_hub_port():
+            raise AnalysisError(
+                "invalid_base_url", "Target base URL cannot point to Port-Light itself.", 422
+            )
+
+
+def validate_target_url(
+    value: str, *, check_runtime_port: bool = True, resolve_dns: bool = False
+) -> list[tuple]:
     """Reject cloud metadata, link-local, unspecified, multicast, and self-loopback targets."""
     parsed = urlsplit(value)
     raw_host = parsed.hostname or ""
     host = raw_host.rstrip(".").lower()
-    if host in _METADATA_HOSTS or host.endswith((".metadata.google.internal", ".metadata.goog")):
-        raise AnalysisError("invalid_input", "Target base URL is not allowed.", 422)
+    if not host or host in _METADATA_HOSTS or host.endswith(
+        (".metadata.google.internal", ".metadata.goog")
+    ):
+        raise AnalysisError("invalid_base_url", "Target base URL is not allowed.", 422)
+    effective_port = parsed.port or (443 if parsed.scheme == "https" else 80)
     address = _parse_ip(raw_host)
-    if address is not None and _forbidden_ip(address):
-        raise AnalysisError("invalid_input", "Target base URL is not allowed.", 422)
-    if check_runtime_port and _is_loopback_host(host, address):
-        hub_port = _configured_hub_port()
-        effective_port = parsed.port or (443 if parsed.scheme == "https" else 80)
-        if hub_port is not None and effective_port == hub_port:
+    if address is not None:
+        _validate_ip_target(address, effective_port, check_runtime_port=check_runtime_port)
+    elif check_runtime_port and _is_loopback_host(host, None):
+        if effective_port == _configured_hub_port():
             raise AnalysisError(
-                "invalid_input", "Target base URL cannot point to Port-Light itself.", 422
+                "invalid_base_url", "Target base URL cannot point to Port-Light itself.", 422
             )
+    if not resolve_dns:
+        return []
+    return resolve_target_addresses(value, check_runtime_port=check_runtime_port)
+
+
+def resolve_target_addresses(
+    value: str, *, check_runtime_port: bool = True, allow_unresolved: bool = False
+) -> list[tuple]:
+    """Resolve DNS and validate every resolved IP for connection-level socket pinning."""
+    validate_target_url(value, check_runtime_port=check_runtime_port, resolve_dns=False)
+    parsed = urlsplit(value)
+    raw_host = parsed.hostname or ""
+    effective_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        addresses = socket.getaddrinfo(raw_host, effective_port, type=socket.SOCK_STREAM)
+    except OSError:
+        if allow_unresolved:
+            return []
+        raise AnalysisError(
+            "provider_connection",
+            "Unable to connect to model provider; request was not retried.",
+            502,
+        ) from None
+    if not addresses:
+        if allow_unresolved:
+            return []
+        raise AnalysisError(
+            "provider_connection",
+            "Unable to connect to model provider; request was not retried.",
+            502,
+        )
+    for entry in addresses:
+        resolved_host = entry[4][0] if len(entry) >= 5 and entry[4] else ""
+        resolved_ip = _parse_ip(str(resolved_host))
+        if resolved_ip is None:
+            raise AnalysisError("invalid_base_url", "Target base URL is not allowed.", 422)
+        _validate_ip_target(resolved_ip, effective_port, check_runtime_port=check_runtime_port)
+    return list(addresses)
 
 
 def normalize_base_url(value: object, *, check_runtime_port: bool = True) -> str:

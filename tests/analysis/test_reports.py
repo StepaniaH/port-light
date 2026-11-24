@@ -1,4 +1,5 @@
 import asyncio
+import json
 import secrets
 import sqlite3
 import threading
@@ -7,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from backend.analysis.evidence import AnalysisError
-from backend.analysis.reports import APPLICATION_ID, ReportStore, owner_hash
+from backend.analysis.reports import APPLICATION_ID, SCHEMA_VERSION, ReportStore, owner_hash
 from backend.analysis.workbench import Workbench, build_capture
 from tests.analysis.observation_fixture import seed_legacy_report
 from tests.analysis.test_workbench import batch_document
@@ -306,3 +307,95 @@ def test_module_shutdown_interrupts_attempts_without_replay_or_credentials(tmp_p
         store.close()
 
     asyncio.run(scenario())
+
+
+def test_v2_to_v3_migration_backfills_scope_summary_and_preserves_reports(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    path = state / "analysis.sqlite3"
+    owner = secrets.token_urlsafe(24)
+    document = ReportStore._workbench_document(
+        make_capture(port=8080), identifier="wb-v2-report-1", created_at=1_700_000_050
+    )
+    body = json.dumps(document, ensure_ascii=False, sort_keys=True)
+    resources = json.dumps(document["resources"], sort_keys=True, separators=(",", ":"))
+    with sqlite3.connect(path) as database:
+        ReportStore._create_legacy_tables(database)
+        database.execute(
+            """CREATE TABLE workbench_reports (
+                id TEXT PRIMARY KEY, owner_hash TEXT NOT NULL,
+                source_workbench_id TEXT NOT NULL, result_revision TEXT NOT NULL,
+                source_capture_id TEXT NOT NULL, source_report_id TEXT,
+                kind TEXT NOT NULL, created_at INTEGER NOT NULL,
+                resources TEXT NOT NULL, body TEXT NOT NULL, bytes INTEGER NOT NULL,
+                UNIQUE(owner_hash, source_workbench_id, result_revision)
+            )"""
+        )
+        database.execute(
+            """CREATE TABLE workbench_jobs (
+                id TEXT PRIMARY KEY, owner_hash TEXT NOT NULL, resources TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('running','completed','failed','cancelled','interrupted')),
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+            )"""
+        )
+        database.execute(
+            "INSERT INTO workbench_reports VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                document["id"],
+                owner_hash(owner),
+                document["source_workbench_id"],
+                document["result_revision"],
+                document["source_capture_id"],
+                document["source_report_id"],
+                document["kind"],
+                document["created_at"],
+                resources,
+                body,
+                len(body.encode("utf-8")),
+            ),
+        )
+        database.execute(f"PRAGMA application_id={APPLICATION_ID}")
+        database.execute("PRAGMA user_version=2")
+
+    store = ReportStore(tmp_path)
+    store.open()
+    try:
+        assert store.connection is not None
+        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        listed, next_cursor = store.list_workbench(owner)
+        assert next_cursor is None
+        assert len(listed) == 1
+        assert listed[0]["id"] == document["id"]
+        assert listed[0]["scope_summary"] == document["scope_summary"]
+        assert store.get_workbench(document["id"], owner) == document
+        saved_new = store.save_workbench(make_capture(port=8081), owner)
+        assert saved_new["scope_summary"]["scope"]["port"] == 8081
+    finally:
+        store.close()
+
+
+def test_list_workbench_reads_scope_summary_without_reading_body_column(tmp_path):
+    owner = secrets.token_urlsafe(24)
+    store = ReportStore(tmp_path)
+    store.open()
+    try:
+        saved = store.save_workbench(make_capture(port=9090), owner)
+        store.connection.set_authorizer(
+            lambda action, table, column, *_: (
+                sqlite3.SQLITE_DENY
+                if action == sqlite3.SQLITE_READ
+                and table == "workbench_reports"
+                and column == "body"
+                else sqlite3.SQLITE_OK
+            )
+        )
+        listed, next_cursor = store.list_workbench(owner)
+        assert next_cursor is None
+        assert len(listed) == 1
+        assert listed[0]["id"] == saved["id"]
+        assert listed[0]["scope_summary"] == saved["scope_summary"]
+        with pytest.raises(AnalysisError, match="report_storage_unavailable"):
+            store.get_workbench(saved["id"], owner)
+        store.connection.set_authorizer(None)
+    finally:
+        store.close()

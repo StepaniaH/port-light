@@ -1,5 +1,5 @@
 /* Mounted inside the application shell. A visit owns its requests and recovery IDs. */
-export async function mount({ root, locale, port, signal, enhanceSelects, revision }) {
+export async function mount({ root, locale, port, signal, enhanceSelects, revision, getHiddenUnlock }) {
   const asset = name => '/analysis/assets/' + name + (revision ? '?v=' + revision : '');
   const resource = async (name, format) => {
     const response = await fetch(asset(name), { credentials: 'same-origin', signal });
@@ -52,11 +52,53 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     item.status = statusCode;
     return item;
   }
+  function hiddenUnlockHeader() {
+    const value = typeof getHiddenUnlock === 'function' ? getHiddenUnlock() : '';
+    return typeof value === 'string' && value ? { 'X-Hidden-Unlock': value } : {};
+  }
+  function isUnavailableReceipt(capture) {
+    return Boolean(capture && capture.result_available === false);
+  }
   async function api(path, options = {}) {
-    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options, signal });
+    const headers = { ...hiddenUnlockHeader(), ...(options.headers || {}) };
+    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options, headers, signal });
     const data = await response.json().catch(() => null);
     if (!response.ok || !data) throw failure(data?.error?.code, response.status);
     return data;
+  }
+  async function downloadExport(link) {
+    const headers = hiddenUnlockHeader();
+    const href = link.getAttribute('href');
+    if (!href) return;
+    error();
+    try {
+      const response = await fetch(href, { credentials: 'same-origin', cache: 'no-store', headers, signal });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw failure(data?.error?.code, response.status);
+      }
+      const blob = await response.blob();
+      if (signal.aborted) return;
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const fallbackName = state.legacy?.reportId
+        ? 'port-light-report-' + state.legacy.reportId + '.json'
+        : state.report?.id
+          ? 'port-light-workbench-' + state.report.id + '.json'
+          : 'port-light-report.json';
+      const filename = (match && match[1] ? match[1] : fallbackName).replace(/[/\\]/g, '_');
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.style.display = 'none';
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (item) {
+      if (!signal.aborted) error(display.failureText(item, t));
+    }
   }
   function action(body, extra = {}) {
     return {
@@ -224,6 +266,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     applyScopeFields(); renderScopeNotice(); renderAI(); controls(); saveVisit();
   }
   function updateDirtyState() {
+    if (isUnavailableReceipt(state.capture)) { state.dirty = false; return; }
     try {
       state.dirty = Boolean(state.legacy || state.capture && !display.matchesCaptureRequest(state.capture, {
         kind: state.task, scope: currentScope(), protocol: byId('protocol').value,
@@ -261,6 +304,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     applyScopeFields();
   }
   function syncCaptureScope(capture, report, sourceReport) {
+    if (isUnavailableReceipt(capture)) return;
     const requested = capture?.scope_requested || {};
     const scope = requested.scope && typeof requested.scope === 'object' ? requested.scope : requested;
     const taskKind = capture?.kind === 'changes' || capture?.source_kind === 'changes' || report?.kind === 'changes' || sourceReport?.kind === 'changes' ? 'changes' : 'triage';
@@ -669,6 +713,27 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     return Boolean(state.capture && state.report?.id && state.report.source_workbench_id === state.capture.id &&
       state.report.result_revision === state.capture.result_revision);
   }
+  function renderUnavailableReceipt(capture) {
+    const interrupted = capture.status === 'interrupted';
+    setText('result-state', interrupted ? t('interrupted') : display.captureStateText(capture.status, t));
+    setText('conclusion', interrupted ? t('capture_interrupted') : display.failureText(capture.error || { code: 'result_unavailable' }, t));
+    byId('result-scope').hidden = true;
+    byId('result-scope').replaceChildren();
+    byId('observations-summary').hidden = true;
+    byId('observations-summary').replaceChildren();
+    byId('capture-meta').replaceChildren();
+    byId('coverage').replaceChildren();
+    byId('comparison-section').hidden = true;
+    byId('priority-queue').closest('section').hidden = true;
+    byId('remaining-section').hidden = true;
+    root.querySelector('.facts-details').hidden = true;
+    byId('save-report').hidden = true;
+    byId('export-link').hidden = true;
+    byId('export-link').removeAttribute('href');
+    byId('recheck').hidden = true;
+    byId('report-actions').hidden = true;
+    setText('report-status', '');
+  }
   function renderResults({ refreshEvidence = true } = {}) {
     const capture = state.capture;
     byId('results').hidden = !capture && !state.legacy;
@@ -682,6 +747,9 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     byId('report-context').hidden = !historical;
     setText('report-context', historical ? t('report_context', { time: date(state.report.created_at) }) : '');
     if (state.legacy) return renderLegacy();
+    if (isUnavailableReceipt(capture)) return renderUnavailableReceipt(capture);
+    byId('priority-queue').closest('section').hidden = false;
+    root.querySelector('.facts-details').hidden = false;
     setText('result-state', historical ? t('report_saved_short') : display.captureStateText(capture.status === 'interrupted' ? 'interrupted' : 'ready', t));
     setText('conclusion', display.conclusionText(capture, t));
     const mode = capture.source_kind === 'changes' ? 'changes' : 'triage';
@@ -702,10 +770,13 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     byId('save-report').textContent = currentRevisionSaved() ? t('report_saved_short') : t('save_report');
     byId('export-link').hidden = !currentRevisionSaved();
     if (currentRevisionSaved()) byId('export-link').href = '/analysis/api/workbench/reports/' + encodeURIComponent(state.report.id) + '/export';
+    else byId('export-link').removeAttribute('href');
     byId('recheck').hidden = !currentRevisionSaved();
     setText('report-status', reportStatus());
   }
   function renderLegacy() {
+    byId('priority-queue').closest('section').hidden = false;
+    root.querySelector('.facts-details').hidden = false;
     const view = display.legacyPresentation(state.legacy.document, t);
     setText('result-state', t('legacy_report'));
     setText('conclusion', view.conclusion);
@@ -803,6 +874,29 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       setText('ai-state', ''); return;
     }
     empty.hidden = true; emptyAction.hidden = true; content.hidden = false;
+    if (isUnavailableReceipt(capture)) {
+      const receiptStatus = capture.ai?.status || capture.status;
+      setText('ai-state', display.aiStateText(receiptStatus, t));
+      byId('ai-state').classList.toggle('is-ok', false);
+      const interrupted = capture.status === 'interrupted';
+      setText('ai-eligibility', interrupted ? t('ai_interrupted_capture') : '');
+      byId('ai-eligibility').hidden = !interrupted;
+      const receiptError = capture.error || { code: interrupted ? 'interrupted' : 'result_unavailable' };
+      byId('ai-error').hidden = false;
+      setText('ai-error', display.failureText(receiptError, t));
+      byId('ai-payload-details').hidden = true;
+      byId('ai-payload-summary').hidden = true;
+      byId('ai-payload-omitted').hidden = true;
+      byId('ai-connection').hidden = true;
+      byId('consent-field').hidden = true;
+      byId('start-ai').hidden = true;
+      byId('cancel-ai').hidden = true;
+      byId('retry-ai').hidden = true;
+      byId('ai-explanation').hidden = true;
+      byId('ai-recommendations').hidden = true;
+      byId('ai-recommendations-empty').hidden = true;
+      return;
+    }
     const preview = capture.ai_preview || {};
     const ai = capture.ai || { status: 'not_started' };
     const connection = savedConnection();
@@ -920,13 +1014,14 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     byId('capture-form').setAttribute('aria-busy', String(state.capturing));
     byId('show-more-selected').disabled = running;
     for (const button of byId('selected-ports').querySelectorAll('button')) button.disabled = running;
-    const saveable = ['ready', 'completed', 'failed', 'cancelled'].includes(state.capture?.status) && state.liveCapture;
+    const saveable = ['ready', 'completed', 'failed', 'cancelled'].includes(state.capture?.status) &&
+      !isUnavailableReceipt(state.capture) && state.liveCapture;
     byId('save-report').disabled = running || !saveable || !state.reportsAvailable || currentRevisionSaved();
     byId('recheck').disabled = running || !state.enabled || !currentRevisionSaved() || state.dirty;
     const ai = state.capture?.ai || { status: 'not_started' };
     const preview = state.capture?.ai_preview || {};
     const connection = savedConnection();
-    const canStart = settingsEnableAI() && !state.settingsError && state.liveCapture && preview.eligible === true && !state.dirty && ai.status === 'not_started' && state.capture?.status === 'ready' && !running && byId('consent').checked &&
+    const canStart = settingsEnableAI() && !state.settingsError && state.liveCapture && !isUnavailableReceipt(state.capture) && preview.eligible === true && !state.dirty && ai.status === 'not_started' && state.capture?.status === 'ready' && !running && byId('consent').checked &&
       Boolean(connection) && state.consentedRevision === connection.revision;
     byId('start-ai').disabled = !canStart;
     byId('cancel-ai').disabled = state.busy || ai.status !== 'running';
@@ -937,7 +1032,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     for (const button of root.querySelectorAll('#analysis-report-list button, #analysis-legacy-report-list button')) button.disabled = running;
     enhanceSelects(root);
   }
-  function updateCapture(capture, { report = state.report, sourceReport = state.sourceReport, focus = false, live = true, resetView = false } = {}) {
+  function updateCapture(capture, { report = state.report, sourceReport = state.sourceReport, focus = false, live = true, resetView = false, clearError = true } = {}) {
     if (signal.aborted || !capture) return;
     const changed = resetView || state.capture?.id !== capture.id || Boolean(state.legacy);
     clearTimeout(state.timer);
@@ -949,8 +1044,9 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       state.remainingOpen = false; state.visibleProblems = 12; state.visibleFacts = 20; state.aiResultKey = null;
       root.querySelector('.facts-details').open = false;
     }
-    error(); status(); renderResults({ refreshEvidence: changed }); renderAI(); syncReportSelection(); controls(); saveVisit();
-    if (live && capture.status === 'running') schedulePoll(capture.id, state.generation);
+    if (clearError) error();
+    status(); renderResults({ refreshEvidence: changed }); renderAI(); syncReportSelection(); controls(); saveVisit();
+    if (live && capture.status === 'running' && !isUnavailableReceipt(capture)) schedulePoll(capture.id, state.generation);
     if (focus) { byId('conclusion').focus(); byId('results-panel').scrollIntoView({ block: 'start' }); }
   }
   function discardUnavailableCapture(item) {
@@ -1017,12 +1113,21 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
           error(t('error_configuration_changed'));
           return;
         }
-        error(display.failureText(item, t));
-        try { updateCapture(await api('/analysis/api/workbench/captures/' + encodeURIComponent(current.id))); }
-        catch (_) {
-          state.aiUncertain = true;
-          state.capture = { ...current, status: 'running', ai: { ...(current.ai || {}), status: 'running' } };
-          renderResults(); renderAI(); controls(); schedulePoll(current.id, state.generation);
+        const message = display.failureText(item, t);
+        error(message);
+        try {
+          const refreshed = await api('/analysis/api/workbench/captures/' + encodeURIComponent(current.id));
+          if (!signal.aborted) {
+            updateCapture(refreshed, { clearError: false });
+            error(message);
+          }
+        } catch (_) {
+          if (!signal.aborted) {
+            state.aiUncertain = true;
+            state.capture = { ...current, status: 'running', ai: { ...(current.ai || {}), status: 'running' } };
+            renderResults(); renderAI(); controls(); schedulePoll(current.id, state.generation);
+            error(message);
+          }
         }
       }
     } finally { state.busy = false; controls(); }
@@ -1273,6 +1378,11 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     if (saved?.liveCapture === true && saved?.captureId) {
       try {
         const capture = await api('/analysis/api/workbench/captures/' + encodeURIComponent(saved.captureId));
+        if (isUnavailableReceipt(capture)) {
+          if (saved.reportId && await loadReport(saved.reportId)) return;
+          updateCapture(capture, { report: null, sourceReport: null, live: true });
+          return;
+        }
         let report = null; let source = null;
         if (saved.reportId) {
           try {
@@ -1294,7 +1404,11 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     }
     if (saved?.reportId && await loadReport(saved.reportId)) return;
     if (saved?.liveCapture !== true && saved?.captureId && !saved?.reportId) {
-      try { updateCapture(await api('/analysis/api/workbench/captures/' + encodeURIComponent(saved.captureId))); return; }
+      try {
+        const capture = await api('/analysis/api/workbench/captures/' + encodeURIComponent(saved.captureId));
+        updateCapture(capture, { report: null, sourceReport: null, live: true });
+        return;
+      }
       catch (item) {
         if (item.status === 404) {
           state.capture = null; state.report = null; saveVisit();
@@ -1349,6 +1463,11 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   on('start-ai', 'click', startAI); on('cancel-ai', 'click', cancelAI);
   on('retry-ai', 'click', () => { if (!byId('retry-ai').disabled) capture(); });
   on('save-report', 'click', saveReport); on('recheck', 'click', recheck);
+  on('export-link', 'click', event => {
+    if (!Object.keys(hiddenUnlockHeader()).length) return;
+    event.preventDefault();
+    downloadExport(event.currentTarget);
+  });
   on('load-more-reports', 'click', () => loadReports(false).catch(item => error(display.failureText(item, t))));
   on('clear-reports', 'click', clearReports);
 
@@ -1365,7 +1484,8 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     setText('report-storage-note', state.reportsAvailable ? t('storage_note') : t('error_storage'));
     configureOptions(options); renderAI(); controls();
     await Promise.allSettled([state.reportsAvailable ? loadReports(true) : Promise.resolve(), loadLegacyReports(), restoreResult(saved)]);
-    if (saved && state.capture && saved.captureId === state.capture.id && state.capture.status !== 'running' &&
+    if (saved && state.capture && saved.captureId === state.capture.id &&
+        state.capture.status !== 'running' && !isUnavailableReceipt(state.capture) &&
         (!isPort(port) || saved.routePort === port)) {
       restoreForm(saved); markScopeChanged();
     }

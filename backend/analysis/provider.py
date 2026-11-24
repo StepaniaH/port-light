@@ -1,15 +1,26 @@
 """Bounded Chat Completions transport and connectivity probes."""
 
+from __future__ import annotations
+
 import asyncio
+import errno
+import http.client
 import json
 import os
+import socket
+import ssl
+import threading
+import time
 from urllib.parse import urlsplit
 
 import httpx
 
 from . import __version__
 from .evidence import AnalysisError
-from .settings import normalize_base_url, validate_target_url
+from .settings import normalize_base_url, resolve_target_addresses, validate_target_url
+
+MAX_RESPONSE_BYTES = 65536
+CONNECT_TIMEOUT_S = 10.0
 
 PROVIDERS = {
     "openai": {
@@ -133,6 +144,230 @@ def decode_completion(body: bytes, *, probe=False) -> tuple[str, dict]:
         ) from None
 
 
+def _strip_zone(host: str) -> str:
+    return host.split("%", 1)[0]
+
+
+def _check_status(status_code: int) -> None:
+    if status_code in {401, 403}:
+        raise AnalysisError(
+            "provider_auth",
+            "Model provider rejected authentication or model access.",
+            502,
+        )
+    if status_code == 429:
+        raise AnalysisError(
+            "provider_limit", "Model provider quota or rate limit exceeded.", 502
+        )
+    if status_code != 200:
+        raise AnalysisError(
+            "provider_error", "Model provider rejected the request.", 502
+        )
+
+
+class _ActiveSocket:
+    """Track the active socket so cancellation or timeout aborts blocking I/O."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._sock: socket.socket | None = None
+        self._cancelled = False
+
+    @property
+    def cancelled(self) -> bool:
+        with self._lock:
+            return self._cancelled
+
+    def set(self, sock: socket.socket | None) -> None:
+        close_now = False
+        with self._lock:
+            self._sock = sock
+            if self._cancelled and sock is not None:
+                close_now = True
+                self._sock = None
+        if close_now:
+            try:
+                sock.close()
+            except OSError:
+                pass
+            raise TimeoutError("Model request cancelled")
+
+    def cancel(self) -> None:
+        with self._lock:
+            self._cancelled = True
+            sock = self._sock
+            self._sock = None
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+
+def _connect_pinned(
+    addresses: list[tuple], timeout: float, active: _ActiveSocket
+) -> socket.socket:
+    last_err: OSError | None = None
+    for af, socktype, proto, _canonname, sockaddr in addresses:
+        if active.cancelled:
+            raise TimeoutError("Model request cancelled")
+        sock = None
+        try:
+            sock = socket.socket(af, socktype, proto)
+            sock.settimeout(timeout)
+            active.set(sock)
+            sock.connect(sockaddr)
+            return sock
+        except OSError as exc:
+            last_err = exc
+            active.set(None)
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+            if active.cancelled:
+                raise TimeoutError("Model request cancelled") from None
+    if last_err is not None:
+        raise last_err
+    raise OSError("no resolved addresses available")
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    def __init__(
+        self,
+        host: str,
+        port: int | None = None,
+        *,
+        timeout: float,
+        addresses: list[tuple],
+        active: _ActiveSocket,
+    ) -> None:
+        super().__init__(host, port=port, timeout=timeout)
+        self._addresses = addresses
+        self._active = active
+
+    def connect(self) -> None:
+        self.sock = _connect_pinned(self._addresses, self.timeout, self._active)
+        try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError as exc:
+            if exc.errno != errno.ENOPROTOOPT:
+                raise
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(
+        self,
+        host: str,
+        port: int | None = None,
+        *,
+        timeout: float,
+        context: ssl.SSLContext,
+        addresses: list[tuple],
+        active: _ActiveSocket,
+    ) -> None:
+        super().__init__(host, port=port, timeout=timeout, context=context)
+        self._addresses = addresses
+        self._active = active
+
+    def connect(self) -> None:
+        raw_sock = _connect_pinned(self._addresses, self.timeout, self._active)
+        try:
+            raw_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError as exc:
+            if exc.errno != errno.ENOPROTOOPT:
+                self._active.set(None)
+                raw_sock.close()
+                raise
+        try:
+            wrapped = self._context.wrap_socket(
+                raw_sock, server_hostname=_strip_zone(self.host)
+            )
+        except BaseException:
+            self._active.set(None)
+            raw_sock.close()
+            raise
+        self._active.set(wrapped)
+        self.sock = wrapped
+
+
+def _post_pinned_sync(
+    endpoint: str,
+    addresses: list[tuple],
+    payload: dict,
+    headers: dict[str, str],
+    *,
+    timeout: float,
+    active: _ActiveSocket,
+) -> tuple[int, bytes]:
+    parsed = urlsplit(endpoint)
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    encoded_body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    request_headers = {
+        "Content-Type": "application/json",
+        "Accept-Encoding": "identity",
+        **headers,
+    }
+    deadline = time.monotonic() + timeout
+    connect_timeout = min(CONNECT_TIMEOUT_S, max(timeout, 0.001))
+    if parsed.scheme == "https":
+        conn: http.client.HTTPConnection = _PinnedHTTPSConnection(
+            host,
+            port=port,
+            timeout=connect_timeout,
+            context=ssl.create_default_context(),
+            addresses=addresses,
+            active=active,
+        )
+    else:
+        conn = _PinnedHTTPConnection(
+            host,
+            port=port,
+            timeout=connect_timeout,
+            addresses=addresses,
+            active=active,
+        )
+    try:
+        conn.connect()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Model request timed out")
+        conn.sock.settimeout(remaining)
+        conn.request("POST", path, body=encoded_body, headers=request_headers)
+        response = conn.getresponse()
+        status = int(response.status)
+        if status != 200:
+            return status, b""
+        body = bytearray()
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Model request timed out")
+            if conn.sock is not None:
+                conn.sock.settimeout(remaining)
+            chunk = response.read(8192)
+            if not chunk:
+                break
+            body.extend(chunk)
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise AnalysisError(
+                    "invalid_output", "Model response exceeded size limit.", 502
+                )
+        return status, bytes(body)
+    finally:
+        active.set(None)
+        conn.close()
+
+
 class ChatGateway:
     def __init__(self, transport=None, *, providers=None):
         self.transport = transport
@@ -172,47 +407,73 @@ class ChatGateway:
         }
         if provider == "opencode-go":
             headers["x-opencode-session"] = session_id
+        proxy = None if self.transport is not None else configured_proxy()
+        if self.transport is not None or proxy is not None:
+            if proxy is not None:
+                await asyncio.to_thread(
+                    resolve_target_addresses, settings["endpoint"], allow_unresolved=True
+                )
+            try:
+                async with (
+                    asyncio.timeout(timeout),
+                    httpx.AsyncClient(
+                        transport=self.transport,
+                        timeout=httpx.Timeout(timeout, connect=CONNECT_TIMEOUT_S),
+                        follow_redirects=False,
+                        trust_env=False,
+                        proxy=proxy,
+                    ) as client,
+                    client.stream(
+                        "POST", settings["endpoint"], json=payload, headers=headers
+                    ) as response,
+                ):
+                    _check_status(response.status_code)
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        body.extend(chunk)
+                        if len(body) > MAX_RESPONSE_BYTES:
+                            raise AnalysisError(
+                                "invalid_output", "Model response exceeded size limit.", 502
+                            )
+                return bytes(body)
+            except (TimeoutError, httpx.TimeoutException):
+                raise AnalysisError(
+                    "provider_timeout", "Model request timed out and was not retried.", 504
+                ) from None
+            except (httpx.HTTPError, httpx.InvalidURL):
+                raise AnalysisError(
+                    "provider_connection",
+                    "Unable to connect to model provider; request was not retried.",
+                    502,
+                ) from None
+        active = _ActiveSocket()
         try:
-            async with (
-                asyncio.timeout(timeout),
-                httpx.AsyncClient(
-                    transport=self.transport,
-                    timeout=httpx.Timeout(timeout, connect=10),
-                    follow_redirects=False,
-                    trust_env=False,
-                    proxy=configured_proxy(),
-                ) as client,
-                client.stream(
-                    "POST", settings["endpoint"], json=payload, headers=headers
-                ) as response,
-            ):
-                if response.status_code in {401, 403}:
-                    raise AnalysisError(
-                        "provider_auth",
-                        "Model provider rejected authentication or model access.",
-                        502,
-                    )
-                if response.status_code == 429:
-                    raise AnalysisError(
-                        "provider_limit", "Model provider quota or rate limit exceeded.", 502
-                    )
-                if response.status_code != 200:
-                    raise AnalysisError(
-                        "provider_error", "Model provider rejected the request.", 502
-                    )
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    body.extend(chunk)
-                    if len(body) > 65536:
-                        raise AnalysisError(
-                            "invalid_output", "Model response exceeded size limit.", 502
-                        )
-            return bytes(body)
-        except (TimeoutError, httpx.TimeoutException):
+            async with asyncio.timeout(timeout):
+                addresses = await asyncio.to_thread(
+                    resolve_target_addresses, settings["endpoint"]
+                )
+                status_code, body = await asyncio.to_thread(
+                    _post_pinned_sync,
+                    settings["endpoint"],
+                    addresses,
+                    payload,
+                    headers,
+                    timeout=timeout,
+                    active=active,
+                )
+            _check_status(status_code)
+            return body
+        except AnalysisError:
+            raise
+        except TimeoutError:
+            active.cancel()
             raise AnalysisError(
                 "provider_timeout", "Model request timed out and was not retried.", 504
             ) from None
-        except (httpx.HTTPError, httpx.InvalidURL):
+        except asyncio.CancelledError:
+            active.cancel()
+            raise
+        except (OSError, http.client.HTTPException, ValueError):
             raise AnalysisError(
                 "provider_connection",
                 "Unable to connect to model provider; request was not retried.",

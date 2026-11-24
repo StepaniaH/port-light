@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import stat
 import time
 from contextlib import asynccontextmanager
@@ -18,6 +19,9 @@ from backend.analysis.settings import (
     PROFILE_FILE,
     AIConnectionInput,
     BYOKStore,
+    normalize_base_url,
+    resolve_target_addresses,
+    validate_target_url,
 )
 from tests.analysis.observation_fixture import observation
 from tests.analysis.test_workbench import batch_document
@@ -509,3 +513,87 @@ def test_connection_probe_keeps_browser_session_out_of_provider_headers(tmp_path
         assert len(provider_sessions) == 2
         assert all(value and value != browser_session for value in provider_sessions)
         assert provider_sessions[0] != provider_sessions[1]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1:2100/v1",
+        "http://localhost:2100/v1",
+        "http://[::1]:2100/v1",
+        "http://[::ffff:127.0.0.1]:2100/v1",
+        "http://[fd00:ec2::254]/latest/meta-data",
+        "http://100.100.100.200/latest/meta-data",
+        "http://[::ffff:100.100.100.200]/v1",
+        "http://169.254.169.254/v1",
+        "http://[fe80::1]:8000/v1",
+    ],
+)
+def test_unset_hub_port_defaults_to_2100_and_blocks_cloud_metadata_with_invalid_base_url(
+    tmp_path, monkeypatch, url
+):
+    monkeypatch.delenv("PORT_LIGHT_PORT", raising=False)
+    monkeypatch.delenv("PORT_LIGHT_ANALYSIS_DEMO", raising=False)
+    with pytest.raises(AnalysisError) as caught:
+        normalize_base_url(url)
+    assert caught.value.status == 422
+    assert caught.value.code == "invalid_base_url"
+
+    assert normalize_base_url("http://127.0.0.1:11434/v1") == "http://127.0.0.1:11434/v1"
+    monkeypatch.setenv("PORT_LIGHT_PORT", "not-a-port")
+    with pytest.raises(AnalysisError) as invalid_env_caught:
+        normalize_base_url("http://127.0.0.1:2100/v1")
+    assert invalid_env_caught.value.code == "invalid_base_url"
+
+    monkeypatch.delenv("PORT_LIGHT_PORT", raising=False)
+    with TestClient(host(tmp_path, {}, settings_reader=lambda: False)) as client:
+        rejected = client.put(
+            "/analysis/api/settings/ai",
+            headers={**ACTION, "X-Port-Light-Model-Key": SAVED_KEY},
+            json={"provider": "custom", "model": "fixture-model", "base_url": url},
+        )
+        assert rejected.status_code == 422
+        assert rejected.json()["error"]["code"] == "invalid_base_url"
+
+
+@pytest.mark.parametrize(
+    "url, addresses",
+    [
+        ("http://rebind.example.invalid/v1", ["169.254.169.254"]),
+        ("http://rebind.example.invalid/v1", ["93.184.216.34", "169.254.169.254"]),
+        ("http://rebind.example.invalid/v1", ["fd00:ec2::254"]),
+        ("http://rebind.example.invalid/v1", ["100.100.100.200"]),
+        ("http://rebind.example.invalid/v1", ["fe80::1%eth0"]),
+        ("http://rebind.example.invalid/v1", ["::ffff:100.100.100.200"]),
+        ("http://rebind.example.invalid/v1", ["0.0.0.0"]),
+        ("http://rebind.example.invalid/v1", ["224.0.0.1"]),
+        ("http://rebind.example.invalid:2100/v1", ["127.0.0.1"]),
+        ("http://rebind.example.invalid:2100/v1", ["192.168.1.50", "::1"]),
+    ],
+)
+def test_resolve_target_addresses_rejects_any_disallowed_or_self_loopback_dns_answer(
+    monkeypatch, url, addresses
+):
+    monkeypatch.delenv("PORT_LIGHT_PORT", raising=False)
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda _host, port, *_a, **_kw: [
+            (
+                socket.AF_INET6 if ":" in addr else socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                (addr, port, 0, 0) if ":" in addr else (addr, port),
+            )
+            for addr in addresses
+        ],
+    )
+    with pytest.raises(AnalysisError) as caught:
+        resolve_target_addresses(url)
+    assert caught.value.status == 422
+    assert caught.value.code == "invalid_base_url"
+
+    with pytest.raises(AnalysisError) as direct_caught:
+        validate_target_url(url, resolve_dns=True)
+    assert direct_caught.value.code == "invalid_base_url"

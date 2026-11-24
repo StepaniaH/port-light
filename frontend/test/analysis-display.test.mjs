@@ -274,5 +274,16 @@ test('stable failures remain localized without echoing upstream messages', () =>
     assert.equal(display.failureText({ code: 'incomplete_output' }, t), catalogs[locale].workbench.error_incomplete_output);
     assert.notEqual(display.failureText({ code: 'incomplete_output' }, t), display.failureText({ code: 'invalid_output' }, t));
     assert.equal(display.failureText({ status: 503, message: 'UNTRUSTED' }, t), catalogs[locale].workbench.error_request);
+    assert.equal(display.aiStateText('interrupted', t), catalogs[locale].interrupted);
+    assert.equal(display.failureText({ code: 'busy' }, t), catalogs[locale].error_busy);
+    assert.equal(display.failureText({ code: 'job_capacity' }, t), catalogs[locale].error_busy);
+    assert.equal(display.failureText({ code: 'already_started' }, t), catalogs[locale].error_busy);
+    assert.equal(display.failureText({ code: 'core_incompatible' }, t), catalogs[locale].workbench.error_core);
+    assert.equal(display.failureText({ code: 'analysis_failed' }, t), catalogs[locale].workbench.error_stopped);
+    assert.equal(display.failureText({ code: 'result_unavailable' }, t), catalogs[locale].error_expired);
+    assert.equal(display.failureText({ code: 'invalid_base_url' }, t), catalogs[locale].workbench.error_provider);
+    for (const code of ['busy', 'job_capacity', 'already_started', 'core_incompatible', 'analysis_failed', 'result_unavailable', 'invalid_base_url']) {
+      assert.notEqual(display.failureText({ code }, t), catalogs[locale].workbench.error_request, locale + ':' + code);
+    }
   }
 });

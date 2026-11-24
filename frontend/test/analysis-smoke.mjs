@@ -395,6 +395,8 @@ try {
   await page.locator('#analysis-consent').check();
   await page.locator('#analysis-start-ai').click();
   await expect(page.locator('#analysis-results')).toBeVisible();
+  await expect(page.locator('#analysis-error')).toBeVisible();
+  await expect(page.locator('#analysis-error')).toContainText('扫描数据');
   await delay(450);
   assert.equal(rejectedStarts, 1, 'The client does not resend an uncertain AI POST');
   await page.unroute('**/analysis/api/workbench/captures/*/ai');
@@ -629,6 +631,35 @@ try {
   await expect(byokPage.locator('#analysis-consent-field')).toBeHidden();
   assert.equal(expiredCaptureReads, 1, 'An expired live capture falls back to its saved report once');
   await byokPage.unroute('**/analysis/api/workbench/captures/*');
+
+  // An unavailable receipt with no saved report renders a clean interrupted/expired state with Save disabled.
+  await byokPage.evaluate(visit => {
+    sessionStorage.setItem('port-light-workbench-visit-v1', JSON.stringify({ ...visit, reportId: null, liveCapture: true }));
+  }, savedVisit);
+  await byokPage.goto(byokBase + '/#/settings/analysis/ai', { waitUntil: 'networkidle' });
+  await byokPage.route('**/analysis/api/workbench/captures/*', async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: savedVisit.captureId,
+        status: 'completed',
+        resources: [{ port: 8081, protocol: 'tcp' }],
+        result_available: false,
+        error: { code: 'result_unavailable', message: 'synthetic unavailable receipt' },
+      }),
+    });
+  });
+  await byokPage.goto(byokBase + '/#/workspace/port-analysis/port/8081', { waitUntil: 'networkidle' });
+  await expect(byokPage.locator('#analysis-results')).toBeVisible();
+  await expect(byokPage.locator('#analysis-save-report')).toBeDisabled();
+  await expect(byokPage.locator('#analysis-save-report')).toBeHidden();
+  await expect(byokPage.locator('#analysis-coverage')).toBeEmpty();
+  await expect(byokPage.locator('#analysis-capture-meta')).not.toContainText('时间未知');
+  await expect(byokPage.locator('#analysis-ai-error')).toContainText('过期');
+  await byokPage.unroute('**/analysis/api/workbench/captures/*');
+  await byokPage.evaluate(() => sessionStorage.removeItem('port-light-workbench-visit-v1'));
 
   await byokPage.goto(byokBase + '/#/settings/analysis/ai', { waitUntil: 'networkidle' });
 
@@ -909,6 +940,21 @@ try {
   await savedRow(secondId).locator('[data-connection-action="confirm-delete"]').click();
   await expect(byokPage.locator('.analysis-connection')).toHaveCount(1);
   await expect(savedRow(firstId).locator('input[type="radio"]')).toBeChecked();
+  // Read-only mode with a saved connection hides Test Connection buttons and test_note.
+  await byokPage.route('**/analysis/api/settings', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), readonly: true } });
+  });
+  await byokPage.reload({ waitUntil: 'networkidle' });
+  await expect(byokPage.locator('#analysis-settings-ai')).toContainText('只读');
+  await expect(byokPage.locator('.analysis-connection')).toHaveCount(1);
+  await expect(byokPage.locator('[data-connection-action="test"]')).toHaveCount(0);
+  await expect(byokPage.locator('#analysis-ai-test')).toHaveCount(0);
+  await expect(byokPage.locator('#analysis-ai-form')).toHaveCount(0);
+  await expect(byokPage.locator('#analysis-settings-ai')).not.toContainText(catalogs['zh-CN'].settings.test_note);
+  await byokPage.unroute('**/analysis/api/settings');
+  await byokPage.reload({ waitUntil: 'networkidle' });
+  await expect(savedRow(firstId)).toBeVisible();
   await savedRow(firstId).locator('[data-connection-action="delete"]').click();
   await savedRow(firstId).locator('[data-connection-action="confirm-delete"]').click();
   await expect(byokPage.locator('.analysis-settings-badge')).toHaveText('未配置');

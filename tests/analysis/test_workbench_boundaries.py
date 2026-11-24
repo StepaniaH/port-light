@@ -331,7 +331,7 @@ def test_v1_report_database_migration_keeps_legacy_single_port_report(tmp_path):
     try:
         assert store.connection is not None
         assert store.get("legacy-report", OWNER) == legacy
-        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert store.connection.execute("PRAGMA user_version").fetchone()[0] == 3
         tables = {
             row[0]
             for row in store.connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -715,3 +715,70 @@ def test_dense_dual_protocol_capture_save_read_and_recheck_stay_bounded(
         assert rechecked.status_code == 201, rechecked.text
         assert rechecked.json()["comparison"]["persisting"]
         assert len(state["batch_requests"]) == 8
+
+
+def test_report_list_exact_page_boundary_omits_next_cursor(tmp_path, monkeypatch, state):
+    monkeypatch.setenv("PORT_LIGHT_ANALYSIS_DEMO", "1")
+    app = host(tmp_path, state)
+    with TestClient(app) as client:
+        store = app.state.analysis_module.state.report_store
+        tick = [1_700_000_010]
+        store.clock = lambda: tick[0]
+        visible_ids = []
+        for index, port in enumerate(range(21_000, 21_020)):
+            tick[0] += 1
+            visible_ids.append(
+                store.save_workbench(
+                    capture(
+                        batch_document([port], capture_id=f"obs-exact-{index}"),
+                        identifier=f"capture-exact-{index}",
+                        scope_requested=scope("selected_ports", [port]),
+                    ),
+                    OWNER,
+                )["id"]
+            )
+        client.cookies.set(COOKIE, OWNER, path="/analysis")
+        exact = client.get("/analysis/api/workbench/reports?limit=20")
+        assert exact.status_code == 200
+        assert len(exact.json()["reports"]) == 20
+        assert exact.json()["next_cursor"] is None
+
+        # A trailing hidden report must not emit a spurious cursor or leak existence.
+        tick[0] = 1_700_000_005
+        store.save_workbench(
+            capture(
+                batch_document([21_099], capture_id="obs-exact-hidden"),
+                identifier="capture-exact-hidden",
+                scope_requested=scope("selected_ports", [21_099]),
+            ),
+            OWNER,
+        )
+        state["hidden_ports"] = {21_099}
+        with_trailing_hidden = client.get("/analysis/api/workbench/reports?limit=20")
+        assert with_trailing_hidden.status_code == 200
+        assert len(with_trailing_hidden.json()["reports"]) == 20
+        assert with_trailing_hidden.json()["next_cursor"] is None
+
+        # Adding a 21st visible report after the hidden one yields a real cursor and 1-item page 2.
+        tick[0] = 1_700_000_001
+        extra_id = store.save_workbench(
+            capture(
+                batch_document([21_098], capture_id="obs-exact-extra"),
+                identifier="capture-exact-extra",
+                scope_requested=scope("selected_ports", [21_098]),
+            ),
+            OWNER,
+        )["id"]
+        page_one = client.get("/analysis/api/workbench/reports?limit=20")
+        assert page_one.status_code == 200
+        page_one_body = page_one.json()
+        assert len(page_one_body["reports"]) == 20
+        assert page_one_body["next_cursor"] == page_one_body["reports"][-1]["id"]
+        page_two = client.get(
+            "/analysis/api/workbench/reports",
+            params={"limit": 20, "cursor": page_one_body["next_cursor"]},
+        )
+        assert page_two.status_code == 200
+        assert [item["id"] for item in page_two.json()["reports"]] == [extra_id]
+        assert page_two.json()["next_cursor"] is None
+        assert {item["id"] for item in page_one_body["reports"]} == set(visible_ids)

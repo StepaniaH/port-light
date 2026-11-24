@@ -1,5 +1,8 @@
 import asyncio
 import json
+import socket
+import ssl
+import threading
 
 import httpx
 import pytest
@@ -536,3 +539,259 @@ def test_demo_and_concurrency_gates_enforce_provider_and_session_limits():
         await demo.close()
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "url, addresses",
+    [
+        ("http://imds.example.invalid/v1", ["169.254.169.254"]),
+        ("http://imds6.example.invalid/v1", ["fd00:ec2::254"]),
+        ("http://alibaba.example.invalid/v1", ["100.100.100.200"]),
+        ("http://hub.example.invalid:2100/v1", ["127.0.0.1"]),
+        ("http://mixed.example.invalid/v1", ["192.0.2.10", "fe80::1"]),
+    ],
+)
+def test_gateway_blocks_dns_ssrf_and_self_loopback_before_opening_socket(
+    monkeypatch, url, addresses
+):
+    monkeypatch.delenv("PORT_LIGHT_AI_PROXY", raising=False)
+    monkeypatch.delenv("PORT_LIGHT_PORT", raising=False)
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda _host, port, *_a, **_kw: [
+            (
+                socket.AF_INET6 if ":" in addr else socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                (addr, port, 0, 0) if ":" in addr else (addr, port),
+            )
+            for addr in addresses
+        ],
+    )
+
+    real_socket = socket.socket
+
+    def unexpected_socket(af=socket.AF_INET, *args, **kwargs):
+        if af in (socket.AF_INET, socket.AF_INET6):
+            pytest.fail("disallowed DNS target opened a socket")
+        return real_socket(af, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "socket", unexpected_socket)
+    gateway = ChatGateway(
+        providers={
+            "custom": {
+                "name": "Custom",
+                "token_parameter": "max_tokens",
+                "json_mode": False,
+            }
+        }
+    )
+    with pytest.raises(AnalysisError) as caught:
+        asyncio.run(
+            gateway.probe(
+                "custom",
+                "fixture-model",
+                "fixture-key",
+                connection={
+                    "base_url": url,
+                    "token_parameter": "max_tokens",
+                    "json_mode": False,
+                },
+            )
+        )
+    assert caught.value.status == 422
+    assert caught.value.code == "invalid_base_url"
+
+
+def test_gateway_pins_validated_addresses_without_second_dns_lookup(monkeypatch):
+    monkeypatch.delenv("PORT_LIGHT_AI_PROXY", raising=False)
+    monkeypatch.delenv("PORT_LIGHT_PORT", raising=False)
+    attempted: list[tuple] = []
+    request_wire = bytearray()
+    client_sock, server_sock = socket.socketpair()
+
+    def serve():
+        try:
+            while b"\r\n\r\n" not in request_wire:
+                chunk = server_sock.recv(4096)
+                if not chunk:
+                    break
+                request_wire.extend(chunk)
+            header_end = request_wire.index(b"\r\n\r\n") + 4
+            content_length = 0
+            for line in request_wire[:header_end].decode("latin1").split("\r\n"):
+                if line.lower().startswith("content-length:"):
+                    content_length = int(line.split(":", 1)[1].strip())
+            while len(request_wire) - header_end < content_length:
+                chunk = server_sock.recv(4096)
+                if not chunk:
+                    break
+                request_wire.extend(chunk)
+            body = json.dumps(
+                {"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]}
+            ).encode("utf-8")
+            server_sock.sendall(
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: application/json\r\n"
+                b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n"
+                b"Connection: close\r\n\r\n" + body
+            )
+        finally:
+            server_sock.close()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+
+    class PinnedSocket:
+        def __init__(self):
+            self._connected = False
+
+        def settimeout(self, _timeout):
+            pass
+
+        def setsockopt(self, *_args):
+            pass
+
+        def connect(self, sockaddr):
+            attempted.append(sockaddr)
+            if sockaddr[0] == "192.0.2.10":
+                raise ConnectionRefusedError("primary unreachable")
+            self._connected = True
+
+        def sendall(self, data):
+            client_sock.sendall(data)
+
+        def makefile(self, *args, **kwargs):
+            return client_sock.makefile(*args, **kwargs)
+
+        def close(self):
+            if self._connected:
+                client_sock.close()
+
+    lookups = 0
+
+    def fake_getaddrinfo(host, resolved_port, *_args, **_kwargs):
+        nonlocal lookups
+        lookups += 1
+        if lookups > 1:
+            raise AssertionError("provider performed a second DNS lookup")
+        assert host == "llm.example.invalid"
+        assert resolved_port == 8081
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.10", 8081)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.2", 8081)),
+        ]
+
+    gateway = ChatGateway(
+        providers={
+            "custom": {
+                "name": "Custom",
+                "token_parameter": "max_tokens",
+                "json_mode": False,
+            }
+        }
+    )
+    real_socket = socket.socket
+
+    def fake_socket(af=socket.AF_INET, *args, **kwargs):
+        if af in (socket.AF_INET, socket.AF_INET6):
+            return PinnedSocket()
+        return real_socket(af, *args, **kwargs)
+
+    try:
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        monkeypatch.setattr(socket, "socket", fake_socket)
+        asyncio.run(
+            gateway.probe(
+                "custom",
+                "fixture-model",
+                "fixture-key",
+                connection={
+                    "base_url": "http://llm.example.invalid:8081/v1",
+                    "token_parameter": "max_tokens",
+                    "json_mode": False,
+                },
+            )
+        )
+    finally:
+        client_sock.close()
+        thread.join(timeout=1)
+
+    assert lookups == 1
+    assert attempted == [("192.0.2.10", 8081), ("10.0.0.2", 8081)]
+    wire = bytes(request_wire)
+    assert b"POST /v1/chat/completions HTTP/1.1\r\n" in wire
+    assert b"Host: llm.example.invalid:8081\r\n" in wire
+    assert b"Authorization: Bearer fixture-key\r\n" in wire
+
+
+def test_gateway_https_pins_validated_ip_and_preserves_sni_hostname(monkeypatch):
+    monkeypatch.delenv("PORT_LIGHT_AI_PROXY", raising=False)
+    monkeypatch.delenv("PORT_LIGHT_PORT", raising=False)
+    connected: list[tuple] = []
+    sni_hosts: list[str] = []
+
+    class FakeSocket:
+        def settimeout(self, _timeout):
+            pass
+
+        def setsockopt(self, *_args):
+            pass
+
+        def connect(self, sockaddr):
+            connected.append(sockaddr)
+
+        def close(self):
+            pass
+
+    class FakeContext:
+        verify_mode = ssl.CERT_REQUIRED
+        check_hostname = True
+
+        def wrap_socket(self, _sock, *, server_hostname=None):
+            sni_hosts.append(server_hostname)
+            raise ssl.SSLCertVerificationError("synthetic TLS mismatch")
+
+    real_socket = socket.socket
+
+    def fake_socket(af=socket.AF_INET, *args, **kwargs):
+        if af in (socket.AF_INET, socket.AF_INET6):
+            return FakeSocket()
+        return real_socket(af, *args, **kwargs)
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda _host, port, *_a, **_kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.20", port))
+        ],
+    )
+    monkeypatch.setattr(socket, "socket", fake_socket)
+    monkeypatch.setattr(ssl, "create_default_context", lambda: FakeContext())
+    gateway = ChatGateway(
+        providers={
+            "custom": {
+                "name": "Custom",
+                "token_parameter": "max_tokens",
+                "json_mode": False,
+            }
+        }
+    )
+    with pytest.raises(AnalysisError) as caught:
+        asyncio.run(
+            gateway.probe(
+                "custom",
+                "fixture-model",
+                "fixture-key",
+                connection={
+                    "base_url": "https://llm.example.invalid/v1",
+                    "token_parameter": "max_tokens",
+                    "json_mode": False,
+                },
+            )
+        )
+    assert caught.value.code == "provider_connection"
+    assert connected == [("192.0.2.20", 443)]
+    assert sni_hosts == ["llm.example.invalid"]

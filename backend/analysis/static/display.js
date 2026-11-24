@@ -159,6 +159,7 @@ export function captureStateText(status, t) {
 }
 
 export function aiStateText(status, t) {
+  if (status === 'interrupted') return t('interrupted');
   const value = known(status, ['not_started', 'running', 'completed', 'failed', 'cancelled']);
   return t('ai_' + (value || 'not_started'));
 }
@@ -379,14 +380,19 @@ export function limitationText(code, t) {
 export function failureText(failure, t) {
   const aliases = {
     invalid_scope: 'scope', scope_too_large: 'scope_too_large', access_restricted: 'access',
-    core_unavailable: 'core', confirmation_required: 'confirm', not_ready: 'not_ready',
+    core_unavailable: 'core', core_incompatible: 'core',
+    confirmation_required: 'confirm', not_ready: 'not_ready',
     configuration_changed: 'configuration_changed',
-    capture_expired: 'expired', not_found: 'expired', report_not_found: 'report_missing',
+    capture_expired: 'expired', not_found: 'expired', result_unavailable: 'expired',
+    report_not_found: 'report_missing',
     invalid_input: 'scope', invalid_action: 'access', invalid_origin: 'access',
+    invalid_base_url: 'provider', invalid_model: 'provider',
     unsupported_provider: 'provider', invalid_key: 'provider_key',
     provider_auth: 'provider_key', provider_limit: 'provider_limit', provider_timeout: 'provider_timeout',
     provider_error: 'provider', provider_connection: 'provider', provider_unavailable: 'provider',
-    invalid_output: 'output', incomplete_output: 'incomplete_output', cancelled: 'stopped', interrupted: 'stopped',
+    invalid_output: 'output', incomplete_output: 'incomplete_output',
+    busy: 'busy', job_capacity: 'busy', already_started: 'busy',
+    analysis_failed: 'stopped', cancelled: 'stopped', interrupted: 'stopped',
     report_storage_unavailable: 'storage', report_too_large: 'storage_full', report_limit: 'storage_full',
     receipt_unavailable: 'receipt',
   };

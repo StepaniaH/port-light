@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .evidence import AnalysisError
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 REPORT_DOCUMENT_SCHEMA = 1
 APPLICATION_ID = 0x504C4152
 MAX_REPORTS = 256
@@ -116,9 +116,18 @@ class ReportStore:
         )
 
     @staticmethod
-    def _workbench_schema(connection):
+    def _workbench_schema_v2(connection):
         connection.execute(
             "SELECT id, owner_hash, source_workbench_id, result_revision, source_capture_id, source_report_id, kind, created_at, resources, body, bytes FROM workbench_reports LIMIT 0"
+        )
+        connection.execute(
+            "SELECT id, owner_hash, resources, status, created_at, updated_at FROM workbench_jobs LIMIT 0"
+        )
+
+    @staticmethod
+    def _workbench_schema(connection):
+        connection.execute(
+            "SELECT id, owner_hash, source_workbench_id, result_revision, source_capture_id, source_report_id, kind, created_at, resources, body, bytes, scope_summary FROM workbench_reports LIMIT 0"
         )
         connection.execute(
             "SELECT id, owner_hash, resources, status, created_at, updated_at FROM workbench_jobs LIMIT 0"
@@ -147,6 +156,7 @@ class ReportStore:
             source_capture_id TEXT NOT NULL, source_report_id TEXT,
             kind TEXT NOT NULL, created_at INTEGER NOT NULL,
             resources TEXT NOT NULL, body TEXT NOT NULL, bytes INTEGER NOT NULL,
+            scope_summary TEXT NOT NULL,
             UNIQUE(owner_hash, source_workbench_id, result_revision)
         )""")
         connection.execute("""CREATE TABLE workbench_jobs (
@@ -156,12 +166,44 @@ class ReportStore:
         )""")
 
     @staticmethod
+    def _backfill_scope_summary(connection):
+        rows = connection.execute("SELECT id, body FROM workbench_reports").fetchall()
+        for row in rows:
+            document = json.loads(row["body"])
+            if not isinstance(document, dict) or not isinstance(
+                document.get("scope_summary"), dict
+            ):
+                raise ValueError("Invalid workbench report scope_summary")
+            encoded = json.dumps(
+                document["scope_summary"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            connection.execute(
+                "UPDATE workbench_reports SET scope_summary=? WHERE id=?",
+                (encoded, row["id"]),
+            )
+
+    @staticmethod
     def _migrate(connection):
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         application = connection.execute("PRAGMA application_id").fetchone()[0]
         if version == SCHEMA_VERSION and application == APPLICATION_ID:
             ReportStore._legacy_schema(connection)
             ReportStore._workbench_schema(connection)
+            return
+        if version == 2 and application == APPLICATION_ID:
+            ReportStore._legacy_schema(connection)
+            ReportStore._workbench_schema_v2(connection)
+            with connection:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "ALTER TABLE workbench_reports ADD COLUMN scope_summary TEXT NOT NULL DEFAULT '{}'"
+                )
+                ReportStore._backfill_scope_summary(connection)
+                connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
             return
         if version == 1 and application == APPLICATION_ID:
             ReportStore._legacy_schema(connection)
@@ -353,6 +395,13 @@ class ReportStore:
                 413,
             )
         resources = json.dumps(document["resources"], sort_keys=True, separators=(",", ":"))
+        scope_summary = json.dumps(
+            document["scope_summary"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
         with self._database(write=True) as database:
             previous = database.execute(
                 "SELECT body FROM workbench_reports WHERE owner_hash=? AND source_workbench_id=? AND result_revision=?",
@@ -386,7 +435,11 @@ class ReportStore:
                     )
                 database.execute("DELETE FROM workbench_reports WHERE id=?", (oldest["id"],))
             database.execute(
-                "INSERT INTO workbench_reports VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO workbench_reports ("
+                "id, owner_hash, source_workbench_id, result_revision, "
+                "source_capture_id, source_report_id, kind, created_at, "
+                "resources, body, bytes, scope_summary"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     document["id"],
                     digest,
@@ -399,6 +452,7 @@ class ReportStore:
                     resources,
                     body,
                     size,
+                    scope_summary,
                 ),
             )
         return document
@@ -461,7 +515,7 @@ class ReportStore:
                 where += " AND (created_at < ? OR (created_at = ? AND id < ?))"
                 parameters.extend((row["created_at"], row["created_at"], row["id"]))
             rows = database.execute(
-                "SELECT id, created_at, kind, source_report_id, result_revision, resources, body "
+                "SELECT id, created_at, kind, source_report_id, result_revision, resources, scope_summary "
                 f"FROM workbench_reports WHERE {where} "
                 "ORDER BY created_at DESC, id DESC LIMIT ?",
                 (*parameters, limit + 1),
@@ -472,7 +526,9 @@ class ReportStore:
         for row in rows:
             try:
                 resources = json.loads(row["resources"])
-                scope_summary = json.loads(row["body"])["scope_summary"]
+                scope_summary = json.loads(row["scope_summary"])
+                if not isinstance(scope_summary, dict):
+                    raise ValueError("invalid scope_summary")
             except (TypeError, ValueError, KeyError):
                 raise storage_error() from None
             records.append(
