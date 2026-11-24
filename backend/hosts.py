@@ -10,9 +10,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import errno
+import hashlib
 import http.client
 import ipaddress
 import json
+import math
 import os
 import re
 import secrets
@@ -40,7 +42,33 @@ _BLOCKED_HOSTS = frozenset({
     "metadata.google.internal",
     "metadata.goog",
 })
+_BLOCKED_IPS = frozenset({
+    ipaddress.ip_address("169.254.169.254"),
+    ipaddress.ip_address("100.100.100.200"),
+    ipaddress.ip_address("fd00:ec2::254"),
+})
 _REDIRECTS = frozenset({301, 302, 303, 307, 308})
+_PEER_STATUSES = frozenset({"used", "configured", "free", "unknown"})
+_PEER_SOURCE_TYPES = frozenset({"docker", "system", "host", "manual", "unknown"})
+_PEER_BIND_SCOPES = frozenset({"public", "lan", "link", "localhost"})
+_PEER_SCAN_STATES = frozenset({"ok", "failed", "disabled", "unknown"})
+_PEER_HEALTH_STATUSES = frozenset({"ok", "degraded"})
+_PEER_LISTEN_SOURCES = frozenset({"host_proc", "ss", "lsof", "proc", "none"})
+_PEER_DIAG_CODES = frozenset({"port_range", "port_budget", "invalid_file"})
+_PEER_CONTAINER_STATUSES = frozenset({
+    "created", "running", "paused", "restarting", "removing", "exited", "dead",
+})
+_PEER_PUBLISH_MODES = frozenset({"host", "ingress"})
+_PEER_HISTORY_STATES = frozenset({"used", "configured", "free"})
+_MAX_PEER_PORTS = 65535
+_MAX_PEER_CONTAINERS = 256
+_MAX_PEER_COMPOSE = 256
+_MAX_PEER_DEGRADATIONS = 20
+_MAX_PEER_DIAGNOSTICS = 16
+_MAX_PEER_VIOLATIONS = 64
+_MAX_PEER_URLS = 128
+_MAX_PEER_IPS = 128
+_MAX_PEER_HISTORY_EVENTS = 5000
 
 
 class HostsError(ValueError):
@@ -178,7 +206,7 @@ def catalog() -> dict:
 def replace_peers(raw_peers) -> list[dict]:
     if hosts_readonly():
         raise PermissionError("hosts are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY")
-    normalized = _normalize_peers(raw_peers, _file_peers())
+    normalized = _normalize_peers(raw_peers, _resolved_peers())
     port_store.replace_peers(normalized)
     return [_public_peer(p) for p in normalized]
 
@@ -341,7 +369,7 @@ def _env_peers() -> list[dict]:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise HostsError("PORT_LIGHT_PEERS must be a JSON array") from exc
-    return _normalize_peers(data, [])
+    return _normalize_peers(data, [], deterministic_ids=True)
 
 
 def _public_peer(peer: dict) -> dict:
@@ -356,7 +384,12 @@ def _public_peer(peer: dict) -> dict:
     }
 
 
-def _normalize_peers(raw_peers, existing: list[dict]) -> list[dict]:
+def _normalize_peers(
+    raw_peers,
+    existing: list[dict],
+    *,
+    deterministic_ids: bool = False,
+) -> list[dict]:
     if raw_peers is None:
         return []
     if not isinstance(raw_peers, list):
@@ -386,9 +419,19 @@ def _normalize_peers(raw_peers, existing: list[dict]) -> list[dict]:
         if host_id and not _ID_RE.match(host_id):
             raise HostsError("invalid id")
         if not host_id:
-            host_id = secrets.token_hex(4)
-        while host_id in seen_ids:
-            host_id = secrets.token_hex(4)
+            if deterministic_ids:
+                host_id = hashlib.sha256(url_key.encode("utf-8")).hexdigest()[:12]
+                suffix = 1
+                while host_id in seen_ids:
+                    host_id = hashlib.sha256(f"{url_key}#{suffix}".encode("utf-8")).hexdigest()[:12]
+                    suffix += 1
+            else:
+                host_id = secrets.token_hex(4)
+                while host_id in seen_ids:
+                    host_id = secrets.token_hex(4)
+        else:
+            while host_id in seen_ids:
+                host_id = secrets.token_hex(4)
         seen_ids.add(host_id)
         prev = by_id.get(host_id, {})
         if (prev.get("password") and prev.get("url") != url
@@ -427,6 +470,8 @@ def _normalize_peers(raw_peers, existing: list[dict]) -> list[dict]:
 def _ip_allowed(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     if ip.version == 6 and ip.ipv4_mapped is not None:
         return _ip_allowed(ip.ipv4_mapped)
+    if ip in _BLOCKED_IPS:
+        return False
     if ip.is_unspecified or ip.is_multicast:
         return False
     if ip.is_loopback:
@@ -484,3 +529,386 @@ def _parse_peer_url(url: str):
     else:
         netloc = host_part
     return parsed._replace(scheme=parsed.scheme, netloc=netloc, path="", params="", query="", fragment="")
+
+
+def _peer_int(value, *, field: str, lo: int = 0, hi: int | None = None) -> int:
+    if type(value) is not int or value < lo or (hi is not None and value > hi):
+        raise HostsError(f"invalid peer {field}")
+    return value
+
+
+def _peer_opt_int(value, *, field: str, lo: int = 0, hi: int | None = None) -> int | None:
+    if value is None:
+        return None
+    return _peer_int(value, field=field, lo=lo, hi=hi)
+
+
+def _peer_bool(value, *, field: str) -> bool:
+    if type(value) is not bool:
+        raise HostsError(f"invalid peer {field}")
+    return value
+
+
+def _peer_str(value, *, field: str, max_len: int = 512) -> str:
+    if not isinstance(value, str):
+        raise HostsError(f"invalid peer {field}")
+    return value[:max_len]
+
+
+def _peer_opt_str(value, *, field: str, max_len: int = 512) -> str | None:
+    if value is None:
+        return None
+    return _peer_str(value, field=field, max_len=max_len)
+
+
+def _peer_str_list(value, *, field: str, max_items: int, max_len: int) -> list[str]:
+    if not isinstance(value, list) or len(value) > max_items:
+        raise HostsError(f"invalid peer {field}")
+    return [_peer_str(item, field=field, max_len=max_len) for item in value]
+
+
+def _normalize_peer_container(raw) -> dict:
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer container")
+    out: dict = {}
+    for key, max_len in (
+        ("name", 256),
+        ("image", 512),
+        ("compose_project", 256),
+        ("compose_service", 256),
+        ("network_mode", 256),
+        ("protocol", 32),
+    ):
+        if key in raw:
+            out[key] = _peer_opt_str(raw[key], field=f"container.{key}", max_len=max_len)
+    if "status" in raw:
+        status = _peer_opt_str(raw["status"], field="container.status", max_len=32)
+        if status is not None and status not in _PEER_CONTAINER_STATUSES:
+            raise HostsError("invalid peer container.status")
+        out["status"] = status
+    for key, max_items, max_len in (
+        ("urls", _MAX_PEER_URLS, 2048),
+        ("vhost_urls", _MAX_PEER_URLS, 2048),
+        ("bind_ips", _MAX_PEER_IPS, 128),
+        ("protocols", 16, 32),
+    ):
+        if key in raw:
+            out[key] = _peer_str_list(
+                raw[key], field=f"container.{key}", max_items=max_items, max_len=max_len,
+            )
+    for key in ("container_port", "vhost_port", "label_port"):
+        if key in raw:
+            out[key] = _peer_opt_int(raw[key], field=f"container.{key}", lo=1, hi=65535)
+    return out
+
+
+def _normalize_peer_compose(raw) -> dict:
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer compose config")
+    out: dict = {}
+    for key, max_len in (
+        ("project_dir", 512),
+        ("project_name", 256),
+        ("service_name", 256),
+        ("compose_file", 512),
+        ("protocol", 32),
+        ("host_ip", 128),
+        ("network_mode", 256),
+        ("mapping_source", 64),
+    ):
+        if key in raw:
+            out[key] = _peer_opt_str(raw[key], field=f"compose.{key}", max_len=max_len)
+    if "container_port" in raw:
+        out["container_port"] = _peer_opt_int(
+            raw["container_port"], field="compose.container_port", lo=1, hi=65535,
+        )
+    if "publish_mode" in raw:
+        mode = _peer_opt_str(raw["publish_mode"], field="compose.publish_mode", max_len=32)
+        if mode is not None and mode not in _PEER_PUBLISH_MODES:
+            raise HostsError("invalid peer compose.publish_mode")
+        out["publish_mode"] = mode
+    return out
+
+
+def _normalize_peer_known_service(raw) -> dict | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer known_service")
+    out: dict = {}
+    for key, max_len in (("name", 256), ("description", 512), ("category", 64)):
+        if key in raw:
+            out[key] = _peer_opt_str(raw[key], field=f"known_service.{key}", max_len=max_len)
+    for key in ("is_access_port", "from_label"):
+        if key in raw:
+            out[key] = _peer_bool(raw[key], field=f"known_service.{key}")
+    return out
+
+
+def _normalize_peer_rule_violation(raw) -> dict:
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer rule_violation")
+    out: dict = {}
+    for key, max_len in (("rule", 64), ("project", 256), ("service", 256)):
+        if key in raw:
+            out[key] = _peer_str(raw[key], field=f"rule_violation.{key}", max_len=max_len)
+    for key in ("start", "end"):
+        if key in raw:
+            out[key] = _peer_int(raw[key], field=f"rule_violation.{key}", lo=1, hi=65535)
+    return out
+
+
+def normalize_peer_port_row(raw, *, expected_port: int | None = None) -> dict:
+    """Validate and normalize one proxied peer port row before returning to browsers."""
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer port row")
+    port = _peer_int(raw.get("port"), field="port", lo=1, hi=65535)
+    if expected_port is not None and port != expected_port:
+        raise HostsError("peer port mismatch")
+    status = raw.get("status")
+    if not isinstance(status, str) or status not in _PEER_STATUSES:
+        raise HostsError("invalid peer status")
+    out: dict = {"port": port, "status": status}
+    if "source_type" in raw:
+        st = _peer_opt_str(raw["source_type"], field="source_type", max_len=32)
+        out["source_type"] = st if st in _PEER_SOURCE_TYPES else "unknown"
+    if "bind_scope" in raw:
+        scope = _peer_opt_str(raw["bind_scope"], field="bind_scope", max_len=32)
+        if scope is not None and scope not in _PEER_BIND_SCOPES:
+            raise HostsError("invalid peer bind_scope")
+        out["bind_scope"] = scope
+    for key, max_len in (
+        ("protocol", 32),
+        ("ip", 128),
+        ("process", 256),
+        ("manual_label", 512),
+        ("machine", 128),
+    ):
+        if key in raw:
+            out[key] = _peer_opt_str(raw[key], field=key, max_len=max_len)
+    if "pid" in raw:
+        out["pid"] = _peer_opt_int(raw["pid"], field="pid", lo=0)
+    if "expires_at" in raw:
+        out["expires_at"] = _peer_opt_int(raw["expires_at"], field="expires_at", lo=0)
+    for key in ("is_reservation", "is_hidden", "conflict"):
+        if key in raw:
+            out[key] = _peer_bool(raw[key], field=key)
+    if "ips" in raw:
+        out["ips"] = _peer_str_list(raw["ips"], field="ips", max_items=_MAX_PEER_IPS, max_len=128)
+    if "urls" in raw:
+        out["urls"] = _peer_str_list(raw["urls"], field="urls", max_items=_MAX_PEER_URLS, max_len=2048)
+    if "known_service" in raw:
+        out["known_service"] = _normalize_peer_known_service(raw["known_service"])
+    if "containers" in raw:
+        items = raw["containers"]
+        if not isinstance(items, list) or len(items) > _MAX_PEER_CONTAINERS:
+            raise HostsError("invalid peer containers")
+        out["containers"] = [_normalize_peer_container(item) for item in items]
+    if "compose_configs" in raw:
+        items = raw["compose_configs"]
+        if not isinstance(items, list) or len(items) > _MAX_PEER_COMPOSE:
+            raise HostsError("invalid peer compose_configs")
+        out["compose_configs"] = [_normalize_peer_compose(item) for item in items]
+    if "rule_violations" in raw:
+        items = raw["rule_violations"]
+        if not isinstance(items, list) or len(items) > _MAX_PEER_VIOLATIONS:
+            raise HostsError("invalid peer rule_violations")
+        out["rule_violations"] = [_normalize_peer_rule_violation(item) for item in items]
+    return out
+
+
+def _normalize_peer_sources(raw) -> dict[str, str]:
+    if not isinstance(raw, dict) or len(raw) > 16:
+        raise HostsError("invalid peer sources")
+    out: dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or len(key) > 32:
+            raise HostsError("invalid peer source key")
+        if not isinstance(value, str) or value not in _PEER_SCAN_STATES:
+            raise HostsError("invalid peer source state")
+        out[key] = value
+    return out
+
+
+def _normalize_peer_summary(raw) -> dict:
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer summary")
+    out: dict = {}
+    for key in ("used", "configured", "free", "hidden"):
+        if key in raw:
+            out[key] = _peer_opt_int(raw[key], field=f"summary.{key}", lo=0, hi=65535)
+    for key in ("range_start", "range_end"):
+        if key in raw:
+            out[key] = _peer_opt_int(raw[key], field=f"summary.{key}", lo=1, hi=65535)
+    if "compose_files" in raw:
+        out["compose_files"] = _peer_opt_int(raw["compose_files"], field="summary.compose_files", lo=0)
+    for key in ("hidden_locked", "scan_complete", "stale", "compose_truncated", "compose_incomplete"):
+        if key in raw:
+            out[key] = _peer_bool(raw[key], field=f"summary.{key}")
+    if "hidden_ports" in raw:
+        raw_hidden = raw["hidden_ports"]
+        if not isinstance(raw_hidden, list) or len(raw_hidden) > _MAX_PEER_PORTS:
+            raise HostsError("invalid peer summary.hidden_ports")
+        out["hidden_ports"] = [
+            _peer_int(p, field="summary.hidden_ports", lo=1, hi=65535) for p in raw_hidden
+        ]
+    if "hidden_occupancy" in raw:
+        raw_occ = raw["hidden_occupancy"]
+        if not isinstance(raw_occ, list) or len(raw_occ) > _MAX_PEER_PORTS:
+            raise HostsError("invalid peer summary.hidden_occupancy")
+        occ_out: list[dict] = []
+        for item in raw_occ:
+            if not isinstance(item, dict):
+                raise HostsError("invalid peer summary.hidden_occupancy")
+            occ_port = _peer_int(item.get("port"), field="summary.hidden_occupancy.port", lo=1, hi=65535)
+            occ_status = item.get("status")
+            if not isinstance(occ_status, str) or occ_status not in _PEER_STATUSES:
+                raise HostsError("invalid peer summary.hidden_occupancy.status")
+            occ_out.append({"port": occ_port, "status": occ_status})
+        out["hidden_occupancy"] = occ_out
+    if "sources" in raw:
+        out["sources"] = _normalize_peer_sources(raw["sources"])
+    if "compose_diagnostics" in raw:
+        raw_diag = raw["compose_diagnostics"]
+        if not isinstance(raw_diag, list) or len(raw_diag) > _MAX_PEER_DIAGNOSTICS:
+            raise HostsError("invalid peer summary.compose_diagnostics")
+        diag_out: list[dict] = []
+        for item in raw_diag:
+            if not isinstance(item, dict):
+                raise HostsError("invalid peer compose_diagnostic")
+            code = item.get("code")
+            if not isinstance(code, str) or code not in _PEER_DIAG_CODES:
+                raise HostsError("invalid peer compose_diagnostic.code")
+            entry: dict = {"code": code}
+            if "file" in item:
+                entry["file"] = _peer_opt_str(item["file"], field="compose_diagnostic.file", max_len=512)
+            if "range" in item:
+                entry["range"] = _peer_opt_str(item["range"], field="compose_diagnostic.range", max_len=128)
+            if "limit" in item:
+                entry["limit"] = _peer_opt_int(item["limit"], field="compose_diagnostic.limit", lo=0)
+            diag_out.append(entry)
+        out["compose_diagnostics"] = diag_out
+    return out
+
+
+def normalize_peer_ports_response(raw) -> dict:
+    """Validate and normalize a proxied peer ``GET /api/ports`` payload."""
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer ports payload")
+    raw_ports = raw.get("ports")
+    if not isinstance(raw_ports, list) or len(raw_ports) > _MAX_PEER_PORTS:
+        raise HostsError("invalid peer ports list")
+    raw_summary = raw.get("summary")
+    if not isinstance(raw_summary, dict):
+        raise HostsError("invalid peer summary")
+    return {
+        "ports": [normalize_peer_port_row(row) for row in raw_ports],
+        "summary": _normalize_peer_summary(raw_summary),
+    }
+
+
+def normalize_peer_port_response(raw, *, expected_port: int) -> dict:
+    """Validate and normalize a proxied peer ``GET /api/ports/{port}`` payload."""
+    return normalize_peer_port_row(raw, expected_port=expected_port)
+
+
+def normalize_peer_health_response(raw) -> dict:
+    """Validate and normalize a proxied peer ``GET /api/health`` payload."""
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer health payload")
+    status = raw.get("status")
+    if not isinstance(status, str) or status not in _PEER_HEALTH_STATUSES:
+        raise HostsError("invalid peer health status")
+    out: dict = {"status": status}
+    if "version" in raw:
+        out["version"] = _peer_str(raw["version"], field="health.version", max_len=64)
+    if "auth_required" in raw:
+        out["auth_required"] = _peer_bool(raw["auth_required"], field="health.auth_required")
+    if "scanners" in raw:
+        scanners = raw["scanners"]
+        if not isinstance(scanners, dict):
+            raise HostsError("invalid peer health.scanners")
+        sc_out: dict = {}
+        for key in ("proc", "docker", "compose"):
+            if key in scanners:
+                sc_out[key] = _peer_bool(scanners[key], field=f"health.scanners.{key}")
+        if "listen_source" in scanners:
+            src = scanners["listen_source"]
+            if not isinstance(src, str) or src not in _PEER_LISTEN_SOURCES:
+                raise HostsError("invalid peer health.scanners.listen_source")
+            sc_out["listen_source"] = src
+        out["scanners"] = sc_out
+    if "occupancy" in raw:
+        occ = raw["occupancy"]
+        if not isinstance(occ, dict):
+            raise HostsError("invalid peer health.occupancy")
+        occ_out: dict = {}
+        for key in ("ready", "initialized", "stale", "compose_incomplete", "compose_truncated"):
+            if key in occ:
+                occ_out[key] = _peer_bool(occ[key], field=f"health.occupancy.{key}")
+        if "scan_age_seconds" in occ:
+            age = occ["scan_age_seconds"]
+            if age is not None:
+                if (
+                    isinstance(age, bool)
+                    or not isinstance(age, (int, float))
+                    or not math.isfinite(age)
+                    or age < 0
+                ):
+                    raise HostsError("invalid peer health.occupancy.scan_age_seconds")
+            occ_out["scan_age_seconds"] = age
+        if "compose_files_scanned" in occ:
+            occ_out["compose_files_scanned"] = _peer_int(
+                occ["compose_files_scanned"], field="health.occupancy.compose_files_scanned", lo=0,
+            )
+        if "sources" in occ:
+            occ_out["sources"] = _normalize_peer_sources(occ["sources"])
+        out["occupancy"] = occ_out
+    if "degradations" in raw:
+        raw_degs = raw["degradations"]
+        if not isinstance(raw_degs, list) or len(raw_degs) > 100:
+            raise HostsError("invalid peer health.degradations")
+        degs_out: list[dict] = []
+        for event in raw_degs[-_MAX_PEER_DEGRADATIONS:]:
+            if not isinstance(event, dict):
+                raise HostsError("invalid peer health degradation entry")
+            entry: dict = {
+                "source": _peer_str(event.get("source"), field="health.degradation.source", max_len=64),
+                "reason": _peer_str(event.get("reason"), field="health.degradation.reason", max_len=256),
+            }
+            if "scope" in event:
+                entry["scope"] = _peer_str(event["scope"], field="health.degradation.scope", max_len=256)
+            if "ts" in event:
+                entry["ts"] = _peer_int(event["ts"], field="health.degradation.ts", lo=0)
+            degs_out.append(entry)
+        out["degradations"] = degs_out
+    return out
+
+
+def normalize_peer_history_response(raw, *, expected_port: int) -> dict:
+    """Validate and normalize a proxied peer ``GET /api/ports/{port}/history`` payload."""
+    if not isinstance(raw, dict):
+        raise HostsError("invalid peer history payload")
+    port = _peer_int(raw.get("port"), field="history.port", lo=1, hi=65535)
+    if port != expected_port:
+        raise HostsError("peer history port mismatch")
+    raw_events = raw.get("events")
+    if not isinstance(raw_events, list):
+        raise HostsError("invalid peer history events")
+    retained = raw_events[-_MAX_PEER_HISTORY_EVENTS:] if len(raw_events) > _MAX_PEER_HISTORY_EVENTS else raw_events
+    events_out: list[dict] = []
+    for event in retained:
+        if not isinstance(event, dict):
+            raise HostsError("invalid peer history event")
+        state = event.get("state")
+        if not isinstance(state, str) or state not in _PEER_HISTORY_STATES:
+            raise HostsError("invalid peer history event.state")
+        entry: dict = {"state": state}
+        if "ts" in event:
+            entry["ts"] = _peer_int(event["ts"], field="history.event.ts", lo=0)
+        if "holders" in event:
+            entry["holders"] = _peer_str_list(
+                event["holders"], field="history.event.holders", max_items=64, max_len=256,
+            )
+        events_out.append(entry)
+    return {"port": port, "events": events_out}

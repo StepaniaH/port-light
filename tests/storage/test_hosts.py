@@ -58,6 +58,11 @@ def test_origin_url_strips_to_scheme_host_port(url, origin):
         "http://",
         "http://[::ffff:169.254.169.254]/",
         "http://[::ffff:169.254.169.254%eth0]/",
+        "http://100.100.100.200/",
+        "http://[::ffff:100.100.100.200]/",
+        "http://[fd00:ec2::254]/",
+        "http://[fd00:ec2::254%eth0]/",
+        "http://[fd00:0ec2:0000:0000:0000:0000:0000:0254]:80/",
         "http://[2606:4700:4700::1111%eth0]:2100",
     ],
 )
@@ -68,7 +73,8 @@ def test_origin_url_rejects_ssrf_and_public_ips(url):
 
 @pytest.mark.parametrize("addresses", [
     ["8.8.8.8"], ["10.0.0.2", "8.8.8.8"], ["169.254.169.254"],
-    ["::ffff:169.254.169.254"], [],
+    ["::ffff:169.254.169.254"], ["100.100.100.200"], ["fd00:ec2::254"],
+    ["10.0.0.2", "fd00:ec2::254"], [],
 ])
 def test_peer_dns_rejects_any_disallowed_answer(monkeypatch, addresses):
     monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: [
@@ -509,10 +515,14 @@ def test_peer_proxy_gates_hidden_ports_history_and_health_scopes(tmp_path, monke
             return 404, None, None
         if path == "/api/ports/8080":
             return 200, {"port": 8080, "status": "used", "is_hidden": False}, None
+        if path == "/api/ports/8097":
+            return 200, {"port": 8097, "status": "free", "is_hidden": False}, None
         if path == "/api/ports/8096/history":
             return 200, {"port": 8096, "events": [{"state": "used"}]}, None
         if path == "/api/ports/8080/history":
             return 200, {"port": 8080, "events": [{"state": "used"}]}, None
+        if path == "/api/ports/8097/history":
+            return 200, {"port": 8097, "events": []}, None
         return 404, None, None
 
     monkeypatch.setattr(hosts, "fetch_peer_json", fake_fetch)
@@ -522,6 +532,8 @@ def test_peer_proxy_gates_hidden_ports_history_and_health_scopes(tmp_path, monke
     assert seen_queries[-1] == ("/api/ports", {"include_hidden": "false"})
     assert [row["port"] for row in locked.json()["ports"]] == [8080]
     assert locked.json()["summary"]["hidden_locked"] is True
+    assert locked.json()["summary"]["hidden"] == 0
+    assert locked.json()["summary"]["free"] == 101
     assert locked.json()["summary"]["hidden_ports"] == []
     assert locked.json()["summary"]["hidden_occupancy"] == []
     assert "compose_diagnostics" not in locked.json()["summary"]
@@ -537,6 +549,8 @@ def test_peer_proxy_gates_hidden_ports_history_and_health_scopes(tmp_path, monke
     assert unlocked.json()["summary"]["hidden_ports"] == [8096]
 
     assert client.get(f"/api/hosts/{peer_id}/ports/8096", params={"include_hidden": True}).status_code == 404
+    assert client.get(f"/api/hosts/{peer_id}/ports/8097").status_code == 404
+    assert client.get(f"/api/hosts/{peer_id}/ports/8080").status_code == 200
     assert client.get(
         f"/api/hosts/{peer_id}/ports/8096",
         params={"include_hidden": True},
@@ -544,6 +558,7 @@ def test_peer_proxy_gates_hidden_ports_history_and_health_scopes(tmp_path, monke
     ).status_code == 200
 
     assert client.get(f"/api/hosts/{peer_id}/ports/8096/history").status_code == 404
+    assert client.get(f"/api/hosts/{peer_id}/ports/8097/history").status_code == 404
     assert client.get(f"/api/hosts/{peer_id}/ports/8080/history").status_code == 200
     assert client.get(
         f"/api/hosts/{peer_id}/ports/8096/history",
@@ -557,3 +572,251 @@ def test_peer_proxy_gates_hidden_ports_history_and_health_scopes(tmp_path, monke
         headers={"X-Hidden-Unlock": "unlock-secret"},
     ).json()
     assert auth_health["degradations"][0]["scope"] == "secret/compose.yml"
+
+
+@pytest.mark.parametrize("payload", [
+    {"ports": [{"port": "<img src=x onerror=alert(1)>", "status": "used"}], "summary": {"used": 1}},
+    {"ports": [{"port": 8080, "status": 'used" onclick="alert(1)'}], "summary": {"used": 1}},
+    {"ports": [{"port": 8080, "status": "used", "pid": "<svg onload=alert(1)>"}], "summary": {"used": 1}},
+    {"ports": [{"port": 8080, "status": "used", "containers": [{"name": "a", "container_port": "<script>"}]}], "summary": {"used": 1}},
+    {"ports": [{"port": 8080, "status": "used", "compose_configs": [{"service_name": "a", "container_port": "80<img/>"}]}], "summary": {"used": 1}},
+    {"ports": [], "summary": {"used": "<img src=x onerror=alert(1)>", "configured": 0, "free": 0}},
+    {"ports": [], "summary": {"used": 0, "configured": True, "free": 0}},
+    {"ports": [], "summary": {"used": 0, "configured": 0, "free": "bad"}},
+    {"ports": [], "summary": {"used": 0, "configured": 0, "free": None, "hidden": "1<script>"}},
+    {"ports": [], "summary": {"used": 0, "hidden_occupancy": [{"port": 80, "status": "evil"}]}},
+    {"ports": [], "summary": {"used": 0, "hidden_ports": ["80"]}},
+])
+def test_peer_proxy_rejects_malicious_ports_payloads(tmp_path, monkeypatch, payload):
+    client = _client(tmp_path, monkeypatch)
+    peer_id = client.put(
+        "/api/hosts",
+        json={"peers": [{"name": "Peer", "url": "http://10.0.0.2:2100"}]},
+    ).json()["peers"][0]["id"]
+    monkeypatch.setattr(hosts, "fetch_peer_json", lambda *_a, **_kw: (200, payload, '"etag"'))
+    res = client.get(f"/api/hosts/{peer_id}/ports")
+    assert res.status_code == 502
+
+
+def test_peer_proxy_validates_single_port_and_health_responses(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    peer_id = client.put(
+        "/api/hosts",
+        json={"peers": [{"name": "Peer", "url": "http://10.0.0.2:2100"}]},
+    ).json()["peers"][0]["id"]
+
+    for bad_port in (
+        {"port": 8081, "status": "used"},
+        {"port": "8080", "status": "used"},
+        {"port": 8080, "status": "used", "pid": "123"},
+        {"port": 8080, "status": "evil"},
+        {"port": 8080, "status": "used", "containers": [{"container_port": "80"}]},
+    ):
+        monkeypatch.setattr(hosts, "fetch_peer_json", lambda *_a, _b=bad_port, **_kw: (200, _b, None))
+        assert client.get(f"/api/hosts/{peer_id}/ports/8080").status_code == 502
+
+    for bad_health in (
+        {"arbitrary": "untrusted"},
+        {"status": "<script>alert(1)</script>"},
+        {"status": "ok", "scanners": {"docker": "yes"}},
+        {"status": "ok", "scanners": {"listen_source": "<img/>"}},
+        {"status": "ok", "degradations": "not-a-list"},
+    ):
+        monkeypatch.setattr(hosts, "fetch_peer_json", lambda *_a, _b=bad_health, **_kw: (200, _b, None))
+        assert client.get(f"/api/hosts/{peer_id}/health").status_code == 502
+
+    monkeypatch.setattr(
+        hosts,
+        "fetch_peer_json",
+        lambda *_a, **_kw: (
+            200,
+            {"status": "ok", "scanners": {"docker": True, "extra": "drop"}, "untrusted": {"x": 1}},
+            '"raw-etag"',
+        ),
+    )
+    sanitized = client.get(f"/api/hosts/{peer_id}/health")
+    assert sanitized.status_code == 200
+    assert sanitized.json() == {"status": "ok", "scanners": {"docker": True}}
+    assert "etag" not in sanitized.headers
+
+
+def test_env_peers_work_in_auto_mode_and_keep_deterministic_ids_and_credentials(tmp_path, monkeypatch):
+    from backend import main as main_mod
+    from backend.compose_scanner import ComposeScan
+
+    monkeypatch.setattr(main_mod, "scan_containers", lambda: [])
+    monkeypatch.setattr(main_mod, "scan_listening_ports", lambda **_kw: [])
+    monkeypatch.setattr(main_mod, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
+
+    peers_env = json.dumps([
+        {"name": "Box", "url": "http://192.168.1.9:2100", "username": "u", "password": "pw"},
+    ])
+    client = _client(tmp_path, monkeypatch, PORT_LIGHT_PEERS=peers_env)
+
+    first = client.get("/api/hosts").json()["peers"]
+    second = client.get("/api/hosts").json()["peers"]
+    assert len(first) == 1
+    assert first[0]["name"] == "Box"
+    assert first[0]["id"] == second[0]["id"]
+    peer_id = first[0]["id"]
+
+    # Unrelated settings/manual writes must not write an empty "peers" key that hides env fallback.
+    assert client.put("/api/settings", json={"host_name": "Hub"}).status_code == 200
+    assert client.post("/api/manual-ports", json={"port": 44000, "label": "local"}).status_code == 200
+    assert client.get("/api/hosts").json()["peers"][0]["id"] == peer_id
+
+    seen_auth = []
+
+    def fake_fetch(peer, path, query, if_none_match=None):
+        seen_auth.append((path, peer.get("username"), peer.get("password")))
+        if path == "/api/health":
+            return 200, {"status": "ok"}, None
+        return 200, {"ports": [], "summary": {
+            "hidden_locked": False, "compose_incomplete": False,
+            "compose_truncated": False, "scan_complete": True,
+        }}, None
+
+    monkeypatch.setattr(hosts, "fetch_peer_json", fake_fetch)
+    assert client.get(f"/api/hosts/{peer_id}/health").status_code == 200
+    suggest_res = client.get("/api/ports/suggest", params={"scope": "all"})
+    assert suggest_res.status_code == 200
+    assert suggest_res.json()["scope"] == "all:1/1"
+    assert ("/api/health", "u", "pw") in seen_auth
+    assert ("/api/ports", "u", "pw") in seen_auth
+
+    # Same deterministic ID & credential lookup holds in explicit env mode too.
+    monkeypatch.setenv("PORT_LIGHT_SETTINGS_SOURCE", "env")
+    env_first = client.get("/api/hosts").json()["peers"][0]["id"]
+    env_second = client.get("/api/hosts").json()["peers"][0]["id"]
+    assert env_first == env_second == peer_id
+    assert client.get(f"/api/hosts/{env_first}/health").status_code == 200
+    assert client.get("/api/ports/suggest", params={"scope": "all"}).json()["scope"] == "all:1/1"
+
+
+def test_peer_proxy_validates_history_and_compose_publish_mode(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    peer_id = client.put(
+        "/api/hosts",
+        json={"peers": [{"name": "Peer", "url": "http://10.0.0.2:2100"}]},
+    ).json()["peers"][0]["id"]
+
+    for bad_history in (
+        {"port": 8081, "events": []},
+        {"port": "8080", "events": []},
+        {"port": 8080, "events": "not-a-list"},
+        {"port": 8080, "events": [{"ts": 1, "state": "constructor", "holders": []}]},
+        {"port": 8080, "events": [{"ts": -1, "state": "used", "holders": []}]},
+        {"port": 8080, "events": [{"ts": 1, "state": "used", "holders": [123]}]},
+    ):
+        monkeypatch.setattr(hosts, "fetch_peer_json", lambda *_a, _b=bad_history, **_kw: (200, _b, None))
+        assert client.get(f"/api/hosts/{peer_id}/ports/8080/history").status_code == 502
+
+    monkeypatch.setattr(
+        hosts,
+        "fetch_peer_json",
+        lambda *_a, **_kw: (
+            200,
+            {"port": 8080, "events": [{"ts": 100, "state": "used", "holders": ["nginx"], "extra": 1}], "x": 2},
+            '"raw-etag"',
+        ),
+    )
+    ok_hist = client.get(f"/api/hosts/{peer_id}/ports/8080/history")
+    assert ok_hist.status_code == 200
+    assert ok_hist.json() == {"port": 8080, "events": [{"ts": 100, "state": "used", "holders": ["nginx"]}]}
+    assert "etag" not in ok_hist.headers
+
+    monkeypatch.setattr(
+        hosts,
+        "fetch_peer_json",
+        lambda *_a, **_kw: (
+            200,
+            {"port": 8080, "status": "configured", "compose_configs": [{"service_name": "web", "publish_mode": "evil"}]},
+            None,
+        ),
+    )
+    assert client.get(f"/api/hosts/{peer_id}/ports/8080").status_code == 502
+
+    monkeypatch.setattr(
+        hosts,
+        "fetch_peer_json",
+        lambda *_a, **_kw: (
+            200,
+            {"port": 8080, "status": "configured", "compose_configs": [{"service_name": "web", "publish_mode": "host"}]},
+            None,
+        ),
+    )
+    ok_port = client.get(f"/api/hosts/{peer_id}/ports/8080")
+    assert ok_port.status_code == 200
+    assert ok_port.json()["compose_configs"][0]["publish_mode"] == "host"
+
+
+def test_env_peer_first_rename_preserves_password_and_url_change_requires_credentials(tmp_path, monkeypatch):
+    from backend import main as main_mod
+    from backend.compose_scanner import ComposeScan
+
+    monkeypatch.setattr(main_mod, "scan_containers", lambda: [])
+    monkeypatch.setattr(main_mod, "scan_listening_ports", lambda **_kw: [])
+    monkeypatch.setattr(main_mod, "scan_compose_tree", lambda *_a, **_k: ComposeScan())
+
+    peers_env = json.dumps([
+        {"name": "Box", "url": "http://192.168.1.9:2100", "username": "u", "password": "pw"},
+    ])
+    client = _client(tmp_path, monkeypatch, PORT_LIGHT_PEERS=peers_env)
+    peer_id = client.get("/api/hosts").json()["peers"][0]["id"]
+
+    # Changing an env peer's URL before the first save still requires supplying a password.
+    bad_url = client.put("/api/hosts", json={
+        "peers": [{"id": peer_id, "name": "Box", "url": "http://192.168.1.10:2100", "username": "u"}],
+    })
+    assert bad_url.status_code == 400
+    assert bad_url.json()["detail"] == "credentials_required"
+
+    # Renaming an env peer in auto mode with password omitted preserves the Basic Auth secret.
+    renamed = client.put("/api/hosts", json={
+        "peers": [{"id": peer_id, "name": "Renamed Box", "url": "http://192.168.1.9:2100", "username": "u"}],
+    })
+    assert renamed.status_code == 200
+    assert renamed.json()["peers"][0]["name"] == "Renamed Box"
+    assert renamed.json()["peers"][0]["has_auth"] is True
+    assert hosts.get_peer(peer_id)["password"] == "pw"
+
+    seen_auth = []
+
+    def fake_fetch(peer, path, query, if_none_match=None):
+        seen_auth.append((path, peer.get("username"), peer.get("password")))
+        if path == "/api/health":
+            return 200, {"status": "ok"}, None
+        return 200, {"ports": [], "summary": {
+            "hidden_locked": False, "compose_incomplete": False,
+            "compose_truncated": False, "scan_complete": True,
+        }}, None
+
+    monkeypatch.setattr(hosts, "fetch_peer_json", fake_fetch)
+    assert client.get(f"/api/hosts/{peer_id}/health").status_code == 200
+    suggest_res = client.get("/api/ports/suggest", params={"scope": "all"})
+    assert suggest_res.status_code == 200
+    assert suggest_res.json()["scope"] == "all:1/1"
+    assert ("/api/health", "u", "pw") in seen_auth
+    assert ("/api/ports", "u", "pw") in seen_auth
+
+
+def test_peer_proxy_truncates_large_history_to_newest_5000_events(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    peer_id = client.put(
+        "/api/hosts",
+        json={"peers": [{"name": "Peer", "url": "http://10.0.0.2:2100"}]},
+    ).json()["peers"][0]["id"]
+
+    events = [{"ts": i, "state": "used", "holders": []} for i in range(5001)]
+    monkeypatch.setattr(
+        hosts,
+        "fetch_peer_json",
+        lambda *_a, **_kw: (200, {"port": 8080, "events": events}, '"huge-hist-etag"'),
+    )
+    res = client.get(f"/api/hosts/{peer_id}/ports/8080/history")
+    assert res.status_code == 200
+    assert "etag" not in res.headers
+    returned = res.json()["events"]
+    assert len(returned) == 5000
+    assert returned[0]["ts"] == 1
+    assert returned[-1]["ts"] == 5000

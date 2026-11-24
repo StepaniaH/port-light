@@ -114,17 +114,25 @@ def get_host_health(host_id: str, request: Request) -> Response:
         return JSONResponse(health(request))
     peer = _resolve_peer(host_id)
     status, data, etag = hosts.fetch_peer_json(peer, "/api/health", {}, None)
-    if status == 200 and isinstance(data, dict) and not runtime.request_may_see_hidden(request):
-        if isinstance(data.get("degradations"), list):
-            data = {
-                **data,
-                "degradations": [
-                    {key: value for key, value in event.items() if key != "scope"}
-                    if isinstance(event, dict) else event
-                    for event in data["degradations"]
-                ],
-            }
-        etag = None
+    if status == 200 and data is not None:
+        try:
+            normalized = hosts.normalize_peer_health_response(data)
+        except hosts.HostsError as exc:
+            raise HTTPException(status_code=502, detail="invalid peer response") from exc
+        if normalized != data:
+            etag = None
+        data = normalized
+        if not runtime.request_may_see_hidden(request):
+            if isinstance(data.get("degradations"), list):
+                data = {
+                    **data,
+                    "degradations": [
+                        {key: value for key, value in event.items() if key != "scope"}
+                        if isinstance(event, dict) else event
+                        for event in data["degradations"]
+                    ],
+                }
+            etag = None
     return _peer_response(status, data, etag)
 
 
@@ -148,26 +156,45 @@ def get_host_ports(
     peer = _resolve_peer(host_id)
     if_none_match = request.headers.get("if-none-match") if may_see else None
     status, data, etag = hosts.fetch_peer_json(peer, "/api/ports", query, if_none_match)
-    if status == 200 and isinstance(data, dict):
-        redacted = False
-        if not allow_hidden and isinstance(data.get("ports"), list):
+    if status == 200 and data is not None:
+        try:
+            normalized = hosts.normalize_peer_ports_response(data)
+        except hosts.HostsError as exc:
+            raise HTTPException(status_code=502, detail="invalid peer response") from exc
+        redacted = normalized != data
+        data = normalized
+        if not allow_hidden:
             filtered = [
                 row for row in data["ports"]
-                if not (isinstance(row, dict) and row.get("is_hidden"))
+                if not row.get("is_hidden")
             ]
             if len(filtered) != len(data["ports"]):
                 redacted = True
             data = {**data, "ports": filtered}
         if not may_see:
             redacted = True
-            if isinstance(data.get("summary"), dict):
-                summary = dict(data["summary"])
-                summary["hidden_ports"] = []
-                summary["hidden_occupancy"] = []
-                summary.pop("compose_diagnostics", None)
-                if runtime.hidden_ports_withheld():
-                    summary["hidden_locked"] = True
-                data = {**data, "summary": summary}
+            summary = dict(data["summary"])
+            prev_hidden = summary.get("hidden")
+            summary["hidden"] = 0
+            if isinstance(summary.get("free"), int):
+                if (
+                    summary.get("scan_complete") is True
+                    and isinstance(summary.get("range_start"), int)
+                    and isinstance(summary.get("range_end"), int)
+                ):
+                    r_start, r_end = summary["range_start"], summary["range_end"]
+                    visible_in_range = sum(
+                        1 for row in data["ports"] if r_start <= row["port"] <= r_end
+                    )
+                    summary["free"] = max(0, r_end - r_start + 1 - visible_in_range)
+                elif isinstance(prev_hidden, int) and prev_hidden > 0:
+                    summary["free"] = min(65535, summary["free"] + prev_hidden)
+            summary["hidden_ports"] = []
+            summary["hidden_occupancy"] = []
+            summary.pop("compose_diagnostics", None)
+            if runtime.hidden_ports_withheld():
+                summary["hidden_locked"] = True
+            data = {**data, "summary": summary}
         if redacted:
             etag = None
     return _peer_response(status, data, etag)
@@ -184,12 +211,22 @@ def get_host_port(
         raise HTTPException(status_code=400, detail="port out of range")
     if host_id == hosts.LOCAL_ID:
         return JSONResponse(get_port(port, request, include_hidden))
-    allow_hidden = bool(include_hidden and runtime.request_may_see_hidden(request))
+    may_see = runtime.request_may_see_hidden(request)
+    locked = runtime.hidden_ports_withheld() and not may_see
+    allow_hidden = bool(include_hidden and may_see)
     query = {"include_hidden": "true" if allow_hidden else "false"}
     peer = _resolve_peer(host_id)
     status, data, etag = hosts.fetch_peer_json(peer, f"/api/ports/{port}", query, None)
-    if status == 200 and isinstance(data, dict) and not allow_hidden and data.get("is_hidden"):
-        raise HTTPException(status_code=404, detail="not found")
+    if status == 200 and data is not None:
+        try:
+            normalized = hosts.normalize_peer_port_response(data, expected_port=port)
+        except hosts.HostsError as exc:
+            raise HTTPException(status_code=502, detail="invalid peer response") from exc
+        if normalized != data:
+            etag = None
+        data = normalized
+        if (not allow_hidden and data.get("is_hidden")) or (locked and data.get("status") == "free"):
+            raise HTTPException(status_code=404, detail="not found")
     return _peer_response(status, data, etag, not_found_ok=True)
 
 
@@ -224,9 +261,21 @@ def host_port_history(host_id: str, port: int, request: Request,
             raise HTTPException(status_code=502, detail="peer authentication failed")
         if check_status != 200 or not isinstance(check_data, dict):
             raise HTTPException(status_code=502, detail="peer unreachable")
-        if check_data.get("is_hidden"):
+        try:
+            check_data = hosts.normalize_peer_port_response(check_data, expected_port=port)
+        except hosts.HostsError as exc:
+            raise HTTPException(status_code=502, detail="invalid peer response") from exc
+        if check_data.get("is_hidden") or check_data.get("status") == "free":
             raise HTTPException(status_code=404, detail="not found")
     status, data, etag = hosts.fetch_peer_json(
         peer, f"/api/ports/{port}/history", {"hours": str(hours)}, None,
     )
+    if status == 200 and data is not None:
+        try:
+            normalized = hosts.normalize_peer_history_response(data, expected_port=port)
+        except hosts.HostsError as exc:
+            raise HTTPException(status_code=502, detail="invalid peer response") from exc
+        if normalized != data:
+            etag = None
+        data = normalized
     return _peer_response(status, data, etag, not_found_ok=True)

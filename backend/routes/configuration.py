@@ -40,10 +40,13 @@ def list_port_rules() -> dict:
 
 
 @router.put("/api/port-rules")
-def replace_port_rules(body: port_rules.RuleDocument) -> dict:
+def replace_port_rules(body: dict = Body(...)) -> dict:
     if app_settings.settings_readonly():
         raise HTTPException(status_code=403, detail="settings are read-only")
-    rules = [r.model_dump() for r in body.rules]
+    try:
+        rules = port_rules.validate_rule_update(body, port_store.get_port_rules())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     port_store.set_port_rules(rules)
     runtime._monitor.state_changed()
     return {"rules": rules}

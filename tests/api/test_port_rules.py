@@ -127,3 +127,120 @@ def test_rules_match_project_dir_before_project_name_and_reject_traversal(empty_
     assert distinct.status_code == 200
     assert client.get('/api/ports/30050').json()['rule_violations'][0]['project'] == 'prod/wiki'
     assert 'rule_violations' not in client.get('/api/ports/30060').json()
+    assert client.put('/api/port-rules', json={'rules': [rule(projects=['v1..v2'])]}).status_code == 200
+
+
+def test_legacy_port_rules_survive_upgrade_and_allow_api_repair(empty_scan, tmp_path):
+    from backend import degradations
+
+    scan = ComposeScan(ports=[
+        ComposePort(
+            port=30050, compose_file='apps/wiki/compose.yaml',
+            project_dir='apps/wiki', project_name='wiki', service_name='web', container_port=80,
+        ),
+    ])
+    import backend.main as main_mod
+    original_scan = main_mod.scan_compose_tree
+    main_mod.scan_compose_tree = lambda *a, **kw: scan
+    try:
+        path = tmp_path / 'port_light.json'
+        path.write_text(json.dumps({
+            'port_rules': [
+                rule(name='legacy-rel', start=30000, end=30010, projects=['./apps/wiki', 'apps/blog/']),
+                rule(name='legacy-abs', start=31000, end=31010, projects=['/srv/media', 'win\\app', '../legacy']),
+            ],
+        }))
+        client = TestClient(main_mod.app)
+        assert client.get('/api/ports').status_code == 200
+        assert client.get('/api/settings').status_code == 200
+        rules_res = client.get('/api/port-rules')
+        assert rules_res.status_code == 200
+        assert rules_res.json()['rules'] == [
+            {'name': 'legacy-rel', 'start': 30000, 'end': 30010, 'projects': ['apps/wiki', 'apps/blog']},
+            {'name': 'legacy-abs', 'start': 31000, 'end': 31010, 'projects': ['/srv/media', 'win\\app', '../legacy']},
+        ]
+        assert client.get('/api/ports/30050').json()['rule_violations'][0]['rule'] == 'legacy-rel'
+
+        # Cross-rule collision during legacy normalization keeps the conflicting raw form safely.
+        path.write_text(json.dumps({
+            'port_rules': [
+                rule(name='r1', start=30000, end=30010, projects=['./apps/wiki']),
+                rule(name='r2', start=31000, end=31010, projects=['apps/wiki']),
+            ],
+        }))
+        port_store._FILE_MEMO.clear()
+        colliding = client.get('/api/port-rules')
+        assert colliding.status_code == 200
+        assert colliding.json()['rules'][0]['projects'] == ['./apps/wiki']
+
+        # Order-independent alias normalization: two dirty rules claiming the same canonical
+        # project keep their raw forms in either rule order.
+        pair = [
+            rule(name='r1', start=30000, end=30010, projects=['./apps/wiki']),
+            rule(name='r2', start=31000, end=31010, projects=['apps/wiki/']),
+        ]
+        for ordered in (pair, list(reversed(pair))):
+            path.write_text(json.dumps({'port_rules': ordered}))
+            port_store._FILE_MEMO.clear()
+            res = client.get('/api/port-rules')
+            assert res.status_code == 200
+            by_name = {item['name']: item['projects'] for item in res.json()['rules']}
+            assert by_name == {'r1': ['./apps/wiki'], 'r2': ['apps/wiki/']}
+
+        # Legacy project names with tabs load with 200 rather than 503.
+        path.write_text(json.dumps({
+            'port_rules': [rule(name='tabbed', start=30000, end=30010, projects=['app\tmedia'])],
+        }))
+        port_store._FILE_MEMO.clear()
+        tabbed = client.get('/api/port-rules')
+        assert tabbed.status_code == 200
+        assert tabbed.json()['rules'][0]['projects'] == ['app\tmedia']
+        assert client.put('/api/port-rules', json={
+            'rules': [rule(name='tabbed', start=30000, end=30010, projects=['app-media'])],
+        }).status_code == 200
+
+        # Sequential UI repair when 2+ non-normalizable legacy rules exist: fixing or deleting
+        # one rule preserves untouched legacy rules while new invalid paths still return 422.
+        path.write_text(json.dumps({
+            'port_rules': [
+                rule(name='r1', start=30000, end=30010, projects=['/srv/a']),
+                rule(name='r2', start=31000, end=31010, projects=['win\\b']),
+            ],
+        }))
+        port_store._FILE_MEMO.clear()
+        assert client.put('/api/port-rules', json={
+            'rules': [
+                rule(name='r1', start=30000, end=30010, projects=['apps/a']),
+                rule(name='r2', start=31000, end=31010, projects=['win\\b']),
+            ],
+        }).status_code == 200
+        assert client.put('/api/port-rules', json={
+            'rules': [
+                rule(name='r1', start=30000, end=30010, projects=['/srv/new']),
+                rule(name='r2', start=31000, end=31010, projects=['win\\b']),
+            ],
+        }).status_code == 422
+        assert client.put('/api/port-rules', json={
+            'rules': [
+                rule(name='r1', start=30000, end=30010, projects=['win\\b']),
+                rule(name='r2', start=31000, end=31010, projects=['apps/b']),
+            ],
+        }).status_code == 422
+        assert client.put('/api/port-rules', json={
+            'rules': [rule(name='r2', start=31000, end=31010, projects=['win\\b'])],
+        }).status_code == 200
+
+        cleared = client.put('/api/port-rules', json={'rules': []})
+        assert cleared.status_code == 200
+        assert client.get('/api/port-rules').json()['rules'] == []
+
+        # Truly corrupt structure still fails closed and records a store degradation.
+        degradations.reset()
+        corrupt = json.dumps({'port_rules': [{'name': 'bad'}]})
+        path.write_text(corrupt)
+        port_store._FILE_MEMO.clear()
+        assert client.get('/api/port-rules').status_code == 503
+        assert path.read_text() == corrupt
+        assert any(d['source'] == 'store' for d in degradations.recent())
+    finally:
+        main_mod.scan_compose_tree = original_scan

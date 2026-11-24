@@ -82,7 +82,7 @@ def store_generation() -> int:
 def store_revision() -> tuple:
     try:
         st = _data_file().stat()
-        return (_generation, st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+        return (_generation, st.st_dev, st.st_ino, st.st_mtime_ns, st.st_ctime_ns, st.st_size)
     except FileNotFoundError:
         return (_generation, None, None)
     except OSError as exc:
@@ -107,15 +107,16 @@ def _read_error() -> StoreReadError:
 
 def _load() -> dict:
     """Load user data; only a missing file represents an empty store."""
-    empty = {"manual_ports": [], "hidden_ports": [], "peers": []}
+    empty = {"manual_ports": [], "hidden_ports": []}
     f = _data_file()
     try:
         st = f.stat()
     except FileNotFoundError:
+        _FILE_MEMO.pop(str(f), None)
         return empty
     except OSError as exc:
         raise _read_error() from exc
-    token = (st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+    token = (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_ctime_ns, st.st_size, _generation)
     memo = _FILE_MEMO.get(str(f))
     if memo is not None and memo[0] == token:
         return copy.deepcopy(memo[1])
@@ -145,11 +146,11 @@ def _load() -> dict:
            for key, value in data.get("reservation_requests", {}).items()):
         raise _read_error()
     if "port_rules" in data:
-        from .port_rules import RuleDocument
+        from .port_rules import load_stored_rules
         try:
-            document = RuleDocument(rules=data["port_rules"])
-            data["port_rules"] = [rule.model_dump() for rule in document.rules]
+            data["port_rules"] = load_stored_rules(data["port_rules"])
         except ValueError as exc:
+            degradations.report("store", "port_light.json", "invalid port rules in data file")
             raise StoreReadError("invalid port rules in data file") from exc
     _FILE_MEMO[str(f)] = (token, data)
     return copy.deepcopy(data)
@@ -171,6 +172,7 @@ def _save(data: dict) -> None:
         tmp_name = None
         global _generation
         _generation += 1
+        _FILE_MEMO.pop(str(target), None)
     except OSError as exc:
         if tmp_name:
             try:
@@ -197,8 +199,11 @@ def _save(data: dict) -> None:
 def _entry_port(entry) -> int | None:
     if not isinstance(entry, dict):
         return None
+    raw = entry.get("port")
+    if isinstance(raw, bool):
+        return None
     try:
-        port = int(entry.get("port"))
+        port = int(raw)
     except (TypeError, ValueError):
         return None
     if port < 1 or port > 65535:
@@ -206,13 +211,19 @@ def _entry_port(entry) -> int | None:
     return port
 
 
+def _normalize_machine(machine: str | None) -> str:
+    return str(machine or "").strip() or "localhost"
+
+
 def _entry_machine(entry) -> str:
     if not isinstance(entry, dict):
         return "localhost"
-    return str(entry.get("machine") or "localhost")
+    return _normalize_machine(entry.get("machine"))
 
 
 def _hidden_port(value) -> int | None:
+    if isinstance(value, bool):
+        return None
     try:
         port = int(value)
     except (TypeError, ValueError):
@@ -430,13 +441,6 @@ def allocate_reservation(taken: set[int], start: int, end: int, parameters: dict
         if existing is not None:
             return existing, False
         _drop_expired_locked(data)
-        records = data.setdefault("reservation_requests", {})
-        active = {entry.get("request_hash") for entry in data.get("manual_ports", [])}
-        for digest, record in list(records.items()):
-            if digest not in active and record["created_at"] < _now() - REQUEST_RETENTION_S:
-                del records[digest]
-        if len(records) >= MAX_RESERVATION_REQUESTS:
-            raise ReservationConflict("reservation recovery capacity reached; release unused reservations and wait until inactive receipts are seven days old")
         if parameters.get("rule"):
             from .port_rules import allocation_range
             try:
@@ -450,11 +454,41 @@ def allocate_reservation(taken: set[int], start: int, end: int, parameters: dict
         picks = [port for port in range(start, end + 1) if port not in occupied][:parameters["count"]]
         if parameters["require_count"] and len(picks) != parameters["count"]:
             picks = []
+        if not picks:
+            return {
+                "ports": [],
+                "reserved": [],
+                "failed": [],
+                "reservations": [],
+                "expires_at": None,
+                "scope": scope,
+                "range": {"start": start, "end": end},
+            }, True
         entries = data.setdefault("manual_ports", [])
-        if picks and len(entries) + len(picks) > MAX_MANUAL_PORTS:
+        if len(entries) + len(picks) > MAX_MANUAL_PORTS:
             raise ValueError(f"at most {MAX_MANUAL_PORTS} manual ports are allowed")
+        records = data.setdefault("reservation_requests", {})
+        now = _now()
+        active = {
+            entry.get("request_hash")
+            for entry in entries
+            if entry.get("request_hash")
+        }
+        for digest, record in list(records.items()):
+            if digest not in active and record["created_at"] < now - REQUEST_RETENTION_S:
+                del records[digest]
+        if len(records) >= MAX_RESERVATION_REQUESTS:
+            inactive_digests = sorted(
+                (digest for digest in records if digest not in active),
+                key=lambda digest: (records[digest]["created_at"], digest),
+            )
+            excess = len(records) - MAX_RESERVATION_REQUESTS + 1
+            for digest in inactive_digests[:excess]:
+                del records[digest]
+        if len(records) >= MAX_RESERVATION_REQUESTS:
+            raise ReservationConflict("reservation recovery capacity reached; release unused reservations first")
         ttl = parameters["ttl"]
-        expires_at = _now() + ttl if ttl is not None and picks else None
+        expires_at = now + ttl if ttl is not None else None
         digest = _request_hash(key)
         for port in picks:
             entry = {"port": port, "label": parameters["label"], "machine": "localhost",
@@ -465,7 +499,7 @@ def allocate_reservation(taken: set[int], start: int, end: int, parameters: dict
             entries.append(entry)
         result = {"ports": picks, "reserved": picks, "failed": [], "expires_at": expires_at,
                   "scope": scope, "range": {"start": start, "end": end}}
-        records[digest] = {"parameters": parameters, "result": result, "created_at": _now()}
+        records[digest] = {"parameters": parameters, "result": result, "created_at": now}
         _save(data)
         return _request_result(data, key), True
 
@@ -524,6 +558,7 @@ def add_manual_port(
     if type(port) is bool or not isinstance(port, int) or not (1 <= port <= 65535):
         raise ValueError("port out of range")
     _validate_manual_fields(label, machine)
+    machine = _normalize_machine(machine)
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
@@ -532,9 +567,10 @@ def add_manual_port(
         for entry in mp:
             if _entry_port(entry) is None:
                 continue
-            if _entry_port(entry) == port and _entry_machine(entry) == machine:
+            if _entry_port(entry) == port:
                 _require_manual(entry)
-                continue
+                if _entry_machine(entry) == machine:
+                    continue
             kept.append(entry)
         if len(kept) >= MAX_MANUAL_PORTS:
             raise ValueError(f"at most {MAX_MANUAL_PORTS} manual ports are allowed")
@@ -548,6 +584,7 @@ def add_manual_port(
 
 
 def remove_manual_port(port: int, machine: str = "localhost") -> bool:
+    machine = _normalize_machine(machine)
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
@@ -571,7 +608,8 @@ def remove_manual_port(port: int, machine: str = "localhost") -> bool:
 # ── Hidden ports ──────────────────────────────────────────────
 
 def get_hidden_ports() -> list[int]:
-    return _hidden_from(_load())
+    with _LOCK:
+        return _hidden_from(_load())
 
 
 def add_hidden_port(port: int) -> bool:
@@ -608,6 +646,7 @@ def remove_hidden_port(port: int) -> bool:
 
 def update_manual_port(port: int, label: str, machine: str = "localhost") -> dict | None:
     _validate_manual_fields(label, machine)
+    machine = _normalize_machine(machine)
     with _LOCK:
         data = _load()
         _drop_expired_locked(data)
@@ -631,9 +670,10 @@ def update_manual_port(port: int, label: str, machine: str = "localhost") -> dic
 
 
 def get_stored_settings() -> dict:
-    data = _load()
-    raw = data.get("settings")
-    return dict(raw) if isinstance(raw, dict) else {}
+    with _LOCK:
+        data = _load()
+        raw = data.get("settings")
+        return dict(raw) if isinstance(raw, dict) else {}
 
 
 def update_stored_settings(patch: dict) -> dict:
@@ -655,11 +695,13 @@ def update_stored_settings(patch: dict) -> dict:
 
 def peers_stored() -> bool:
     """True when the file has a ``peers`` key, including an empty list."""
-    return "peers" in _load()
+    with _LOCK:
+        return "peers" in _load()
 
 
 def get_peers() -> list[dict]:
-    data = _load()
+    with _LOCK:
+        data = _load()
     raw = data.get("peers")
     if not isinstance(raw, list):
         return []
