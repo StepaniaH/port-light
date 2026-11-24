@@ -116,20 +116,25 @@ Data lives below `PORT_LIGHT_DATA_DIR/analysis`:
   and file mode `0600`. The key is not application-encrypted; protect the data volume
   and backups. The API never returns its value or a partial key.
 - `state/analysis.sqlite3`: reports and bounded job receipts. Reports survive
-  restart but belong to their browser session. Clearing the session cookie or
-  switching browsers loses access through the UI. Export reports you need to keep.
+  restart and belong to their browser session (`Max-Age` 90 days, refreshed on
+  capture or recheck). Clearing the session cookie or switching browsers loses
+  access through the UI. Export reports you need to keep permanently.
 
 Every report read rechecks current access to its referenced resources. Hidden
-port protection, Basic Auth and same-origin mutation checks apply. Run one
-application worker per data directory.
+port protection, Basic Auth and same-origin mutation checks apply. Custom
+provider addresses reject cloud metadata/link-local addresses, unspecified or
+multicast addresses, and Port-Light's own loopback port; connection tests also
+require writable settings. Run one application worker per data directory.
 
 ## Limits and failure behavior
 
 A capture includes at most 1024 port numbers (up to 2048 TCP/UDP resource facts).
 Oversized scopes are rejected rather than silently truncated. Workbench reports
-have limits of 128 reports, 2 MiB each and 32 MiB total. Legacy single-port report
-limits are separate. At capacity, new saves are refused; existing data is not
-automatically deleted.
+have limits of 128 reports, 2 MiB each and 32 MiB total. When saving a new
+workbench report reaches the total count or byte limit, the oldest saved report
+is evicted automatically; oversized single reports are rejected. Temporary
+captures keep up to 32 entries in memory and evict the oldest non-running
+capture when full.
 
 AI receives at most 12 captured problems, 32 port/protocol states and 32 KiB of
 selected evidence. The preview discloses omitted states and problems. Names,
@@ -138,10 +143,10 @@ The provider still receives the API key as authentication and can see the Hub's
 network address. Review the payload and the provider's data policy before sending.
 
 Interrupted requests are not retried automatically; an upstream provider may
-already have billed a timed-out request. Temporary single-port previews and
-workbench captures expire after 10 minutes; finishing an AI attempt starts a new
-10-minute retention period. Expired entries are cleaned up every 30 seconds.
-Corrupt report databases are preserved, and storage errors do not stop scanning.
+already have billed a timed-out request. Temporary workbench captures expire
+after 10 minutes; finishing an AI attempt starts a new 10-minute retention
+period. Expired entries are cleaned up every 30 seconds. Corrupt report
+databases are preserved, and storage errors do not stop scanning.
 
 ## HTTP API
 
@@ -158,22 +163,20 @@ resources also require the current `X-Hidden-Unlock` header.
 | PUT / DELETE | `/settings/ai/connections/{id}` | Edit or delete one connection with its current `config_revision`. |
 | POST | `/settings/ai/active` | Select a saved `profile_id` with its current `config_revision`. |
 | PUT / DELETE | `/settings/ai` | Legacy API: edit the active connection or clear all connections. |
-| POST | `/settings/ai/test` | Test a saved or draft connection with explicit billing consent. |
+| POST | `/settings/ai/test` | Test a saved or draft connection with explicit billing consent (requires writable settings). |
 | GET | `/workbench/options` | Read available scopes and limits. |
 | POST | `/workbench/captures` | Capture observations and suggested checks. |
 | GET | `/workbench/captures/{id}` | Read a capture and its current status. |
 | POST | `/workbench/captures/{id}/ai` | Start one explicitly confirmed model request. |
 | POST | `/workbench/captures/{id}/cancel` | Cancel an attempt. |
-| GET / POST | `/workbench/reports` | List or save reports. |
-| GET | `/workbench/reports/{id}` | Read a saved report. |
+| GET / POST / DELETE | `/workbench/reports` | List, save, or clear the current session's workbench reports. |
+| GET / DELETE | `/workbench/reports/{id}` | Read or delete a saved report. |
 | GET | `/workbench/reports/{id}/export` | Download a saved report as JSON. |
 | POST | `/workbench/rechecks` | Compare new observations with a saved report. |
 
-The single-port API also provides `POST /analysis/previews`,
-`GET /analysis/{id}`, and `POST /analysis/{id}/start` or `/cancel`.
-`GET /analysis/{id}/report` exports a completed temporary result.
-Use `GET /reports` to list saved single-port reports, `POST /reports` to save one,
-and `GET /reports/{id}` or `/reports/{id}/export` to read or export it.
+Previously saved single-port reports remain readable, exportable, and deletable
+for their owning session via `GET /reports`, `DELETE /reports`,
+`GET /reports/{id}`, `GET /reports/{id}/export`, and `DELETE /reports/{id}`.
 
 Submitting the same attempt twice does not trigger a second provider request.
 Captures and reports are checked against the requesting session and current port

@@ -146,6 +146,7 @@ With Basic Auth or `HIDDEN_UNLOCK_PASSWORD` enabled, hidden ports require unlock
 | `WEBHOOK_URL` | unset | Opt-in webhook target (`http(s)` only). With `WEBHOOK_EVENTS=new_listener,conflict`, Port-Light POSTs `{event, port}` JSON. |
 | `WEBHOOK_SECRET` | unset | Sent as `X-Port-Light-Secret`. |
 | `WEBHOOK_EVENTS` | unset | Comma list: `new_listener`, `conflict`. |
+| `WEBHOOK_COOLDOWN_S` | `0` | Optional per-event/port cooldown in seconds after a port leaves `used` or `conflict` and re-arms. Env-only. |
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
 | `AGENT_TOKEN` | unset | When set, suggestions and reservation creation/recovery require a matching `X-Agent-Token` header. Env-only. |
 

@@ -233,9 +233,11 @@ POSTs fire-and-forget JSON per event:
 {"event": "new_listener", "port": 6379}
 ```
 
-Delivery has a 3s timeout and no retries; failures appear as degradation
-events on `/api/health`. `WEBHOOK_SECRET` adds an `X-Port-Light-Secret`
-header for the receiver to check.
+Delivery has a 3s timeout, no retries, and disables redirects and environment
+proxies; failures appear as degradation events on `/api/health`. Ports that
+stop listening or clear a conflict re-arm for future transitions, with an
+optional per-port cooldown configured via `WEBHOOK_COOLDOWN_S` (default `0`).
+`WEBHOOK_SECRET` adds an `X-Port-Light-Secret` header for the receiver to check.
 
 See the environment tables in the README for the full variable list.
 
@@ -253,8 +255,8 @@ above instead of guessing ports. The published image includes it at
 
 `port_light_client/mcp.py` is a dependency-free MCP stdio adapter over the same
 shared client as the CLI; `mcp/server.py` remains a compatibility entry point.
-It exposes eight tools: `doctor`, `suggest_ports`, `reserve_ports`, `check_port`,
-`list_occupancy`, `port_history`, `list_degradations`, `release_port`.
+It exposes nine tools: `doctor`, `suggest_ports`, `reserve_ports`, `check_port`,
+`list_occupancy`, `list_rules`, `port_history`, `list_degradations`, `release_port`.
 
 The `port-light-cli` package now also installs `port-light-mcp`. Both use
 Python 3.11+ without runtime dependencies. Use an absolute executable path in
@@ -262,8 +264,8 @@ GUI clients and set `PORT_LIGHT_URL` to the instance reachable from the agent's
 computer. A source checkout is no longer required for a separately installed
 MCP client. This entry point requires v0.8.4 or later; older wheels contain only the CLI.
 
-Use `port-light mcp-config --client codex` or `--client claude-code` to generate
-the correct registration format. `port-light verify` checks the actual adapter,
+Use `port-light mcp-config --client <codex|claude-code|cursor|vscode|gemini-cli>` to generate
+the registration format for your client. `port-light verify` checks the actual adapter,
 diagnostics and read-only agent gate without reserving ports. See the
 [AI setup guide](ai-setup.md) for client-specific installation and updates.
 
@@ -359,6 +361,6 @@ Available since v0.8.3. `GET /api/port-rules` returns the local rule document. `
 
 `GET /api/ports/suggest?rule=development&count=2` selects that rule’s range. `POST /api/reservations` accepts an optional `rule` field with the same semantics and still requires a retained `Idempotency-Key`. Numeric bounds may narrow the selected range. Unknown rules or bounds outside it return `400`; malformed rule documents return `422`.
 
-MCP `suggest_ports` accepts `rule`. `/api/meta` advertises `port_rules: 1`. Rules are stored in the existing data directory. Deleting a rule leaves active reservations and their recovery receipts intact.
+MCP `list_rules` lists configured rules, and `reserve_ports` / `suggest_ports` accept `rule`. Rule `projects` entries match relative Compose `project_dir` paths (such as `prod/wiki`) first and fall back to `project_name`. `/api/meta` advertises `port_rules: 1`. Rules are stored in the existing data directory. Deleting a rule leaves active reservations and their recovery receipts intact.
 
 `GET /api/reservations` lists local manual entries and reservations with public labels, machine names, optional expiry, and `is_reservation`. Hidden-port authorization filters this list; request keys and release tokens are never returned. Token-based release continues to use `DELETE /api/reservations/{port}`.

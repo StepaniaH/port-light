@@ -75,24 +75,30 @@ export PORT_LIGHT_AGENT_TOKEN='agent-token'
 
 port-light doctor
 port-light check 5432
+port-light list --start 8000 --end 8999
+port-light rules
 port-light reserve --count 2 --start 8000 --end 8999 --label preview
 port-light release 8000
 ```
 
 ## Commands
 
-### `mcp-config --client codex|claude-code`
+### `mcp-config --client codex|claude-code|cursor|vscode|gemini-cli`
 
 Prints the selected client's TOML or JSON without changing AI settings or making
 network requests. Use the installed CLI in its permanent environment. Output
-contains an absolute executable path, the target URL, a persistent state directory
-and secret variable references, never credential values. Merge only the Port-Light
+contains an absolute executable path, the target URL, a persistent state directory,
+and secret variable references where supported (`codex`, `claude-code`), never
+credential values. Merge only the Port-Light
 entry into the existing configuration; preserve its scope, custom settings and state.
 See the [AI setup guide](ai-setup.md) for file locations and safe updates.
 
 ```bash
 port-light --url https://ports.example.lan mcp-config --client codex
 port-light --url https://ports.example.lan mcp-config --client claude-code
+port-light --url https://ports.example.lan mcp-config --client cursor
+port-light --url https://ports.example.lan mcp-config --client vscode
+port-light --url https://ports.example.lan mcp-config --client gemini-cli
 ```
 
 ### `verify`
@@ -132,6 +138,25 @@ makes it useful as a CI or shell assertion. Used or configured ports exit `1`.
 
 ```bash
 port-light check 8080
+```
+
+### `list`
+
+Lists occupied and configured ports within `--start`..`--end` (default `1`..`9999`),
+with optional `--status used|configured|unknown` and `--conflicts` filters.
+
+```bash
+port-light list --start 8000 --end 8999
+port-light list --conflicts --json
+```
+
+### `rules`
+
+Lists named port allocation rules configured on the target instance.
+
+```bash
+port-light rules
+port-light rules --json
 ```
 
 ### `reserve`
@@ -209,7 +234,8 @@ terminal text. The flag may appear before or after the command.
 | `3` | Authentication, compatibility, network, TLS or server failure; cleanup/storage failure after a completed reservation or release |
 
 The client verifies HTTPS with the system trust store unless `--ca-file` or
-`PORT_LIGHT_CA_FILE` selects a private CA bundle. URLs containing credentials,
+`PORT_LIGHT_CA_FILE` selects a private CA bundle, and ignores environment HTTP
+proxies so local/LAN requests are not routed externally. URLs containing credentials,
 query strings, or fragments are rejected, as are HTTP redirects. The CLI
 negotiates named capabilities through `/api/meta`. Read-only checks can validate
 responses from older servers, but reservation commands require the advertised
@@ -252,7 +278,9 @@ After validating the response and saving every active release token, it removes
 the pending file. Network, validation, or token-storage failures preserve it.
 A batch with some ports already released returns the remaining active ports and
 `inactive_ports`; a wholly inactive request reports conflict without allocating.
-Missing receipts return not-found and keep the journal for investigation.
+Deterministic server rejections during `reserve` and `not_found` responses during
+`recover` remove the uncommitted pending file so future requests with the same
+parameters are not blocked.
 
 Keep the same URL and state directory when recovering. Older journals without
 metadata need one retry of the original command to attach that metadata without

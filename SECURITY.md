@@ -12,8 +12,8 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 
 | Surface | Behavior |
 |---------|----------|
-| HTTP API | Unauthenticated only when both `AUTH_USER` and `AUTH_PASSWORD` are absent. Invalid partial configuration returns 503. `/api/health` is always open. |
-| Hidden ports | Display filter by default. With `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD`, rows are withheld until Basic Auth or `X-Hidden-Unlock` succeeds. |
+| HTTP API | Unauthenticated only when both `AUTH_USER` and `AUTH_PASSWORD` are absent. Invalid partial configuration returns 503. State-changing requests enforce same-origin (`Origin` / `Sec-Fetch-Site`) checks when browser headers are present. `/api/health` is always open. |
+| Hidden ports | Display filter by default. With `AUTH_*` or `HIDDEN_UNLOCK_PASSWORD`, local and proxied peer rows, hidden port history, and diagnostic scopes are withheld until Basic Auth or `X-Hidden-Unlock` succeeds. |
 | Docker socket | Often mounted into the container. Read-only is not the same as safe. |
 | `/host/proc` | Read-only view of host network tables (and other `/proc` data for PID 1). |
 | Compose mount | Read-only view of the bind you set, including sibling `.env` files. |
@@ -23,7 +23,7 @@ Use [GitHub private vulnerability reporting](https://github.com/StepaniaH/port-l
 | Browser reservations | Request keys and release tokens remain in the tab’s session storage. They are never included in reservation list responses. Copied release commands contain a secret token. |
 | Port rules | Rule names, ranges, and assigned project names use the same read authorization as other configuration. Rule changes require editable settings. |
 | CLI | An HTTP client; it has no direct Docker, `/proc`, or Compose access. Basic Auth and agent tokens come from environment variables. Per-port release tokens are saved in owner-only local state unless `--no-save` is explicitly used with JSON output. |
-| AI integration | MCP returns requested port data to the connected AI tool. Setup documents use the same authentication as the UI. Generated configuration uses credential variable references; it does not contain their values. |
+| AI integration | MCP returns requested port data to the connected AI tool. Setup documents use the same authentication as the UI. Generated configuration emits secret variable references where supported (`codex`, `claude-code`) and never credential values. |
 
 Without auth, anyone who can reach port 2100 can read the port map (names, images, bind addresses, Compose paths), machine descriptions, and peer connection settings other than passwords. They can also change manual/hidden entries and editable settings.
 
@@ -82,9 +82,9 @@ instance URL, so review generated configuration before committing or sharing it.
 
 ## Peer DNS validation
 
-Every request resolves the peer hostname and checks all returned IPv4/IPv6 addresses. A public, IPv4 link-local, multicast, or unspecified address causes rejection of the entire result. IPv4-mapped IPv6 addresses receive the IPv4 checks too. Empty or failed DNS responses make the peer unavailable.
+Every request resolves the peer hostname once via `getaddrinfo` and checks all returned IPv4/IPv6 addresses (stripping IPv6 zone suffixes during validation). A public, IPv4 link-local, multicast, or unspecified address causes rejection of the entire result. IPv4-mapped IPv6 addresses receive the IPv4 checks too. Empty or failed DNS responses make the peer unavailable.
 
-The HTTP client resolves again when connecting. Validation does not pin the destination IP, so a DNS change between validation and connection can bypass the preflight check. Use literal private IPs or DNS you control. System DNS resolution is not covered by the 4-second HTTP socket timeout.
+The HTTP/HTTPS transport connects directly to those validated socket addresses in order without resolving DNS a second time, while preserving the configured hostname for the `Host` header, TLS SNI, and certificate SAN verification. System DNS resolution is not covered by the 4-second HTTP socket timeout. Connection-test endpoints (`/api/hosts/test` and `/analysis/api/settings/ai/test`) also require writable settings.
 
 ## Data file failures
 

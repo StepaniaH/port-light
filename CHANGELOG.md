@@ -7,14 +7,22 @@ Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 ### Added
 
 - Link the Unraid Community Applications listing from both READMEs and deployment guides, with an installation badge and Apps-tab instructions.
+- Add `port-light list` and `port-light rules` CLI commands, an MCP `list_rules` tool, and `mcp-config --client` templates for `cursor`, `vscode`, and `gemini-cli`.
+- Support relative Compose project folder paths in `port_rules`, add a `Conflicts` filter chip to the main grid, show status across other configured machines in the port detail drawer, and allow discarding uncommitted pending reservation requests in the browser.
+- Add report deletion and clear-all actions in the troubleshooting workspace, a 90-day sliding session cookie, and LRU eviction when saved workbench reports or temporary captures reach capacity.
 
 ### Changed
 
 - Raise the minimum versions of FastAPI to 0.162.0, Pydantic to 2.14.2, Uvicorn to 0.54.0, pytest to 9.2.0, Ruff to 0.17.3, and build to 1.6.1.
+- Reuse a single persistent scan worker and cached full-range snapshot classification in `OccupancyMonitor`, share one SQLite connection across `history` and `agent_events`, and skip redundant `/api/health` polls on unchanged `304` responses.
+- Pin peer HTTP/HTTPS connections to validated `getaddrinfo` addresses, re-arm webhook events after ports leave `used` or `conflict` states (with optional `WEBHOOK_COOLDOWN_S`), and remove the superseded `/analysis/api/analysis/*` single-port preview runtime while keeping saved legacy reports readable, exportable, and deletable.
 
 ### Fixed
 
 - Make Compose scanning optional in the Unraid template, omit empty Basic Auth variables, and use the current theme settings. Document installation checks and upgrades for pinned image versions.
+- Filter `PortLightClient.list_occupancy()` to the requested port range, include host processes, reservation labels, and Compose service names in `compact_port()`, bypass environment proxies in `HttpTransport`, and remove uncommitted pending request files after deterministic rejections or `404` recoveries.
+- Enforce `X-Hidden-Unlock` on proxied peer occupancy, history, and health scopes, validate hidden-port unlocks against the local Hub in multi-machine views, enforce writable settings on connection tests, block cross-origin state-changing `/api/*` requests, and reject cloud metadata/link-local or self-loopback custom AI URLs.
+- Attribute host-network containers per `(port, protocol)` without letting `EXPOSE` broaden listener bind scopes, ignore connected outbound UDP sockets in `lsof`, detect intra-project Compose bind conflicts without false IPv4/IPv6 wildcard overlaps, preserve `!reset`/`!override` tags across `compose.override.yml` and `extends`, enforce non-blocking regular-file size and YAML node budgets, retain observation baselines across degraded scans, and render saved legacy AI interpretations.
 
 ## 0.8.5 — 2026-10-03
 

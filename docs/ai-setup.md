@@ -94,6 +94,9 @@ the installed `port-light`:
 ```bash
 port-light --url http://your-host:2100 mcp-config --client codex
 port-light --url http://your-host:2100 mcp-config --client claude-code
+port-light --url http://your-host:2100 mcp-config --client cursor
+port-light --url http://your-host:2100 mcp-config --client vscode
+port-light --url http://your-host:2100 mcp-config --client gemini-cli
 ```
 
 Run only the command for the current tool. It prints configuration; it does not
@@ -157,6 +160,13 @@ A tool with no local execution or LAN access needs a reachable execution environ
 The skill format is documented at <https://agentskills.io/specification>.
 MCP registration is client-specific; see the current tool's official documentation.
 
+For `cursor` and `gemini-cli`, `mcp-config` emits JSON under `mcpServers.port-light`;
+for `vscode`, it emits JSON under `servers.port-light` with `"type": "stdio"`.
+Unlike `codex` and `claude-code`, those three templates omit secret variable
+placeholders from `env` — supply `PORT_LIGHT_AUTH` or `PORT_LIGHT_AGENT_TOKEN`
+through the client's environment or secure secret mechanism without writing
+credential values into tracked project files.
+
 ## Verify without reserving anything
 
 1. Run `port-light --version`, then `port-light verify --json` with the configured
@@ -168,8 +178,9 @@ MCP registration is client-specific; see the current tool's official documentati
    run the matching commands with `docker exec` and the same forwarded variables.
 2. For MCP, perform `initialize`, `notifications/initialized` and `tools/list`
    through the AI tool or a stdio test. Verify the tools actually exposed by the
-   installed version. Releases since v0.8.4 include `doctor`, `reserve_ports`
-   and `release_port`; older adapters have `check_port` and `suggest_ports`.
+   installed version. Releases since v0.8.4 include `doctor`, `reserve_ports`,
+   and `release_port` (with `list_rules` added in newer clients and checked by
+   `verify`); older adapters have `check_port` and `suggest_ports`.
 3. Call MCP `doctor` if available. A healthy `/api/health` does not validate the
    agent token; if one is configured, a read-only `suggest_ports` call with no
    `reserve` or `ttl` verifies that gate. Never create a test reservation merely
