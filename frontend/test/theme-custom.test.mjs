@@ -8,6 +8,8 @@ const V = 'v=' + (entrySrc.match(/\?v=(\d+)/) || ['', '63'])[1];
 
 const { S, applyTheme, CUSTOM_PREFIX, customPaletteVars } =
   await import('../js/state.js?' + V);
+const { hexForColorInput, normalizeHexColor, previewEditorColor } =
+  await import('../js/settings.js?' + V);
 
 const THEME = {
   id: 'abcd1234', name: 'Mine', basedOn: 'gruvbox', mode: 'dark',
@@ -46,4 +48,28 @@ test('applyTheme falls back to built-in when custom mode mismatches', () => {
   applyTheme();
   assert.equal(document.documentElement.style.getPropertyValue('--bg'), '');
   S.settings.theme_mode = 'system';
+});
+
+test('custom theme hex helpers normalize 3/4/6/8-digit values and reject invalid hex', () => {
+  assert.equal(normalizeHexColor(' #AbC '), '#abc');
+  assert.equal(normalizeHexColor('#AbCd'), '#abcd');
+  assert.equal(normalizeHexColor('#112233'), '#112233');
+  assert.equal(normalizeHexColor('#11223380'), '#11223380');
+  for (const bad of ['', '#12', '#12345', '#1234567', '#123456789', 'red']) {
+    assert.equal(normalizeHexColor(bad), null, bad);
+    assert.equal(hexForColorInput(bad), null, bad);
+  }
+  assert.equal(hexForColorInput('#f0a'), '#ff00aa');
+  assert.equal(hexForColorInput('#f0a8'), '#ff00aa');
+  assert.equal(hexForColorInput('#11223380'), '#112233');
+  try {
+    assert.equal(previewEditorColor('bg', '#f0a'), true);
+    assert.equal(document.documentElement.style.getPropertyValue('--bg'), '#f0a');
+    assert.equal(previewEditorColor('bg', '#11223380'), true);
+    assert.equal(document.documentElement.style.getPropertyValue('--bg'), '#11223380');
+    assert.equal(previewEditorColor('bg', 'not-hex'), false);
+    assert.equal(document.documentElement.style.getPropertyValue('--bg'), '#11223380');
+  } finally {
+    applyTheme();
+  }
 });

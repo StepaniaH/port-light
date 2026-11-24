@@ -10,6 +10,13 @@ const entry = html.match(/app\.js\?v=(\d+)/);
 assert.ok(entry, 'index.html must load app.js with an explicit ?v=');
 const V = entry[1];
 
+test('index.html pins classic assets and omits inline scripts', () => {
+  for (const asset of ['boot.js', 'style.css', 'i18n.js', 'js/app.js']) {
+    assert.ok(html.includes(asset + '?v=' + V), 'index.html must pin ' + asset + '?v=' + V);
+  }
+  assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)/i, 'index.html must not contain inline scripts');
+});
+
 test('every js import specifier pins the entry version', () => {
   for (const f of readdirSync(dir)) {
     if (!f.endsWith('.js')) continue;
@@ -18,13 +25,17 @@ test('every js import specifier pins the entry version', () => {
     for (const v of specs) {
       assert.equal(v, V, f + ' pins ?v=' + v + ', entry is ?v=' + V);
     }
+    const localImports = [...src.matchAll(/from\s+['"](\.\/[\w-]+\.js(?:\?v=\d+)?)['"]/g)].map((m) => m[1]);
+    for (const spec of localImports) {
+      assert.ok(spec.endsWith('?v=' + V), f + ' local import must pin ?v=' + V + ': ' + spec);
+    }
   }
 });
 
 test('frontend imports remain acyclic and the API stays independent of views', () => {
   const graph = new Map(readdirSync(dir).filter(f => f.endsWith('.js')).map(f => {
     const source = readFileSync(new URL(f, dir), 'utf8');
-    return [f, [...source.matchAll(/from\s+['"]\.\/(\w+\.js)\?v=\d+['"]/g)].map(m => m[1])];
+    return [f, [...source.matchAll(/from\s+['"]\.\/([\w-]+\.js)\?v=\d+['"]/g)].map(m => m[1])];
   }));
   function visit(file, path = []) {
     assert.ok(!path.includes(file), 'Import cycle: ' + [...path, file].join(' → '));

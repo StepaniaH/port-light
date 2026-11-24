@@ -117,3 +117,29 @@ test('waterfall keeps all 32 peers visible instead of automatically switching la
     assert.equal(displayedHosts().length, 33);
   });
 });
+
+test('tabs layout fingerprint reflects background peer changes for the open detail port', () => {
+  const savedMaps = S.hostMaps;
+  const savedPort = S.selectedPort;
+  try {
+    withState({
+      focusHostId: 'local',
+      settings: { host_layout: 'tabs' },
+      hostCatalog: { local: { id: 'local', name: 'Hub', local: true }, peers: [{ id: PEER, name: 'NAS' }] },
+    }, () => {
+      S.hostMaps = { local: { data: { ports: [], summary: { scan_complete: true } } } };
+      S.selectedPort = null;
+      const closedBefore = occupancyFingerprint();
+      S.hostMaps[PEER] = { data: { ports: [{ port: 8080, status: 'used', process: 'nas-app' }], summary: { scan_complete: true } } };
+      assert.equal(occupancyFingerprint(), closedBefore, 'background peer changes do not churn grid when drawer is closed');
+
+      S.selectedPort = 8080;
+      const openLoaded = occupancyFingerprint();
+      S.hostMaps[PEER] = { error: 'down', data: S.hostMaps[PEER].data };
+      assert.notEqual(occupancyFingerprint(), openLoaded, 'peer error updates open detail fingerprint in tabs mode');
+    });
+  } finally {
+    S.hostMaps = savedMaps;
+    S.selectedPort = savedPort;
+  }
+});

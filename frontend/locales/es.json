@@ -735,13 +735,14 @@
     "internalHint": "Normalmente no se accede directamente.",
     "conflict": "Conflicto de Compose",
     "conflictHint": "Declarado por {n} proyectos de Compose que vinculan la misma dirección.",
+    "conflictServicesHint": "Declarado por {n} servicios del mismo proyecto Compose que vinculan la misma dirección.",
     "hide": "Ocultar de la cuadrícula",
     "unhide": "Mostrar",
     "delete": "Eliminar",
     "deleteConfirm": "¿Eliminar la entrada manual del puerto {port}?",
     "actionFailed": "No se pudo actualizar ese puerto.",
     "notFound": "Este puerto no está en el mapa de ocupación.",
-    "hiddenLocked": "Este puerto está oculto. Desbloquee los puertos ocultos para verlo.",
+    "hiddenLocked": "El estado del puerto se oculta mientras los puertos ocultos estén bloqueados. Desbloquee los puertos ocultos para verlo.",
     "loading": "Leyendo la ocupación…",
     "label": "Etiqueta",
     "saveLabel": "Guardar etiqueta",
@@ -1264,7 +1265,10 @@
     "conflictsEmpty": "No se encontraron conflictos de configuración.",
     "rulesEmpty": "Aún no hay reglas de puertos.",
     "reservationsEmpty": "Aún no hay puertos reservados.",
-    "discardPending": "Descartar solicitud pendiente"
+    "discardPending": "Descartar solicitud pendiente",
+    "recoveredPending": "Esta solicitud pendiente ya se había confirmado en el servidor. Se recuperaron las credenciales de liberación.",
+    "discardConfirm": "No se pudo comprobar con el servidor si esta solicitud se confirmó. Descartar solo borra el estado local del navegador y no cancela una reserva activa. ¿Descartar de todos modos?",
+    "discardNotFoundConfirm": "No se encontró ningún recibo de esta solicitud en el servidor. Descartar solo borra el estado local del navegador y no puede recuperar ni cancelar una reserva desalojada o no reconocida. ¿Descartar de todos modos?"
   },
   "preview": {
     "nasName": "NAS · Multimedia y almacenamiento",

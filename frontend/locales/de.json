@@ -735,13 +735,14 @@
     "internalHint": "Wird normalerweise nicht direkt angesprochen.",
     "conflict": "Compose-Konflikt",
     "conflictHint": "Deklariert von {n} Compose-Projekten, die dieselbe Adresse binden.",
+    "conflictServicesHint": "Deklariert von {n} Diensten im selben Compose-Projekt, die dieselbe Adresse binden.",
     "hide": "Aus dem Raster ausblenden",
     "unhide": "Einblenden",
     "delete": "Löschen",
     "deleteConfirm": "Den manuellen Eintrag für Port {port} entfernen?",
     "actionFailed": "Dieser Port konnte nicht aktualisiert werden.",
     "notFound": "Dieser Port ist nicht auf der Belegungskarte.",
-    "hiddenLocked": "Dieser Port ist verborgen. Entsperren Sie verborgene Ports, um ihn zu sehen.",
+    "hiddenLocked": "Der Portstatus wird zurückgehalten, solange verborgene Ports gesperrt sind. Entsperren Sie verborgene Ports, um ihn anzuzeigen.",
     "loading": "Belegung wird gelesen…",
     "label": "Bezeichnung",
     "saveLabel": "Bezeichnung speichern",
@@ -1264,7 +1265,10 @@
     "conflictsEmpty": "Keine Konfigurationskonflikte gefunden.",
     "rulesEmpty": "Noch keine Portregeln.",
     "reservationsEmpty": "Noch keine reservierten Ports.",
-    "discardPending": "Ausstehende Anfrage verwerfen"
+    "discardPending": "Ausstehende Anfrage verwerfen",
+    "recoveredPending": "Diese ausstehende Anfrage wurde auf dem Server bereits ausgeführt. Freigabe-Zugangsdaten wurden wiederhergestellt.",
+    "discardConfirm": "Es konnte nicht mit dem Server geprüft werden, ob diese Anfrage ausgeführt wurde. Das Verwerfen löscht nur den lokalen Browser-Status und gibt keine aktive Reservierung frei. Trotzdem verwerfen?",
+    "discardNotFoundConfirm": "Auf dem Server wurde kein Beleg für diese Anfrage gefunden. Das Verwerfen löscht nur den lokalen Browser-Status und kann eine verdrängte oder nicht erkannte Reservierung weder wiederherstellen noch freigeben. Trotzdem verwerfen?"
   },
   "preview": {
     "nasName": "NAS · Medien & Speicher",

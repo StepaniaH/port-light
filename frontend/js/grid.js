@@ -1,15 +1,26 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { groupPorts, portRuns } from './port-groups.js?v=122';
-import { S } from './state.js?v=122';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=122';
-import { KIND_MATCHERS } from './kinds.js?v=122';
-import { isLease } from './leases.js?v=122';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=122';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=122';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=122';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=122';
-import { api } from './api.js?v=122';
+import { groupPorts, portRuns } from './port-groups.js?v=125';
+import { S } from './state.js?v=125';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=125';
+import { KIND_MATCHERS } from './kinds.js?v=125';
+import { isLease } from './leases.js?v=125';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=125';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=125';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=125';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=125';
+import { api } from './api.js?v=125';
+
+const ALLOWED_STATUSES = new Set(['used', 'configured', 'free', 'unknown']);
+function safeStatus(status) {
+  return ALLOWED_STATUSES.has(status) ? status : 'unknown';
+}
+function safePortNumber(port) {
+  return typeof port === 'number' && Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
+}
+function safeSummaryCount(value) {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
+}
 
 const expandedRuns = new Set();
 const boardSizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
@@ -65,8 +76,8 @@ function sizeHostBoard(board) {
     if (!rootEl || !snap) return;
     const targetHost = hostId || 'local';
     if (snap.host && snap.host !== targetHost) return;
-    if (snap.port) {
-      const again = rootEl.querySelector('.port-cell[data-port="' + snap.port + '"]');
+    if (snap.port && /^\d+$/.test(String(snap.port))) {
+      const again = rootEl.querySelector('.port-cell[data-port="' + String(snap.port) + '"]');
       if (again) again.focus({ preventScroll: true });
       return;
     }
@@ -88,9 +99,10 @@ function sizeHostBoard(board) {
     S.pendingGridFocus = null;
     if (!pending) return;
     const port = pending.port || pending;
+    if (!/^\d+$/.test(String(port))) return;
     const hostId = pending.hostId || 'local';
     const root = document.getElementById('host-grid-' + hostId) || grid;
-    const cell = root.querySelector('.port-cell[data-port="' + port + '"]');
+    const cell = root.querySelector('.port-cell[data-port="' + String(port) + '"]');
     if (cell) cell.focus({ preventScroll: true });
   }
 
@@ -272,7 +284,7 @@ function sizeHostBoard(board) {
   export function buildSearchContext(ports, hitPort, dataCtx, hostId) {
     dataCtx = dataCtx || S.currentData;
     hostId = hostId || 'local';
-    const allPortNums = new Set(ports.map(function (p) { return p.port; }));
+    const allPortNums = new Set(ports.filter(function (p) { return p && safePortNumber(p.port) !== null; }).map(function (p) { return p.port; }));
     const hitExists = allPortNums.has(hitPort);
     const hiddenNums = new Set((dataCtx && dataCtx.summary && dataCtx.summary.hidden_ports) || []);
     const locked = !!(dataCtx && dataCtx.summary && dataCtx.summary.hidden_locked);
@@ -417,9 +429,9 @@ function sizeHostBoard(board) {
     });
     const html = summaries.length ? '<div class="bind-addresses" aria-hidden="true">' +
       summaries.map(function (row) {
-        return '<div class="bind-address-row"><span class="bind-family">' + row.family +
+        return '<div class="bind-address-row"><span class="bind-family">' + escapeHtml(row.family) +
           '</span><span class="bind-value">' + escapeHtml(row.display) + '</span>' +
-          (row.additional ? '<span class="bind-more">+' + row.additional + '</span>' : '') +
+          (row.additional ? '<span class="bind-more">+' + escapeHtml(String(row.additional)) + '</span>' : '') +
           '</div>';
       }).join('') + '</div>' : '';
     return {
@@ -436,21 +448,28 @@ function sizeHostBoard(board) {
   }
 
   export function renderSummary(s) {
+    s = s || {};
     const warnings = scanWarningState(summary);
     function toggle(active, attrs, dot, n, label) {
       return '<button type="button" class="stat' + (active ? ' active' : '') + '" ' + attrs +
         ' aria-pressed="' + (active ? 'true' : 'false') + '">' +
-        '<span class="dot ' + dot + '"></span><span class="num">' + n + '</span> ' + label + '</button>';
+        '<span class="dot ' + escapeHtml(dot) + '"></span><span class="num">' + escapeHtml(String(n)) +
+        '</span> ' + escapeHtml(label) + '</button>';
     }
+    const usedCount = safeSummaryCount(s.used);
+    const configuredCount = safeSummaryCount(s.configured);
+    const freeText = !scanUnavailable(s) ? String(safeSummaryCount(s.free)) : '—';
+    const hiddenCount = safeSummaryCount(s.hidden);
     let html = '';
     if (hasPeers()) {
       html += '<span class="legend-host">' + escapeHtml(t('hosts.legendHost', { name: hostName(S.focusHostId) })) + '</span>';
     }
-    html += toggle(S.statusFilter === 'used', 'data-status="used"', 'used', s.used, t('legend.inUse')) +
-      toggle(S.statusFilter === 'configured', 'data-status="configured"', 'configured', s.configured, t('legend.configured')) +
-      '<span class="stat is-static"><span class="dot free"></span><span class="num">' + (!scanUnavailable(s) ? s.free : '—') + '</span> ' + t('legend.free') + '</span>';
-    if (s.hidden > 0) {
-      html += toggle(S.kindFilters.has('hidden'), 'data-kind="hidden"', 'hidden', s.hidden,
+    html += toggle(S.statusFilter === 'used', 'data-status="used"', 'used', usedCount, t('legend.inUse')) +
+      toggle(S.statusFilter === 'configured', 'data-status="configured"', 'configured', configuredCount, t('legend.configured')) +
+      '<span class="stat is-static"><span class="dot free"></span><span class="num">' + escapeHtml(freeText) +
+      '</span> ' + escapeHtml(t('legend.free')) + '</span>';
+    if (hiddenCount > 0) {
+      html += toggle(S.kindFilters.has('hidden'), 'data-kind="hidden"', 'hidden', hiddenCount,
         t('legend.hidden') + (s.hidden_locked ? ' (' + t('legend.locked') + ')' : ''));
     }
     if (scanUnavailable(s)) {
@@ -517,7 +536,7 @@ function sizeHostBoard(board) {
       }
       if (map.data && map.data.summary && counts) {
         counts.innerHTML = ['used', 'configured'].map(state => '<span>' +
-          escapeHtml(t('status.' + state)) + '<strong>' + escapeHtml(String(map.data.summary[state])) + '</strong></span>').join('');
+          escapeHtml(t('status.' + state)) + '<strong>' + escapeHtml(String(safeSummaryCount(map.data.summary[state]))) + '</strong></span>').join('');
       }
       if (pills) renderScanners(map.scanners || {}, pills, map.data);
       if (map.data && root) renderGrid(map.data.ports, root, map.data, h.id, restore);
@@ -624,6 +643,7 @@ function sizeHostBoard(board) {
       });
     } else {
       displayPorts = ports.filter(function (p) {
+        if (!p || safePortNumber(p.port) === null) return false;
         if (!S.searchTerm && (p.port < S.rangeStart || p.port > S.rangeEnd)) return false;
         if (!S.showHidden && p.is_hidden) return false;
         if (!matchesFilter(p)) return false;
@@ -662,7 +682,7 @@ function sizeHostBoard(board) {
 
     if (displayPorts.length === 0) {
       const inRange = (dataCtx.ports || []).filter(function (p) {
-        return p.port >= S.rangeStart && p.port <= S.rangeEnd && (S.showHidden || !p.is_hidden);
+        return p && safePortNumber(p.port) !== null && p.port >= S.rangeStart && p.port <= S.rangeEnd && (S.showHidden || !p.is_hidden);
       });
       const noFacet = !S.searchTerm && S.searchPortNum === null && S.kindFilters.size === 0 && S.statusFilter === 'all';
       const key = noFacet && inRange.length === 0 ? 'grid.emptyNone' : 'grid.empty';
@@ -674,9 +694,11 @@ function sizeHostBoard(board) {
     }
 
     const renderCell = function (p) {
+      const status = safeStatus(p.status);
+      const portText = escapeHtml(String(p.port));
       const lockedHit = !!(p._locked && p._synthetic);
-      let cls = p._unavailable || p.status === 'unknown' || lockedHit ? 'locked'
-        : p.status === 'used' ? 'used' : p.status === 'configured' ? 'configured' : 'free';
+      let cls = p._unavailable || status === 'unknown' || lockedHit ? 'locked'
+        : status === 'used' ? 'used' : status === 'configured' ? 'configured' : 'free';
       if (p.is_hidden) cls += ' hidden';
       const conflict = p.conflict ? ' conflict' : '';
       const selected = cellSelected(p) ? ' selected' : '';
@@ -685,10 +707,10 @@ function sizeHostBoard(board) {
       const searchNear = S.searchPortNum !== null && !isSearchHit ? ' search-near' : '';
       const label = getCellLabel(p);
       const labelText = label ? '<div class="port-label">' + escapeHtml(label) + '</div>' : '';
-      const statusLabel = p._unavailable || p.status === 'unknown' ? t('status.unknown')
-        : lockedHit ? t('legend.locked') : t('status.' + p.status);
-      const statusText = S.settings.show_status_text && !lockedHit && !p._unavailable && p.status !== 'free'
-        ? '<span class="status-text">' + escapeHtml(t('status.' + p.status)) + '</span>' : '';
+      const statusLabel = p._unavailable || status === 'unknown' ? t('status.unknown')
+        : lockedHit ? t('legend.locked') : t('status.' + status);
+      const statusText = S.settings.show_status_text && !lockedHit && !p._unavailable && status !== 'free'
+        ? '<span class="status-text">' + escapeHtml(t('status.' + status)) + '</span>' : '';
       const accessBadge = S.settings.show_access_badge && p.known_service && p.known_service.is_access_port
         ? '<span class="access-badge">' + escapeHtml(t('grid.web')) + '</span>' : '';
       const protoBadge = S.settings.show_protocol_badge && p.protocol && p.protocol !== 'tcp'
@@ -711,11 +733,11 @@ function sizeHostBoard(board) {
       const ariaParts = [String(p.port), statusLabel, label, p.protocol].filter(Boolean).concat(bindView.ariaParts);
       const titleParts = [p.port, p.protocol, p.bind_scope, label].filter(Boolean).concat(bindView.titleParts);
       return '<button type="button" class="port-cell ' + cls + conflict + selected + searchHit + searchNear + '"' +
-        ' data-port="' + p.port + '" data-host="' + escapeHtml(hostId) + '"' +
+        ' data-port="' + portText + '" data-host="' + escapeHtml(hostId) + '"' +
         ' aria-label="' + escapeHtml(ariaParts.join(', ')) + '"' +
         ' aria-selected="' + (cellSelected(p) ? 'true' : 'false') + '"' +
         ' title="' + escapeHtml(titleParts.join(' · ')) + '">' +
-        '<div class="port-num">' + p.port + '</div>' +
+        '<div class="port-num">' + portText + '</div>' +
         labelText +
         bindView.html +
         '<div class="cell-meta"><span class="indicator"></span>' + protoBadge + accessBadge + leaseBadge + ruleBadge + statusText + '</div>' +
@@ -746,13 +768,16 @@ function sizeHostBoard(board) {
       rootEl.innerHTML = groupPorts(displayPorts, S.groupMode).map(group => '<section class="port-group"><h3>' +
         escapeHtml(group.label || t('manage.other')) + '</h3><div class="group-ports">' + sortPortRuns(group.rows).map(run => {
           if (run.length < 4) return rootEl._renderPortRun(run);
+          const firstPort = escapeHtml(String(run[0].port));
+          const lastPort = escapeHtml(String(run.at(-1).port));
+          const runStatus = safeStatus(run[0].status);
           const key = group.key + ':' + run[0].port;
           rootEl._portRuns.set(key, run);
           const open = opened.has(key) || expandedRuns.has(hostId + ':' + key) || run.some(p => cellSelected(p) || String(p.port) === String(restorePort));
           return '<details class="port-run" data-run="' + escapeHtml(key) + '" data-host="' + escapeHtml(hostId) + '"' + (open ? ' open' : '') + '><summary>' +
-            '<span class="port-run-heading"><strong>' + run[0].port + '–' + run.at(-1).port + '</strong><span>' +
+            '<span class="port-run-heading"><strong>' + firstPort + '–' + lastPort + '</strong><span>' +
             escapeHtml(t('manage.portCount', { count: run.length })) + '</span><span class="port-run-state">' +
-            escapeHtml(t('status.' + run[0].status)) + '</span>' +
+            escapeHtml(t('status.' + runStatus)) + '</span>' +
             (run[0].conflict ? '<span class="port-run-conflict">' + escapeHtml(t('manage.conflicts')) + '</span>' : '') +
             (run[0].rule_violations?.length ? '<span class="port-run-conflict port-run-rule">' + escapeHtml(t('manage.outsideRule')) + '</span>' : '') + '</span>' +
             '</summary><div class="group-ports">' + (open ? rootEl._renderPortRun(run) : '') + '</div></details>';

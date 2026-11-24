@@ -735,13 +735,14 @@
     "internalHint": "Généralement pas accessible directement.",
     "conflict": "Conflit Compose",
     "conflictHint": "Déclaré par {n} projets Compose qui lient la même adresse.",
+    "conflictServicesHint": "Déclaré par {n} services du même projet Compose qui lient la même adresse.",
     "hide": "Masquer dans la grille",
     "unhide": "Ne plus masquer",
     "delete": "Supprimer",
     "deleteConfirm": "Supprimer l'entrée manuelle du port {port} ?",
     "actionFailed": "Impossible de mettre à jour ce port.",
     "notFound": "Ce port ne figure pas sur la carte d'occupation.",
-    "hiddenLocked": "Ce port est masqué. Déverrouillez les ports masqués pour l'afficher.",
+    "hiddenLocked": "L'état du port est masqué tant que les ports masqués sont verrouillés. Déverrouillez les ports masqués pour l'afficher.",
     "loading": "Lecture de l'occupation…",
     "label": "Libellé",
     "saveLabel": "Enregistrer le libellé",
@@ -1264,7 +1265,10 @@
     "conflictsEmpty": "Aucun conflit de configuration détecté.",
     "rulesEmpty": "Aucune règle de ports pour le moment.",
     "reservationsEmpty": "Aucun port réservé pour le moment.",
-    "discardPending": "Abandonner la requête en attente"
+    "discardPending": "Abandonner la requête en attente",
+    "recoveredPending": "Cette requête en attente avait déjà été validée sur le serveur. Les identifiants de libération ont été récupérés.",
+    "discardConfirm": "Impossible de vérifier auprès du serveur si cette requête a été validée. L'abandon efface uniquement l'état local du navigateur et n'annule pas une réservation active. Abandonner quand même ?",
+    "discardNotFoundConfirm": "Aucun reçu pour cette requête n'a été trouvé sur le serveur. L'abandon efface uniquement l'état local du navigateur et ne peut ni récupérer ni annuler une réservation évincée ou non reconnue. Abandonner quand même ?"
   },
   "preview": {
     "nasName": "NAS · Médias et stockage",

@@ -11,8 +11,13 @@ def test_index_loads_module_entry(monkeypatch):
     client = TestClient(app)
     res = client.get("/")
     assert res.status_code == 200
+    assert 'src="/static/boot.js?v=' in res.text
+    assert "<script>" not in res.text
     assert 'type="module" src="/static/js/app.js?v=' in res.text
     assert res.headers.get("cache-control") == "no-cache"
+    csp = res.headers.get("content-security-policy") or ""
+    assert "script-src 'self';" in csp
+    assert "script-src 'self' 'unsafe-inline'" not in csp
 
 
 def test_module_chunks_are_served_with_revalidation(monkeypatch):
@@ -34,6 +39,7 @@ def test_classic_static_assets_stay_immutable(monkeypatch):
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
     client = TestClient(app)
-    res = client.get("/static/i18n.js")
-    assert res.status_code == 200
-    assert "immutable" in (res.headers.get("cache-control") or "")
+    for path in ("/static/i18n.js", "/static/boot.js"):
+        res = client.get(path)
+        assert res.status_code == 200, path
+        assert "immutable" in (res.headers.get("cache-control") or ""), path

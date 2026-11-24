@@ -1,19 +1,40 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=122';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=122';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=122';
-import { trapTab } from './a11y.js?v=122';
-import { api, fetchHostOccupancy } from './api.js?v=122';
-import { portApiUrl, hasPeers, listedHosts, hostName, gridHash, portHash, dataForHost } from './hosts.js?v=122';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=122';
+import { S, saveView } from './state.js?v=125';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=125';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=125';
+import { trapTab } from './a11y.js?v=125';
+import { api, fetchHostOccupancy } from './api.js?v=125';
+import { portApiUrl, hasPeers, listedHosts, hostName, gridHash, portHash, dataForHost } from './hosts.js?v=125';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=125';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=122';
-import { closeModals, modalOpen, openModal } from './modal.js?v=122';
+} from './grid.js?v=125';
+import { closeModals, modalOpen, openModal } from './modal.js?v=125';
+import { portUiLinksHtml } from './ui-links.js?v=125';
 
+const ALLOWED_STATUSES = new Set(['used', 'configured', 'free', 'unknown']);
+const CONTAINER_STATUSES = new Set([
+  'created', 'dead', 'removing', 'exited',
+  'paused', 'restarting', 'running',
+]);
+
+function safeStatus(status) {
+  return ALLOWED_STATUSES.has(status) ? status : 'unknown';
+}
+
+function hostSnapshotState(hostId) {
+  const data = dataForHost(hostId);
+  const summaryData = data && data.summary;
+  return {
+    hiddenLocked: !!(summaryData && summaryData.hidden_locked),
+    unavailable: !!(summaryData && (summaryData.scan_complete !== true || summaryData.stale)),
+  };
+}
+
+let shownDetail = null;
 let tick;
 let loadPorts;
 export function configureDetail(actions) {
@@ -67,76 +88,205 @@ export function configureDetail(actions) {
   export function showPortDetail(port, fallback) {
     const hostId = S.selectedHostId || 'local';
     const gen = ++S.portDetailGen;
+    const snapState = hostSnapshotState(hostId);
     const local = portFromList(port, hostId);
     if (local) {
       S.detailShownPort = port;
+      shownDetail = {
+        hostId,
+        port,
+        row: local,
+        fromList: true,
+        pending: false,
+        hiddenLocked: snapState.hiddenLocked,
+        unavailable: snapState.unavailable,
+        showHidden: S.showHidden,
+        otherHtml: '',
+      };
       renderDetail(local);
       return;
     }
-    renderDetail(fallback && fallback.port === port ? fallback : pendingStub(port));
+    const stub = fallback && fallback.port === port ? fallback : pendingStub(port);
     S.detailShownPort = port;
+    shownDetail = {
+      hostId,
+      port,
+      row: stub,
+      fromList: false,
+      pending: !!stub._pending,
+      hiddenLocked: snapState.hiddenLocked,
+      unavailable: snapState.unavailable,
+      showHidden: S.showHidden,
+      otherHtml: '',
+    };
+    renderDetail(stub);
     const openedHost = hostId;
     api(portApiUrl(hostId, port) + '?include_hidden=true').then(function (res) {
       if (gen !== S.portDetailGen || S.selectedPort !== port || S.selectedHostId !== openedHost) return null;
       if (res.status === 404) {
         const data = dataForHost(openedHost);
         const locked = !!(data && data.summary && data.summary.hidden_locked);
-        renderDetail(Object.assign(freeStub(port), {
+        const missingRow = Object.assign(freeStub(port), {
+          status: 'unknown',
           _missing: true,
           _locked: locked,
-          is_hidden: locked,
-        }));
+          is_hidden: false,
+        });
+        const latestState = hostSnapshotState(openedHost);
+        shownDetail = {
+          hostId: openedHost,
+          port,
+          row: missingRow,
+          fromList: false,
+          pending: false,
+          hiddenLocked: latestState.hiddenLocked,
+          unavailable: latestState.unavailable,
+          showHidden: S.showHidden,
+          otherHtml: '',
+        };
+        renderDetail(missingRow);
         return null;
       }
       if (!res.ok) {
-        S.detailShownPort = null;
-        if (res.status === 503) renderDetail({ ...pendingStub(port), _pending: false, _unavailable: true });
-        else showDetailError(t('detail.actionFailed'));
+        if (res.status === 503) {
+          const unavailableRow = { ...pendingStub(port), _pending: false, _unavailable: true };
+          const latestState = hostSnapshotState(openedHost);
+          S.detailShownPort = port;
+          shownDetail = {
+            hostId: openedHost,
+            port,
+            row: unavailableRow,
+            fromList: false,
+            pending: false,
+            hiddenLocked: latestState.hiddenLocked,
+            unavailable: true,
+            showHidden: S.showHidden,
+            otherHtml: '',
+          };
+          renderDetail(unavailableRow);
+        } else {
+          S.detailShownPort = null;
+          shownDetail = null;
+          showDetailError(t('detail.actionFailed'));
+        }
         return null;
       }
       return res.json();
     }).then(function (row) {
       if (!row || gen !== S.portDetailGen || S.selectedPort !== port || S.selectedHostId !== openedHost) return;
       if (row.known_service) S.knownCache[port] = row.known_service;
+      const latestState = hostSnapshotState(openedHost);
+      shownDetail = {
+        hostId: openedHost,
+        port,
+        row,
+        fromList: false,
+        pending: false,
+        hiddenLocked: latestState.hiddenLocked,
+        unavailable: latestState.unavailable,
+        showHidden: S.showHidden,
+        otherHtml: '',
+      };
       renderDetail(row);
     }).catch(function () {
-      if (gen === S.portDetailGen) S.detailShownPort = null;
+      if (gen === S.portDetailGen) {
+        S.detailShownPort = null;
+        shownDetail = null;
+      }
     });
+  }
+
+  export function syncOpenDetail() {
+    if (S.selectedPort === null) return;
+    const hostId = S.selectedHostId || 'local';
+    const entry = portFromList(S.selectedPort, hostId);
+    if (entry) {
+      const snapState = hostSnapshotState(hostId);
+      S.detailShownPort = S.selectedPort;
+      shownDetail = {
+        hostId,
+        port: S.selectedPort,
+        row: entry,
+        fromList: true,
+        pending: false,
+        hiddenLocked: snapState.hiddenLocked,
+        unavailable: snapState.unavailable,
+        showHidden: S.showHidden,
+        otherHtml: '',
+      };
+      renderDetail(entry);
+      return;
+    }
+    if (S.route.name !== 'port') {
+      closeDetail(true);
+      return;
+    }
+    const snapState = hostSnapshotState(hostId);
+    const matchesShown = S.detailShownPort === S.selectedPort &&
+      shownDetail &&
+      shownDetail.port === S.selectedPort &&
+      shownDetail.hostId === hostId &&
+      !shownDetail.fromList;
+    if (!matchesShown ||
+        shownDetail.hiddenLocked !== snapState.hiddenLocked ||
+        shownDetail.unavailable !== snapState.unavailable ||
+        shownDetail.showHidden !== S.showHidden) {
+      S.detailShownPort = null;
+      showPortDetail(S.selectedPort);
+      return;
+    }
+    if (shownDetail.pending) return;
+    const nextOtherHtml = otherMachinesHtml(S.selectedPort, hostId);
+    if (nextOtherHtml !== shownDetail.otherHtml) {
+      renderDetail(shownDetail.row);
+    }
   }
 
   function otherMachinesHtml(portNum, currentHostId) {
     if (!hasPeers()) return '';
     const activeHost = currentHostId || 'local';
     const others = listedHosts().filter(function (h) {
-      return h.id !== activeHost && S.hostMaps[h.id] && S.hostMaps[h.id].data;
+      return h.id !== activeHost && S.hostMaps[h.id] && (S.hostMaps[h.id].data || S.hostMaps[h.id].error);
     });
     if (!others.length) return '';
     const rows = others.map(function (h) {
-      const hostData = S.hostMaps[h.id].data;
-      const match = (hostData.ports || []).find(function (r) {
-        return r.port === portNum && (S.showHidden || !r.is_hidden);
-      });
+      const hostMap = S.hostMaps[h.id] || {};
       let state = 'unknown';
       let holder = '';
-      if (match) {
-        state = match.status || 'unknown';
-        if (state === 'used' || state === 'configured') holder = getCellLabel(match);
+      let tagLabel = '';
+      let errorAttr = '';
+      if (hostMap.error) {
+        state = 'unknown';
+        const errKind = hostMap.error === 'auth' ? 'auth' : 'down';
+        errorAttr = ' data-other-error="' + errKind + '"';
+        holder = t(errKind === 'auth' ? 'hosts.authFailed' : 'hosts.unreachable');
+        tagLabel = t('settings.scanners.state.failed');
       } else {
-        const hiddenNums = (hostData.summary && hostData.summary.hidden_ports) || [];
-        if (hiddenNums.indexOf(portNum) >= 0) {
-          state = hiddenOccupancy(portNum, hostData);
-        } else if (hostData.summary && hostData.summary.hidden_locked) {
-          state = S.lockedHitCache[h.id + ':' + portNum] === 'free' ? 'free' : 'unknown';
-        } else if (hostData.summary && hostData.summary.scan_complete === true && !hostData.summary.stale) {
-          state = 'free';
+        const hostData = hostMap.data || {};
+        const match = (hostData.ports || []).find(function (r) {
+          return r.port === portNum && (S.showHidden || !r.is_hidden);
+        });
+        if (match) {
+          state = safeStatus(match.status);
+          if (state === 'used' || state === 'configured') holder = getCellLabel(match);
+        } else {
+          const hiddenNums = (hostData.summary && hostData.summary.hidden_ports) || [];
+          if (hiddenNums.indexOf(portNum) >= 0) {
+            state = safeStatus(hiddenOccupancy(portNum, hostData));
+          } else if (hostData.summary && hostData.summary.hidden_locked) {
+            state = S.lockedHitCache[h.id + ':' + portNum] === 'free' ? 'free' : 'unknown';
+          } else if (hostData.summary && hostData.summary.scan_complete === true && !hostData.summary.stale) {
+            state = 'free';
+          }
         }
+        tagLabel = t('status.' + state);
       }
       return '<a class="detail-other-machine" href="' + escapeHtml(portHash(h.id, portNum)) +
-        '" data-other-host="' + escapeHtml(h.id) + '">' +
+        '" data-other-host="' + escapeHtml(h.id) + '"' + errorAttr + '>' +
         '<span class="detail-other-name">' + escapeHtml(hostName(h.id)) + '</span>' +
         '<span class="detail-other-meta">' +
         (holder ? '<span class="detail-other-holder">' + escapeHtml(holder) + '</span>' : '') +
-        '<span class="tag ' + escapeHtml(state) + '">' + escapeHtml(t('status.' + state) || state) + '</span>' +
+        '<span class="tag ' + state + '">' + escapeHtml(tagLabel || state) + '</span>' +
         '</span></a>';
     }).join('');
     return '<section class="detail-other-machines" data-other-machines>' +
@@ -148,23 +298,30 @@ export function configureDetail(actions) {
     const opening = detailPanel.classList.contains('hidden');
     setDetailOpen(true);
     const name = getCellLabel(p);
+    const portStr = escapeHtml(String(p.port));
+    const status = safeStatus(p.status);
+    const activeHost = S.selectedHostId || 'local';
+    const otherHtml = p._pending ? '' : otherMachinesHtml(p.port, activeHost);
     let html = '<div class="detail-head"><div><h2><button type="button" class="detail-copy-port" data-copy-port="' +
-      p.port + '" title="' + escapeHtml(t('detail.copyPort')) + '" aria-label="' +
-      escapeHtml(t('detail.copyPort') + ': ' + p.port) + '">' + p.port + '</button></h2>' +
+      portStr + '" title="' + escapeHtml(t('detail.copyPort')) + '" aria-label="' +
+      escapeHtml(t('detail.copyPort') + ': ' + String(p.port)) + '">' + portStr + '</button></h2>' +
       (name ? '<div class="detail-sub">' + escapeHtml(name) + '</div>' : '') +
       '</div><button type="button" class="close-btn" data-close-detail aria-label="' +
       escapeHtml(t('detail.close')) + '">×</button></div>';
 
-    if (p._pending || p._unavailable || p.status === 'unknown') {
+    if (p._pending || p._unavailable || (!p._missing && p.status === 'unknown')) {
       html += '<p class="modal-hint">' + escapeHtml(t(p._unavailable || p.status === 'unknown' ? 'scanner.snapshotUnavailable' : 'detail.loading')) + '</p>';
-      if (!p._pending) html += otherMachinesHtml(p.port, S.selectedHostId || 'local');
+      if (!p._pending) html += otherHtml;
     } else {
     const remote = S.selectedHostId && S.selectedHostId !== 'local';
     if (remote) {
       html += '<p class="modal-hint">' + escapeHtml(t('detail.remoteReadOnly', { name: hostName(S.selectedHostId) })) + '</p>';
     }
-    html += '<div class="row"><span class="key">' + escapeHtml(t('detail.status')) + '</span><span class="tag ' + p.status + '">' +
-      escapeHtml(t('status.' + p.status) || p.status) + '</span></div>';
+    const statusLabel = p._missing
+      ? t(p._locked ? 'legend.locked' : 'status.unknown')
+      : t('status.' + status);
+    html += '<div class="row"><span class="key">' + escapeHtml(t('detail.status')) + '</span><span class="tag ' + status + '">' +
+      escapeHtml(statusLabel) + '</span></div>';
     if (p._missing) {
       html += '<p class="detail-error" role="alert">' +
         escapeHtml(t(p._locked ? 'detail.hiddenLocked' : 'detail.notFound')) + '</p>';
@@ -180,7 +337,7 @@ export function configureDetail(actions) {
     }
 
     if (p.process) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.process')) + '</span><span class="val">' + escapeHtml(p.process) + '</span></div>';
-    if (p.pid) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.pid')) + '</span><span class="val">' + p.pid + '</span></div>';
+    if (p.pid) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.pid')) + '</span><span class="val">' + escapeHtml(String(p.pid)) + '</span></div>';
 
     if (p.urls && p.urls.length > 0) {
       html += '<div class="section-title">' + escapeHtml(t('detail.open')) + '</div>';
@@ -205,11 +362,38 @@ export function configureDetail(actions) {
     }
 
     if (p.conflict) {
-      const projectCount = Array.from(new Set((p.compose_configs || []).map(function (c) {
-        return c.project_dir;
-      }))).length;
-      html += '<div class="info-box conflict-box"><span class="info-name">' + escapeHtml(t('detail.conflict')) +
-        '</span> — ' + escapeHtml(t('detail.conflictHint', { n: projectCount })) + '</div>';
+      const configs = Array.isArray(p.compose_configs) ? p.compose_configs : [];
+      const projectCount = new Set(configs.map(function (c) {
+        return c.project_dir || c.project_name || '';
+      })).size;
+      const serviceCount = new Set(configs.map(function (c) {
+        return (c.project_dir || c.project_name || '') + '\0' + (c.service_name || '');
+      })).size;
+      let conflictText;
+      if (projectCount > 1) {
+        conflictText = t('detail.conflictHint', { n: projectCount });
+      } else {
+        conflictText = t('detail.conflictServicesHint', { n: Math.max(serviceCount, 2) });
+      }
+      html += '<div class="info-box conflict-box" data-compose-conflict><span class="info-name">' + escapeHtml(t('detail.conflict')) +
+        '</span> — ' + escapeHtml(conflictText) + '</div>';
+    }
+
+    if (Array.isArray(p.rule_violations) && p.rule_violations.length > 0) {
+      for (let i = 0; i < p.rule_violations.length; i++) {
+        const v = p.rule_violations[i];
+        if (!v || typeof v !== 'object') continue;
+        const target = [v.project, v.service].filter(Boolean).join(' / ');
+        const range = v.start != null && v.end != null ? String(v.start) + '–' + String(v.end) : '';
+        const details = [
+          target,
+          v.rule ? t('manage.rule') + ': ' + String(v.rule) : '',
+          range,
+        ].filter(Boolean).join(' · ');
+        html += '<div class="info-box conflict-box" data-rule-violation><span class="info-name">' +
+          escapeHtml(t('manage.outsideRule')) + '</span>' +
+          (details ? ' — ' + escapeHtml(details) : '') + '</div>';
+      }
     }
 
     if (p.bind_scope === 'public' && p.known_service && p.known_service.is_access_port) {
@@ -221,14 +405,9 @@ export function configureDetail(actions) {
       html += '<div class="section-title">' + escapeHtml(t('detail.containers')) + '</div>';
       for (let i = 0; i < p.containers.length; i++) {
         const c = p.containers[i];
-        const live = c.status === 'running' || c.status === 'paused' || c.status === 'restarting';
-        const knownTag = {
-          created: 1, dead: 1, removing: 1, exited: 1,
-          paused: 1, restarting: 1, running: 1,
-        };
-        const tag = live ? c.status : (knownTag[c.status] ? c.status : 'exited');
+        const tag = CONTAINER_STATUSES.has(c.status) ? c.status : 'exited';
         html += '<div class="row"><span class="key">' + escapeHtml(c.name) + '</span><span class="tag ' + tag + '">' +
-          escapeHtml(t('status.' + tag) || c.status) + '</span></div>';
+          escapeHtml(t('status.' + tag)) + '</span></div>';
         html += '<div class="row"><span class="key">' + escapeHtml(t('detail.image')) + '</span><span class="val">' + escapeHtml(c.image) + '</span></div>';
         if (c.compose_project) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.project')) + '</span><span class="val">' + escapeHtml(c.compose_project) + '</span></div>';
         if (c.compose_service) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.service')) + '</span><span class="val">' + escapeHtml(c.compose_service) + '</span></div>';
@@ -243,7 +422,7 @@ export function configureDetail(actions) {
         }
         if (c.container_port) {
           html += '<div class="row"><span class="key">' + escapeHtml(t('detail.containerPort')) + '</span><span class="val">' +
-            c.container_port + '</span></div>';
+            escapeHtml(String(c.container_port)) + '</span></div>';
         }
       }
     }
@@ -258,7 +437,7 @@ export function configureDetail(actions) {
         if (cc.host_ip) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.bind')) + '</span><span class="val">' + escapeHtml(cc.host_ip) + '</span></div>';
         if (cc.protocol && cc.protocol !== 'tcp') html += '<div class="row"><span class="key">' + escapeHtml(t('detail.protocol')) + '</span><span class="val">' + escapeHtml(cc.protocol) + '</span></div>';
         if (cc.network_mode) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.network')) + '</span><span class="val">' + escapeHtml(cc.network_mode) + '</span></div>';
-        if (cc.container_port) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.containerPort')) + '</span><span class="val">' + cc.container_port + '</span></div>';
+        if (cc.container_port) html += '<div class="row"><span class="key">' + escapeHtml(t('detail.containerPort')) + '</span><span class="val">' + escapeHtml(String(cc.container_port)) + '</span></div>';
       }
     }
 
@@ -276,24 +455,24 @@ export function configureDetail(actions) {
       html += '<p class="modal-hint">' + escapeHtml(t('detail.reservationHint')) + '</p>';
     }
 
-    html += otherMachinesHtml(p.port, S.selectedHostId || 'local');
+    html += otherHtml;
 
     if (!remote && !p.is_reservation && (p.manual_label != null || p.source_type === 'manual')) {
-      html += '<form class="detail-label-form" data-label-form="' + p.port + '"><label><span class="key">' +
+      html += '<form class="detail-label-form" data-label-form="' + portStr + '"><label><span class="key">' +
         escapeHtml(t('detail.label')) + '</span><input type="text" maxlength="80" value="' +
         escapeHtml(p.manual_label || '') + '" data-label-input></label><button type="submit" class="btn-secondary">' +
         escapeHtml(t('detail.saveLabel')) + '</button></form>';
     }
 
-    if (!remote) {
+    if (!remote && !p._missing) {
     html += '<div class="action-row">';
     if (p.is_hidden) {
-      html += '<button type="button" class="btn-unhide" data-unhide-port="' + p.port + '">' + escapeHtml(t('detail.unhide')) + '</button>';
+      html += '<button type="button" class="btn-unhide" data-unhide-port="' + portStr + '">' + escapeHtml(t('detail.unhide')) + '</button>';
     } else {
-      html += '<button type="button" class="btn-hide" data-hide-port="' + p.port + '">' + escapeHtml(t('detail.hide')) + '</button>';
+      html += '<button type="button" class="btn-hide" data-hide-port="' + portStr + '">' + escapeHtml(t('detail.hide')) + '</button>';
     }
     if (!p.is_reservation && (p.manual_label != null || p.source_type === 'manual')) {
-      html += '<button type="button" class="btn-delete" data-delete-port="' + p.port + '">' + escapeHtml(t('detail.delete')) + '</button>';
+      html += '<button type="button" class="btn-delete" data-delete-port="' + portStr + '">' + escapeHtml(t('detail.delete')) + '</button>';
     }
     html += '</div>';
     }
@@ -323,6 +502,9 @@ export function configureDetail(actions) {
       html += '<div class="action-row">' + portUiLinksHtml(S.meta.ui_links, p.port, window.PortLightI18n?.locale() || 'en') + '</div>';
     }
     if (!p._pending && !p._unavailable && p.status !== 'unknown' && !p._missing) html += '<section id="detail-history" hidden></section>';
+    if (shownDetail && shownDetail.port === p.port && shownDetail.hostId === activeHost) {
+      shownDetail.otherHtml = otherHtml;
+    }
     detailContent.innerHTML = html;
     if (!p._pending && !p._unavailable && p.status !== 'unknown' && !p._missing) {
       loadPortHistory(p.port, S.selectedHostId || 'local', detailContent.querySelector('#detail-history'));
@@ -378,6 +560,7 @@ export function configureDetail(actions) {
     setDetailOpen(false);
     S.selectedPort = null;
     S.detailShownPort = null;
+    shownDetail = null;
     S.portDetailGen += 1;
     if (!skipHash && S.route.name === 'port') {
       location.hash = gridHash(hostId);
@@ -520,6 +703,11 @@ export function configureDetail(actions) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ port: port, label: label, machine: 'localhost' }),
     });
+    if (res.status === 403 && S.meta.hidden_unlock_required) {
+      S.pendingAfterUnlock = function () { addManualPort(); };
+      openModal('unhide-modal');
+      return;
+    }
     if (!res.ok) {
       const body = await res.json().catch(function () { return {}; });
       showAddError(errorText(body, res.status) || t('modal.addFailed'));
@@ -535,9 +723,9 @@ export function configureDetail(actions) {
 
 
   const HISTORY_STATE_KEYS = {
-    used: 'summary.used',
-    configured: 'summary.configured',
-    free: 'summary.free',
+    used: 'status.used',
+    configured: 'status.configured',
+    free: 'status.free',
   };
 
   async function loadPortHistory(port, hostId, host) {
@@ -547,19 +735,25 @@ export function configureDetail(actions) {
       const body = await res.json();
       if (!host || S.selectedPort !== port || S.selectedHostId !== hostId
           || detailContent.querySelector('#detail-history') !== host
-          || !body.events || !body.events.length) return;
+          || !body || typeof body !== 'object'
+          || (body.port !== undefined && body.port !== port)
+          || !Array.isArray(body.events) || !body.events.length) return;
       const loc = window.PortLightI18n ? PortLightI18n.locale() : undefined;
-      const items = body.events.slice(-5).map(function (ev) {
-        const time = new Date(ev.ts * 1000).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
-        const stateKey = HISTORY_STATE_KEYS[ev.state];
-        const stateText = stateKey ? t(stateKey) : ev.state;
-        const who = (ev.holders && ev.holders.length)
+      const items = body.events.slice(-5).filter(ev => ev && typeof ev === 'object').map(function (ev) {
+        const ts = Number(ev.ts);
+        const dt = Number.isFinite(ts) ? new Date(ts * 1000) : null;
+        const time = dt ? dt.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' }) : '';
+        const iso = dt ? dt.toISOString() : '';
+        const stateKey = typeof ev.state === 'string' && Object.hasOwn(HISTORY_STATE_KEYS, ev.state)
+          ? HISTORY_STATE_KEYS[ev.state] : null;
+        const stateText = stateKey ? t(stateKey) : String(ev.state || '');
+        const who = (Array.isArray(ev.holders) && ev.holders.length)
           ? '<span class="history-holders">' + escapeHtml(ev.holders.join(', ')) + '</span>' : '';
-        return '<div class="history-event"><time datetime="' + new Date(ev.ts * 1000).toISOString() + '">' +
+        return '<div class="history-event"><time datetime="' + escapeHtml(iso) + '">' +
           escapeHtml(time) + '</time><span>' + escapeHtml(stateText) + '</span>' + who + '</div>';
       }).join('');
+      if (!items) return;
       host.innerHTML = '<h3 class="history-title">' + escapeHtml(t('history.title')) + '</h3>' + items;
       host.hidden = false;
     } catch (err) { /* history is best-effort */ }
   }
-import { portUiLinksHtml } from './ui-links.js?v=122';

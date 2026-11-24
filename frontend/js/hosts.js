@@ -1,8 +1,8 @@
 /* Host catalog, occupancy selectors, and route URLs. */
 
-import { S } from './state.js?v=122';
-import { t } from './text.js?v=122';
-import { usesFocusedFleet } from './fleet.js?v=122';
+import { S } from './state.js?v=125';
+import { t } from './text.js?v=125';
+import { usesFocusedFleet } from './fleet.js?v=125';
 
   export function hasPeers() {
     return !!(S.hostCatalog.peers && S.hostCatalog.peers.length);
@@ -57,12 +57,38 @@ import { usesFocusedFleet } from './fleet.js?v=122';
     }
     return S.hostMaps[hostId] && S.hostMaps[hostId].data;
   }
+  function detailPeerSlice(hostId, portNum) {
+    const m = S.hostMaps[hostId];
+    if (!m) return null;
+    const data = m.data;
+    const summary = data && data.summary;
+    const match = data && Array.isArray(data.ports)
+      ? data.ports.find(function (r) { return r && r.port === portNum; }) || null
+      : null;
+    const hiddenOcc = summary && Array.isArray(summary.hidden_occupancy)
+      ? summary.hidden_occupancy.find(function (r) { return r && r.port === portNum; }) || null
+      : null;
+    const hiddenListed = !!(summary && Array.isArray(summary.hidden_ports) && summary.hidden_ports.indexOf(portNum) >= 0);
+    return {
+      id: hostId,
+      error: m.error || '',
+      loaded: !!data,
+      scan_complete: summary ? summary.scan_complete : null,
+      stale: !!(summary && summary.stale),
+      hidden_locked: !!(summary && summary.hidden_locked),
+      hidden_listed: hiddenListed,
+      hidden_occ: hiddenOcc,
+      locked_hit: S.lockedHitCache[hostId + ':' + portNum] || '',
+      match: match,
+    };
+  }
   export function occupancyFingerprint() {
     if (!hasPeers()) {
       if (!S.currentData) return '';
       return JSON.stringify({ ports: S.currentData.ports, summary: S.currentData.summary });
     }
-    return JSON.stringify(displayedHosts().map(function (h) {
+    const visible = displayedHosts();
+    const boards = visible.map(function (h) {
       const m = S.hostMaps[h.id] || {};
       return {
         id: h.id,
@@ -71,5 +97,13 @@ import { usesFocusedFleet } from './fleet.js?v=122';
         error: m.error || '',
         scanners: m.scanners || null,
       };
-    }));
+    });
+    if (usesFocusedHostView() && S.selectedPort !== null) {
+      const shownIds = new Set(visible.map(function (h) { return h.id; }));
+      const detailPeers = listedHosts()
+        .filter(function (h) { return !shownIds.has(h.id); })
+        .map(function (h) { return detailPeerSlice(h.id, S.selectedPort); });
+      return JSON.stringify({ boards: boards, detailPort: S.selectedPort, detailPeers: detailPeers });
+    }
+    return JSON.stringify(boards);
   }

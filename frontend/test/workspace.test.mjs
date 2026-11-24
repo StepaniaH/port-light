@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
-const { workspaceAssets } = await import('../js/workspace.js?v=' + version);
+const { getHiddenUnlock, workspaceAssets, workspaceMountOptions } = await import('../js/workspace.js?v=' + version);
+const { S } = await import('../js/state.js?v=' + version);
 const { portUiLinksHtml, workspaceHref } = await import('../js/ui-links.js?v=' + version);
 const { parseHash } = await import('../js/router.js?v=' + version);
 const link = { key: 'tools', path: '/tools/', label: 'Tools', workspace: { api: 1,
@@ -27,4 +28,23 @@ test('only module-local assets load, with the verified release revision', () => 
     assert.equal(workspaceAssets({ ...link, workspace: { ...link.workspace, entry } }), null);
   }
   assert.equal(workspaceAssets({ ...link, workspace: { ...link.workspace, revision: '../invalid' } }), null);
+});
+
+test('workspaceMountOptions passes getHiddenUnlock reflecting active hidden unlock state', () => {
+  const prev = S.hiddenUnlock;
+  sessionStorage.removeItem('port-light-hidden-unlock');
+  try {
+    S.hiddenUnlock = '';
+    const opts = workspaceMountOptions({ root: {}, locale: 'en', port: 8080, signal: null, revision: 'a'.repeat(64) });
+    assert.equal(typeof opts.getHiddenUnlock, 'function');
+    assert.equal(opts.getHiddenUnlock(), '');
+    sessionStorage.setItem('port-light-hidden-unlock', 'stored-secret');
+    assert.equal(opts.getHiddenUnlock(), 'stored-secret');
+    S.hiddenUnlock = 'live-secret';
+    assert.equal(opts.getHiddenUnlock(), 'live-secret');
+    assert.equal(getHiddenUnlock(), 'live-secret');
+  } finally {
+    S.hiddenUnlock = prev;
+    sessionStorage.removeItem('port-light-hidden-unlock');
+  }
 });

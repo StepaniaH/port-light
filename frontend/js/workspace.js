@@ -1,10 +1,23 @@
 /* Optional local modules use the same shell, appearance and navigation as core views. */
-import { S } from './state.js?v=122';
-import { t } from './text.js?v=122';
-import { enhanceSelects } from './select.js?v=122';
-import { workspaceAssets } from './extension-assets.js?v=122';
+import { S } from './state.js?v=125';
+import { t } from './text.js?v=125';
+import { enhanceSelects } from './select.js?v=125';
+import { workspaceAssets } from './extension-assets.js?v=125';
 
-export { workspaceAssets } from './extension-assets.js?v=122';
+export { workspaceAssets } from './extension-assets.js?v=125';
+
+export function getHiddenUnlock() {
+  if (S.hiddenUnlock) return String(S.hiddenUnlock);
+  try {
+    return sessionStorage.getItem('port-light-hidden-unlock') || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+export function workspaceMountOptions({ root, locale, port, signal, revision }) {
+  return { root, locale, port, signal, enhanceSelects, revision, getHiddenUnlock };
+}
 
 export function mountWorkspacePage(container) {
   let controller;
@@ -66,7 +79,7 @@ export function mountWorkspacePage(container) {
       const [module] = await Promise.all([import(assets.entry), ready]);
       if (signal.aborted) return;
       if (typeof module.mount !== 'function') throw new Error('Invalid workspace entry');
-      const dispose = await module.mount({ root, locale, port: route.port, signal, enhanceSelects, revision: assets.revision });
+      const dispose = await module.mount(workspaceMountOptions({ root, locale, port: route.port, signal, revision: assets.revision }));
       if (signal.aborted) { dispose?.(); return; }
       return typeof dispose === 'function' ? dispose : null;
     }

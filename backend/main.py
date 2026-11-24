@@ -104,7 +104,7 @@ async def security_headers_middleware(request: Request, call_next):
     )
     response.headers.setdefault(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "default-src 'self'; script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     )

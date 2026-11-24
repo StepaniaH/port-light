@@ -67,6 +67,8 @@ def test_health_unauthenticated(monkeypatch):
     assert res.headers.get("cache-control") == "no-store"
     csp = res.headers.get("content-security-policy") or ""
     assert "default-src 'self'" in csp
+    assert "script-src 'self';" in csp
+    assert "script-src 'self' 'unsafe-inline'" not in csp
     assert "frame-ancestors 'none'" in csp
     assert res.headers.get("cross-origin-opener-policy") == "same-origin"
     assert res.headers.get("cross-origin-resource-policy") == "same-origin"

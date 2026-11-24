@@ -735,13 +735,14 @@
     "internalHint": "Usually not reached directly.",
     "conflict": "Compose conflict",
     "conflictHint": "Declared by {n} Compose projects that bind the same address.",
+    "conflictServicesHint": "Declared by {n} services in the same Compose project that bind the same address.",
     "hide": "Hide from grid",
     "unhide": "Unhide",
     "delete": "Delete",
     "deleteConfirm": "Remove the manual entry for port {port}?",
     "actionFailed": "Could not update that port.",
     "notFound": "This port is not on the occupancy map.",
-    "hiddenLocked": "This port is hidden. Unlock hidden ports to see it.",
+    "hiddenLocked": "Port status is withheld while hidden ports are locked. Unlock hidden ports to view it.",
     "loading": "Reading occupancy…",
     "label": "Label",
     "saveLabel": "Save label",
@@ -1264,7 +1265,10 @@
     "conflictsEmpty": "No configuration conflicts found.",
     "rulesEmpty": "No port rules yet.",
     "reservationsEmpty": "No reserved ports yet.",
-    "discardPending": "Discard pending request"
+    "discardPending": "Discard pending request",
+    "recoveredPending": "This pending request had already committed on the server. Release credentials were recovered.",
+    "discardConfirm": "Could not verify with the server whether this request committed. Discarding clears only local browser state and will not cancel an active reservation. Discard anyway?",
+    "discardNotFoundConfirm": "No receipt for this request was found on the server. Discarding clears only local browser state and cannot recover or cancel an evicted or unrecognized reservation. Discard anyway?"
   },
   "preview": {
     "nasName": "NAS · Media & storage",

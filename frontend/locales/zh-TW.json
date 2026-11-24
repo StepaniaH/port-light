@@ -735,13 +735,14 @@
     "internalHint": "通常不會直接連線。",
     "conflict": "Compose 衝突",
     "conflictHint": "{n} 個 Compose 專案繫結了同一位址。",
+    "conflictServicesHint": "同一 Compose 專案中有 {n} 個服務繫結了同一位址。",
     "hide": "從一覽隱藏",
     "unhide": "取消隱藏",
     "delete": "刪除",
     "deleteConfirm": "刪除連接埠 {port} 的手動項目？",
     "actionFailed": "無法更新該連接埠。",
     "notFound": "佔用圖上沒有這個連接埠。",
-    "hiddenLocked": "此連接埠已隱藏。解鎖隱藏連接埠後才能查看。",
+    "hiddenLocked": "隱藏連接埠已鎖定時不會顯示連接埠狀態。解鎖隱藏連接埠後才能查看。",
     "loading": "正在讀取佔用…",
     "label": "標籤",
     "saveLabel": "儲存標籤",
@@ -1264,7 +1265,10 @@
     "conflictsEmpty": "未發現設定衝突。",
     "rulesEmpty": "尚無連接埠規則。",
     "reservationsEmpty": "尚無預留連接埠。",
-    "discardPending": "放棄待處理請求"
+    "discardPending": "放棄待處理請求",
+    "recoveredPending": "該待處理請求已在伺服器端提交成功，已恢復其釋放憑證。",
+    "discardConfirm": "無法向伺服器確認此請求是否已提交。放棄僅會清除目前瀏覽器的本機紀錄，不會取消已生效的預留。仍要放棄嗎？",
+    "discardNotFoundConfirm": "伺服器找不到此請求的回執。放棄僅會清除目前瀏覽器的本機紀錄，無法恢復或取消已被淘汰或未識別的預留。仍要放棄嗎？"
   },
   "preview": {
     "nasName": "NAS · 媒體與儲存",

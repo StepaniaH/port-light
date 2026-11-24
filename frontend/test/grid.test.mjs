@@ -202,3 +202,40 @@ test('collapsed grouped runs surface rule violation badges and preserve summary 
     document.activeElement = null;
   }
 });
+
+test('grid and summary neutralize hostile peer payloads in numeric and status fields', () => {
+  const previous = { searchTerm: S.searchTerm, groupMode: S.groupMode, settings: { ...S.settings } };
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  try {
+    renderSummary({
+      scan_complete: true,
+      used: '<img src=x onerror=alert(1)>',
+      configured: '<b>2</b>',
+      free: '<svg onload=alert(1)>',
+      hidden: { valueOf: () => 1, toString: () => '<script>alert(1)</script>' },
+    });
+    const summaryHtml = document.getElementById('summary').innerHTML;
+    assert.doesNotMatch(summaryHtml, /<img|<svg|<script|onerror|onload/i);
+
+    const maliciousRows = [
+      { port: '<img src=x onerror=alert(1)>', status: 'used', process: 'evil' },
+      { port: '8080<script>x</script>', status: 'configured', process: 'evil2' },
+      { port: 8080, status: 'used" onclick="alert(1)', process: 'ok-svc' },
+    ];
+    for (const term of ['', 'evil']) {
+      S.searchTerm = term;
+      renderGrid(maliciousRows, root, { ports: maliciousRows, summary: { scan_complete: true } }, 'peer0001');
+      assert.doesNotMatch(root.innerHTML, /<img|<script|onerror|onclick/i);
+    }
+    S.searchTerm = '';
+    renderGrid([maliciousRows[2]], root, { ports: [maliciousRows[2]], summary: { scan_complete: true } }, 'peer0001');
+    const cell = root.querySelector('.port-cell');
+    assert.ok(cell, 'valid integer port still renders');
+    assert.equal(cell.getAttribute('onclick'), null);
+    assert.match(cell.className, /\blocked\b/);
+  } finally {
+    Object.assign(S, previous);
+    root.remove();
+  }
+});

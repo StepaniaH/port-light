@@ -1,43 +1,36 @@
 /* Port-Light frontend */
 
-import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=122';
-import { errorText, escapeHtml, t } from './text.js?v=122';
-import { moveChipFocus, trapTab } from './a11y.js?v=122';
+import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=125';
+import { errorText, escapeHtml, t } from './text.js?v=125';
+import { moveChipFocus, trapTab } from './a11y.js?v=125';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=122';
-import { openModal, closeModals, modalOpen } from './modal.js?v=122';
-import { applyRoute as updateRoute } from './router.js?v=122';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=122';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=122';
-import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=122';
-import { refreshFleet } from './fleet.js?v=122';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=122';
-import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=122';
-import { mountManagementPage } from './management.js?v=122';
-import { mountActionMenu } from './action-menu.js?v=122';
-import { mountDoctorPage } from './doctor.js?v=122';
-import { renderUiLinks } from './ui-links.js?v=122';
-import { mountWorkspacePage } from './workspace.js?v=122';
-import { observeSelects, enhanceSelects } from './select.js?v=122';
+} from './dom.js?v=125';
+import { openModal, closeModals, modalOpen } from './modal.js?v=125';
+import { applyRoute as updateRoute } from './router.js?v=125';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=125';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=125';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=125';
+import { refreshFleet } from './fleet.js?v=125';
+import { configureDetail, closeDetail, showPortDetail, syncOpenDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=125';
+import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=125';
+import { mountManagementPage } from './management.js?v=125';
+import { mountActionMenu } from './action-menu.js?v=125';
+import { mountDoctorPage } from './doctor.js?v=125';
+import { renderUiLinks } from './ui-links.js?v=125';
+import { mountWorkspacePage } from './workspace.js?v=125';
+import { observeSelects, enhanceSelects } from './select.js?v=125';
 
 (function () {
   'use strict';
 
   function render() {
     renderGridView();
-    if (S.selectedPort !== null) {
-      const entry = portFromList(S.selectedPort, S.selectedHostId);
-      if (entry) renderDetail(entry);
-      else if (S.route.name === 'port') {
-        S.detailShownPort = null;
-        showPortDetail(S.selectedPort);
-      } else closeDetail(true);
-    }
+    syncOpenDetail();
   }
 
   let settingsPage = null;
@@ -525,6 +518,14 @@ import { observeSelects, enhanceSelects } from './select.js?v=122';
     try {
       const res = await api('/api/free-runs?count=' + count +
         '&start=' + S.rangeStart + '&end=' + S.rangeEnd);
+      if (res.status === 403 && S.meta.hidden_unlock_required) {
+        S.pendingAfterUnlock = function () {
+          openModal('free-modal');
+          document.getElementById('free-find').click();
+        };
+        openModal('unhide-modal');
+        return;
+      }
       if (!res.ok) throw new Error(t(res.status === 503 ? 'planner.unavailable' : 'planner.failed'));
       const body = await res.json();
       if (!body.runs || !body.runs.length) {
@@ -564,6 +565,11 @@ import { observeSelects, enhanceSelects } from './select.js?v=122';
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ start: startR, end: endR, label: label }),
       });
+      if (res.status === 403 && S.meta.hidden_unlock_required) {
+        S.pendingAfterUnlock = function () { openModal('free-modal'); };
+        openModal('unhide-modal');
+        return;
+      }
       if (!res.ok) throw new Error(t(res.status === 409 ? 'planner.changed'
         : res.status === 503 ? 'planner.unavailable' : 'planner.failed'));
       closeModals();

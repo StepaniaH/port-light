@@ -1,20 +1,20 @@
-import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=122';
-export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=122';
-import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=122';
-export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=122';
-import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=122';
-export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=122';
-import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows, testPeerConnection } from './settings-peers.js?v=122';
-export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=122';
+import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=125';
+export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=125';
+import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=125';
+export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=125';
+import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=125';
+export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=125';
+import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows, testPeerConnection } from './settings-peers.js?v=125';
+export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=125';
 /* Settings panels, locale menu, theme picker, and peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=122';
-import { t, escapeHtml, errorText } from './text.js?v=122';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=122';
-import { api, fetchHosts, fetchSettings } from './api.js?v=122';
-import { bindAddressView } from './grid.js?v=122';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=122';
-import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=122';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=125';
+import { t, escapeHtml, errorText } from './text.js?v=125';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=125';
+import { api, fetchHosts, fetchSettings } from './api.js?v=125';
+import { bindAddressView } from './grid.js?v=125';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=125';
+import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=125';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -427,11 +427,27 @@ function settingValuesEqual(left, right) {
       '</div><div class="editor-grid">' + rows + '</div></details><p id="theme-editor-status" class="action-status" role="status" aria-live="polite"></p>';
   }
 
+  const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+  export function normalizeHexColor(raw) {
+    const value = String(raw || '').trim();
+    return HEX_COLOR_RE.test(value) ? value.toLowerCase() : null;
+  }
+
+  export function hexForColorInput(raw) {
+    const hex = normalizeHexColor(raw);
+    if (!hex) return null;
+    if (hex.length === 4 || hex.length === 5) {
+      return '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+    }
+    return hex.slice(0, 7);
+  }
+
   function rgbToHex(raw) {
     const m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(raw || '');
-    if (!m) return /^#[0-9a-fA-F]{3,8}$/.test((raw || '').trim()) ? raw.trim() : '#000000';
+    if (!m) return normalizeHexColor(raw) || '#000000';
     return '#' + m.slice(1).map(function (n) {
-      return ('0' + Number(n).toString(16)).slice(-2);
+      return ('0' + Math.max(0, Math.min(255, Number(n))).toString(16)).slice(-2);
     }).join('');
   }
 
@@ -442,17 +458,68 @@ function settingValuesEqual(left, right) {
     conflict: '--conflict', access: '--access', hidden: '--hidden', danger: '--danger',
   };
 
+  function setEditorColorRow(key, rawHex) {
+    const hex = normalizeHexColor(rawHex) || '#000000';
+    const pickerHex = hexForColorInput(hex) || '#000000';
+    const color = document.querySelector('[data-editor-color="' + key + '"]');
+    const hexInput = document.querySelector('[data-editor-hex="' + key + '"]');
+    if (color) color.value = pickerHex;
+    if (hexInput) {
+      hexInput.value = hex;
+      hexInput.removeAttribute('aria-invalid');
+    }
+  }
+
   export function fillEditorFromPreset() {
     const editor = document.getElementById('theme-editor');
-    if (editor) editor.dataset.initialized = '1';
-    const cs = getComputedStyle(document.documentElement);
+    if (editor) {
+      editor.setAttribute('data-initialized', '1');
+      editor.removeAttribute('data-mode');
+    }
+    applyAppearance();
+    const cs = typeof getComputedStyle === 'function'
+      ? getComputedStyle(document.documentElement)
+      : document.documentElement.style;
     EDITOR_VARS.forEach(function (row) {
-      const hex = rgbToHex(cs.getPropertyValue(CUSTOM_CSS_NAMES[row.key]));
-      const color = document.querySelector('[data-editor-color="' + row.key + '"]');
-      const hexInput = document.querySelector('[data-editor-hex="' + row.key + '"]');
-      if (color) color.value = hex.slice(0, 7);
-      if (hexInput) hexInput.value = hex;
+      setEditorColorRow(row.key, rgbToHex(cs.getPropertyValue(CUSTOM_CSS_NAMES[row.key])));
     });
+  }
+
+  export function loadEditorTarget(targetId) {
+    const editor = document.getElementById('theme-editor');
+    const nameInput = document.getElementById('editor-name');
+    const target = String(targetId || '').trim();
+    const theme = target
+      ? (S.customThemes || []).find(function (item) { return item.id === target; }) || null
+      : null;
+    setPageStatus('theme-editor-status', '', 'action-status', 0);
+    if (!theme) {
+      if (nameInput) {
+        nameInput.value = '';
+        nameInput.removeAttribute('aria-invalid');
+      }
+      fillEditorFromPreset();
+      return false;
+    }
+    const mode = theme.mode === 'light' ? 'light' : 'dark';
+    if (editor) {
+      editor.setAttribute('data-initialized', '1');
+      editor.setAttribute('data-mode', mode);
+    }
+    if (nameInput) {
+      nameInput.value = theme.name || '';
+      nameInput.removeAttribute('aria-invalid');
+    }
+    applyAppearance();
+    document.documentElement.setAttribute('data-mode', mode);
+    document.documentElement.removeAttribute('data-palette');
+    const colors = theme.colors || {};
+    EDITOR_VARS.forEach(function (row) {
+      const hex = normalizeHexColor(colors[row.key]) || '#000000';
+      setEditorColorRow(row.key, hex);
+      previewEditorColor(row.key, hex);
+    });
+    return true;
   }
 
   function collectEditorColors() {
@@ -460,17 +527,60 @@ function settingValuesEqual(left, right) {
     let ok = true;
     EDITOR_VARS.forEach(function (row) {
       const hexInput = document.querySelector('[data-editor-hex="' + row.key + '"]');
-      const value = (hexInput && hexInput.value || '').trim();
-      if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value)) {
+      const value = normalizeHexColor(hexInput && hexInput.value);
+      if (value) {
+        if (hexInput) hexInput.removeAttribute('aria-invalid');
         out[row.key] = value;
-      } else ok = false;
+      } else {
+        if (hexInput) hexInput.setAttribute('aria-invalid', 'true');
+        ok = false;
+      }
     });
     return ok ? out : null;
   }
 
-  function previewEditorColor(key, hex) {
-    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
-    document.documentElement.style.setProperty(CUSTOM_CSS_NAMES[key], hex);
+  export function previewEditorColor(key, hex) {
+    const normalized = normalizeHexColor(hex);
+    if (!normalized || !CUSTOM_CSS_NAMES[key]) return false;
+    document.documentElement.style.setProperty(CUSTOM_CSS_NAMES[key], normalized);
+    return true;
+  }
+
+  export function handleEditorColorInput(colorRow) {
+    if (!colorRow) return false;
+    const key = colorRow.getAttribute('data-editor-color');
+    const hex = normalizeHexColor(colorRow.value);
+    if (!key || !hex) return false;
+    const hexInput = document.querySelector('[data-editor-hex="' + key + '"]');
+    if (hexInput) {
+      hexInput.value = hex;
+      hexInput.removeAttribute('aria-invalid');
+    }
+    return previewEditorColor(key, hex);
+  }
+
+  export function handleEditorHexInput(hexInput) {
+    if (!hexInput) return false;
+    const key = hexInput.getAttribute('data-editor-hex');
+    if (!key) return false;
+    const hex = normalizeHexColor(hexInput.value);
+    if (!hex) {
+      hexInput.setAttribute('aria-invalid', 'true');
+      return false;
+    }
+    hexInput.removeAttribute('aria-invalid');
+    const color = document.querySelector('[data-editor-color="' + key + '"]');
+    const pickerHex = hexForColorInput(hex);
+    if (color && pickerHex) color.value = pickerHex;
+    return previewEditorColor(key, hex);
+  }
+
+  function activeEditorMode(editingTheme) {
+    const editor = document.getElementById('theme-editor');
+    const attr = editor ? editor.getAttribute('data-mode') : '';
+    if (attr === 'light' || attr === 'dark') return attr;
+    if (editingTheme && (editingTheme.mode === 'light' || editingTheme.mode === 'dark')) return editingTheme.mode;
+    return currentMode();
   }
 
   export async function refreshThemeChoices(deletedId) {
@@ -495,7 +605,9 @@ function settingValuesEqual(left, right) {
     if (target) {
       const selected = target.value;
       target.innerHTML = themeTargetsHtml();
-      target.value = S.customThemes.some(function (theme) { return theme.id === selected; }) ? selected : '';
+      const stillExists = S.customThemes.some(function (theme) { return theme.id === selected; });
+      target.value = stillExists ? selected : '';
+      if (selected && !stillExists) loadEditorTarget('');
     }
     applyAppearance();
     if (removedSelection && control) {
@@ -506,13 +618,26 @@ function settingValuesEqual(left, right) {
 
   async function saveEditorTheme(btn) {
     const colors = collectEditorColors();
-    const name = ((document.getElementById('editor-name') || {}).value || '').trim();
+    const nameInput = document.getElementById('editor-name');
+    const name = ((nameInput && nameInput.value) || '').trim();
+    if (nameInput) {
+      if (name) nameInput.removeAttribute('aria-invalid');
+      else nameInput.setAttribute('aria-invalid', 'true');
+    }
     const target = (document.getElementById('editor-target') || {}).value || '';
     if (!colors || !name) {
       setPageStatus('theme-editor-status', 'settings.editor.invalid', 'action-status is-error', 0);
       return;
     }
-    const payload = { name: name, basedOn: '', mode: currentMode(), colors: colors };
+    const editingTheme = target
+      ? (S.customThemes || []).find(function (item) { return item.id === target; }) || null
+      : null;
+    const payload = {
+      name: name,
+      basedOn: editingTheme ? (editingTheme.basedOn || '') : '',
+      mode: activeEditorMode(editingTheme),
+      colors: colors,
+    };
     const url = target ? '/api/custom-themes/' + encodeURIComponent(target) : '/api/custom-themes';
     try {
       const res = await api(url, {
@@ -536,7 +661,11 @@ function settingValuesEqual(left, right) {
   function exportEditorTheme() {
     const colors = collectEditorColors() || editorDefaults();
     const name = ((document.getElementById('editor-name') || {}).value || 'port-light-theme');
-    const blob = new Blob([JSON.stringify({ name: name, basedOn: '', mode: currentMode(), colors: colors }, null, 2)],
+    const target = (document.getElementById('editor-target') || {}).value || '';
+    const editingTheme = target
+      ? (S.customThemes || []).find(function (item) { return item.id === target; }) || null
+      : null;
+    const blob = new Blob([JSON.stringify({ name: name, basedOn: '', mode: activeEditorMode(editingTheme), colors: colors }, null, 2)],
       { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -729,33 +858,34 @@ function settingValuesEqual(left, right) {
     });
     document.addEventListener('toggle', function (event) {
       const editor = event.target;
-      if (editor.id === 'theme-editor' && editor.open && !editor.dataset.initialized) fillEditorFromPreset();
+      if (editor.id === 'theme-editor' && editor.open && !editor.getAttribute('data-initialized')) fillEditorFromPreset();
     }, true);
-    /* The file input and hex rows are rebuilt on every renderSettingsForm, so
-       these two are wired as document-level delegates rather than bound to
-       today's elements. */
+    /* The file input, target selector, and hex rows are rebuilt on every
+       renderSettingsForm, so these are wired as document-level delegates
+       rather than bound to today's elements. */
     document.addEventListener('change', function (e) {
       if (e.target && e.target.name && CARD_FIELD_KEYS[e.target.name]) {
         updateDisplayPreview();
         return;
       }
+      if (e.target && e.target.id === 'editor-target') {
+        loadEditorTarget(e.target.value);
+        return;
+      }
       if (e.target && e.target.id === 'editor-file') importEditorThemeFile(e.target);
     });
     document.addEventListener('input', function (e) {
+      if (e.target && e.target.id === 'editor-name') {
+        if (String(e.target.value || '').trim()) e.target.removeAttribute('aria-invalid');
+        return;
+      }
       const colorRow = e.target && e.target.closest ? e.target.closest('[data-editor-color]') : null;
       if (colorRow) {
-        const key = colorRow.getAttribute('data-editor-color');
-        const hexInput = document.querySelector('[data-editor-hex="' + key + '"]');
-        if (hexInput) hexInput.value = colorRow.value;
-        previewEditorColor(key, colorRow.value);
+        handleEditorColorInput(colorRow);
         return;
       }
       const hexInput = e.target && e.target.closest ? e.target.closest('[data-editor-hex]') : null;
-      if (!hexInput || !/^#[0-9a-fA-F]{6}$/.test(hexInput.value)) return;
-      const key = hexInput.getAttribute('data-editor-hex');
-      const color = document.querySelector('[data-editor-color="' + key + '"]');
-      if (color) color.value = hexInput.value;
-      previewEditorColor(key, hexInput.value);
+      if (hexInput) handleEditorHexInput(hexInput);
     });
   }
 
@@ -959,6 +1089,31 @@ function settingValuesEqual(left, right) {
     LIVE_APPLY_KEYS.forEach(function (key) {
       if (S.settingsDirtyKeys.has(key)) S.settings[key] = S.settingsDraft[key];
     });
+    if (body.values && (Object.prototype.hasOwnProperty.call(body.values, 'host_name') ||
+        Object.prototype.hasOwnProperty.call(body.values, 'host_description'))) {
+      if (!S.hostCatalog) {
+        S.hostCatalog = { local: { id: 'local', name: '', description: '', local: true }, peers: [], readonly: false, max_peers: 32 };
+      }
+      if (!S.hostCatalog.local) {
+        S.hostCatalog.local = { id: 'local', name: '', description: '', local: true };
+      }
+      if (Object.prototype.hasOwnProperty.call(body.values, 'host_name') && !S.settingsDirtyKeys.has('host_name')) {
+        const nextName = String(body.values.host_name || '').trim();
+        if (nextName) {
+          S.hostCatalog.local.name = nextName;
+        } else if (keys.includes('host_name')) {
+          S.hostCatalog.local.name = '';
+          fetchHosts().then(function (catalog) {
+            if (catalog && catalog.local && !S.settingsDirtyKeys.has('host_name') && !String(S.settings.host_name || '').trim()) {
+              S.hostCatalog.local = Object.assign({}, S.hostCatalog.local, catalog.local);
+            }
+          });
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(body.values, 'host_description') && !S.settingsDirtyKeys.has('host_description')) {
+        S.hostCatalog.local.description = String(body.values.host_description || '').trim();
+      }
+    }
     if (keys.includes('port_range_start') || keys.includes('port_range_end')) {
       if (!S.settingsDirtyKeys.has('port_range_start') && !S.settingsDirtyKeys.has('port_range_end')) {
         S.rangeStart = body.values.port_range_start;
@@ -1269,7 +1424,7 @@ function settingValuesEqual(left, right) {
         return loadSettingsPage();
       },
       show(section) { showSettingsPanel(section, true); },
-      close() { settingsLoadGeneration += 1; closeAnalysisSettings(); },
+      close() { settingsLoadGeneration += 1; closeAnalysisSettings(); applyAppearance(); },
       syncPaletteAvailability,
       closeTransient(opts) { return closeLocaleMenu(opts); },
       hasPending() {

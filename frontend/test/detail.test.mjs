@@ -5,7 +5,7 @@ import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
 const { S } = await import('../js/state.js?v=' + version);
-const { renderDetail, showPortDetail, unlockHidden } = await import('../js/detail.js?v=' + version);
+const { renderDetail, showPortDetail, syncOpenDetail, unlockHidden } = await import('../js/detail.js?v=' + version);
 const { portFromList } = await import('../js/grid.js?v=' + version);
 const detail = document.getElementById('detail-content');
 const PEER = 'abcdef123456';
@@ -200,4 +200,234 @@ test('detail drawer renders other machines from loaded hostMaps with zero extra 
   assert.ok(peerLinks[0].querySelector('.tag.used'));
   assert.ok(peerLinks[1].querySelector('.tag.free'));
   assert.ok(peerLinks[2].querySelector('.tag.unknown'));
+});
+
+test('renderDetail escapes peer numeric fields and allowlists status classes', () => {
+  globalThis.fetch = async () => ({ ok: false });
+  renderDetail({
+    port: '<img src=x onerror=alert(1)>',
+    status: 'used" onclick="alert(1)',
+    pid: '<svg onload=alert(1)>',
+    source_type: 'docker',
+    containers: [{
+      name: 'web',
+      status: 'running" onmouseover="alert(1)',
+      image: 'nginx',
+      container_port: '<script>1</script>',
+    }, {
+      name: 'proto',
+      status: 'constructor',
+      image: 'busybox',
+    }],
+    compose_configs: [{
+      project_name: 'proj',
+      service_name: 'svc',
+      compose_file: 'compose.yaml',
+      container_port: '<iframe src=x>',
+    }],
+  });
+  assert.doesNotMatch(detail.innerHTML, /<(?:img|svg|script|iframe)\b|"[^"]*\s+on(?:click|mouseover)=/i);
+  assert.doesNotMatch(detail.innerHTML, /onclick=|onmouseover=/i);
+  assert.match(detail.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(detail.innerHTML, /&lt;svg onload=alert\(1\)&gt;/);
+  assert.match(detail.innerHTML, /&lt;script&gt;1&lt;\/script&gt;/);
+  assert.match(detail.innerHTML, /&lt;iframe src=x&gt;/);
+  assert.ok(detail.querySelector('.tag.unknown'), 'unknown status maps to allowlisted unknown class');
+  assert.equal(detail.querySelectorAll('.tag.exited').length, 2, 'invalid/prototype container statuses map to exited');
+});
+
+test('port history resolves status.* keys from en.json instead of raw summary.* keys', async () => {
+  const prevI18n = window.PortLightI18n;
+  const english = JSON.parse(readFileSync(new URL('../locales/en.json', import.meta.url), 'utf8'));
+  window.PortLightI18n = {
+    locale: () => 'en',
+    t(key, vars = {}) {
+      const raw = key.split('.').reduce((acc, part) => acc?.[part], english);
+      const text = typeof raw === 'string' ? raw : key;
+      return text.replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? '{' + name + '}'));
+    },
+  };
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        events: [
+          { ts: 1700000000, state: 'used', holders: ['nginx'] },
+          { ts: 1700000060, state: 'configured', holders: ['app'] },
+          { ts: 1700000120, state: 'free', holders: [] },
+        ],
+      }),
+    });
+    renderDetail(row(45000));
+    await flush();
+    const history = detail.querySelector('#detail-history');
+    assert.match(history.innerHTML, />in use</);
+    assert.match(history.innerHTML, />configured</);
+    assert.match(history.innerHTML, />free</);
+    assert.doesNotMatch(history.innerHTML, /summary\.|status\./);
+  } finally {
+    window.PortLightI18n = prevI18n;
+  }
+});
+
+test('otherMachines shows peer error state instead of stale cached occupancy or free', async () => {
+  const PEER_DOWN = '112233445566';
+  const PEER_AUTH = '665544332211';
+  S.hostCatalog = {
+    local: { id: 'local', name: 'Hub', local: true },
+    peers: [
+      { id: PEER_DOWN, name: 'Down Box' },
+      { id: PEER_AUTH, name: 'Auth Box' },
+    ],
+  };
+  S.hostMaps = {
+    local: { data: { ports: [row(45000)], summary: { scan_complete: true } } },
+    [PEER_DOWN]: {
+      data: { ports: [{ port: 45000, status: 'used', process: 'stale-daemon' }], summary: { scan_complete: true } },
+      error: 'down',
+    },
+    [PEER_AUTH]: { error: 'auth' },
+  };
+  globalThis.fetch = async () => ({ ok: false, status: 404 });
+  renderDetail(row(45000));
+  await flush();
+  const downLink = detail.querySelector('[data-other-host="' + PEER_DOWN + '"]');
+  const authLink = detail.querySelector('[data-other-host="' + PEER_AUTH + '"]');
+  assert.ok(downLink);
+  assert.ok(authLink);
+  assert.equal(downLink.getAttribute('data-other-error'), 'down');
+  assert.equal(authLink.getAttribute('data-other-error'), 'auth');
+  assert.doesNotMatch(detail.innerHTML, /stale-daemon/);
+  assert.match(detail.innerHTML, new RegExp('data-other-host="' + PEER_DOWN + '"[^>]*>[\\s\\S]*?hosts\\.unreachable[\\s\\S]*?<\\/a>'));
+  assert.match(detail.innerHTML, new RegExp('data-other-host="' + PEER_AUTH + '"[^>]*>[\\s\\S]*?hosts\\.authFailed[\\s\\S]*?<\\/a>'));
+  assert.ok(downLink.querySelector('.tag.unknown'));
+  assert.ok(authLink.querySelector('.tag.unknown'));
+  assert.equal(downLink.querySelector('.tag.used'), null);
+  assert.equal(downLink.querySelector('.tag.free'), null);
+});
+
+test('syncOpenDetail avoids refetching an already-loaded free port while updating peer changes', async () => {
+  S.route = { name: 'port', port: 45000, hostId: 'local' };
+  S.selectedPort = 45000;
+  S.selectedHostId = 'local';
+  S.hostCatalog = {
+    local: { id: 'local', name: 'Hub', local: true },
+    peers: [{ id: PEER, name: 'Peer Box' }],
+  };
+  S.hostMaps = {
+    local: { data: { ports: [], summary: { scan_complete: true, stale: false, hidden_locked: false } } },
+  };
+  const calls = [];
+  globalThis.fetch = async url => {
+    calls.push(String(url));
+    if (String(url).includes('/history')) return { ok: true, json: async () => ({ events: [] }) };
+    return { ok: true, json: async () => ({ port: 45000, status: 'free', source_type: 'unknown' }) };
+  };
+  showPortDetail(45000);
+  await flush();
+  assert.equal(calls.filter(u => !u.includes('/history')).length, 1);
+  assert.match(detail.innerHTML, /status\.free/);
+
+  syncOpenDetail();
+  syncOpenDetail();
+  await flush();
+  assert.equal(calls.filter(u => !u.includes('/history')).length, 1, 'must not refetch free port on repeated renders');
+  assert.doesNotMatch(detail.innerHTML, /detail\.loading/);
+
+  S.hostMaps[PEER] = {
+    data: { ports: [{ port: 45000, status: 'used', process: 'peer-api' }], summary: { scan_complete: true } },
+  };
+  syncOpenDetail();
+  await flush();
+  assert.equal(calls.filter(u => !u.includes('/history')).length, 1, 'peer update refreshes drawer without refetching port');
+  assert.match(detail.innerHTML, /peer-api/);
+});
+
+test('renderDetail distinguishes intra-project conflicts and renders rule_violations', () => {
+  globalThis.fetch = async () => ({ ok: false });
+  renderDetail({
+    port: 8080,
+    status: 'configured',
+    source_type: 'docker',
+    conflict: true,
+    compose_configs: [
+      { project_dir: 'apps/stack', project_name: 'stack', service_name: 'web', compose_file: 'compose.yaml' },
+      { project_dir: 'apps/stack', project_name: 'stack', service_name: 'api', compose_file: 'compose.yaml' },
+    ],
+    rule_violations: [
+      { rule: 'apps<1>', project: 'stack', service: 'web', start: 30000, end: 30999 },
+    ],
+  });
+  const conflictBox = detail.querySelector('[data-compose-conflict]');
+  assert.ok(conflictBox);
+  assert.match(detail.innerHTML, /data-compose-conflict[^>]*>[\s\S]*?detail\.conflictServicesHint/);
+  assert.doesNotMatch(detail.innerHTML, /detail\.conflictHint/);
+  const ruleBox = detail.querySelector('[data-rule-violation]');
+  assert.ok(ruleBox);
+  assert.match(detail.innerHTML, /data-rule-violation[^>]*>[\s\S]*?manage\.outsideRule/);
+  assert.match(detail.innerHTML, /stack \/ web/);
+  assert.match(detail.innerHTML, /apps&lt;1&gt;/);
+  assert.match(detail.innerHTML, /30000–30999/);
+
+  renderDetail({
+    port: 8080,
+    status: 'configured',
+    source_type: 'docker',
+    conflict: true,
+    compose_configs: [
+      { project_dir: 'apps/a', project_name: 'a', service_name: 'web', compose_file: 'a/compose.yaml' },
+      { project_dir: 'apps/b', project_name: 'b', service_name: 'web', compose_file: 'b/compose.yaml' },
+    ],
+  });
+  assert.ok(detail.querySelector('[data-compose-conflict]'));
+  assert.match(detail.innerHTML, /data-compose-conflict[^>]*>[\s\S]*?detail\.conflictHint/);
+});
+
+test('locked and unlocked 404 responses render unknown/locked status instead of free or unhide', async () => {
+  S.currentData = { ports: [], summary: { scan_complete: true, stale: false, hidden_locked: true } };
+  globalThis.fetch = async () => ({ ok: false, status: 404 });
+  showPortDetail(45000);
+  await flush();
+  assert.ok(detail.querySelector('.tag.unknown'));
+  assert.equal(detail.querySelector('.tag.free'), null);
+  assert.match(detail.innerHTML, /legend\.locked/);
+  assert.doesNotMatch(detail.innerHTML, /status\.free/);
+  assert.match(detail.innerHTML, /detail\.hiddenLocked/);
+  assert.equal(detail.querySelector('[data-unhide-port]'), null);
+  assert.equal(detail.querySelector('[data-hide-port]'), null);
+
+  S.currentData = { ports: [], summary: { scan_complete: true, stale: false, hidden_locked: false } };
+  S.selectedPort = 45001;
+  showPortDetail(45001);
+  await flush();
+  assert.ok(detail.querySelector('.tag.unknown'));
+  assert.equal(detail.querySelector('.tag.free'), null);
+  assert.match(detail.innerHTML, /status\.unknown/);
+  assert.doesNotMatch(detail.innerHTML, /status\.free/);
+  assert.match(detail.innerHTML, /detail\.notFound/);
+  assert.equal(detail.querySelector('[data-unhide-port]'), null);
+  assert.equal(detail.querySelector('[data-hide-port]'), null);
+});
+
+test('port history ignores mismatched port payloads and prototype state keys', async () => {
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ port: 9999, events: [{ ts: 1700000000, state: 'used', holders: ['wrong'] }] }),
+  });
+  renderDetail(row(45000));
+  await flush();
+  const wrongHistory = detail.querySelector('#detail-history');
+  assert.equal(wrongHistory.hasAttribute('hidden'), true);
+  assert.equal(wrongHistory.innerHTML, '');
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ port: 45000, events: [{ ts: 1700000000, state: 'constructor', holders: ['app'] }] }),
+  });
+  renderDetail(row(45000));
+  await flush();
+  const protoHistory = detail.querySelector('#detail-history');
+  assert.equal(protoHistory.hidden, false);
+  assert.match(protoHistory.innerHTML, /constructor/);
+  assert.doesNotMatch(protoHistory.innerHTML, /function Object/);
 });

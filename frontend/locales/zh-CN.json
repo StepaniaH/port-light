@@ -735,13 +735,14 @@
     "internalHint": "一般不直接访问。",
     "conflict": "Compose 冲突",
     "conflictHint": "{n} 个 Compose 项目绑定了同一地址。",
+    "conflictServicesHint": "同一 Compose 项目中有 {n} 个服务绑定了同一地址。",
     "hide": "从网格隐藏",
     "unhide": "取消隐藏",
     "delete": "删除",
     "deleteConfirm": "删除端口 {port} 的手动条目？",
     "actionFailed": "无法更新该端口。",
     "notFound": "占用图上没有这个端口。",
-    "hiddenLocked": "该端口已隐藏。解锁隐藏端口后才能查看。",
+    "hiddenLocked": "隐藏端口已锁定时不显示端口状态。解锁隐藏端口后才能查看。",
     "loading": "正在读取占用…",
     "label": "标签",
     "saveLabel": "保存标签",
@@ -1264,7 +1265,10 @@
     "conflictsEmpty": "未发现配置冲突。",
     "rulesEmpty": "还没有端口规则。",
     "reservationsEmpty": "还没有预留端口。",
-    "discardPending": "放弃待处理请求"
+    "discardPending": "放弃待处理请求",
+    "recoveredPending": "该待处理请求已在服务端提交成功，已恢复其释放凭据。",
+    "discardConfirm": "无法与服务端确认该请求是否已提交。放弃仅清除当前浏览器的本地记录，不会取消服务端已生效的预留。仍要放弃吗？",
+    "discardNotFoundConfirm": "服务端未找到该请求的回执。放弃仅清除当前浏览器的本地记录，无法恢复或取消已被淘汰或未识别的预留。仍要放弃吗？"
   },
   "preview": {
     "nasName": "NAS · 媒体与存储",

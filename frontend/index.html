@@ -7,26 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
   <link rel="alternate icon" type="image/png" href="/static/icon.png">
   <link rel="apple-touch-icon" href="/static/icon.png">
-  <script>
-    try {
-      var s = JSON.parse(localStorage.getItem('port-light-settings') || '{}');
-      var m = s.theme_mode === 'light' || s.theme_mode === 'dark'
-        ? s.theme_mode
-        : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-      document.documentElement.setAttribute('data-mode', m);
-      var PAL = {gruvbox:['dark','light'],catppuccin:['dark','light'],solarized:['dark','light'],nord:['dark','light'],dracula:['dark','light'],'tokyo-night':['dark','light'],'one-dark':['dark','light'],everforest:['dark','light'],'rose-pine':['dark','light'],kanagawa:['dark','light']};
-      if (typeof s.theme_palette === 'string' && s.theme_palette && PAL[s.theme_palette] && PAL[s.theme_palette].indexOf(m) >= 0) {
-        document.documentElement.setAttribute('data-palette', s.theme_palette);
-      }
-      var DENSITY = {loose:{minW:164,gap:10,padX:14,padT:12,padB:16,minH:76},standard:{minW:138,gap:8,padX:12,padT:10,padB:12,minH:64},compact:{minW:112,gap:6,padX:10,padT:8,padB:8,minH:52}};
-      var d = DENSITY[s.grid_density] || DENSITY.standard;
-      for (var key in d) {
-        var name = '--cell-' + key.toLowerCase().replace('minw','min-w').replace('padx','pad-x').replace('padt','pad-t').replace('padb','pad-b').replace('minh','min-h');
-        document.documentElement.style.setProperty(name, d[key] + 'px');
-      }
-    } catch (e) {}
-  </script>
-  <link rel="stylesheet" href="/static/style.css?v=122">
+  <script src="/static/boot.js?v=125"></script>
+  <link rel="stylesheet" href="/static/style.css?v=125">
 </head>
 <body>
   <a class="skip-link" href="#grid" data-i18n="grid.skip">Skip to ports</a>
@@ -320,7 +302,7 @@ c-396 -401 -264 -360 -1180 -364 -868 -3 -822 -12 -862 166 -48 216 -77 228
     </div>
   </div>
 
-  <script src="/static/i18n.js?v=122"></script>
-  <script type="module" src="/static/js/app.js?v=122"></script>
+  <script src="/static/i18n.js?v=125"></script>
+  <script type="module" src="/static/js/app.js?v=125"></script>
 </body>
 </html>

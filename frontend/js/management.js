@@ -1,9 +1,9 @@
 /* Local reservation ownership, allocation rules, and Compose conflict review. */
-import { S } from './state.js?v=122';
-import { hostName } from './hosts.js?v=122';
-import { api } from './api.js?v=122';
-import { t, escapeHtml } from './text.js?v=122';
-import { copyReportText } from './doctor.js?v=122';
+import { S } from './state.js?v=125';
+import { hostName } from './hosts.js?v=125';
+import { api } from './api.js?v=125';
+import { t, escapeHtml } from './text.js?v=125';
+import { copyReportText } from './doctor.js?v=125';
 
 const storageKey = 'port-light-reservation-session';
 const e = escapeHtml;
@@ -17,14 +17,15 @@ export function composeSnippet(config, port) {
   if (!Number.isInteger(config.container_port) || !Number.isInteger(port) || port < 1 || port > 65535 ||
       ['expose', 'lan'].includes(config.mapping_source) || config.network_mode === 'host' || String(config.network_mode || '').startsWith('ns:') || String(config.network_mode || '').startsWith('service:') ||
       String(config.network_mode || '').startsWith('container:')) return null;
-  const deploy = config.mapping_source === 'deploy.ports';
-  const indent = deploy ? '  ' : '';
+  const modeLine = (config.publish_mode === 'host' || config.publish_mode === 'ingress')
+    ? '\n        mode: ' + JSON.stringify(config.publish_mode)
+    : '';
   const mapping = '    ports:\n      - target: ' +
     config.container_port + '\n        published: ' + JSON.stringify(String(port)) +
     '\n        protocol: ' + JSON.stringify(config.protocol || 'tcp') +
-    (config.host_ip ? '\n        host_ip: ' + JSON.stringify(config.host_ip) : '') + '\n';
-  return 'services:\n  ' + JSON.stringify(config.service_name) + ':\n' + (deploy ? '    deploy:\n' : '') +
-    mapping.trimEnd().split('\n').map(line => indent + line).join('\n') + '\n';
+    (config.host_ip ? '\n        host_ip: ' + JSON.stringify(config.host_ip) : '') +
+    modeLine + '\n';
+  return 'services:\n  ' + JSON.stringify(config.service_name) + ':\n' + mapping;
 }
 async function json(url, options) {
   const response = await api(url, options);
@@ -251,10 +252,28 @@ export function mountManagementPage(root) {
         }
         else status(t('manage.noPending'));
       } else if (action === 'discardPending') {
-        const saved = session();
-        delete saved.pending;
-        save(saved);
-        status('');
+        agentToken = root.querySelector('[name="agentToken"]')?.value || agentToken;
+        const pending = session().pending;
+        if (!pending) {
+          status(t('manage.noPending'));
+        } else {
+          try {
+            const result = await json('/api/reservations/request', {
+              headers: { 'Idempotency-Key': pending.key, 'X-Agent-Token': agentToken },
+            });
+            await acceptReservation(result);
+            if (result.ports?.length) status(t('manage.recoveredPending'));
+          } catch (error) {
+            if (error.status === 409 || window.confirm(t(error.status === 404 ? 'manage.discardNotFoundConfirm' : 'manage.discardConfirm'))) {
+              const saved = session();
+              delete saved.pending;
+              save(saved);
+              status('');
+            } else {
+              status(error.message || t('manage.failed'));
+            }
+          }
+        }
       } else if (action === 'copySnippet') { await copyReportText(btn.parentElement.querySelector('pre').textContent); status(t('manage.copied')); }
       else if (action === 'copyRelease' || action === 'release') {
         const saved = session(); const port = Number(btn.dataset.port); const token = saved.tokens[port];

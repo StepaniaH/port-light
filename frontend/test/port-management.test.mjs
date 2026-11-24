@@ -43,13 +43,18 @@ test('portRuns never merges rule-violating ports into compliant contiguous runs'
     [[21000, 21002], [21003, 21004], [21005, 21007]],
   );
 });
-test('Compose replacement preserves target, bind and protocol; Swarm uses deploy.ports', () => {
+test('Compose replacement preserves target, bind, protocol and publish mode under service ports', () => {
   const snippet = composeSnippet({ ...config, protocol: 'udp', host_ip: '::1' }, 28000);
   assert.match(snippet, /target: 80/);
   assert.match(snippet, /published: "28000"/);
   assert.match(snippet, /protocol: "udp"/);
   assert.match(snippet, /host_ip: "::1"/);
-  assert.match(composeSnippet({ ...config, mapping_source: 'deploy.ports' }, 28001), /    deploy:\n      ports:/);
+  const hostModeSnippet = composeSnippet({ ...config, publish_mode: 'host' }, 28001);
+  assert.match(hostModeSnippet, /mode: "host"/);
+  assert.doesNotMatch(hostModeSnippet, /^\s*deploy:/m);
+  const legacyDeploySnippet = composeSnippet({ ...config, mapping_source: 'deploy.ports' }, 28002);
+  assert.match(legacyDeploySnippet, /^  "web":\n    ports:/m);
+  assert.doesNotMatch(legacyDeploySnippet, /^\s*deploy:/m);
   assert.equal(composeSnippet({ ...config, mapping_source: 'lan' }, 28001), null);
   assert.equal(composeSnippet({ ...config, network_mode: 'host' }, 28001), null);
   assert.equal(composeSnippet(config, undefined), null);
@@ -97,22 +102,55 @@ test('grouped runs respect name and status sorting across noncontiguous ports', 
   } finally { S.sortMode = original; }
 });
 
-test('discardPending clears stuck reservation state and conflicts include unlocked hidden ports', async () => {
+test('discardPending probes server before discarding, recovers committed claims, and confirms offline discards', async () => {
   const { S } = await import('../js/state.js?v=' + version);
   const root = document.createElement('main');
   const savedFetch = globalThis.fetch;
   const savedUnlock = S.hiddenUnlock;
+  const savedConfirm = window.confirm;
+  const savedMeta = S.meta;
+  const clickDiscard = () => root.dispatchEvent({
+    type: 'click',
+    target: { closest: sel => (sel === '[data-action]' ? { dataset: { action: 'discardPending' } } : null) },
+  });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  const drain = async () => { for (let i = 0; i < 8; i++) await flush(); };
   try {
+    S.hiddenUnlock = 'local-secret';
+    S.meta = { automation: { agent_token: true } };
+
+    // 1. Probe returns 404 (not found) -> asks confirm with discardNotFoundConfirm; cancel preserves, accept clears.
+    const confirmPrompts = [];
+    window.confirm = msg => { confirmPrompts.push(msg); return false; };
     sessionStorage.setItem('port-light-reservation-session', JSON.stringify({
       tokens: { 24001: 'keep-token' },
       pending: { key: 'stuck-idempotency-key', body: { count: 1 } },
     }));
-    S.hiddenUnlock = 'local-secret';
     const seenRequests = [];
+    let probeBehavior = '404';
+    let serverReservations = [];
     globalThis.fetch = async (url, opts = {}) => {
-      seenRequests.push({ url: String(url), unlock: opts.headers?.['X-Hidden-Unlock'] });
-      if (String(url).startsWith('/api/port-rules')) return new Response(JSON.stringify({ rules: [], readonly: false }));
-      if (String(url).startsWith('/api/reservations')) return new Response(JSON.stringify({ reservations: [] }));
+      const target = String(url);
+      seenRequests.push({
+        url: target,
+        unlock: opts.headers?.['X-Hidden-Unlock'],
+        agentToken: opts.headers?.['X-Agent-Token'],
+        idempotencyKey: opts.headers?.['Idempotency-Key'],
+      });
+      if (target === '/api/reservations/request') {
+        if (probeBehavior === '404') return new Response(JSON.stringify({ detail: 'not found' }), { status: 404 });
+        if (probeBehavior === '409') return new Response(JSON.stringify({ detail: 'conflict' }), { status: 409 });
+        if (probeBehavior === '500') return new Response(JSON.stringify({ detail: 'server error' }), { status: 500 });
+        if (probeBehavior === '503') return new Response(JSON.stringify({ detail: 'in progress' }), { status: 503 });
+        if (probeBehavior === '200') {
+          return new Response(JSON.stringify({
+            ports: [28000],
+            reservations: [{ port: 28000, token: 'recovered-tok', expires_at: null }],
+          }), { status: 200 });
+        }
+      }
+      if (target.startsWith('/api/port-rules')) return new Response(JSON.stringify({ rules: [], readonly: false }));
+      if (target.startsWith('/api/reservations')) return new Response(JSON.stringify({ reservations: serverReservations }));
       return new Response(JSON.stringify({
         ports: [{
           port: 24500, status: 'configured', protocol: 'tcp', is_hidden: true, conflict: true,
@@ -129,17 +167,102 @@ test('discardPending clears stuck reservation state and conflicts include unlock
     assert.ok(retryBtn && !retryBtn.hidden);
     assert.ok(discardBtn && !discardBtn.hidden);
 
-    root.dispatchEvent({
-      type: 'click',
-      target: { closest: sel => (sel === '[data-action]' ? { dataset: { action: 'discardPending' } } : null) },
-    });
-    await new Promise(resolve => setImmediate(resolve));
+    const tokenField = root.querySelector('[name="agentToken"]');
+    tokenField.value = 'typed-agent-secret';
+    clickDiscard();
+    await drain();
 
-    const stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
+    let stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
+    assert.equal(stored.pending.key, 'stuck-idempotency-key');
+    assert.equal(stored.tokens[24001], 'keep-token');
+    assert.deepEqual(confirmPrompts, ['manage.discardNotFoundConfirm']);
+    const probeReq = seenRequests.find(r => r.url === '/api/reservations/request');
+    assert.equal(probeReq.agentToken, 'typed-agent-secret');
+    assert.equal(probeReq.idempotencyKey, 'stuck-idempotency-key');
+
+    window.confirm = msg => { confirmPrompts.push(msg); return true; };
+    clickDiscard();
+    await drain();
+    stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
     assert.equal(stored.pending, undefined);
     assert.equal(stored.tokens[24001], 'keep-token');
+    assert.equal(confirmPrompts.length, 2);
     assert.equal(retryBtn.hidden, true);
     assert.equal(discardBtn.hidden, true);
+
+    // 2. Probe returns 200 (server had committed) -> recovers tokens without confirming.
+    confirmPrompts.length = 0;
+    probeBehavior = '200';
+    serverReservations = [{ port: 28000, label: 'perm', machine: 'localhost', is_reservation: true, expires_at: null }];
+    sessionStorage.setItem('port-light-reservation-session', JSON.stringify({
+      tokens: { 24001: 'keep-token' },
+      pending: { key: 'committed-key', body: { count: 1 } },
+    }));
+    await page.open('reservations');
+    clickDiscard();
+    await drain();
+
+    stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
+    assert.equal(stored.pending, undefined);
+    assert.equal(stored.tokens[28000], 'recovered-tok');
+    assert.equal(stored.tokens[24001], 'keep-token');
+    assert.equal(confirmPrompts.length, 0);
+    assert.match(root.querySelector('[role="status"]').textContent, /manage\.recoveredPending/);
+    const expiryFilter = root.querySelector('[data-filter="expiry"]');
+    expiryFilter.value = 'permanent';
+    root.dispatchEvent({ type: 'change', target: { dataset: { filter: 'expiry' } } });
+    const releaseBtn = root.querySelector('[data-action="release"][data-port="28000"]');
+    assert.ok(releaseBtn && !releaseBtn.hasAttribute('disabled'));
+
+    // 3. Probe returns 409 (already released/expired) -> clears without prompt.
+    probeBehavior = '409';
+    sessionStorage.setItem('port-light-reservation-session', JSON.stringify({
+      tokens: { 24001: 'keep-token' },
+      pending: { key: 'stale-key', body: { count: 1 } },
+    }));
+    await page.open('reservations');
+    clickDiscard();
+    await drain();
+    stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
+    assert.equal(stored.pending, undefined);
+    assert.equal(confirmPrompts.length, 0);
+
+    // 4. Probe returns 503 (in flight) -> prompts with discardConfirm; cancel preserves pending.
+    probeBehavior = '503';
+    sessionStorage.setItem('port-light-reservation-session', JSON.stringify({
+      tokens: { 24001: 'keep-token' },
+      pending: { key: 'inflight-key', body: { count: 1 } },
+    }));
+    await page.open('reservations');
+    window.confirm = msg => { confirmPrompts.push(msg); return false; };
+    clickDiscard();
+    await drain();
+    stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
+    assert.equal(stored.pending.key, 'inflight-key');
+    assert.deepEqual(confirmPrompts, ['manage.discardConfirm']);
+
+    // 5. Probe fails with 500 -> prompts with discardConfirm; cancel preserves key, confirm discards key.
+    confirmPrompts.length = 0;
+    probeBehavior = '500';
+    sessionStorage.setItem('port-light-reservation-session', JSON.stringify({
+      tokens: { 24001: 'keep-token' },
+      pending: { key: 'uncertain-key', body: { count: 1 } },
+    }));
+    await page.open('reservations');
+    window.confirm = msg => { confirmPrompts.push(msg); return false; };
+    clickDiscard();
+    await drain();
+    stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
+    assert.equal(stored.pending.key, 'uncertain-key');
+    assert.deepEqual(confirmPrompts, ['manage.discardConfirm']);
+
+    window.confirm = msg => { confirmPrompts.push(msg); return true; };
+    clickDiscard();
+    await drain();
+    stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
+    assert.equal(stored.pending, undefined);
+    assert.equal(stored.tokens[24001], 'keep-token');
+    assert.equal(confirmPrompts.length, 2);
 
     await page.open('conflicts');
     const portsCall = seenRequests.find(r => r.url.startsWith('/api/ports?'));
@@ -150,6 +273,8 @@ test('discardPending clears stuck reservation state and conflicts include unlock
   } finally {
     globalThis.fetch = savedFetch;
     S.hiddenUnlock = savedUnlock;
+    S.meta = savedMeta;
+    window.confirm = savedConfirm;
     sessionStorage.removeItem('port-light-reservation-session');
   }
 });

@@ -14,7 +14,8 @@ test('entry pins a shared cache-bust version', () => {
   assert.ok(version, 'app.js should carry a ?v=N cache-bust marker');
 });
 
-const { parseHash } = await import('../js/router.js?' + V);
+const { applyRoute, parseHash } = await import('../js/router.js?' + V);
+const { S } = await import('../js/state.js?' + V);
 
 const grid = (hostId) => ({ name: 'grid', hostId: hostId || 'local' });
 const port = (n, hostId) => ({ name: 'port', port: n, hostId: hostId || 'local' });
@@ -64,4 +65,42 @@ test('malformed host ids are forced back to local', () => {
   assert.deepEqual(parseHash('#/h/ab/port/80'), port(80));
   assert.deepEqual(parseHash('#/h/abcdeg123456789xyz/port/80'), port(80));
   assert.deepEqual(parseHash('#/h/../port/80'), port(80));
+});
+
+test('applyRoute falls back to local when a port URL references a deleted or unknown peer', () => {
+  const prevHash = location.hash;
+  const prevState = {
+    route: S.route,
+    focusHostId: S.focusHostId,
+    selectedHostId: S.selectedHostId,
+    selectedPort: S.selectedPort,
+    hostCatalog: S.hostCatalog,
+    currentData: S.currentData,
+  };
+  try {
+    S.hostCatalog = { local: { id: 'local', name: 'Hub', local: true }, peers: [{ id: PEER, name: 'Peer' }] };
+    S.currentData = { ports: [], summary: { scan_complete: true } };
+    S.route = { name: 'grid', hostId: 'local' };
+    S.focusHostId = 'local';
+    S.selectedHostId = 'local';
+    S.selectedPort = null;
+
+    let renders = 0;
+    location.hash = '#/h/deadbeef1234/port/8080';
+    applyRoute({ render: () => { renders += 1; }, refresh: () => {} });
+    assert.equal(S.selectedPort, 8080);
+    assert.equal(S.selectedHostId, 'local');
+    assert.equal(S.focusHostId, 'local');
+    assert.equal(renders, 1);
+
+    location.hash = '#/h/' + PEER + '/port/443';
+    applyRoute({ render: () => { renders += 1; }, refresh: () => {} });
+    assert.equal(S.selectedPort, 443);
+    assert.equal(S.selectedHostId, PEER);
+    assert.equal(S.focusHostId, PEER);
+    assert.equal(renders, 2);
+  } finally {
+    location.hash = prevHash;
+    Object.assign(S, prevState);
+  }
 });

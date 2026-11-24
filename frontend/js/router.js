@@ -1,10 +1,10 @@
 /* Hash router: #/, #/settings/:panel(/:analysisSection), #/port/:n, #/h/:host(/port/:n). */
 
-import { S, SETTINGS_PANELS } from './state.js?v=122';
-import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=122';
-import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=122';
-import { applyPendingGridFocus, syncAddButton } from './grid.js?v=122';
-import { closeDetail, showPortDetail } from './detail.js?v=122';
+import { S, SETTINGS_PANELS } from './state.js?v=125';
+import { settingsBtn, appEl, syncHeaderHeight } from './dom.js?v=125';
+import { hostById, hasPeers, usesFocusedHostView } from './hosts.js?v=125';
+import { applyPendingGridFocus, syncAddButton } from './grid.js?v=125';
+import { closeDetail, showPortDetail } from './detail.js?v=125';
 
 
   export function parseHash(hash) {
@@ -120,13 +120,13 @@ import { closeDetail, showPortDetail } from './detail.js?v=122';
       return;
     }
     if (['settings', 'doctor', 'manage', 'workspace'].includes(prev)) refresh();
-    if (S.route.hostId && hostById(S.route.hostId)) S.focusHostId = S.route.hostId;
-    else if (S.route.name !== 'settings') S.focusHostId = 'local';
+    const resolvedHostId = S.route.hostId && hostById(S.route.hostId) ? S.route.hostId : 'local';
+    S.focusHostId = resolvedHostId;
     if (usesFocusedHostView() && S.focusHostId !== previousHostId) refresh();
     if (S.route.name === 'port') {
       S.selectedPort = S.route.port;
-      S.selectedHostId = S.route.hostId || 'local';
-      S.focusHostId = S.selectedHostId;
+      S.selectedHostId = resolvedHostId;
+      S.focusHostId = resolvedHostId;
       if (S.currentData || hasPeers()) render();
       else showPortDetail(S.route.port);
       return;

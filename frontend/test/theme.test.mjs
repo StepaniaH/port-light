@@ -102,7 +102,9 @@ test('new light palettes keep text, tinted status labels, and primary buttons re
 });
 
 test('cached appearance bootstrap and runtime preserve every palette across system modes', () => {
-  const bootstrap = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  assert.match(html, new RegExp('<script src="/static/boot\\.js\\?v=' + version[1] + '"></script>'));
+  assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)/i);
+  const bootstrap = readFileSync(new URL('../boot.js', import.meta.url), 'utf8');
   const previous = { ...S.settings };
   const media = window.matchMedia;
   try {

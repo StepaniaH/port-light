@@ -13,7 +13,7 @@ const entrySrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const version = entrySrc.match(/\?v=(\d+)/);
 const V = version ? 'v=' + version[1] : '';
 
-const { automationCardsHtml, formatRefreshInterval, renderField, renderModePicker, renderPalettePicker, renderPeersEditor, renderSettingsForm, syncDependentSettings, syncPaletteAvailability, syncRefreshCapacity, themeEditorHtml, updateRefreshSlider } = await import('../js/settings.js?' + V);
+const { automationCardsHtml, formatRefreshInterval, handleEditorHexInput, loadEditorTarget, mountSettingsPage, previewEditorColor, renderField, renderModePicker, renderPalettePicker, renderPeersEditor, renderSettingsForm, saveSettingsFields, syncDependentSettings, syncPaletteAvailability, syncRefreshCapacity, themeEditorHtml, updateRefreshSlider } = await import('../js/settings.js?' + V);
 const { SETTINGS_PANELS, S, applyAppearance, applyDensity, persistAppearance, DENSITY_PRESETS } = await import('../js/state.js?' + V);
 const { parseHash } = await import('../js/router.js?' + V);
 
@@ -607,13 +607,25 @@ test('applyAppearance previews without persisting; persistAppearance mirrors den
   assert.ok(!('text_scale' in stored));
 });
 
-test('inline bootstrap table matches DENSITY_PRESETS', async () => {
-  const fs = await import('node:fs');
-  const src = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  for (const name of Object.keys(DENSITY_PRESETS)) {
-    for (const [k, v] of Object.entries(DENSITY_PRESETS[name])) {
-      assert.ok(src.includes(k + ':' + v), name + ' ' + k + ':' + v + ' present in bootstrap');
-    }
+test('boot.js appearance bootstrap matches DENSITY_PRESETS without inline script', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const boot = readFileSync(new URL('../boot.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)/i);
+  assert.ok(html.includes('/static/boot.js?v=' + version[1]));
+  for (const [name, preset] of Object.entries(DENSITY_PRESETS)) {
+    const props = new Map();
+    runInNewContext(boot, {
+      localStorage: { getItem: () => JSON.stringify({ grid_density: name }) },
+      matchMedia: () => ({ matches: false }),
+      document: { documentElement: { setAttribute() {}, style: { setProperty: (k, v) => props.set(k, v) } } },
+    });
+    assert.equal(props.get('--cell-min-w'), preset.minW + 'px', name);
+    assert.equal(props.get('--cell-gap'), preset.gap + 'px', name);
+    assert.equal(props.get('--cell-pad-x'), preset.padX + 'px', name);
+    assert.equal(props.get('--cell-pad-t'), preset.padT + 'px', name);
+    assert.equal(props.get('--cell-pad-b'), preset.padB + 'px', name);
+    assert.equal(props.get('--cell-min-h'), preset.minH + 'px', name);
   }
 });
 
@@ -630,5 +642,115 @@ test('palette picker lists custom themes with badge and delete hook', () => {
     assert.match(html, /@custom:abcd1234/);
   } finally {
     S.customThemes = [];
+  }
+});
+
+test('custom theme editor loads target palette, validates hex inputs, and reverts previews on close', () => {
+  const savedQuery = document.querySelector;
+  const savedThemes = S.customThemes;
+  const savedSettings = { ...S.settings };
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const colors = Object.fromEntries([
+    'bg', 'elevated', 'card', 'cardHover', 'border', 'text', 'textDim', 'used',
+    'configured', 'free', 'accent', 'conflict', 'access', 'hidden', 'danger',
+  ].map(k => [k, k === 'bg' ? '#f0a' : '#112233']));
+  try {
+    S.settings.theme_mode = 'dark';
+    S.settings.theme_palette = '';
+    S.customThemes = [{ id: 'abcd1234', name: 'Sunset', basedOn: 'gruvbox', mode: 'light', colors }];
+    host.innerHTML = themeEditorHtml(false);
+    document.querySelector = sel => host.querySelector(sel);
+
+    assert.equal(loadEditorTarget('abcd1234'), true);
+    assert.equal(document.getElementById('editor-name').value, 'Sunset');
+    assert.equal(document.getElementById('theme-editor').getAttribute('data-mode'), 'light');
+    assert.equal(document.documentElement.getAttribute('data-mode'), 'light');
+    assert.equal(host.querySelector('[data-editor-hex="bg"]').value, '#f0a');
+    assert.equal(host.querySelector('[data-editor-color="bg"]').value, '#ff00aa');
+    assert.equal(document.documentElement.style.getPropertyValue('--bg'), '#f0a');
+
+    const bgHex = host.querySelector('[data-editor-hex="bg"]');
+    bgHex.value = 'not-a-hex';
+    assert.equal(handleEditorHexInput(bgHex), false);
+    assert.equal(bgHex.getAttribute('aria-invalid'), 'true');
+    bgHex.value = '#1234';
+    assert.equal(handleEditorHexInput(bgHex), true);
+    assert.equal(bgHex.getAttribute('aria-invalid'), null);
+    assert.equal(host.querySelector('[data-editor-color="bg"]').value, '#112233');
+
+    assert.equal(loadEditorTarget(''), false);
+    assert.equal(document.getElementById('editor-name').value, '');
+    assert.equal(document.getElementById('theme-editor').getAttribute('data-mode'), null);
+    assert.equal(document.documentElement.style.getPropertyValue('--bg'), '');
+
+    const page = mountSettingsPage(document.getElementById('settings-form'));
+    previewEditorColor('bg', '#abcdef');
+    assert.equal(document.documentElement.style.getPropertyValue('--bg'), '#abcdef');
+    page.close();
+    assert.equal(document.documentElement.style.getPropertyValue('--bg'), '');
+  } finally {
+    document.querySelector = savedQuery;
+    S.customThemes = savedThemes;
+    S.settings = savedSettings;
+    applyAppearance();
+    host.remove();
+  }
+});
+
+test('saving host_name or host_description updates S.hostCatalog.local immediately', async () => {
+  const prevFetch = globalThis.fetch;
+  const prevState = {
+    settings: { ...S.settings },
+    settingsDoc: S.settingsDoc,
+    settingsConfirmed: { ...S.settingsConfirmed },
+    settingsDraft: { ...S.settingsDraft },
+    settingsDirtyKeys: new Set(S.settingsDirtyKeys),
+    settingsSubmittingKeys: new Set(S.settingsSubmittingKeys),
+    settingsKeyRevisions: { ...S.settingsKeyRevisions },
+    hostCatalog: S.hostCatalog,
+  };
+  const form = document.getElementById('settings-form');
+  const prevElements = form.elements;
+  try {
+    S.hostCatalog = {
+      local: { id: 'local', name: 'Old Box', description: 'Old desc', local: true },
+      peers: [],
+      readonly: false,
+      max_peers: 32,
+    };
+    S.settingsDoc = {
+      readonly: false,
+      values: { host_name: 'Old Box', host_description: 'Old desc', refresh_ms: 5000 },
+      fields: [
+        { key: 'host_name', type: 'str' },
+        { key: 'host_description', type: 'str' },
+        { key: 'refresh_ms', type: 'int' },
+      ],
+    };
+    form.elements = {
+      host_name: { value: 'Home Hub' },
+      host_description: { value: 'Rack A · LAN' },
+      refresh_ms: { value: '5000' },
+    };
+    S.settingsDirtyKeys = new Set(['host_name', 'host_description']);
+    S.settingsSubmittingKeys = new Set();
+    S.settingsKeyRevisions = { host_name: 1, host_description: 1 };
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        readonly: false,
+        values: { host_name: 'Home Hub', host_description: 'Rack A · LAN', refresh_ms: 5000 },
+        fields: S.settingsDoc.fields,
+        custom_themes: [],
+      }),
+    });
+    assert.equal(await saveSettingsFields(), true);
+    assert.equal(S.hostCatalog.local.name, 'Home Hub');
+    assert.equal(S.hostCatalog.local.description, 'Rack A · LAN');
+  } finally {
+    globalThis.fetch = prevFetch;
+    form.elements = prevElements;
+    Object.assign(S, prevState);
   }
 });
