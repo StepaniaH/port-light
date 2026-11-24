@@ -37,6 +37,7 @@ from port_light_client.state import ReservationStore
 SUPPORTED_PROTOCOL_VERSIONS = ("2024-11-05", "2025-06-18", "2025-11-25")
 PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[-1]
 MAX_MESSAGE_BYTES = 1024 * 1024
+DEFAULT_TTL = 3600
 SERVER_INFO = {"name": "port-light", "version": __version__}
 INSTRUCTIONS = (
     "Port-Light observes the host selected by PORT_LIGHT_URL, which may differ "
@@ -58,10 +59,9 @@ TOOLS = [
         "description": (
             "Plan free network ports on the selected host, skipping anything that is "
             "listening, published by Docker, declared in Compose, or reserved. "
-            "With reserve=true the returned ports are claimed as configured so "
-            "later calls skip them until released or expired. Save each returned "
-            "reservation token for release_port. Prefer reserve_ports for new "
-            "reservations with automatic expiry. This does not bind an OS socket."
+            "With reserve=true the returned ports are claimed as expiring leases "
+            "(default 3600s) and release tokens are saved privately for release_port. "
+            "Prefer reserve_ports for new reservations. This does not bind an OS socket."
         ),
         "inputSchema": {
             "type": "object",
@@ -75,8 +75,7 @@ TOOLS = [
                 "label": {"type": "string",
                           "description": "Label stored with reserved ports"},
                 "ttl": {"type": "integer", "minimum": 60, "maximum": 604800,
-                        "description": "Turn reservations into leases that "
-                                       "expire after this many seconds"},
+                        "description": "Lease duration in seconds when reserve=true (default 3600)"},
                 "scope": {"type": "string", "enum": ["self", "all"],
                           "default": "self",
                           "description": "all also avoids ports occupied on peers"},
@@ -164,7 +163,7 @@ TOOLS.extend([
         "inputSchema": {
             "type": "object",
             "properties": {
-                key: ({**value, "default": 3600} if key == "ttl" else value)
+                key: ({**value, "default": DEFAULT_TTL} if key == "ttl" else value)
                 for key, value in TOOLS[0]["inputSchema"]["properties"].items()
                 if key != "reserve"
             },
@@ -206,6 +205,17 @@ def client() -> PortLightClient:
     return create_client(os.environ)
 
 
+def _redact_reservations(result: dict) -> dict:
+    return {
+        **result,
+        "reservations": [
+            {key: value for key, value in row.items() if key != "token"}
+            for row in result.get("reservations", [])
+        ],
+        "tokens_saved": True,
+    }
+
+
 def run_tool(name: str, args: dict) -> dict:
     if name not in {tool["name"] for tool in TOOLS}:
         raise KeyError(name)
@@ -216,29 +226,24 @@ def run_tool(name: str, args: dict) -> dict:
 
     if name == "reserve_ports":
         parameters = {"count": 1, "start": None, "end": None, "label": "",
-                      "ttl": 3600, "scope": "self", **args}
+                      "ttl": DEFAULT_TTL, "scope": "self", **args}
         store = ReservationStore()
         store.ensure_writable()
         with store.pending_request(port_light.base_url, parameters) as key:
             result = port_light.reserve_ports(**parameters, request_key=key)
             for reservation in result.get("reservations", []):
                 store.save(port_light.base_url, reservation)
-        return {
-            **result,
-            "reservations": [
-                {key: value for key, value in row.items() if key != "token"}
-                for row in result.get("reservations", [])
-            ],
-            "tokens_saved": True,
-        }
+        return _redact_reservations(result)
 
     if name == "suggest_ports":
+        reserve = bool(args.get("reserve"))
+        ttl = int(args["ttl"]) if args.get("ttl") is not None else (DEFAULT_TTL if reserve else None)
         parameters = dict(
             count=int(args.get("count", 1)),
             start=int(args["start"]) if args.get("start") is not None else None,
             end=int(args["end"]) if args.get("end") is not None else None,
-            reserve=bool(args.get("reserve")),
-            ttl=int(args["ttl"]) if args.get("ttl") is not None else None,
+            reserve=reserve,
+            ttl=ttl,
             scope=str(args.get("scope", "self")),
             label=str(args.get("label", "")),
         )
@@ -251,7 +256,7 @@ def run_tool(name: str, args: dict) -> dict:
                 result = port_light.suggest_ports(**parameters, request_key=key)
                 for reservation in result.get("reservations", []):
                     store.save(port_light.base_url, reservation)
-                return result
+            return _redact_reservations(result)
         return port_light.suggest_ports(**parameters)
 
     if name == "check_port":
@@ -373,7 +378,10 @@ class McpSession:
                 }}
             except Exception:  # noqa: BLE001 — isolate failures without leaking credentials
                 return {"jsonrpc": "2.0", "id": msg_id, "result": {
-                    "content": [{"type": "text", "text": "Port-Light MCP request failed unexpectedly"}],
+                    "content": [{"type": "text", "text": json.dumps({
+                        "code": "internal_error",
+                        "message": "Port-Light MCP request failed unexpectedly",
+                    })}],
                     "isError": True,
                 }}
         return rpc_error(msg_id, -32601, "Unknown method")

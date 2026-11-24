@@ -228,29 +228,93 @@ class ReservationStore:
                          "parameters": parameters})
         return rows
 
-    @contextmanager
-    def recovery_request(self, base_url: str, request_id: str):
+    def discard_pending_request(self, base_url: str, request_id: str) -> dict[str, Any]:
+        """Remove one local pending request journal for this server without contacting the server."""
         if not re.fullmatch(r"[a-f0-9]{64}", request_id):
             raise PortLightError("invalid_request", "request ID must come from port-light requests")
+        base_url = normalize_base_url(base_url)
         target = self.root / "requests" / f"{request_id}.json"
+        try:
+            exists = target.exists()
+        except OSError as exc:
+            raise PortLightError("state_read_failed", "could not inspect pending reservation state") from exc
+        if not exists:
+            raise PortLightError("not_found", "pending request not found; run port-light requests")
         with self._request_lock(target):
             try:
                 payload = self._read_request(target)
             except FileNotFoundError as exc:
                 raise PortLightError("not_found", "pending request not found; run port-light requests") from exc
             parameters = payload.get("parameters")
-            if (payload.get("url") != normalize_base_url(base_url)
+            if (payload.get("url") != base_url
+                    or not isinstance(parameters, dict)
+                    or self._request_id(base_url, parameters) != request_id):
+                raise PortLightError("state_read_failed", "pending request does not match this server")
+            try:
+                target.unlink()
+            except FileNotFoundError as exc:
+                raise PortLightError("not_found", "pending request not found; run port-light requests") from exc
+            except OSError as exc:
+                raise PortLightError(
+                    "state_write_failed",
+                    "could not discard pending reservation state",
+                ) from exc
+            return {
+                "id": request_id,
+                "created_at": payload["created_at"],
+                "parameters": parameters,
+            }
+
+    @contextmanager
+    def recovery_request(self, base_url: str, request_id: str):
+        if not re.fullmatch(r"[a-f0-9]{64}", request_id):
+            raise PortLightError("invalid_request", "request ID must come from port-light requests")
+        base_url = normalize_base_url(base_url)
+        target = self.root / "requests" / f"{request_id}.json"
+        try:
+            exists = target.exists()
+        except OSError as exc:
+            raise PortLightError("state_read_failed", "could not inspect pending reservation state") from exc
+        if not exists:
+            raise PortLightError("not_found", "pending request not found; run port-light requests")
+        with self._request_lock(target):
+            try:
+                payload = self._read_request(target)
+            except FileNotFoundError as exc:
+                raise PortLightError("not_found", "pending request not found; run port-light requests") from exc
+            parameters = payload.get("parameters")
+            if (payload.get("url") != base_url
                     or not isinstance(parameters, dict)
                     or self._request_id(base_url, parameters) != request_id):
                 raise PortLightError("state_read_failed", "pending request does not match this server")
             try:
                 yield payload["key"], parameters
             except PortLightError as exc:
-                if exc.code == "not_found":
-                    target.unlink(missing_ok=True)
+                if exc.code in ("not_found", "conflict"):
+                    try:
+                        target.unlink(missing_ok=True)
+                    except OSError as unlink_exc:
+                        raise PortLightError(
+                            "state_write_failed",
+                            "could not remove stale pending reservation state",
+                        ) from unlink_exc
+                    if exc.code == "conflict":
+                        detail = str(exc).strip().rstrip(".")
+                        prefix = f"{detail}. " if detail else "Pending reservation request has no active ports. "
+                        raise PortLightError(
+                            "conflict",
+                            f"{prefix}Cleared the stale pending request; you may submit a new reservation.",
+                            status=exc.status,
+                        ) from exc
                 raise
             else:
-                target.unlink(missing_ok=True)
+                try:
+                    target.unlink(missing_ok=True)
+                except OSError as unlink_exc:
+                    raise PortLightError(
+                        "state_write_failed",
+                        "could not remove completed pending reservation state",
+                    ) from unlink_exc
 
     def load(self, base_url: str, port: int) -> str | None:
         target = self._path(base_url, port)

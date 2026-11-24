@@ -597,3 +597,105 @@ def test_recover_not_found_cleans_up_stale_pending_request(tmp_path):
     code, req_after, _ = invoke(["requests", "--json"], client=client, store=store)
     assert code == 0
     assert json.loads(req_after)["requests"] == []
+
+
+def test_recover_conflict_clears_stale_pending_request(tmp_path):
+    from port_light_client.state import ReservationStore
+
+    store = ReservationStore(tmp_path / "state")
+    client = FakeClient()
+    client.base_url = "https://ports.example.invalid"
+
+    def fail_unreachable(**_kwargs):
+        raise PortLightError("unreachable", "connection dropped")
+
+    client.reserve_ports = fail_unreachable
+    code, _, _ = invoke(["reserve", "--label", "expired"], client=client, store=store)
+    assert code == 3
+
+    code, req_out, _ = invoke(["requests", "--json"], client=client, store=store)
+    request_id = json.loads(req_out)["requests"][0]["id"]
+
+    def fail_conflict(_key, _params):
+        raise PortLightError(
+            "conflict",
+            "reservation request has no active ports; no new ports were allocated",
+            status=409,
+        )
+
+    client.recover_reservation = fail_conflict
+    code, rec_out, _ = invoke(["recover", request_id, "--json"], client=client, store=store)
+    payload = json.loads(rec_out)
+    assert code == 1
+    assert payload["error"]["code"] == "conflict"
+    assert payload["error"]["status"] == 409
+    assert "cleared" in payload["error"]["message"].lower()
+
+    code, req_after, _ = invoke(["requests", "--json"], client=client, store=store)
+    assert code == 0
+    assert json.loads(req_after)["requests"] == []
+
+
+def test_requests_discard_removes_pending_journal_without_contacting_server(tmp_path):
+    from port_light_client.state import ReservationStore
+
+    store = ReservationStore(tmp_path / "state")
+    client = FakeClient()
+    client.base_url = "https://ports.example.invalid"
+
+    def fail_unreachable(**_kwargs):
+        raise PortLightError("unreachable", "connection dropped")
+
+    client.reserve_ports = fail_unreachable
+    assert invoke(["reserve", "--label", "first"], client=client, store=store)[0] == 3
+    assert invoke(["reserve", "--label", "second"], client=client, store=store)[0] == 3
+
+    code, req_out, _ = invoke(["requests", "--json"], client=client, store=store)
+    assert code == 0
+    rows = json.loads(req_out)["requests"]
+    assert len(rows) == 2
+    client.calls.clear()
+
+    code, out_json, err = invoke(["requests", "--discard", rows[0]["id"], "--json"], client=client, store=store)
+    payload = json.loads(out_json)
+    assert code == 0
+    assert err == ""
+    assert payload["ok"] is True
+    assert payload["command"] == "requests"
+    assert payload["discarded"] == rows[0]["id"]
+    assert "key" not in out_json
+    assert client.calls == []
+
+    code, out_text, err = invoke(["requests", "--discard", rows[1]["id"]], client=client, store=store)
+    assert code == 0
+    assert err == ""
+    assert f"Discarded pending request {rows[1]['id']}." in out_text
+    assert client.calls == []
+
+    code, missing_out, _ = invoke(["requests", "--discard", rows[0]["id"], "--json"], client=client, store=store)
+    assert code == 1
+    assert json.loads(missing_out)["error"]["code"] == "not_found"
+
+    code, bad_out, _ = invoke(["requests", "--discard", "invalid", "--json"], client=client, store=store)
+    assert code == 2
+    assert json.loads(bad_out)["error"]["code"] == "invalid_request"
+
+
+@pytest.mark.parametrize(("error_code", "expected_exit"), [
+    ("invalid_response", 3),
+    ("timeout", 3),
+    ("tls_error", 3),
+    ("invalid_request", 2),
+    ("invalid_url", 2),
+])
+def test_error_exit_codes_distinguish_server_and_input_failures(error_code, expected_exit):
+    client = FakeClient()
+
+    def fail(_port):
+        raise PortLightError(error_code, "simulated failure")
+
+    client.check_port = fail
+    code, output, error = invoke(["check", "5432", "--json"], client=client)
+    assert code == expected_exit
+    assert error == ""
+    assert json.loads(output)["error"]["code"] == error_code

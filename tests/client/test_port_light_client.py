@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import http.client
 import io
 import json
 import os
+import ssl
 import urllib.error
 
 import pytest
@@ -736,3 +738,157 @@ def test_recovery_request_cleans_up_unrecorded_pending_request_on_not_found(tmp_
 
     with store.pending_request(url, params) as fresh_key:
         assert fresh_key != first_key
+
+
+def test_normalize_base_url_lowercases_host_supports_ipv6_and_rejects_bad_ports():
+    assert normalize_base_url("HTTPS://Port-Light.Example:2100/SubPath/") == "https://port-light.example:2100/SubPath"
+    assert normalize_base_url("HTTP://[2001:DB8::1]:2100/") == "http://[2001:db8::1]:2100"
+    assert normalize_base_url("http://[::1]/") == "http://[::1]"
+    for bad in (
+        "http://port-light.example:0",
+        "http://port-light.example:70000",
+        "http://port-light.example:abc",
+        "http://[::1",
+        "http://bad host:2100",
+        "http://port-light.example:2100\r\nX-Injected: 1",
+    ):
+        with pytest.raises(PortLightError) as caught:
+            normalize_base_url(bad)
+        assert caught.value.code == "invalid_url"
+
+
+@pytest.mark.parametrize(("raised", "expected_code"), [
+    (http.client.IncompleteRead(b"partial"), "invalid_response"),
+    (http.client.BadStatusLine("garbage"), "invalid_response"),
+    (http.client.LineTooLong("header"), "invalid_response"),
+    (http.client.InvalidURL("bad url"), "invalid_url"),
+    (http.client.RemoteDisconnected("closed"), "unreachable"),
+    (ssl.SSLError(1, "WRONG_VERSION_NUMBER"), "tls_error"),
+    (urllib.error.URLError(ssl.SSLCertVerificationError(1, "verify failed")), "tls_error"),
+    (TimeoutError("timed out"), "timeout"),
+    (urllib.error.URLError(TimeoutError("timed out")), "timeout"),
+    (ValueError("Invalid header value"), "invalid_request"),
+])
+def test_http_transport_classifies_http_ssl_timeout_and_value_errors(raised, expected_code):
+    transport = HttpTransport("https://ports.example", opener=CapturingOpener(error=raised))
+    with pytest.raises(PortLightError) as caught:
+        transport.request("GET", "/api/health")
+    assert caught.value.code == expected_code
+
+
+def test_http_transport_handles_read_incomplete_and_rejects_invalid_headers():
+    class TruncatedResponse(Response):
+        def read(self, _size):
+            raise http.client.IncompleteRead(b"{")
+
+    transport = HttpTransport("http://localhost:2100", opener=CapturingOpener(TruncatedResponse()))
+    with pytest.raises(PortLightError) as caught:
+        transport.request("GET", "/api/health")
+    assert caught.value.code == "invalid_response"
+
+    clean_transport = HttpTransport("http://localhost:2100", opener=CapturingOpener())
+    for bad_value in ("secret-token\r\nX-Injected: 1", "secret-token-\u2603", "secret-token\x00"):
+        with pytest.raises(PortLightError) as caught:
+            clean_transport.request("GET", "/api/health", headers={"X-Agent-Token": bad_value})
+        assert caught.value.code == "invalid_request"
+        assert "secret-token" not in str(caught.value)
+
+
+def test_http_transport_closes_http_error_and_guards_body_read():
+    class TrackingBody(io.BytesIO):
+        def __init__(self, body=b"", *, read_error=None):
+            super().__init__(body)
+            self.read_error = read_error
+            self.was_closed = False
+
+        def read(self, size=-1):
+            if self.read_error is not None:
+                raise self.read_error
+            return super().read(size)
+
+        def close(self):
+            self.was_closed = True
+            super().close()
+
+    broken_body = TrackingBody(b"", read_error=http.client.IncompleteRead(b"partial"))
+    broken_error = urllib.error.HTTPError("http://localhost:2100/api/health", 502, "bad gateway", {}, broken_body)
+    transport = HttpTransport("http://localhost:2100", opener=CapturingOpener(error=broken_error))
+    with pytest.raises(PortLightError) as caught:
+        transport.request("GET", "/api/health")
+    assert caught.value.code == "server_error"
+    assert caught.value.status == 502
+    assert broken_body.was_closed is True
+
+    ok_body = TrackingBody(b'{"detail":"reservation request has no active ports"}')
+    ok_error = urllib.error.HTTPError("http://localhost:2100/api/reservations/request", 409, "conflict", {}, ok_body)
+    transport = HttpTransport("http://localhost:2100", opener=CapturingOpener(error=ok_error))
+    with pytest.raises(PortLightError) as caught:
+        transport.request("GET", "/api/reservations/request")
+    assert caught.value.code == "conflict"
+    assert caught.value.status == 409
+    assert ok_body.was_closed is True
+
+
+def test_recovery_request_clears_stale_pending_journal_on_conflict(tmp_path):
+    store = ReservationStore(tmp_path / "state")
+    url = "https://ports.example.invalid"
+    params = {"count": 1, "scope": "self"}
+    first_key = None
+    with pytest.raises(PortLightError):
+        with store.pending_request(url, params) as key:
+            first_key = key
+            raise PortLightError("unreachable", "response lost")
+    request_id = store.pending_requests(url)[0]["id"]
+
+    with pytest.raises(PortLightError) as conflict:
+        with store.recovery_request(url, request_id):
+            raise PortLightError(
+                "conflict",
+                "reservation request has no active ports; no new ports were allocated",
+                status=409,
+            )
+    assert conflict.value.code == "conflict"
+    assert conflict.value.status == 409
+    assert "cleared" in str(conflict.value).lower()
+    assert store.pending_requests(url) == []
+
+    with store.pending_request(url, params) as fresh_key:
+        assert fresh_key != first_key
+
+
+def test_discard_pending_request_removes_journal_and_validates_ownership(tmp_path):
+    store = ReservationStore(tmp_path / "state")
+    url = "https://ports.example.invalid"
+    params = {"count": 1, "scope": "self"}
+    with pytest.raises(PortLightError):
+        with store.pending_request(url, params):
+            raise PortLightError("unreachable", "response lost")
+    request_id = store.pending_requests(url)[0]["id"]
+
+    with pytest.raises(PortLightError) as wrong_server:
+        store.discard_pending_request("https://other.example.invalid", request_id)
+    assert wrong_server.value.code == "state_read_failed"
+    assert len(store.pending_requests(url)) == 1
+
+    with pytest.raises(PortLightError) as bad_id:
+        store.discard_pending_request(url, "not-a-valid-id")
+    assert bad_id.value.code == "invalid_request"
+
+    missing_id = "0" * 64
+    with pytest.raises(PortLightError) as missing:
+        store.discard_pending_request(url, missing_id)
+    assert missing.value.code == "not_found"
+    assert not (tmp_path / "state" / "requests" / f"{missing_id}.lock").exists()
+
+    with pytest.raises(PortLightError):
+        with store.pending_request(url, params):
+            with pytest.raises(PortLightError) as locked:
+                store.discard_pending_request(url, request_id)
+            assert locked.value.code == "reservation_in_progress"
+            raise PortLightError("unreachable", "keep journal")
+
+    discarded = store.discard_pending_request("HTTPS://PORTS.EXAMPLE.INVALID/", request_id)
+    assert discarded["id"] == request_id
+    assert discarded["parameters"] == params
+    assert "key" not in discarded
+    assert store.pending_requests(url) == []

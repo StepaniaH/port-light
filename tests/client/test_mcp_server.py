@@ -162,7 +162,7 @@ def test_suggest_maps_all_options_to_shared_client(fake_client):
         "ttl": 3600,
         "scope": "all",
     }))
-    assert data == {"ports": [8000]}
+    assert data == {"ports": [8000], "reservations": [], "tokens_saved": True}
     assert len(fake_client.calls[0][1].pop("request_key")) == 43
     assert fake_client.calls == [("suggest_ports", {
         "count": 2,
@@ -228,7 +228,10 @@ def test_unexpected_tool_failure_does_not_expose_internal_details(monkeypatch):
     reply = call_tool("check_port", {"port": 1})
     text = reply["result"]["content"][0]["text"]
     assert reply["result"]["isError"] is True
-    assert text == "Port-Light MCP request failed unexpectedly"
+    assert json.loads(text) == {
+        "code": "internal_error",
+        "message": "Port-Light MCP request failed unexpectedly",
+    }
     assert "private" not in text
 
 
@@ -411,4 +414,65 @@ def test_internal_keyerror_is_not_reported_as_unknown_tool(fake_client, monkeypa
     monkeypatch.setattr(fake_client, 'check_port', broken)
     reply = call_tool('check_port', {'port': 8000})
     assert reply['result']['isError'] is True
+    assert tool_data(reply)['code'] == 'internal_error'
     assert 'private-detail' not in json.dumps(reply)
+
+
+def test_suggest_ports_with_reserve_redacts_tokens_and_defaults_to_lease(fake_client, monkeypatch):
+    import time
+
+    expires_at = int(time.time()) + 3600
+    calls = []
+
+    def suggest(**kwargs):
+        calls.append(kwargs)
+        return {
+            "ports": [8000],
+            "reservations": [
+                {"port": 8000, "token": "secret-suggest-token", "expires_at": expires_at},
+            ],
+        }
+
+    monkeypatch.setattr(fake_client, "suggest_ports", suggest)
+    reply = call_tool("suggest_ports", {"reserve": True, "label": "legacy-agent"})
+    assert "secret-suggest-token" not in json.dumps(reply)
+    data = tool_data(reply)
+    assert data["tokens_saved"] is True
+    assert data["reservations"] == [{"port": 8000, "expires_at": expires_at}]
+    assert calls[0]["ttl"] == 3600
+    assert calls[0]["reserve"] is True
+    assert ReservationStore().load(fake_client.base_url, 8000) == "secret-suggest-token"
+    assert ReservationStore().pending_requests(fake_client.base_url) == []
+    assert tool_data(call_tool("release_port", {"port": 8000})) == {"released": 8000}
+    assert ("release_port", 8000, "secret-suggest-token") in fake_client.calls
+
+
+def test_suggest_ports_with_ttl_redacts_tokens_and_read_only_stays_unmutated(fake_client, monkeypatch):
+    import time
+
+    expires_at = int(time.time()) + 600
+
+    def suggest(**kwargs):
+        fake_client.calls.append(("suggest_ports", kwargs))
+        if kwargs.get("reserve") or kwargs.get("ttl") is not None:
+            return {
+                "ports": [8001],
+                "reservations": [
+                    {"port": 8001, "token": "secret-ttl-token", "expires_at": expires_at},
+                ],
+            }
+        return {"ports": [8002]}
+
+    monkeypatch.setattr(fake_client, "suggest_ports", suggest)
+    planning = tool_data(call_tool("suggest_ports", {"count": 1, "scope": "self"}))
+    assert planning == {"ports": [8002]}
+    assert fake_client.calls[0][1]["reserve"] is False
+    assert fake_client.calls[0][1]["ttl"] is None
+    assert ReservationStore().pending_requests(fake_client.base_url) == []
+
+    reply = call_tool("suggest_ports", {"ttl": 600})
+    assert "secret-ttl-token" not in json.dumps(reply)
+    data = tool_data(reply)
+    assert data["tokens_saved"] is True
+    assert data["reservations"] == [{"port": 8001, "expires_at": expires_at}]
+    assert ReservationStore().load(fake_client.base_url, 8001) == "secret-ttl-token"

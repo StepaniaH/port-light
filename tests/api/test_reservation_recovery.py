@@ -1,10 +1,12 @@
 """Exercise durable CLI recovery through the real HTTP application."""
+import asyncio
 import io
 import json
+import threading
 
 from fastapi.testclient import TestClient
 
-from backend import main, port_store
+from backend import hosts, main, port_store
 from port_light_client.client import PortLightClient, PortLightError, _http_error
 from port_light_client.cli import main as cli_main
 from port_light_client.state import ReservationStore
@@ -243,3 +245,165 @@ def test_failed_journal_write_never_sends_request(empty_scan, tmp_path, monkeypa
                     client=PortLightClient(transport=NoTransport()), environ={},
                     stdout=output, stderr=io.StringIO()) == 2
     assert json.loads(output.getvalue())['error']['code'] == 'state_write_failed'
+
+
+def test_cli_recover_clears_expired_409_journal_and_unblocks_new_reservation(empty_scan, tmp_path, monkeypatch):
+    import time
+
+    now = [int(time.time())]
+    monkeypatch.setattr(port_store, "_now", lambda: now[0])
+    with TestClient(main.app) as app_client:
+        transport = AppTransport(app_client)
+        store = ReservationStore(tmp_path / "cli-expired")
+
+        def invoke(argv):
+            output = io.StringIO()
+            code = cli_main(
+                ["--json", *argv],
+                client=PortLightClient(transport=transport),
+                store=store,
+                environ={},
+                stdout=output,
+                stderr=io.StringIO(),
+            )
+            return code, json.loads(output.getvalue())
+
+        reserve_argv = ["reserve", "--start", "45000", "--end", "45001", "--ttl", "60"]
+        code, failed = invoke(reserve_argv)
+        assert code == 3
+        assert failed["ok"] is False
+
+        # Lease expires while the server still retains the inactive receipt for 7 days.
+        now[0] += 61
+        code, conflict = invoke(reserve_argv)
+        assert code == 1
+        assert conflict["error"]["code"] == "conflict"
+
+        code, listing = invoke(["requests"])
+        assert code == 0
+        assert len(listing["requests"]) == 1
+        request_id = listing["requests"][0]["id"]
+
+        # Recover hits real GET /api/reservations/request -> 409, clears the stale journal.
+        code, recovered = invoke(["recover", request_id])
+        assert code == 1
+        assert recovered["error"]["code"] == "conflict"
+        assert recovered["error"]["status"] == 409
+        assert "cleared" in recovered["error"]["message"].lower()
+
+        code, after_listing = invoke(["requests"])
+        assert code == 0
+        assert after_listing["requests"] == []
+
+        code, fresh = invoke(reserve_argv)
+        assert code == 0
+        assert fresh["ports"] == [45000]
+        assert store.load("http://127.0.0.1:2100", 45000) == fresh["reservations"][0]["token"]
+
+
+def test_cli_single_out_of_range_start_fails_closed_without_mutating_server(empty_scan, tmp_path):
+    with TestClient(main.app) as app_client:
+        transport = AppTransport(app_client)
+        transport.lose_response = False
+        store = ReservationStore(tmp_path / "cli-bounds")
+        output = io.StringIO()
+        code = cli_main(
+            ["--json", "reserve", "--start", "20000"],
+            client=PortLightClient(transport=transport),
+            store=store,
+            environ={},
+            stdout=output,
+            stderr=io.StringIO(),
+        )
+        payload = json.loads(output.getvalue())
+        assert code == 2
+        assert payload["ok"] is False
+        assert payload["error"]["code"] == "invalid_request"
+        assert port_store.get_manual_ports() == []
+        assert store.pending_requests("http://127.0.0.1:2100") == []
+
+
+def test_inflight_reservation_recovery_returns_503_until_post_commits(empty_scan, tmp_path, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+
+    async def slow_fetch_peers(_peers, _path, _query):
+        started.set()
+        await asyncio.to_thread(release.wait, 5.0)
+        return [(200, {"ports": [], "summary": {
+            "scan_complete": True, "stale": False,
+            "hidden_locked": False, "compose_incomplete": False, "compose_truncated": False,
+        }}, None)]
+
+    monkeypatch.setattr(hosts, "fetch_peers_json", slow_fetch_peers)
+
+    with TestClient(main.app) as app_client:
+        assert app_client.put("/api/hosts", json={
+            "peers": [{"name": "SlowPeer", "url": "http://10.0.0.2:2100"}],
+        }).status_code == 200
+
+        store = ReservationStore(tmp_path / "cli-inflight")
+        parameters = dict(count=1, start=45000, end=45001, label="", ttl=None, scope="all", require_count=True)
+        key_holder: list[str] = []
+        try:
+            with store.pending_request("http://127.0.0.1:2100", parameters) as key:
+                key_holder.append(key)
+                raise PortLightError("unreachable", "simulated client timeout while server keeps running")
+        except PortLightError:
+            pass
+        key = key_holder[0]
+        rows = store.pending_requests("http://127.0.0.1:2100")
+        assert len(rows) == 1
+        request_id = rows[0]["id"]
+
+        post_result: list[int] = []
+
+        def send_post():
+            resp = app_client.post(
+                "/api/reservations",
+                headers={"Idempotency-Key": key},
+                json=parameters,
+            )
+            post_result.append(resp.status_code)
+
+        worker = threading.Thread(target=send_post, daemon=True)
+        worker.start()
+        try:
+            assert started.wait(timeout=2.0)
+
+            in_flight_get = app_client.get("/api/reservations/request", headers={"Idempotency-Key": key})
+            assert in_flight_get.status_code == 503
+
+            transport = AppTransport(app_client)
+            transport.lose_response = False
+            output = io.StringIO()
+            code = cli_main(
+                ["--json", "recover", request_id],
+                client=PortLightClient(transport=transport),
+                store=store,
+                environ={},
+                stdout=output,
+                stderr=io.StringIO(),
+            )
+            assert code == 3
+            assert json.loads(output.getvalue())["error"]["status"] == 503
+            assert len(store.pending_requests("http://127.0.0.1:2100")) == 1
+        finally:
+            release.set()
+            worker.join(timeout=5.0)
+
+        assert post_result == [200]
+        output = io.StringIO()
+        code = cli_main(
+            ["--json", "recover", request_id],
+            client=PortLightClient(transport=transport),
+            store=store,
+            environ={},
+            stdout=output,
+            stderr=io.StringIO(),
+        )
+        assert code == 0
+        recovered = json.loads(output.getvalue())
+        assert recovered["ports"] == [45000]
+        assert store.load("http://127.0.0.1:2100", 45000) == recovered["reservations"][0]["token"]
+        assert store.pending_requests("http://127.0.0.1:2100") == []

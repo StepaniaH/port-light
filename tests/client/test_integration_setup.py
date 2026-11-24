@@ -115,3 +115,41 @@ def test_verification_reports_agent_gate_failure_without_claiming_registration(t
     assert result["checks"][-1]["code"] == "authentication_failed"
     assert "private-password" not in json.dumps(result)
     assert not list((Path(store.root) / "reservations").iterdir())
+
+
+def test_verification_parses_mcp_internal_error_envelope(tmp_path, monkeypatch):
+    from port_light_client import mcp
+
+    class BrokenClient:
+        base_url = "http://localhost:2100"
+
+        def doctor(self):
+            raise RuntimeError("secret backend trace")
+
+        def suggest_ports(self, **_kwargs):
+            return {"ports": [8000]}
+
+    monkeypatch.setattr(mcp, "client", BrokenClient)
+
+    def run(*_args, **kwargs):
+        session = mcp.McpSession()
+        replies = []
+        for line in kwargs["input"].splitlines():
+            reply = session.handle_request(json.loads(line))
+            if reply is not None:
+                replies.append(json.dumps(reply))
+        return SimpleNamespace(returncode=0, stdout="\n".join(replies) + "\n", stderr="")
+
+    monkeypatch.setattr(integration.subprocess, "run", run)
+    store = ReservationStore(tmp_path)
+    env = integration.connection_environment("http://localhost:2100", store, {})
+    result = integration.verify_integration(env, {}, store)
+    assert result["ready"] is False
+    doctor_check = next(check for check in result["checks"] if check["id"] == "doctor")
+    assert doctor_check == {
+        "id": "doctor",
+        "status": "fail",
+        "code": "internal_error",
+        "detail": "Port-Light MCP request failed unexpectedly",
+    }
+    assert "secret backend trace" not in json.dumps(result)

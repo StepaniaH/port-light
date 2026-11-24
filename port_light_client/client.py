@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import http.client
 import json as jsonlib
 import math
 import re
@@ -45,8 +46,24 @@ class _RejectRedirects(urllib.request.HTTPRedirectHandler):
 
 
 def normalize_base_url(value: str) -> str:
+    if not isinstance(value, str):
+        raise PortLightError(
+            "invalid_url",
+            "Port-Light URL must be an http:// or https:// address with a host",
+        )
     text = value.strip().rstrip("/")
-    parsed = urllib.parse.urlsplit(text)
+    if any(ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in text):
+        raise PortLightError(
+            "invalid_url",
+            "Port-Light URL must not contain whitespace or control characters",
+        )
+    try:
+        parsed = urllib.parse.urlsplit(text)
+    except ValueError as exc:
+        raise PortLightError(
+            "invalid_url",
+            "Port-Light URL must be an http:// or https:// address with a host",
+        ) from exc
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise PortLightError(
             "invalid_url",
@@ -57,12 +74,26 @@ def normalize_base_url(value: str) -> str:
             "invalid_url",
             "Port-Light URL must not contain credentials; use PORT_LIGHT_AUTH",
         )
-    if parsed.query or parsed.fragment:
+    if parsed.query or parsed.fragment or "?" in text or "#" in text:
         raise PortLightError(
             "invalid_url",
             "Port-Light URL must not contain a query string or fragment",
         )
-    return text
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise PortLightError(
+            "invalid_url",
+            "Port-Light URL port must be an integer between 1 and 65535",
+        ) from exc
+    if port is not None and not 1 <= port <= 65535:
+        raise PortLightError(
+            "invalid_url",
+            "Port-Light URL port must be an integer between 1 and 65535",
+        )
+    host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+    netloc = f"{host}:{port}" if port is not None else host
+    return urllib.parse.urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
 
 
 def _http_error(code: int, detail: str, server_code: str = "") -> PortLightError:
@@ -141,19 +172,55 @@ class HttpTransport:
             data = jsonlib.dumps(json).encode("utf-8")
             request_headers["Content-Type"] = "application/json"
         if self._basic_auth:
-            token = base64.b64encode(self._basic_auth.encode()).decode()
+            try:
+                token = base64.b64encode(self._basic_auth.encode("utf-8")).decode("ascii")
+            except UnicodeEncodeError as exc:
+                raise PortLightError(
+                    "invalid_request",
+                    "PORT_LIGHT_AUTH contains invalid characters",
+                ) from exc
             request_headers["Authorization"] = "Basic " + token
-        request = urllib.request.Request(
-            self.base_url + path,
-            method=method,
-            headers=request_headers,
-            data=data,
-        )
+        for header_name, header_value in request_headers.items():
+            if not isinstance(header_name, str) or not isinstance(header_value, str):
+                raise PortLightError("invalid_request", "request headers must be strings")
+            try:
+                header_name.encode("ascii")
+                header_value.encode("latin-1")
+            except UnicodeEncodeError as exc:
+                raise PortLightError(
+                    "invalid_request",
+                    "request headers contain unsupported characters",
+                ) from exc
+            if (
+                not header_name
+                or any(ord(ch) <= 0x20 or ord(ch) == 0x7F or ch == ":" for ch in header_name)
+                or any(ch in ("\r", "\n", "\x00") for ch in header_value)
+            ):
+                raise PortLightError(
+                    "invalid_request",
+                    "request headers contain illegal control characters",
+                )
         try:
+            request = urllib.request.Request(
+                self.base_url + path,
+                method=method,
+                headers=request_headers,
+                data=data,
+            )
             with self._opener.open(request, timeout=self.timeout) as response:
                 body = response.read(4 * 1024 * 1024 + 1)
         except urllib.error.HTTPError as exc:
-            raw = exc.read(256 * 1024)
+            raw = b""
+            try:
+                try:
+                    raw = exc.read(256 * 1024)
+                except (http.client.HTTPException, TimeoutError, OSError, ValueError):
+                    raw = b""
+            finally:
+                try:
+                    exc.close()
+                except Exception:  # noqa: BLE001 — never mask the HTTP error during cleanup
+                    pass
             detail = ""
             server_code = ""
             try:
@@ -165,15 +232,35 @@ class HttpTransport:
                 pass
             raise _http_error(exc.code, detail, server_code) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            reason = getattr(exc, "reason", exc)
-            if isinstance(reason, ssl.SSLError):
+            reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+            if isinstance(exc, ssl.SSLError) or isinstance(reason, ssl.SSLError):
                 raise PortLightError(
                     "tls_error",
                     "could not verify the Port-Light HTTPS certificate",
                 ) from exc
+            if isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError):
+                raise PortLightError(
+                    "timeout",
+                    f"timed out waiting for Port-Light at {self.base_url} after {self.timeout:g}s",
+                ) from exc
             raise PortLightError(
                 "unreachable",
                 f"cannot reach Port-Light at {self.base_url}",
+            ) from exc
+        except http.client.InvalidURL as exc:
+            raise PortLightError(
+                "invalid_url",
+                "Port-Light request URL is invalid",
+            ) from exc
+        except http.client.HTTPException as exc:
+            raise PortLightError(
+                "invalid_response",
+                "Port-Light returned an incomplete or malformed HTTP response",
+            ) from exc
+        except ValueError as exc:  # includes UnicodeEncodeError
+            raise PortLightError(
+                "invalid_request",
+                "Port-Light request headers or URL contain invalid characters",
             ) from exc
 
         if len(body) > 4 * 1024 * 1024:

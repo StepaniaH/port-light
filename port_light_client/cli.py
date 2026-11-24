@@ -147,7 +147,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="read the reservation token from standard input",
     )
-    commands.add_parser("requests", help="list local pending requests without exposing secrets", parents=[common])
+    requests_cmd = commands.add_parser(
+        "requests",
+        help="list or discard local pending requests without exposing secrets",
+        parents=[common],
+    )
+    requests_cmd.add_argument(
+        "--discard",
+        metavar="REQUEST_ID",
+        help="discard a local pending request journal without contacting the server",
+    )
     recover = commands.add_parser("recover", help="recover a pending reservation without allocating", parents=[common])
     recover.add_argument("request_id", help="ID returned by port-light requests")
     return parser
@@ -182,7 +191,7 @@ def _expiry_text(value: Any) -> str:
 def _error_exit(error: PortLightError) -> int:
     if error.code in ("not_found", "conflict", "no_capacity"):
         return 1
-    if error.code.startswith("invalid_") or error.code in (
+    if (error.code.startswith("invalid_") and error.code != "invalid_response") or error.code in (
         "reservation_token_missing",
         "state_read_failed",
         "state_write_failed",
@@ -569,6 +578,19 @@ def main(
                 stderr=stderr,
             )
         if args.command == "requests":
+            if args.discard is not None:
+                discarded = active_store.discard_pending_request(active_client.base_url, args.discard)
+                if json_output:
+                    _json_write(stdout, {
+                        "schema_version": SCHEMA_VERSION,
+                        "ok": True,
+                        "command": "requests",
+                        "discarded": discarded["id"],
+                        "request": discarded,
+                    })
+                else:
+                    stdout.write(f"Discarded pending request {discarded['id']}.\n")
+                return 0
             rows = active_store.pending_requests(active_client.base_url)
             if json_output:
                 _json_write(stdout, {"schema_version": SCHEMA_VERSION, "ok": True,
