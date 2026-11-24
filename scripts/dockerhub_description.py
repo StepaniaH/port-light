@@ -24,8 +24,16 @@ def render(markdown: str, ref: str = 'main') -> str:
         if image:
             return f'https://raw.githubusercontent.com/StepaniaH/port-light/{ref}/' + path
         return f'{GITHUB}/blob/{ref}/' + path
-    result = re.sub(r'(!?\[[^\]\n]*\])\(([^\s)]+)\)',
-                    lambda m: m[1] + '(' + url(m[2], m[1].startswith('!')) + ')', markdown)
+    result = re.sub(
+        r'(!\[[^\]\n]*\])\(([^\s)]+)\)',
+        lambda m: m[1] + '(' + url(m[2], True) + ')',
+        markdown,
+    )
+    result = re.sub(
+        r'(?<!\!)(\[(?:!\[[^\]\n]*\]\([^\s)]+\)|[^\[\]\n])*\])\(([^\s)]+)\)',
+        lambda m: m[1] + '(' + url(m[2], False) + ')',
+        result,
+    )
     return re.sub(r'(<img\b[^>]*\bsrc=")([^"]+)(")',
                   lambda m: m[1] + url(m[2], True) + m[3], result)
 
@@ -49,9 +57,9 @@ def main() -> int:
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9._-]+', args.ref):
         parser.error('ref must be a tag, commit SHA or branch name without slashes')
-    description = render((ROOT / 'README.md').read_text(), args.ref)
+    description = render((ROOT / 'README.md').read_text(encoding='utf-8'), args.ref)
     if args.output:
-        args.output.write_text(description)
+        args.output.write_text(description, encoding='utf-8')
     if not args.publish:
         if not args.output:
             print(description)

@@ -110,7 +110,7 @@ def main() -> int:
     if args.command == 'sync-locales':
         return sync_analysis_messages()
     if args.command == 'test':
-        steps = [[sys.executable, '-m', 'ruff', 'check', 'backend', 'tests', 'mcp', 'port_light_client', 'scripts/dev.py', 'scripts/preview_fleet.py', 'scripts/check_release_ci.py', 'scripts/check_ai_install.py', 'scripts/dockerhub_description.py'],
+        steps = [[sys.executable, '-m', 'ruff', 'check', 'backend', 'tests', 'mcp', 'port_light_client', 'scripts/dev.py', 'scripts/preview_fleet.py', 'scripts/check_release_ci.py', 'scripts/check_ai_install.py', 'scripts/dockerhub_description.py', 'scripts/locale-scaffold.py'],
                  [sys.executable, '-m', 'pytest', '-q'], ['npm', 'run', 'lint'], ['npm', 'test']]
         if args.browser:
             steps += [['npm', 'run', 'smoke:browser'], ['npm', 'run', 'smoke:management'], ['npm', 'run', 'smoke:fleet'], ['npm', 'run', 'smoke:analysis']]

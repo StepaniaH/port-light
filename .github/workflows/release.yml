@@ -21,6 +21,7 @@ jobs:
       packages: write
     outputs:
       sha: ${{ steps.source.outputs.sha }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,7 +52,7 @@ jobs:
           python3 - <<'PY'
           import ast, os, pathlib
           version = os.environ["TAG"].removeprefix("v")
-          client_tree = ast.parse(pathlib.Path("port_light_client/__init__.py").read_text())
+          client_tree = ast.parse(pathlib.Path("port_light_client/__init__.py").read_text(encoding="utf-8"))
           client_version = next(
               ast.literal_eval(node.value)
               for node in client_tree.body
@@ -62,14 +63,61 @@ jobs:
           if client_version != version:
               raise SystemExit(f"tag {version} and product version {client_version} must match")
           PY
-          python -m pip install build
+          python -m pip install "build>=1.6.1"
           python -m build --wheel
+
+      - name: Verify built CLI wheel
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python -m venv "$RUNNER_TEMP/port-light-cli-smoke"
+          "$RUNNER_TEMP/port-light-cli-smoke/bin/python" -m pip install --no-index dist/*.whl
+          cd "$RUNNER_TEMP"
+          version_out="$("$RUNNER_TEMP/port-light-cli-smoke/bin/port-light" --version)"
+          echo "$version_out"
+          expected="${TAG#v}"
+          case "$version_out" in
+            *"$expected"*) ;;
+            *) echo "unexpected port-light --version output: $version_out (expected $expected)" >&2; exit 1 ;;
+          esac
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"release-smoke","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | "$RUNNER_TEMP/port-light-cli-smoke/bin/port-light-mcp" > "$RUNNER_TEMP/mcp-release-smoke.jsonl"
+          python3 - <<'PY'
+          import json, os, pathlib
+          rows = [
+              json.loads(line)
+              for line in pathlib.Path(os.environ["RUNNER_TEMP"], "mcp-release-smoke.jsonl")
+              .read_text(encoding="utf-8")
+              .splitlines()
+          ]
+          assert [r["id"] for r in rows] == [1, 2], rows
+          assert rows[0]["result"]["protocolVersion"] == "2025-11-25", rows[0]
+          assert {"doctor", "reserve_ports", "release_port"} <= {t["name"] for t in rows[1]["result"]["tools"]}, rows[1]
+          PY
+          python3 "$GITHUB_WORKSPACE/scripts/check_ai_install.py" "$RUNNER_TEMP/port-light-cli-smoke/bin/python" "$GITHUB_WORKSPACE"/dist/*.whl
 
       - uses: actions/upload-artifact@v7
         with:
           name: port-light-cli-wheel
           path: dist/*.whl
           if-no-files-found: error
+
+      - name: Verify CHANGELOG section
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          tag = os.environ["TAG"]
+          version = tag.removeprefix("v")
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          m = re.search(rf"^## {re.escape(version)}(?=\s|$).*?(?=^## |\Z)", text, re.M | re.S)
+          if not m:
+              raise SystemExit(f"CHANGELOG.md is missing a '## {version}' section for tag {tag}")
+          PY
 
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
@@ -89,9 +137,16 @@ jobs:
         id: meta
         env:
           REPOSITORY_OWNER: ${{ github.repository_owner }}
+          TAG: ${{ github.ref_name }}
         run: |
           owner="${REPOSITORY_OWNER,,}"
-          echo "tags=stepaniah/port-light:${GITHUB_REF_NAME},stepaniah/port-light:latest,ghcr.io/${owner}/port-light:${GITHUB_REF_NAME},ghcr.io/${owner}/port-light:latest" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "tags=stepaniah/port-light:${TAG},stepaniah/port-light:latest,ghcr.io/${owner}/port-light:${TAG},ghcr.io/${owner}/port-light:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "tags=stepaniah/port-light:${TAG},ghcr.io/${owner}/port-light:${TAG}" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: docker/build-push-action@v7
         with:
@@ -105,6 +160,7 @@ jobs:
   github-release:
     needs: build-and-push
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -124,13 +180,14 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, pathlib, re
-          version = os.environ["TAG"].lstrip("v")
-          text = pathlib.Path("CHANGELOG.md").read_text()
-          m = re.search(rf"^## {re.escape(version)}\b.*?(?=^## |\Z)", text, re.M | re.S)
+          tag = os.environ["TAG"]
+          version = tag.removeprefix("v")
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          m = re.search(rf"^## {re.escape(version)}(?=\s|$).*?(?=^## |\Z)", text, re.M | re.S)
           if not m:
-              m = re.search(r"^## Unreleased\b.*?(?=^## |\Z)", text, re.M | re.S)
-          notes = (m.group(0).strip() if m else f"See CHANGELOG.md for {os.environ['TAG']}.")
-          pathlib.Path("release-notes.md").write_text(notes + "\n")
+              raise SystemExit(f"CHANGELOG.md is missing a '## {version}' section for tag {tag}")
+          notes = m.group(0).strip()
+          pathlib.Path("release-notes.md").write_text(notes + "\n", encoding="utf-8")
           PY
 
       - uses: softprops/action-gh-release@v3
@@ -139,11 +196,14 @@ jobs:
           name: ${{ github.ref_name }}
           body_path: release-notes.md
           generate_release_notes: false
+          prerelease: ${{ needs.build-and-push.outputs.prerelease == 'true' }}
           files: dist/*.whl
 
   dockerhub-description:
     needs: [build-and-push, github-release]
+    if: ${{ success() && needs.build-and-push.outputs.prerelease != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:

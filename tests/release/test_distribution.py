@@ -8,12 +8,32 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_dockerhub_links_resolve_to_release_tag_and_keep_screenshot():
-    source = (ROOT / 'README.md').read_text()
+    source = (ROOT / 'README.md').read_text(encoding='utf-8')
     rendered = render(source, 'v0.8.2')
     assert 'src="https://raw.githubusercontent.com/StepaniaH/port-light/v0.8.2/docs/screenshots/dashboard.png"' in rendered
     assert '(https://github.com/StepaniaH/port-light/blob/v0.8.2/docs/cli.md)' in rendered
+    assert '(https://github.com/StepaniaH/port-light/blob/v0.8.2/docs/README.md)' in rendered
+    assert '[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/StepaniaH/port-light/blob/v0.8.2/LICENSE)' in rendered
     assert '(https://hub.docker.com/r/stepaniah/port-light)' in rendered
     assert '(docs/' not in rendered
+    assert '(LICENSE)' not in rendered
+
+
+def test_dockerhub_render_rewrites_nested_relative_badge_image_and_link():
+    rendered = render('[![Icon](docs/icon.png)](LICENSE) and [MIT](LICENSE)', 'v0.9.0')
+    assert rendered == (
+        '[![Icon](https://raw.githubusercontent.com/StepaniaH/port-light/v0.9.0/docs/icon.png)]'
+        '(https://github.com/StepaniaH/port-light/blob/v0.9.0/LICENSE) and '
+        '[MIT](https://github.com/StepaniaH/port-light/blob/v0.9.0/LICENSE)'
+    )
+
+
+def test_dockerfile_installs_cli_and_mcp_wrappers():
+    dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
+    assert 'COPY scripts/port-light /usr/local/bin/port-light' in dockerfile
+    assert '/usr/local/bin/port-light-mcp' in dockerfile
+    assert 'python -m port_light_client.mcp' in dockerfile
+    assert 'chmod 755 /usr/local/bin/port-light /usr/local/bin/port-light-mcp' in dockerfile
 
 
 def test_unraid_template_and_profile_have_installation_metadata():

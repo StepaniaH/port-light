@@ -16,6 +16,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
@@ -30,13 +31,13 @@ jobs:
         run: pip freeze
       - name: Lint
         if: matrix.python-version == '3.13'
-        run: ruff check backend tests mcp port_light_client scripts/check_release_ci.py scripts/check_ai_install.py scripts/dev.py scripts/dockerhub_description.py
+        run: ruff check backend tests mcp port_light_client scripts/check_release_ci.py scripts/check_ai_install.py scripts/dev.py scripts/dockerhub_description.py scripts/preview_fleet.py scripts/locale-scaffold.py
       - name: Build CLI wheel
         if: matrix.python-version == '3.13'
         run: |
           python -m build --wheel
           python -m venv "$RUNNER_TEMP/port-light-cli-smoke"
-          "$RUNNER_TEMP/port-light-cli-smoke/bin/pip" install --no-index dist/*.whl
+          "$RUNNER_TEMP/port-light-cli-smoke/bin/python" -m pip install --no-index dist/*.whl
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/port-light-cli-smoke/bin/port-light" --version
           python "$GITHUB_WORKSPACE/scripts/check_ai_install.py" "$RUNNER_TEMP/port-light-cli-smoke/bin/python" "$GITHUB_WORKSPACE"/dist/*.whl
@@ -56,6 +57,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -92,6 +94,35 @@ jobs:
           printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-            | docker run --rm -i --entrypoint python port-light:ci /app/mcp/server.py > mcp-smoke.jsonl
-          python -c 'import json; rows = [json.loads(line) for line in open("mcp-smoke.jsonl")]; assert [r["id"] for r in rows] == [1, 2]; assert {"doctor", "reserve_ports", "release_port"} <= {t["name"] for t in rows[1]["result"]["tools"]}'
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' > mcp-input.jsonl
+          docker run --rm -i --entrypoint python port-light:ci /app/mcp/server.py < mcp-input.jsonl > mcp-smoke.jsonl
+          docker run --rm -i --entrypoint port-light-mcp port-light:ci < mcp-input.jsonl > mcp-wrapper-smoke.jsonl
+          python3 - <<'PY'
+          import json, pathlib
+          for path in ("mcp-smoke.jsonl", "mcp-wrapper-smoke.jsonl"):
+              rows = [json.loads(line) for line in pathlib.Path(path).read_text(encoding="utf-8").splitlines()]
+              assert [r["id"] for r in rows] == [1, 2], (path, rows)
+              assert {"doctor", "reserve_ports", "release_port"} <= {t["name"] for t in rows[1]["result"]["tools"]}, path
+          PY
+      - name: Smoke HTTP server boot
+        run: |
+          cid="$(docker run -d -p 127.0.0.1:18210:2100 -e PORT_LIGHT_SCANNERS=listen port-light:ci)"
+          trap 'status=$?; [ "$status" -ne 0 ] && docker logs "$cid" || true; docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          python3 - <<'PY'
+          import json, time, urllib.error, urllib.request
+          url = "http://127.0.0.1:18210/api/health"
+          last_error = None
+          for _ in range(60):
+              try:
+                  with urllib.request.urlopen(url, timeout=2) as response:
+                      assert response.status == 200, f"expected 200, got {response.status}"
+                      payload = json.loads(response.read().decode("utf-8"))
+                      assert payload["status"] in ("ok", "degraded"), payload
+                      assert payload["version"], payload
+                      break
+              except (OSError, urllib.error.URLError) as exc:
+                  last_error = exc
+                  time.sleep(0.5)
+          else:
+              raise SystemExit(f"container /api/health check timed out: {last_error}")
+          PY
