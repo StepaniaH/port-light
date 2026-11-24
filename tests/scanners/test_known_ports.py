@@ -121,3 +121,51 @@ def test_custom_ports_coerces_access_flag(tmp_path, monkeypatch):
     monkeypatch.setenv("CUSTOM_PORTS_FILE", str(path))
     assert get_known_port(22)["is_access_port"] is False
     assert get_known_port(4242)["is_access_port"] is True
+
+
+def test_custom_ports_loads_from_data_dir_and_caches_missing_state(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(data_dir))
+    custom_path = data_dir / "custom_ports.json"
+    monkeypatch.setenv("CUSTOM_PORTS_FILE", str(custom_path))
+
+    assert get_known_port(4242) is None
+    assert get_known_port(4242) is None
+
+    custom_path.write_text(json.dumps({
+        "4242": {
+            "name": "Custom Service",
+            "description": "Inside data directory",
+            "category": "selfhosted",
+            "is_access_port": True,
+        },
+    }), encoding="utf-8")
+    entry = get_known_port(4242)
+    assert entry is not None and entry["name"] == "Custom Service"
+
+    custom_path.unlink()
+    assert get_known_port(4242) is None
+
+
+def test_custom_ports_ignores_oversized_device_and_fifo_targets(tmp_path, monkeypatch):
+    oversized = tmp_path / "huge.json"
+    oversized.write_text(
+        '{"4242": {"name": "Big", "note": "' + ("a" * (512 * 1024 + 64)) + '"}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CUSTOM_PORTS_FILE", str(oversized))
+    assert get_known_port(4242) is None
+    assert get_known_port(22)["name"] == "SSH"
+
+    monkeypatch.setenv("CUSTOM_PORTS_FILE", "/dev/null")
+    assert get_known_port(22)["name"] == "SSH"
+
+    if hasattr(os, "mkfifo"):
+        fifo = tmp_path / "ports.fifo"
+        try:
+            os.mkfifo(fifo)
+        except OSError:
+            return
+        monkeypatch.setenv("CUSTOM_PORTS_FILE", str(fifo))
+        assert get_known_port(22)["name"] == "SSH"

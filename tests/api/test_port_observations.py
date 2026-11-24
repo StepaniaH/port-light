@@ -119,3 +119,56 @@ def test_observation_events_survive_in_memory_event_reset(empty_scan, monkeypatc
         event = next(event for event in body["events"] if event["kind"] == "bind_scope_changed")
         assert event["evidence_refs"] == [f"history:{event['event_id']}"]
         assert event["event_id"] in {ref["id"].removeprefix("history:") for ref in body["evidence_refs"]}
+
+
+def test_host_netns_container_observation_tracks_active_protocol_without_expose_leak(
+    empty_scan, monkeypatch,
+):
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [
+        ListeningPort(port=5353, protocol="udp", ip="127.0.0.1", pid=420, inode=9001),
+    ])
+    monkeypatch.setattr(main, "scan_containers", lambda: [ContainerInfo(
+        name="host-dns",
+        container_id="cid-host-dns-01",
+        status="running",
+        image="example.invalid/dns:latest",
+        network_mode="host",
+        pid=400,
+        pids={400, 420},
+        socket_inodes={9001},
+        ports=[
+            PortMapping(host_port=5353, host_ip="0.0.0.0", container_port=5353, protocol="udp", source="expose"),
+            PortMapping(host_port=5353, host_ip="0.0.0.0", container_port=5353, protocol="tcp", source="expose"),
+        ],
+    )])
+    with TestClient(main.app) as client:
+        res = client.get("/api/observations/ports/5353")
+        assert res.status_code == 200
+        entries = {e["protocol"]: e for e in res.json()["current"]["entries"]}
+        assert entries["udp"]["status"] == "used"
+        assert entries["udp"]["listening"] is True
+        assert entries["udp"]["docker_mapped"] is True
+        assert entries["udp"]["docker_live"] is True
+        assert entries["udp"]["bind"] == [
+            {"family": "ipv4", "scope": "loopback", "source": "docker"},
+            {"family": "ipv4", "scope": "loopback", "source": "listen"},
+        ]
+        assert entries["tcp"]["status"] == "configured"
+        assert entries["tcp"]["listening"] is False
+        assert entries["tcp"]["docker_mapped"] is False
+        assert entries["tcp"]["docker_live"] is False
+        assert entries["tcp"]["bind"] == []
+
+
+def test_observation_intra_project_and_family_aware_compose_conflicts(empty_scan, monkeypatch):
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_kw: ComposeScan(ports=[
+        ComposePort(8080, "stack/compose.yml", "stack", "web", protocol="tcp", host_ip="0.0.0.0"),
+        ComposePort(8080, "stack/compose.yml", "stack", "admin", protocol="tcp", host_ip="127.0.0.1"),
+        ComposePort(8081, "stack/compose.yml", "stack", "v4", protocol="tcp", host_ip="0.0.0.0"),
+        ComposePort(8081, "stack/compose.yml", "stack", "v6", protocol="tcp", host_ip="::1"),
+    ]))
+    with TestClient(main.app) as client:
+        conflict_entry = client.get("/api/observations/ports/8080", params={"protocol": "tcp"}).json()["current"]["entries"][0]
+        disjoint_entry = client.get("/api/observations/ports/8081", params={"protocol": "tcp"}).json()["current"]["entries"][0]
+        assert conflict_entry["compose_conflict"] is True
+        assert disjoint_entry["compose_conflict"] is False

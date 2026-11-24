@@ -83,3 +83,47 @@ def test_reservation_list_hides_locked_entries(empty_scan, monkeypatch):
     assert client.get('/api/reservations', headers={'X-Hidden-Unlock': 'test-password'}).json()['reservations'][0]['port'] == 24000
     token = body['reservations'][0]['token']
     assert client.delete('/api/reservations/24000', headers={'X-Reservation-Token': token}).status_code == 200
+
+
+def test_rules_match_project_dir_before_project_name_and_reject_traversal(empty_scan, monkeypatch):
+    scan = ComposeScan(ports=[
+        ComposePort(
+            port=30050, compose_file='prod/wiki/compose.yaml',
+            project_dir='prod/wiki', project_name='wiki', service_name='web', container_port=80,
+        ),
+        ComposePort(
+            port=30060, compose_file='staging/wiki/compose.yaml',
+            project_dir='staging/wiki', project_name='wiki', service_name='web', container_port=80,
+        ),
+    ])
+    monkeypatch.setattr(main, 'scan_compose_tree', lambda *a, **kw: scan)
+    client = TestClient(main.app)
+
+    for bad_ref in ('../wiki', 'prod/../wiki', '..', '.', 'prod\\wiki', '/prod/wiki', 'prod/wiki/', 'prod//wiki'):
+        assert client.put('/api/port-rules', json={'rules': [rule(projects=[bad_ref])]}).status_code == 422
+
+    saved = client.put('/api/port-rules', json={'rules': [
+        rule(name='prod-web', start=30000, end=30099, projects=['prod/wiki']),
+        rule(name='default-wiki', start=31000, end=31099, projects=['wiki']),
+    ]})
+    assert saved.status_code == 200, saved.text
+
+    prod_row = client.get('/api/ports/30050').json()
+    assert 'rule_violations' not in prod_row
+
+    staging_row = client.get('/api/ports/30060').json()
+    assert staging_row['rule_violations'] == [{
+        'rule': 'default-wiki',
+        'project': 'wiki',
+        'service': 'web',
+        'start': 31000,
+        'end': 31099,
+    }]
+
+    distinct = client.put('/api/port-rules', json={'rules': [
+        rule(name='prod-web', start=32000, end=32099, projects=['prod/wiki']),
+        rule(name='staging-web', start=30000, end=30099, projects=['staging/wiki']),
+    ]})
+    assert distinct.status_code == 200
+    assert client.get('/api/ports/30050').json()['rule_violations'][0]['project'] == 'prod/wiki'
+    assert 'rule_violations' not in client.get('/api/ports/30060').json()

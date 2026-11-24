@@ -9,8 +9,10 @@ from collections.abc import Callable
 
 from . import degradations, history
 from .classification import binds_overlap, free_port_payload
+from .models import PortMapping
 from .netaddr import clean_bind_ip, proto_family_of
 from .occupancy_monitor import complete
+from .port_scanner import is_host_netns_mode
 
 PROTOCOLS = ("tcp", "udp")
 MAX_HISTORY_EVENTS = 128
@@ -62,12 +64,16 @@ def _bindings(value, source: str) -> list[dict]:
 
 
 def _compose_conflict(records: list) -> bool:
-    by_project: dict[str, list[str | None]] = {}
+    by_service: dict[tuple[str, str], list[str | None]] = {}
     for record in records:
-        by_project.setdefault(str(getattr(record, "project_dir", "")), []).append(
+        key = (
+            str(getattr(record, "project_dir", "") or ""),
+            str(getattr(record, "service_name", "") or ""),
+        )
+        by_service.setdefault(key, []).append(
             getattr(record, "host_ip", None),
         )
-    groups = list(by_project.values())
+    groups = list(by_service.values())
     for index, left in enumerate(groups):
         for right in groups[index + 1:]:
             if any(binds_overlap(a, b) for a in left for b in right):
@@ -94,6 +100,34 @@ def _observation_index(snap: dict) -> dict:
             )
             if port is not None and protocol in PROTOCOLS:
                 containers.setdefault((port, protocol), []).append((container, mapping))
+        if getattr(container, "status", None) not in ("running", "paused", "restarting"):
+            continue
+        inodes = set(getattr(container, "socket_inodes", None) or ())
+        pids = set(getattr(container, "pids", None) or ())
+        mode = str(getattr(container, "network_mode", None) or "")
+        hostish = bool(inodes) or bool(pids) or mode == "host" or is_host_netns_mode(mode)
+        cpid = getattr(container, "pid", None)
+        if hostish and isinstance(cpid, int) and not isinstance(cpid, bool) and cpid > 0:
+            pids.add(cpid)
+        if not inodes and not pids:
+            continue
+        for (port, protocol), lp_rows in listeners.items():
+            for lp in lp_rows:
+                lp_inode = getattr(lp, "inode", None)
+                lp_pid = getattr(lp, "pid", None)
+                if (lp_inode and lp_inode in inodes) or (lp_pid is not None and lp_pid in pids):
+                    raw_ip = getattr(lp, "ip", None)
+                    lp_ip = str(raw_ip).strip() if isinstance(raw_ip, str) and raw_ip.strip() else ""
+                    containers.setdefault((port, protocol), []).append((
+                        container,
+                        PortMapping(
+                            host_port=port,
+                            host_ip=lp_ip,
+                            container_port=port,
+                            protocol=protocol,
+                            source="host",
+                        ),
+                    ))
     for row in getattr(snap.get("compose_scan"), "ports", []):
         port, protocol = _number(getattr(row, "port", None)), proto_family_of(
             getattr(row, "protocol", None)
@@ -132,10 +166,20 @@ def _protocol_entry(
         status = "unknown"
     bindings = []
     for row in listeners:
-        bindings.extend(_bindings(getattr(row, "ip", None), "listen"))
+        raw_ip = getattr(row, "ip", None)
+        if raw_ip is not None and str(raw_ip).strip():
+            bindings.extend(_bindings(raw_ip, "listen"))
     for _container, mapping in container_matches:
-        bindings.extend(_bindings(getattr(mapping, "host_ip", None), "docker"))
+        msrc = getattr(mapping, "source", "publish")
+        if msrc == "expose":
+            continue
+        raw_ip = getattr(mapping, "host_ip", None)
+        if raw_ip is None or (msrc == "host" and not str(raw_ip).strip()):
+            continue
+        bindings.extend(_bindings(raw_ip, "docker"))
     for row in compose_matches:
+        if getattr(row, "mapping_source", "ports") == "expose":
+            continue
         bindings.extend(_bindings(getattr(row, "host_ip", None), "compose"))
     bindings = sorted({
         (row["family"], row["scope"], row["source"]): row for row in bindings

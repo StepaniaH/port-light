@@ -2,6 +2,15 @@
 from pydantic import BaseModel, Field, model_validator
 
 
+def _valid_project_ref(value: str) -> bool:
+    if "\\" in value or "\x00" in value or any(ord(ch) < 32 for ch in value):
+        return False
+    if value.startswith("/") or value.endswith("/") or "//" in value:
+        return False
+    parts = value.split("/")
+    return not any(part in ("", ".", "..") or ".." in part for part in parts)
+
+
 class PortRule(BaseModel):
     model_config = {"extra": "forbid", "strict": True}
     name: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
@@ -16,6 +25,8 @@ class PortRule(BaseModel):
         self.projects = list(dict.fromkeys(p.strip() for p in self.projects))
         if any(not p or len(p) > 256 for p in self.projects):
             raise ValueError("project names must contain 1–256 characters")
+        if any(not _valid_project_ref(p) for p in self.projects):
+            raise ValueError("project entries must be clean names or relative paths")
         return self
 
 
@@ -49,9 +60,16 @@ def annotate(rows: list[dict], rules: list[dict]) -> None:
     for row in rows:
         violations = []
         for compose in row.get("compose_configs", []):
-            rule = by_project.get(compose.get("project_name"))
+            project_dir = compose.get("project_dir")
+            project_name = compose.get("project_name")
+            if project_dir and project_dir in by_project:
+                rule = by_project[project_dir]
+                matched = project_dir
+            else:
+                rule = by_project.get(project_name)
+                matched = project_name or project_dir or ""
             if rule and not rule["start"] <= row["port"] <= rule["end"]:
-                violations.append({"rule": rule["name"], "project": compose["project_name"],
+                violations.append({"rule": rule["name"], "project": matched,
                                    "service": compose["service_name"],
                                    "start": rule["start"], "end": rule["end"]})
         if violations:

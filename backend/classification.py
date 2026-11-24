@@ -66,6 +66,7 @@ def classify(
                 "ips": [lp.ip] if lp.ip else [],
                 "process": lp.process_name,
                 "pid": lp.pid,
+                "pids": [lp.pid] if lp.pid is not None else [],
             }
             continue
         if lp.protocol and lp.protocol not in rec["protocols"]:
@@ -73,8 +74,12 @@ def classify(
             rec["protocol"] = proto_label(rec["protocols"])
         if lp.ip and lp.ip not in rec["ips"]:
             rec["ips"].append(lp.ip)
+        if lp.pid is not None and lp.pid not in rec["pids"]:
+            rec["pids"].append(lp.pid)
         if lp.process_name and not rec["process"]:
             rec["process"] = lp.process_name
+            rec["pid"] = lp.pid
+        elif lp.pid is not None and rec["pid"] is None:
             rec["pid"] = lp.pid
 
     container_map: dict[int, list[dict]] = {}
@@ -83,7 +88,9 @@ def classify(
         if port < 1 or port > 65535:
             return
         extra = extra or {}
-        hip = (extra.get("host_ip") or "").strip() or None
+        is_expose = extra.get("source") == "expose"
+        raw_hip = (extra.get("host_ip") or "").strip() or None
+        hip = None if is_expose else raw_hip
         proto = extra.get("protocol") or None
         cport = extra.get("container_port")
         lst = container_map.setdefault(port, [])
@@ -91,12 +98,14 @@ def classify(
         if existing:
             if hip and hip not in existing["bind_ips"]:
                 existing["bind_ips"].append(hip)
+            if is_expose and raw_hip and raw_hip not in existing["expose_bind_ips"]:
+                existing["expose_bind_ips"].append(raw_hip)
             if proto and proto not in existing.get("protocols", []):
                 existing.setdefault("protocols", []).append(proto)
                 existing["protocol"] = proto_label(existing["protocols"])
             if cport and not existing.get("container_port"):
                 existing["container_port"] = cport
-            if extra.get("source") != "expose":
+            if not is_expose:
                 existing["expose_only"] = False
             return
         lst.append({
@@ -112,8 +121,9 @@ def classify(
             "vhost_host_ports": vhost_url_host_ports(c),
             "label_port": c.label_port,
             "label_host_ports": label_url_host_ports(c),
-            "expose_only": extra.get("source") == "expose",
+            "expose_only": is_expose,
             "bind_ips": [hip] if hip else [],
+            "expose_bind_ips": [raw_hip] if (is_expose and raw_hip) else [],
             "protocols": [proto] if proto else [],
             "protocol": proto,
             "container_port": cport,
@@ -140,7 +150,7 @@ def classify(
             pids.add(c.pid)
         if pids:
             for port, rec in listening_map.items():
-                if rec.get("pid") in pids:
+                if any(lp_pid in pids for lp_pid in rec.get("pids", ())):
                     _add_container(port, c)
 
     finalize_inode_url_hosts(container_map)
@@ -214,10 +224,10 @@ def classify(
             if not include_hidden:
                 continue
 
+        known = get_known_port(port)
         if ctors:
             source_type = "docker"
         elif is_listening and not ctors:
-            known = get_known_port(port)
             if known and known.get("category") == "system":
                 source_type = "system"
             else:
@@ -229,7 +239,6 @@ def classify(
         else:
             source_type = "unknown"
 
-        known = get_known_port(port)
         pl_hit = None
         for c in ctors:
             labs = c.get("port_labels") or {}
@@ -256,6 +265,12 @@ def classify(
             hip = (c.get("host_ip") or "").strip()
             if hip and hip not in ips:
                 ips.append(hip)
+        if not is_listening and not ips:
+            for c in ctors:
+                for hip in c.get("expose_bind_ips") or []:
+                    hip = (hip or "").strip()
+                    if hip and hip not in ips:
+                        ips.append(hip)
         if not ips:
             ips = [lp_info["ip"] if lp_info else "0.0.0.0"] if has_occ else []
         ip = (lp_info["ip"] if lp_info else None) or (ips[0] if ips else None)
@@ -265,6 +280,7 @@ def classify(
             c.pop("port_labels", None)
             c.pop("label_host_ports", None)
             c.pop("expose_only", None)
+            c.pop("expose_bind_ips", None)
         proto_bits = []
         if lp_info:
             proto_bits.extend(lp_info.get("protocols") or [lp_info["protocol"]])
@@ -354,9 +370,9 @@ def strip_bind_ip(ip: str | None) -> str:
 
 
 def bind_key(ip: str | None) -> str:
-    """Wildcard (`*`) or a canonical address. Empty Compose host_ip is 0.0.0.0."""
+    """Dual-stack wildcard (`*`), IPv4 wildcard (`0.0.0.0`), or canonical IP."""
     text = strip_bind_ip(ip)
-    if not text or text in ("*", "0.0.0.0", "::", "::0"):
+    if not text or text in ("*", "::", "::0"):
         return "*"
     if text == "localhost":
         return "127.0.0.1"
@@ -367,13 +383,26 @@ def bind_key(ip: str | None) -> str:
     if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
         addr = addr.ipv4_mapped
     if addr.is_unspecified:
-        return "*"
+        return "0.0.0.0" if addr.version == 4 else "*"
     return str(addr)
+
+
+def _is_ipv4_key(key: str) -> bool:
+    try:
+        return isinstance(ipaddress.ip_address(key), ipaddress.IPv4Address)
+    except ValueError:
+        return False
 
 
 def binds_overlap(a: str | None, b: str | None) -> bool:
     ka, kb = bind_key(a), bind_key(b)
-    return ka == "*" or kb == "*" or ka == kb
+    if ka == "*" or kb == "*" or ka == kb:
+        return True
+    if ka == "0.0.0.0":
+        return _is_ipv4_key(kb)
+    if kb == "0.0.0.0":
+        return _is_ipv4_key(ka)
+    return False
 
 
 def proto_family(proto: str | None) -> str:
@@ -381,17 +410,18 @@ def proto_family(proto: str | None) -> str:
 
 
 def compose_conflict(composes: list[dict]) -> bool:
-    """True when two Compose projects publish the same port+protocol on overlapping binds."""
-    by_dir: dict[str, list[tuple[str | None, str]]] = {}
+    """True when distinct Compose services publish the same port+protocol on overlapping binds."""
+    by_service: dict[tuple[str, str], list[tuple[str | None, str]]] = {}
     for row in composes:
-        by_dir.setdefault(row.get("project_dir") or "", []).append(
+        key = (row.get("project_dir") or "", row.get("service_name") or "")
+        by_service.setdefault(key, []).append(
             (row.get("host_ip"), proto_family(row.get("protocol"))),
         )
-    dirs = list(by_dir.values())
-    if len(dirs) < 2:
+    groups = list(by_service.values())
+    if len(groups) < 2:
         return False
-    for i, binds_a in enumerate(dirs):
-        for binds_b in dirs[i + 1 :]:
+    for i, binds_a in enumerate(groups):
+        for binds_b in groups[i + 1 :]:
             if any(
                 pa == pb and binds_overlap(a, b)
                 for a, pa in binds_a

@@ -245,6 +245,8 @@ def parse_lsof_line(line: str) -> ListeningPort | None:
     except ValueError:
         return None
     name = m.group("name")
+    if "->" in name:
+        return None
     host, sep, port_s = name.rpartition(":")
     if not sep:
         return None

@@ -57,3 +57,11 @@ def test_proto_bases_and_families():
     assert proto_family_of("udp6") == "udp"
     assert proto_family_of("SCTP") == "sctp"
     assert proto_family_of("tcp") == "tcp"
+
+
+def test_bind_ip_normalization_distinguishes_v4_and_v6_wildcards():
+    assert clean_bind_ip("[2001:db8::10%eth0]") == "2001:db8::10"
+    assert normalize_ip("0.0.0.0") == "0.0.0.0"
+    assert normalize_ip("::") == "::"
+    assert normalize_ip("::ffff:192.0.2.10") == "192.0.2.10"
+    assert normalize_ip("2001:0db8:0:0::1") == "2001:db8::1"

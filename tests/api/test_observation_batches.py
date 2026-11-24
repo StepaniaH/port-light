@@ -146,3 +146,35 @@ def test_batch_event_limit_keeps_newest_same_second_capture(empty_scan, monkeypa
     body = response.json()
     assert [event["event_id"] for event in body["events"]] == [events[-1]["event_id"]]
     assert body["event_coverage"]["truncated"] is True
+
+
+def test_batch_known_attributes_host_netns_container_to_active_protocol_only(empty_scan, monkeypatch):
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [
+        ListeningPort(port=9100, protocol="tcp", ip="127.0.0.1", pid=512, inode=7700),
+    ])
+    monkeypatch.setattr(main, "scan_containers", lambda: [ContainerInfo(
+        name="secret-exporter",
+        container_id="exporter-cid-0001",
+        status="running",
+        image="example.invalid/exporter:latest",
+        network_mode="host",
+        compose_project="secret-monitoring-stack",
+        pid=500,
+        pids={500, 512},
+        socket_inodes={7700},
+        ports=[],
+    )])
+    with TestClient(main.app) as client:
+        response = _batch(client, {"kind": "known"})
+    assert response.status_code == 200
+    body = response.json()
+    row = next(item for item in body["ports"] if item["port"] == 9100)
+    entries = {e["protocol"]: e for e in row["current"]["entries"]}
+    assert entries["tcp"]["docker_live"] is True
+    assert entries["tcp"]["docker_mapped"] is True
+    assert entries["udp"]["docker_live"] is False
+    assert entries["udp"]["docker_mapped"] is False
+    assert {rel["kind"] for rel in row["relations"]} == {"container", "compose_project_label"}
+    assert {rel["protocol"] for rel in row["relations"]} == {"tcp"}
+    assert "secret-exporter" not in response.text
+    assert "secret-monitoring-stack" not in response.text

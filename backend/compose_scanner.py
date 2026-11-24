@@ -15,6 +15,7 @@ from .compose_ports import (_norm_proto as _norm_proto, _normalize_host_ip as _n
 from .compose_documents import (_unwrap_compose as _unwrap_compose, _service_map as _service_map, _port_entries as _port_entries, _overlay_port_fields as _overlay_port_fields, _overlay_compose_docs as _overlay_compose_docs, _load_yaml as _load_yaml, _ComposeTag as _ComposeTag)
 
 from .port_scanner import is_host_netns_mode
+from .safe_io import MAX_COMPOSE_BYTES, MAX_ENV_BYTES, is_blocked_path, read_regular_text
 from . import degradations
 
 _SKIP_DIRS = frozenset({
@@ -58,7 +59,7 @@ def _macvlan_names_tree(
     names = _macvlan_network_names(data)
     nested = chain | {real}
     spec_root = env_base if env_base is not None else parent
-    for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root):
+    for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root, owner_file=filepath):
         nested_env = {**(extra_env or {}), **inc_env}
         nested_base = inc_base if inc_base is not None else env_base
         for inc_path in group:
@@ -75,35 +76,41 @@ def _extends_macvlan_names(
     local_services: dict,
     chain: frozenset[tuple[str, str]],
     work_dir: Path | None = None,
+    cache: dict | None = None,
 ) -> set[str]:
     names: set[str] = set()
     ref = _extends_ref(svc_cfg.get("extends"), filepath, work_dir)
-    if ref is None or ref in chain:
+    if ref is None:
         return names
     ref_file, ref_svc = ref
-    if os.path.realpath(ref_file) == os.path.realpath(filepath):
+    cycle_key = (os.path.realpath(ref_file), ref_svc)
+    if cycle_key in chain:
+        return names
+    if os.path.abspath(ref_file) == os.path.abspath(filepath):
         other_path = filepath
         other_local = local_services
         other = other_local.get(ref_svc) if isinstance(other_local, dict) else None
         nested_dir = work_dir
+        next_env = env_vars
     else:
         other_path = ref_file
-        merged_env = {**_load_env_file(Path(ref_file).parent), **env_vars}
-        names |= _macvlan_names_tree(ref_file, merged_env, frozenset())
-        other_local = _services_from_file(ref_file, env_vars)
+        other_local, other_env = _services_from_file(ref_file, env_vars, cache=cache)
+        next_env = {**other_env, **env_vars}
+        names |= _macvlan_names_tree(ref_file, env_vars, frozenset(), cache=cache)
         other = other_local.get(ref_svc)
         nested_dir = Path(ref_file).parent
     if isinstance(other, dict):
         names |= _extends_macvlan_names(
-            other, other_path, env_vars, other_local, chain | {ref}, nested_dir,
+            other, other_path, next_env, other_local, chain | {cycle_key},
+            nested_dir, cache=cache,
         )
     return names
 
 
-def _read_text(path: Path) -> str | None:
+def _read_text(path: Path, max_bytes: int = MAX_COMPOSE_BYTES) -> str | None:
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+        text = read_regular_text(path, max_bytes=max_bytes)
+    except (OSError, ValueError):
         return None
     if text.startswith("\ufeff"):
         text = text[1:]
@@ -179,6 +186,7 @@ def _service_macvlan_ips(svc_cfg: dict, macvlan_names: set[str]) -> list[str]:
     for name, cfg in items:
         if str(name) not in macvlan_names:
             continue
+        cfg = _unwrap_compose(cfg)
         if not isinstance(cfg, dict):
             continue
         for key in ("ipv4_address", "ipv6_address"):
@@ -258,29 +266,34 @@ def _scan_compose_tree(
     except OSError:
         degradations.report("compose", "scan root", "directory unreadable")
         return ComposeScan(incomplete=True)
-    included: set[str] = set()
+    included_abs: set[str] = set()
+    included_real: set[str] = set()
     incomplete = False
     cache: dict = {}
     for filepath in files:
         try:
-            included |= _included_reals(filepath, cache=cache)
+            inc_abs, inc_real = _included_paths(filepath, cache=cache)
+            included_abs |= inc_abs
+            included_real |= inc_real
         except ComposeWouldFail as exc:
             incomplete = True
-            degradations.report("compose", _degradation_scope(scan_dir, exc), "invalid compose file")
+            degradations.report("compose", _degradation_scope(scan_dir, exc, filepath), "invalid compose file")
     ports: list[ComposePort] = []
     diagnostics: list[dict] = []
     seen_walk: set[str] = set()
     for filepath in files:
+        abs_path = os.path.abspath(filepath)
         real = os.path.realpath(filepath)
-        if real in seen_walk or real in included:
+        if abs_path in seen_walk or abs_path in included_abs:
             continue
-        seen_walk.add(real)
+        if not os.path.islink(filepath) and real in included_real:
+            continue
+        seen_walk.add(abs_path)
         try:
             ports.extend(_parse_compose_file(filepath, scan_dir, frozenset(), cache=cache))
         except ComposeWouldFail as exc:
             incomplete = True
-            path = exc.filepath if isinstance(exc, ComposePortLimit) and exc.filepath else filepath
-            relative = os.path.relpath(path, scan_dir) if os.path.isabs(path) else path
+            relative = _degradation_scope(scan_dir, exc, filepath)
             if len(diagnostics) < 8:
                 diagnostics.append({"code": exc.code if isinstance(exc, ComposePortLimit) else "invalid_file",
                                     "file": relative,
@@ -308,15 +321,17 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-def _degradation_scope(scan_dir: str, exc: ComposeWouldFail) -> str:
-    """Scan-root-relative path when the exception carries one, else its text."""
-    text = str(exc.args[0]) if exc.args else ""
-    if text and os.path.isabs(text):
+def _degradation_scope(scan_dir: str, exc: ComposeWouldFail, filepath: str = "") -> str:
+    """Scan-root-relative Compose file path without interpolated content."""
+    path = exc.filepath if isinstance(exc, ComposePortLimit) and exc.filepath else filepath
+    if not path:
+        return "compose"
+    if os.path.isabs(path):
         try:
-            return os.path.relpath(text, scan_dir)
+            return os.path.relpath(path, scan_dir)
         except ValueError:
-            return text
-    return text or "unknown"
+            return os.path.basename(path) or "compose"
+    return path
 
 
 def _find_compose_files(
@@ -375,7 +390,7 @@ def _sibling_override_path(filepath: str) -> str | None:
         return None
     for cand in candidates:
         path = os.path.join(parent, cand)
-        if os.path.isfile(path):
+        if os.path.lexists(path) and not os.path.isdir(path):
             return path
     return None
 
@@ -395,11 +410,17 @@ def _compose_doc(
     times per scan: include discovery, macvlan names, service parsing).
     """
     if cache is not None:
+        eff_root = (
+            os.path.abspath(str(env_base))
+            if env_base is not None
+            else os.path.abspath(os.path.dirname(filepath))
+        )
         key = (
             os.path.realpath(filepath),
+            eff_root,
+            os.path.abspath(os.path.dirname(filepath)) if apply_override else None,
             bool(apply_override),
             None if extra_env is None else tuple(sorted(extra_env.items())),
-            str(env_base) if env_base is not None else None,
         )
         hit = cache.get(key)
         if hit is not None:
@@ -421,7 +442,7 @@ def _compose_doc_uncached(
         raise ComposeWouldFail(str(filepath))
     parent = Path(filepath).parent
     env_root = env_base if env_base is not None else parent
-    env_vars = {**_load_env_file(env_root), **(extra_env or {})}
+    env_vars = {**_load_env_file(env_root, owner_file=str(filepath)), **(extra_env or {})}
     interpolated = substitute_vars(raw, env_vars, required=False)
     try:
         data = _load_yaml(interpolated)
@@ -431,7 +452,7 @@ def _compose_doc_uncached(
         data = {}
     if not isinstance(data, dict):
         raise ComposeWouldFail(str(filepath))
-    extra_file_env = _require_env_files(env_root, data.get("env_file"))
+    extra_file_env = _require_env_files(env_root, data.get("env_file"), owner_file=str(filepath))
     if extra_file_env:
         env_vars = {**env_vars, **extra_file_env}
     interpolated = substitute_vars(raw, env_vars, required=True)
@@ -447,48 +468,55 @@ def _compose_doc_uncached(
         ov_path = _sibling_override_path(filepath)
         if ov_path:
             ov_raw = _read_text(Path(ov_path))
-            if ov_raw is not None:
-                ov_interpolated = substitute_vars(ov_raw, env_vars)
-                try:
-                    ov_data = _load_yaml(ov_interpolated)
-                except yaml.YAMLError as exc:
-                    raise ComposeWouldFail(str(ov_path)) from exc
-                if isinstance(ov_data, dict):
-                    data = _overlay_compose_docs(data, ov_data)
-                elif ov_data is not None:
-                    raise ComposeWouldFail(str(ov_path))
+            if ov_raw is None:
+                raise ComposeWouldFail(str(filepath))
+            ov_interpolated = substitute_vars(ov_raw, env_vars)
+            try:
+                ov_data = _load_yaml(ov_interpolated)
+            except yaml.YAMLError as exc:
+                raise ComposeWouldFail(str(filepath)) from exc
+            if isinstance(ov_data, dict):
+                ov_env = _require_env_files(env_root, ov_data.get("env_file"), owner_file=str(filepath))
+                if ov_env:
+                    env_vars = {**env_vars, **ov_env}
+                data = _overlay_compose_docs(data, ov_data)
+            elif ov_data is not None:
+                raise ComposeWouldFail(str(filepath))
     return data, env_vars, parent
 
 
-def _included_reals(
+def _included_paths(
     filepath: str,
     extra_env: dict[str, str] | None = None,
     chain: frozenset[str] = frozenset(),
     env_base: Path | None = None,
     apply_override: bool = True,
     cache: dict | None = None,
-) -> set[str]:
-    """Realpaths reached via ``include:`` (not scanned as their own stack)."""
+) -> tuple[set[str], set[str]]:
+    """Paths and realpaths reached via ``include:`` (not scanned as their own stack)."""
     real = os.path.realpath(filepath)
     if real in chain:
-        return set()
+        return set(), set()
     data, env_vars, parent = _compose_doc(
         filepath, extra_env, env_base, apply_override=apply_override, cache=cache,
     )
-    out: set[str] = set()
+    out_abs: set[str] = set()
+    out_real: set[str] = set()
     nested_chain = chain | {real}
     spec_root = env_base if env_base is not None else parent
-    for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root):
+    for group, inc_env, inc_base in _include_specs(data.get("include"), spec_root, owner_file=filepath):
         nested_env = {**env_vars, **inc_env}
         nested_base = inc_base if inc_base is not None else env_base
         for inc_path in group:
-            nested = os.path.realpath(inc_path)
-            out.add(nested)
-            out |= _included_reals(
+            out_abs.add(os.path.abspath(str(inc_path)))
+            out_real.add(os.path.realpath(str(inc_path)))
+            sub_abs, sub_real = _included_paths(
                 str(inc_path), nested_env, nested_chain, nested_base,
                 apply_override=False, cache=cache,
             )
-    return out
+            out_abs |= sub_abs
+            out_real |= sub_real
+    return out_abs, out_real
 
 
 def _parse_compose_file(
@@ -580,7 +608,7 @@ def _parse_compose_data(
     this_name = _project_display_name(data.get("name"), project_name or fallback_name)
 
     spec_root = env_base if env_base is not None else parent
-    specs = _include_specs(data.get("include"), spec_root)
+    specs = _include_specs(data.get("include"), spec_root, owner_file=filepath)
     macvlan_names = set(extra_macvlan or ()) | _macvlan_network_names(data)
     for group, inc_env, inc_base in specs:
         nested_env = {**env_vars, **inc_env}
@@ -602,12 +630,14 @@ def _parse_compose_data(
     work_dir = spec_root
 
     for svc_name, svc_cfg in local_services.items():
-        _require_env_files(work_dir, svc_cfg.get("env_file"))
+        _require_env_files(work_dir, svc_cfg.get("env_file"), owner_file=filepath)
         lan_names = macvlan_names | _extends_macvlan_names(
             svc_cfg, filepath, env_vars, local_services, frozenset(), work_dir,
+            cache=cache,
         )
         svc_cfg = _resolve_extends(
             svc_cfg, filepath, env_vars, frozenset(), local_services, work_dir,
+            cache=cache,
         )
         net = str(_unwrap_compose(svc_cfg.get("network_mode")) or "").strip().lower() or None
         if _is_shared_netns(net):
@@ -692,7 +722,7 @@ def _parse_compose_data(
 
 
 def _include_specs(
-    include, parent: Path,
+    include, parent: Path, owner_file: str = "",
 ) -> list[tuple[list[Path], dict[str, str], Path | None]]:
     if not include:
         return []
@@ -700,6 +730,7 @@ def _include_specs(
         include = [include]
     if not isinstance(include, list):
         return []
+    scope = owner_file or "include"
     out: list[tuple[list[Path], dict[str, str], Path | None]] = []
     for item in include:
         paths: list[str] = []
@@ -708,11 +739,11 @@ def _include_specs(
         if isinstance(item, str):
             paths = [item]
         elif isinstance(item, dict):
-            extra = _require_env_files(parent, item.get("env_file"))
+            extra = _require_env_files(parent, item.get("env_file"), owner_file=scope)
             proj = item.get("project_directory")
             if isinstance(proj, str) and proj.strip():
                 try:
-                    proj_dir = (parent / proj).resolve()
+                    proj_dir = Path(os.path.normpath(os.path.join(str(parent), proj)))
                 except (TypeError, ValueError, OSError):
                     proj_dir = None
                 if proj_dir is not None and proj_dir.is_dir():
@@ -730,16 +761,18 @@ def _include_specs(
             try:
                 if any(ch in path for ch in "*?["):
                     pattern = os.path.normpath(os.path.join(str(parent), path))
-                    candidates = sorted(Path(p).resolve() for p in _glob.glob(pattern))
+                    candidates = sorted(Path(os.path.normpath(p)) for p in _glob.glob(pattern))
                 else:
-                    candidates = [(parent / path).resolve()]
+                    candidates = [Path(os.path.normpath(os.path.join(str(parent), path)))]
             except (TypeError, ValueError, OSError):
-                raise ComposeWouldFail(path) from None
-            for resolved in candidates:
-                if resolved.is_file():
-                    group.append(resolved)
+                raise ComposeWouldFail(scope) from None
+            for cand in candidates:
+                if is_blocked_path(cand):
+                    raise ComposeWouldFail(scope)
+                if cand.is_file():
+                    group.append(cand)
         if paths and not group:
-            raise ComposeWouldFail("include matched no files")
+            raise ComposeWouldFail(scope)
         if group:
             out.append((group, extra, env_base))
     return out
@@ -779,27 +812,48 @@ def _env_file_specs(env_file) -> list[tuple[str, bool]]:
     return names
 
 
-def _require_env_files(parent: Path, env_file) -> dict[str, str]:
+def _require_env_files(parent: Path, env_file, owner_file: str = "") -> dict[str, str]:
     merged: dict[str, str] = {}
+    scope = owner_file or "env_file"
     for name, required in _env_file_specs(env_file):
-        path = (parent / name).resolve()
-        if not path.is_file():
+        try:
+            candidate = Path(os.path.normpath(os.path.join(str(parent), name)))
+        except (TypeError, ValueError, OSError) as exc:
+            raise ComposeWouldFail(scope) from exc
+        if not os.path.lexists(candidate):
             if required:
-                raise ComposeWouldFail(str(path))
+                raise ComposeWouldFail(scope)
             continue
-        merged.update(_read_env_file(path))
+        try:
+            text = read_regular_text(candidate, max_bytes=MAX_ENV_BYTES)
+        except FileNotFoundError as exc:
+            if required:
+                raise ComposeWouldFail(scope) from exc
+            continue
+        except (OSError, ValueError) as exc:
+            raise ComposeWouldFail(scope) from exc
+        merged.update(_parse_env_text(text))
     return merged
 
 
-def _load_env_file(directory: Path) -> dict[str, str]:
-    return _read_env_file(directory / ".env")
+def _load_env_file(directory: Path, owner_file: str = "") -> dict[str, str]:
+    return _read_env_file(directory / ".env", owner_file=owner_file)
 
 
-def _read_env_file(path: Path) -> dict[str, str]:
+def _read_env_file(path: Path, owner_file: str = "") -> dict[str, str]:
+    try:
+        text = read_regular_text(path, max_bytes=MAX_ENV_BYTES)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        raise ComposeWouldFail(owner_file or "env_file") from exc
+    return _parse_env_text(text)
+
+
+def _parse_env_text(text: str) -> dict[str, str]:
     env: dict[str, str] = {}
-    text = _read_text(path)
-    if text is None:
-        return env
+    if text.startswith("\ufeff"):
+        text = text[1:]
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -825,8 +879,9 @@ def _read_env_file(path: Path) -> dict[str, str]:
 
 
 def _extends_ref(ext, filepath: str, work_dir: Path | None = None) -> tuple[str, str] | None:
+    ext = _unwrap_compose(ext)
     if isinstance(ext, str) and ext.strip():
-        return os.path.realpath(filepath), ext.strip()
+        return os.path.abspath(filepath), ext.strip()
     if not isinstance(ext, dict):
         return None
     svc = ext.get("service")
@@ -835,27 +890,35 @@ def _extends_ref(ext, filepath: str, work_dir: Path | None = None) -> tuple[str,
     svc = svc.strip()
     f = ext.get("file")
     if not f:
-        return os.path.realpath(filepath), svc
+        return os.path.abspath(filepath), svc
     if not isinstance(f, str):
         return None
     base = work_dir if work_dir is not None else Path(filepath).parent
-    resolved = (base / f).resolve()
-    if not resolved.is_file():
-        raise ComposeWouldFail(str(resolved))
-    return str(resolved), svc
+    try:
+        cand = Path(os.path.normpath(os.path.join(str(base), f)))
+    except (TypeError, ValueError, OSError):
+        raise ComposeWouldFail(str(filepath)) from None
+    if is_blocked_path(cand) or not cand.is_file():
+        raise ComposeWouldFail(str(filepath))
+    return str(cand), svc
 
 
-def _services_from_file(filepath: str, env_vars: dict[str, str]) -> dict:
+def _services_from_file(
+    filepath: str,
+    env_vars: dict[str, str],
+    cache: dict | None = None,
+) -> tuple[dict, dict[str, str]]:
     loaded = _compose_doc(
         filepath,
         extra_env=env_vars,
-        env_base=Path(filepath).parent,
+        env_base=None,
         apply_override=False,
+        cache=cache,
     )
     if loaded is None:
-        raise ComposeWouldFail(filepath)
-    data, _merged, _parent = loaded
-    return _service_map(data.get("services"))
+        raise ComposeWouldFail(str(filepath))
+    data, merged_env, _parent = loaded
+    return _service_map(data.get("services")), merged_env
 
 
 def _resolve_extends(
@@ -865,31 +928,37 @@ def _resolve_extends(
     chain: frozenset[tuple[str, str]],
     local_services: dict,
     work_dir: Path | None = None,
+    cache: dict | None = None,
 ) -> dict:
     ref = _extends_ref(svc_cfg.get("extends"), filepath, work_dir)
     if ref is None:
         return svc_cfg
-    if ref in chain:
-        return svc_cfg
     ref_file, ref_svc = ref
-    if os.path.realpath(ref_file) == os.path.realpath(filepath):
+    cycle_key = (os.path.realpath(ref_file), ref_svc)
+    if cycle_key in chain:
+        return svc_cfg
+    if os.path.abspath(ref_file) == os.path.abspath(filepath):
         other_local = local_services
         other_path = filepath
         other = other_local.get(ref_svc) if isinstance(other_local, dict) else None
         nested_dir = work_dir
+        next_env = env_vars
     else:
         other_path = ref_file
-        other_local = _services_from_file(ref_file, env_vars)
+        other_local, other_env = _services_from_file(ref_file, env_vars, cache=cache)
+        next_env = {**other_env, **env_vars}
         other = other_local.get(ref_svc)
         nested_dir = Path(ref_file).parent
     if not isinstance(other, dict):
-        raise ComposeWouldFail(ref_svc)
+        raise ComposeWouldFail(str(filepath))
     _require_env_files(
         nested_dir if nested_dir is not None else Path(other_path).parent,
         other.get("env_file"),
+        owner_file=filepath,
     )
     base = _resolve_extends(
-        other, other_path, env_vars, chain | {ref}, other_local, nested_dir,
+        other, other_path, next_env, chain | {cycle_key}, other_local, nested_dir,
+        cache=cache,
     )
     return _overlay_port_fields(base, svc_cfg)
 

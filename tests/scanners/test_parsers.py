@@ -1885,3 +1885,336 @@ def test_large_range_boundaries_and_scan_budget_reset(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, '_MAX_SCAN_PORTS', 256)
     assert len(scan_compose_tree(str(tmp_path)).ports) == 256
     assert len(scan_compose_tree(str(tmp_path)).ports) == 256
+
+
+def test_parse_lsof_line_rejects_connected_outbound_sockets():
+    assert parse_lsof_line(
+        "curl  1200 operator   5u  IPv4 0x10      0t0  UDP 192.0.2.10:55123->198.51.100.20:443"
+    ) is None
+    assert parse_lsof_line(
+        "quic  1201 operator   6u  IPv6 0x11      0t0  UDP [2001:db8::10]:55123->[2001:db8::20]:443"
+    ) is None
+    assert parse_lsof_line(
+        "ssh   1202 operator   7u  IPv4 0x12      0t0  TCP 192.0.2.10:55123->198.51.100.20:22 (ESTABLISHED)"
+    ) is None
+    local_v4 = parse_lsof_line(
+        "dnsd  1203 operator   8u  IPv4 0x13      0t0  UDP 192.0.2.10:5353"
+    )
+    assert local_v4 == ListeningPort(
+        port=5353, protocol="udp", ip="192.0.2.10", process_name="dnsd", pid=1203,
+    )
+    local_v6 = parse_lsof_line(
+        "dnsd  1204 operator   9u  IPv6 0x14      0t0  UDP [2001:db8::10]:5353"
+    )
+    assert local_v6 == ListeningPort(
+        port=5353, protocol="udp6", ip="2001:db8::10", process_name="dnsd", pid=1204,
+    )
+
+
+def test_compose_symlinks_to_regular_files_and_shared_templates(tmp_path):
+    templates = tmp_path / "templates"
+    scan_root = tmp_path / "stacks"
+    prod = scan_root / "prod"
+    staging = scan_root / "staging"
+    for d in (templates, prod, staging):
+        d.mkdir(parents=True)
+    shared_compose = templates / "service.yml"
+    shared_compose.write_text(
+        "services:\n  web:\n    ports:\n      - '${HTTP_PORT}:80'\n",
+        encoding="utf-8",
+    )
+    prod_env = templates / "prod.env"
+    prod_env.write_text("HTTP_PORT=18080\n", encoding="utf-8")
+    os.symlink(shared_compose, prod / "compose.yml")
+    os.symlink(prod_env, prod / ".env")
+    os.symlink(shared_compose, staging / "compose.yml")
+    (staging / ".env").write_text("HTTP_PORT=18081\n", encoding="utf-8")
+
+    scan = scan_compose_tree(str(scan_root))
+    assert scan.incomplete is False
+    found = {(p.project_dir, p.port) for p in scan.ports}
+    assert found == {("prod", 18080), ("staging", 18081)}
+
+
+def test_compose_rejects_fifos_sensitive_trees_and_oversized_inputs(tmp_path, monkeypatch):
+    data_dir = tmp_path / "store"
+    data_dir.mkdir()
+    secret_store = data_dir / "port_light.json"
+    secret_store.write_text('{"manual_ports": [{"port": 9999}]}', encoding="utf-8")
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(data_dir))
+
+    scan_root = tmp_path / "compose"
+    good = scan_root / "good"
+    good.mkdir(parents=True)
+    (good / "compose.yml").write_text(
+        "services:\n  ok:\n    ports: ['18100:80']\n",
+        encoding="utf-8",
+    )
+
+    data_link = scan_root / "data-link"
+    data_link.mkdir()
+    os.symlink(secret_store, data_link / "compose.yml")
+
+    dev_link = scan_root / "dev-link"
+    dev_link.mkdir()
+    os.symlink("/dev/null", dev_link / "compose.yml")
+
+    env_leak = scan_root / "env-leak"
+    env_leak.mkdir()
+    os.symlink(secret_store, env_leak / "stolen.env")
+    (env_leak / "compose.yml").write_text(
+        "env_file:\n  - path: stolen.env\n    required: false\n"
+        "services:\n  s:\n    ports: ['18101:80']\n",
+        encoding="utf-8",
+    )
+
+    big_yaml = scan_root / "big-yaml"
+    big_yaml.mkdir()
+    (big_yaml / "compose.yml").write_text(
+        "services:\n  s:\n    ports: ['18102:80']\n#" + ("x" * (2 * 1024 * 1024 + 64)),
+        encoding="utf-8",
+    )
+
+    big_env = scan_root / "big-env"
+    big_env.mkdir()
+    (big_env / ".env").write_text(
+        "P=18103\n#" + ("y" * (512 * 1024 + 64)),
+        encoding="utf-8",
+    )
+    (big_env / "compose.yml").write_text(
+        "services:\n  s:\n    ports: ['${P}:80']\n",
+        encoding="utf-8",
+    )
+
+    if hasattr(os, "mkfifo"):
+        fifo_dir = scan_root / "fifo-stack"
+        fifo_dir.mkdir()
+        try:
+            os.mkfifo(fifo_dir / "compose.yml")
+        except OSError:
+            pass
+
+    scan = scan_compose_tree(str(scan_root))
+    assert scan.incomplete is True
+    assert {p.port for p in scan.ports} == {18100}
+
+
+def test_compose_yaml_anchor_bomb_aborts_before_materialization(tmp_path):
+    bomb = tmp_path / "bomb"
+    ok = tmp_path / "ok"
+    bomb.mkdir()
+    ok.mkdir()
+    lines = ["x-l0: &l0 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]"]
+    for idx in range(1, 7):
+        prev = f"*l{idx - 1}"
+        lines.append(f"x-l{idx}: &l{idx} [{', '.join([prev] * 10)}]")
+    lines.append("services:\n  web:\n    ports: ['18200:80']\n")
+    payload = "\n".join(lines)
+    assert len(payload.encode("utf-8")) < 5 * 1024
+    (bomb / "compose.yml").write_text(payload, encoding="utf-8")
+    (ok / "compose.yml").write_text(
+        "services:\n  web:\n    ports: ['18201:80']\n",
+        encoding="utf-8",
+    )
+    scan = scan_compose_tree(str(tmp_path))
+    assert scan.incomplete is True
+    assert {p.port for p in scan.ports} == {18201}
+
+
+def test_degradation_scope_never_leaks_interpolated_env_secrets(tmp_path):
+    from backend import degradations
+
+    secret = "s3cr3t-token-value-9f8e7d"
+    for idx, body in enumerate((
+        "env_file: ${TOKEN}.env\nservices:\n  w:\n    ports: ['8080:80']\n",
+        "include:\n  - ${TOKEN}.yml\nservices: {}\n",
+        "services:\n  w:\n    extends:\n      file: ${TOKEN}.yml\n      service: base\n",
+        "services:\n  w:\n    ports: ['${MISSING_REQ:?${TOKEN}}:80']\n",
+    )):
+        sub = tmp_path / f"case{idx}"
+        sub.mkdir()
+        (sub / ".env").write_text(f"TOKEN={secret}\n", encoding="utf-8")
+        (sub / "compose.yml").write_text(body, encoding="utf-8")
+
+    degradations.reset()
+    try:
+        scan = scan_compose_tree(str(tmp_path))
+        assert scan.incomplete is True
+        events = degradations.recent(20)
+        assert events
+        for event in events:
+            assert secret not in event["scope"]
+            assert secret not in event["reason"]
+        for diag in scan.diagnostics:
+            assert secret not in str(diag)
+    finally:
+        degradations.reset()
+
+
+def test_override_with_extends_preserves_reset_and_override_tags(tmp_path):
+    common = tmp_path / "common.yml"
+    common.write_text(
+        "services:\n"
+        "  base:\n"
+        "    ports:\n"
+        "      - '8080:80'\n"
+        "      - '8081:81'\n"
+        "    deploy:\n"
+        "      ports:\n"
+        "        - published: 8082\n"
+        "          target: 82\n"
+        "  hostbase:\n"
+        "    network_mode: host\n"
+        "    expose:\n"
+        "      - '5353/udp'\n",
+        encoding="utf-8",
+    )
+
+    reset_app = tmp_path / "reset-app"
+    reset_app.mkdir()
+    (reset_app / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    extends:\n"
+        "      file: ../common.yml\n"
+        "      service: base\n"
+        "    ports:\n"
+        "      - '8443:443'\n"
+        "  dns:\n"
+        "    extends:\n"
+        "      file: ../common.yml\n"
+        "      service: hostbase\n",
+        encoding="utf-8",
+    )
+    (reset_app / "compose.override.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    ports: !reset\n"
+        "      - '9090:80'\n"
+        "    deploy:\n"
+        "      ports: !override\n"
+        "        - published: 9091\n"
+        "          target: 82\n"
+        "  dns:\n"
+        "    network_mode: !reset\n"
+        "    ports:\n"
+        "      - '15353:5353/udp'\n",
+        encoding="utf-8",
+    )
+    ports = scan_compose_files(str(reset_app))
+    by_svc: dict[str, set[int]] = {}
+    for row in ports:
+        by_svc.setdefault(row.service_name, set()).add(row.port)
+    assert by_svc["web"] == {9090, 9091}
+    assert by_svc["dns"] == {15353}
+
+    layered = tmp_path / "layered"
+    layered.mkdir()
+    (layered / "compose.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    extends:\n"
+        "      file: ../common.yml\n"
+        "      service: base\n"
+        "    ports: !reset\n"
+        "      - '8443:443'\n",
+        encoding="utf-8",
+    )
+    (layered / "compose.override.yml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    ports:\n"
+        "      - '9443:8443'\n",
+        encoding="utf-8",
+    )
+    layered_ports = {p.port for p in scan_compose_files(str(layered)) if p.service_name == "web"}
+    assert layered_ports == {8082, 8443, 9443}
+
+
+def test_override_overlays_extends_and_env_file_and_multihop_extends_env(tmp_path):
+    tier_c = tmp_path / "tier-c"
+    tier_b = tmp_path / "tier-b"
+    tier_a = tmp_path / "tier-a"
+    for d in (tier_c, tier_b, tier_a):
+        d.mkdir()
+    (tier_c / ".env").write_text("C_PORT=17001\nB_PORT=16999\n", encoding="utf-8")
+    (tier_c / "base.yml").write_text(
+        "services:\n"
+        "  core:\n"
+        "    ports:\n"
+        "      - '${B_PORT}:80'\n"
+        "      - '${C_PORT}:81'\n"
+        "      - '${B_EXTRA}:82'\n",
+        encoding="utf-8",
+    )
+    (tier_b / ".env").write_text("B_PORT=17002\n", encoding="utf-8")
+    (tier_b / "extra.env").write_text("B_EXTRA=17003\n", encoding="utf-8")
+    (tier_b / "mid.yml").write_text(
+        "env_file: extra.env\n"
+        "services:\n"
+        "  mid:\n"
+        "    extends:\n"
+        "      file: ../tier-c/base.yml\n"
+        "      service: core\n",
+        encoding="utf-8",
+    )
+    (tier_a / "compose.yml").write_text(
+        "services:\n"
+        "  app:\n"
+        "    image: example.invalid/app:latest\n",
+        encoding="utf-8",
+    )
+    (tier_a / "compose.override.yml").write_text(
+        "services:\n"
+        "  app:\n"
+        "    extends:\n"
+        "      file: ../tier-b/mid.yml\n"
+        "      service: mid\n"
+        "    ports:\n"
+        "      - '17004:83'\n",
+        encoding="utf-8",
+    )
+    assert {p.port for p in scan_compose_files(str(tier_a))} == {17001, 17002, 17003, 17004}
+
+    broken = tmp_path / "broken-override-env"
+    broken.mkdir()
+    (broken / "compose.yml").write_text(
+        "services:\n  app:\n    ports: ['17100:80']\n",
+        encoding="utf-8",
+    )
+    (broken / "compose.override.yml").write_text(
+        "services:\n  app:\n    env_file: missing-from-override.env\n",
+        encoding="utf-8",
+    )
+    assert scan_compose_tree(str(broken)).incomplete is True
+
+
+def test_compose_subdir_under_data_dir_reads_stacks_while_blocking_private_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    compose_dir = tmp_path / "compose"
+    monkeypatch.setenv("COMPOSE_SCAN_DIR", str(compose_dir))
+
+    (tmp_path / "port_light.json").write_text('{"manual_ports": []}', encoding="utf-8")
+    (tmp_path / "analysis").mkdir()
+    (tmp_path / "analysis" / "byok.json").write_text("SECRET_PORT=19999\n", encoding="utf-8")
+
+    stack = compose_dir / "demo"
+    stack.mkdir(parents=True)
+    (stack / "compose.yaml").write_text(
+        "services:\n  web:\n    ports: ['18090:80']\n",
+        encoding="utf-8",
+    )
+    ok_scan = scan_compose_tree(str(compose_dir))
+    assert ok_scan.incomplete is False
+    assert [p.port for p in ok_scan.ports] == [18090]
+
+    escape = compose_dir / "escape"
+    escape.mkdir()
+    (escape / "compose.yaml").write_text(
+        "env_file:\n  - ../../analysis/byok.json\n"
+        "services:\n  leak:\n    ports: ['${SECRET_PORT:-18091}:80']\n",
+        encoding="utf-8",
+    )
+    escaped_scan = scan_compose_tree(str(compose_dir))
+    assert escaped_scan.incomplete is True
+    assert 19999 not in {p.port for p in escaped_scan.ports}

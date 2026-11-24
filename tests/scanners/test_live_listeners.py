@@ -106,3 +106,63 @@ def test_listener_disappears_after_close(client):
     assert not any(p["port"] == port for p in data["ports"]), (
         f"closed listener on {port} still reported"
     )
+
+
+@pytest.mark.skipif(not host_listen_trusted(), reason="no trusted listen table on this host")
+def test_real_udp_listener_appears_in_occupancy(client):
+    sock = None
+    port = None
+    for candidate in range(PROBE_RANGE_START, PROBE_RANGE_END):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.bind(("127.0.0.1", candidate))
+        except OSError:
+            s.close()
+            continue
+        sock, port = s, candidate
+        break
+    if sock is None or port is None:
+        pytest.skip("no bindable UDP port in probe range")
+    try:
+        data = _occupancy(client)
+        row = next((p for p in data["ports"] if p["port"] == port), None)
+        assert row is not None
+        assert row["status"] == "used"
+        assert "udp" in row["protocol"].split(",")
+    finally:
+        sock.close()
+
+
+@pytest.mark.skipif(not host_listen_trusted(), reason="no trusted listen table on this host")
+def test_connected_outbound_udp_socket_does_not_masquerade_as_remote_port_listener():
+    from backend import port_scanner as ps
+
+    target_port = None
+    for candidate in range(PROBE_RANGE_START, PROBE_RANGE_END):
+        probe_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            probe_udp.bind(("127.0.0.1", candidate))
+            probe_tcp.bind(("127.0.0.1", candidate))
+        except OSError:
+            continue
+        finally:
+            probe_udp.close()
+            probe_tcp.close()
+        target_port = candidate
+        break
+    if target_port is None:
+        pytest.skip("no free candidate port in probe range")
+
+    outbound = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        outbound.connect(("127.0.0.1", target_port))
+        local_port = outbound.getsockname()[1]
+        if local_port == target_port:
+            pytest.skip("ephemeral port coincided with target port")
+        listening = ps.scan_listening_ports()
+        assert all(p.port != target_port for p in listening)
+    except OSError:
+        pytest.skip("loopback UDP connect not permitted in this environment")
+    finally:
+        outbound.close()

@@ -20,6 +20,8 @@ import json
 import os
 from pathlib import Path
 
+from .safe_io import MAX_CUSTOM_PORTS_BYTES, is_blocked_path, read_regular_text
+
 KNOWN_PORTS: dict[int, dict] = {
     # ── System services ───────────────────────────────────────
     21:   {"name": "FTP",           "description": "File Transfer Protocol",                          "category": "system",    "is_access_port": True},
@@ -215,6 +217,7 @@ KNOWN_PORTS: dict[int, dict] = {
 _custom_cache: dict[int, dict] | None = None
 _custom_mtime: float | None = None
 _custom_path: str | None = None
+_MISSING_MTIME = -1.0
 
 
 def _load_custom_ports() -> dict[int, dict]:
@@ -222,15 +225,23 @@ def _load_custom_ports() -> dict[int, dict]:
     global _custom_cache, _custom_mtime, _custom_path
     path = os.environ.get("CUSTOM_PORTS_FILE", "/data/custom_ports.json")
     p = Path(path)
+    if is_blocked_path(p, allow_data_dir=True):
+        _custom_cache, _custom_mtime, _custom_path = {}, _MISSING_MTIME, path
+        return _custom_cache
     try:
         mtime = p.stat().st_mtime
     except OSError:
-        _custom_cache, _custom_mtime, _custom_path = {}, None, path
-        return {}
+        if _custom_cache is not None and _custom_path == path and _custom_mtime == _MISSING_MTIME:
+            return _custom_cache
+        _custom_cache, _custom_mtime, _custom_path = {}, _MISSING_MTIME, path
+        return _custom_cache
     if _custom_cache is not None and _custom_path == path and _custom_mtime == mtime:
         return _custom_cache
     try:
-        raw = json.loads(p.read_text())
+        text = read_regular_text(p, max_bytes=MAX_CUSTOM_PORTS_BYTES, allow_data_dir=True)
+        if text.startswith("\ufeff"):
+            text = text[1:]
+        raw = json.loads(text)
         parsed: dict[int, dict] = {}
         if isinstance(raw, dict):
             for key, value in raw.items():
@@ -263,8 +274,7 @@ def get_known_port(port: int) -> dict | None:
     Custom ports override built-in entries with the same number.
     """
     custom = _load_custom_ports()
-    merged = {**KNOWN_PORTS, **custom}
-    entry = merged.get(port)
+    entry = custom.get(port) if port in custom else KNOWN_PORTS.get(port)
     if entry:
         return {
             "name": str(entry.get("name") or "Unknown"),

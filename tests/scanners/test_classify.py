@@ -852,3 +852,109 @@ def test_etag_matched_weak_and_list():
     assert _etag_matched("*", etag) is True
     assert _etag_matched('"nope"', etag) is False
     assert _etag_matched(None, etag) is False
+
+
+def test_multiple_listener_pids_on_same_port_attribute_host_containers():
+    listening = [
+        ListeningPort(port=53, protocol="tcp", ip="127.0.0.1", process_name="stub-resolver", pid=101),
+        ListeningPort(port=53, protocol="udp", ip="192.0.2.10", process_name="coredns", pid=202),
+    ]
+    containers = [
+        ContainerInfo(
+            name="lan-dns",
+            status="running",
+            image="example.invalid/coredns:latest",
+            network_mode="host",
+            pid=200,
+            pids={200, 202},
+        ),
+    ]
+    out = _classify(
+        listening, containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    row = out["ports"][0]
+    assert row["port"] == 53
+    assert row["status"] == "used"
+    assert row["process"] == "stub-resolver"
+    assert row["pid"] == 101
+    assert [c["name"] for c in row["containers"]] == ["lan-dns"]
+
+
+def test_host_network_expose_does_not_widen_loopback_listener_bind_scope():
+    listening = [
+        ListeningPort(port=8080, protocol="tcp", ip="127.0.0.1", inode=77),
+    ]
+    containers = [
+        ContainerInfo(
+            name="local-api",
+            status="running",
+            image="example.invalid/api:latest",
+            network_mode="host",
+            socket_inodes={77},
+            ports=[PortMapping(
+                host_port=8080, host_ip="0.0.0.0",
+                container_port=8080, protocol="tcp", source="expose",
+            )],
+        ),
+    ]
+    out = _classify(
+        listening, containers, [], [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    row = out["ports"][0]
+    assert row["status"] == "used"
+    assert row["bind_scope"] == "localhost"
+    assert row["ips"] == ["127.0.0.1"]
+    assert row["containers"][0]["bind_ips"] == []
+
+
+def test_compose_intra_project_conflict_and_family_aware_bind_overlap():
+    from backend.classification import bind_key, binds_overlap
+
+    assert bind_key(None) == "*"
+    assert bind_key("") == "*"
+    assert bind_key("::") == "*"
+    assert bind_key("0.0.0.0") == "0.0.0.0"
+    assert bind_key("::ffff:192.0.2.10") == "192.0.2.10"
+
+    assert binds_overlap("", "::1") is True
+    assert binds_overlap("::", "192.0.2.10") is True
+    assert binds_overlap("::", "::1") is True
+    assert binds_overlap("0.0.0.0", "127.0.0.1") is True
+    assert binds_overlap("0.0.0.0", "192.0.2.10") is True
+    assert binds_overlap("0.0.0.0", "::ffff:192.0.2.10") is True
+    assert binds_overlap("0.0.0.0", "::1") is False
+    assert binds_overlap("0.0.0.0", "2001:db8::1") is False
+    assert binds_overlap("127.0.0.1", "::1") is False
+
+    intra_conflict = [
+        ComposePort(
+            port=8080, compose_file="stack/compose.yml", project_dir="stack",
+            service_name="web", host_ip="0.0.0.0", protocol="tcp",
+        ),
+        ComposePort(
+            port=8080, compose_file="stack/compose.yml", project_dir="stack",
+            service_name="admin", host_ip="127.0.0.1", protocol="tcp",
+        ),
+    ]
+    v4_and_v6_coexist = [
+        ComposePort(
+            port=8081, compose_file="stack/compose.yml", project_dir="stack",
+            service_name="v4-proxy", host_ip="0.0.0.0", protocol="tcp",
+        ),
+        ComposePort(
+            port=8081, compose_file="stack/compose.yml", project_dir="stack",
+            service_name="v6-proxy", host_ip="::1", protocol="tcp",
+        ),
+    ]
+    out = _classify(
+        [], [], intra_conflict + v4_and_v6_coexist, [], hidden_ports=[],
+        range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    by_port = {p["port"]: p for p in out["ports"]}
+    assert by_port[8080]["conflict"] is True
+    assert by_port[8081]["conflict"] is False
