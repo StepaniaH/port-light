@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from types import ModuleType
 
 from .. import degradations, history
-from ..auth import request_may_see_hidden
+from ..auth import hidden_ports_withheld, request_may_see_hidden
 from ..occupancy_monitor import SnapshotUnavailable, complete
 from ..port_observations import (
     _number,
@@ -119,6 +119,8 @@ def _history_events(
     snap: dict,
     live_events: list[dict],
     show_hidden: bool,
+    locked: bool = False,
+    visible_known: set[int] | None = None,
 ) -> tuple[list[dict], dict, list[str]]:
     limitations = []
     capture_id, captured_at = snap["capture_id"], snap["captured_at"]
@@ -157,6 +159,8 @@ def _history_events(
             return False
         if not show_hidden and port in hidden:
             return False
+        if locked and visible_known is not None and port not in visible_known:
+            return False
         return selected is None or port in selected
 
     by_id = {event["event_id"]: event for event in persisted}
@@ -168,7 +172,7 @@ def _history_events(
         ):
             continue
         by_id[event["event_id"]] = event
-    if not show_hidden and any(
+    if not locked and not show_hidden and any(
         type(event.get("port")) is int and event["port"] in hidden
         for event in by_id.values()
     ):
@@ -196,6 +200,7 @@ def batch_observations(body: BatchInput, request: Request) -> dict:
     """Return compact facts from one monitor capture and a fenced history read."""
     values = runtime._values()
     may_see_hidden = request_may_see_hidden(request)
+    locked = hidden_ports_withheld() and not may_see_hidden
     show_hidden = bool(body.include_hidden and may_see_hidden)
     try:
         snap, live_events = runtime._monitor.latest_with_observation_events(
@@ -203,6 +208,7 @@ def batch_observations(body: BatchInput, request: Request) -> dict:
         )
     except SnapshotUnavailable as exc:
         raise HTTPException(status_code=503, detail="occupancy snapshot unavailable; retry later") from exc
+    visible_known = set(known_observation_ports(snap, show_hidden=False)) if locked else None
     selected, selection_kind = _selection_ports(body.selection, snap, show_hidden)
     if len(selected) > MAX_BATCH_PORTS:
         raise HTTPException(
@@ -220,6 +226,8 @@ def batch_observations(body: BatchInput, request: Request) -> dict:
         snap=snap,
         live_events=live_events,
         show_hidden=show_hidden,
+        locked=locked,
+        visible_known=visible_known,
     )
     event_ports = {event["port"] for event in events if type(event.get("port")) is int}
     effective = sorted(set(selected) | event_ports)
@@ -236,6 +244,9 @@ def batch_observations(body: BatchInput, request: Request) -> dict:
     observations = []
     hidden_withheld = False
     for port in effective:
+        if locked and visible_known is not None and port not in visible_known:
+            hidden_withheld = True
+            continue
         observation = batch_port_observation(
             snap=snap, port=port, protocol=body.protocol, show_hidden=show_hidden, index=index
         )
@@ -248,7 +259,7 @@ def batch_observations(body: BatchInput, request: Request) -> dict:
         limitations.append("scan_incomplete")
     if scan["stale"]:
         limitations.append("scan_stale")
-    if hidden_withheld or (body.include_hidden and not show_hidden):
+    if locked or hidden_withheld or (body.include_hidden and not show_hidden):
         limitations.append("hidden_withheld")
     return {
         "schema_version": 1,
@@ -260,7 +271,7 @@ def batch_observations(body: BatchInput, request: Request) -> dict:
         "coverage": {
             "requested_count": len(selected),
             "observed_count": len(observations),
-            "complete": not hidden_withheld and len(observations) == len(effective),
+            "complete": not locked and not hidden_withheld and len(observations) == len(effective),
             "limitations": sorted(set(limitations)),
         },
         "scan": scan,

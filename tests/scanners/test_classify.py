@@ -958,3 +958,45 @@ def test_compose_intra_project_conflict_and_family_aware_bind_overlap():
     by_port = {p["port"]: p for p in out["ports"]}
     assert by_port[8080]["conflict"] is True
     assert by_port[8081]["conflict"] is False
+
+
+def test_non_localhost_manual_entry_does_not_mask_localhost_reservation():
+    local_res = {
+        "port": 8090,
+        "label": "agent",
+        "machine": "localhost",
+        "is_reservation": True,
+        "expires_at": 1_900_000_000,
+    }
+    remote_manual = {"port": 8090, "label": "spoof", "machine": "other-box"}
+    for manuals in ([local_res, remote_manual], [remote_manual, local_res]):
+        out = _classify(
+            [], [], [], manuals, hidden_ports=[],
+            range_start=1, range_end=65535,
+            include_hidden=False, hidden_locked=False,
+        )
+        row = out["ports"][0]
+        assert row["port"] == 8090
+        assert row["is_reservation"] is True
+        assert row["machine"] == "localhost"
+        assert row["manual_label"] == "agent"
+        assert row["expires_at"] == 1_900_000_000
+
+    local_plain = {"port": 8091, "label": "local-app", "machine": "localhost"}
+    remote_plain = {"port": 8091, "label": "remote-app", "machine": "nas"}
+    for manuals in ([local_plain, remote_plain], [remote_plain, local_plain]):
+        out = _classify(
+            [], [], [], manuals, hidden_ports=[],
+            range_start=1, range_end=65535,
+            include_hidden=False, hidden_locked=False,
+        )
+        assert out["ports"][0]["machine"] == "localhost"
+        assert out["ports"][0]["manual_label"] == "local-app"
+
+    standalone_remote = _classify(
+        [], [], [], [{"port": 8092, "label": "nas-ui", "machine": "nas"}],
+        hidden_ports=[], range_start=1, range_end=65535,
+        include_hidden=False, hidden_locked=False,
+    )
+    assert standalone_remote["ports"][0]["status"] == "configured"
+    assert standalone_remote["ports"][0]["machine"] == "nas"

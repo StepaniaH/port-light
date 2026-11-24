@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import re
+import threading
 from fastapi import HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from .. import port_store
@@ -16,6 +17,8 @@ from types import ModuleType
 runtime: ModuleType | None = None
 
 router = APIRouter()
+_INFLIGHT_LOCK = threading.Lock()
+_INFLIGHT_KEYS: dict[str, int] = {}
 
 class ManualPortCreate(BaseModel):
     port: int = Field(ge=1, le=65535)
@@ -61,7 +64,7 @@ async def suggest_ports(
     rule: str | None = Query(default=None, min_length=1, max_length=64),
 ) -> dict:
     """Read-only planning; mutations require the recoverable POST interface."""
-    runtime._require_agent_token(request)
+    runtime._require_allocation_access(request)
     if reserve or ttl is not None:
         raise HTTPException(status_code=405, detail="use POST /api/reservations with an Idempotency-Key; upgrade CLI/MCP clients")
     return await runtime._suggest(count, start, end, label, ttl, scope, require_count, rule=rule)
@@ -76,26 +79,50 @@ def _reservation_key(request: Request) -> str:
 
 @router.post("/api/reservations")
 async def create_reservation(body: ReservationCreate, request: Request) -> dict:
-    runtime._require_agent_token(request)
+    runtime._require_allocation_access(request)
     if body.start is not None and body.end is not None and body.start > body.end:
         raise HTTPException(status_code=400, detail="end must be greater than or equal to start")
     key = _reservation_key(request)
     parameters = body.model_dump(exclude_none=False)
     if parameters["rule"] is None:
         parameters.pop("rule")
-    existing = await asyncio.to_thread(port_store.reservation_request, key, parameters)
-    if existing is not None:
-        return existing
-    return await runtime._suggest(**parameters, request_key=key)
+    digest = port_store._request_hash(key)
+    with _INFLIGHT_LOCK:
+        _INFLIGHT_KEYS[digest] = _INFLIGHT_KEYS.get(digest, 0) + 1
+    try:
+        existing = await asyncio.to_thread(port_store.reservation_request, key, parameters)
+        if existing is not None:
+            return existing
+        return await runtime._suggest(**parameters, request_key=key)
+    finally:
+        with _INFLIGHT_LOCK:
+            remaining = _INFLIGHT_KEYS.get(digest, 0) - 1
+            if remaining > 0:
+                _INFLIGHT_KEYS[digest] = remaining
+            else:
+                _INFLIGHT_KEYS.pop(digest, None)
 
 
 @router.get("/api/reservations/request")
 def recover_reservation(request: Request) -> dict:
     runtime._require_agent_token(request)
-    result = port_store.reservation_request(_reservation_key(request))
-    if result is None:
-        raise HTTPException(status_code=404, detail="reservation request not found")
-    return result
+    key = _reservation_key(request)
+    result = port_store.reservation_request(key)
+    if result is not None:
+        return result
+    digest = port_store._request_hash(key)
+    with _INFLIGHT_LOCK:
+        inflight = _INFLIGHT_KEYS.get(digest, 0) > 0
+    if inflight:
+        raise HTTPException(
+            status_code=503,
+            detail="reservation request is still in progress; retry recovery shortly",
+        )
+    # Re-check once in case POST committed and cleared _INFLIGHT_KEYS before we acquired _INFLIGHT_LOCK.
+    result = port_store.reservation_request(key)
+    if result is not None:
+        return result
+    raise HTTPException(status_code=404, detail="reservation request not found")
 
 
 @router.delete("/api/reservations/{port}")
@@ -140,7 +167,8 @@ def add_manual_port(body: ManualPortCreate, request: Request) -> dict:
 
 
 @router.post("/api/manual-ports/batch")
-def reserve_manual_range(body: ManualPortBatch) -> dict:
+def reserve_manual_range(body: ManualPortBatch, request: Request) -> dict:
+    runtime._require_hidden_write(request)
     if body.end < body.start or body.end - body.start >= 64:
         raise HTTPException(status_code=422, detail="select between 1 and 64 contiguous ports")
     values = runtime._values()
@@ -213,6 +241,7 @@ def unhide_port(port: int, request: Request) -> dict:
 
 @router.get("/api/free-runs")
 def free_runs(
+    request: Request,
     count: int = Query(default=1, ge=1, le=64),
     start: int | None = Query(default=None, ge=1, le=65535),
     end: int | None = Query(default=None, ge=1, le=65535),
@@ -222,11 +251,25 @@ def free_runs(
     Read-only planning aid. POST /api/manual-ports/batch claims a selected run
     atomically after checking the latest occupancy and stored reservations.
     """
+    runtime._require_hidden_write(request)
     values = runtime._values()
     lo = start if start is not None else values["port_range_start"]
     hi = end if end is not None else values["port_range_end"]
     if hi < lo:
-        lo, hi = hi, lo
+        if start is None and end is None:
+            lo, hi = hi, lo
+        elif start is not None and end is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"start ({lo}) exceeds configured port_range_end ({hi}); specify end explicitly",
+            )
+        elif start is None and end is not None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"end ({hi}) is below configured port_range_start ({lo}); specify start explicitly",
+            )
+        else:
+            raise HTTPException(status_code=400, detail="end must be greater than or equal to start")
     snap = runtime._allocation_snapshot(values)
     _manuals, hidden = snap["user_state"]
     result = runtime._classify_snapshot(snap, values, lo, hi)

@@ -172,3 +172,72 @@ def test_observation_intra_project_and_family_aware_compose_conflicts(empty_scan
         disjoint_entry = client.get("/api/observations/ports/8081", params={"protocol": "tcp"}).json()["current"]["entries"][0]
         assert conflict_entry["compose_conflict"] is True
         assert disjoint_entry["compose_conflict"] is False
+
+
+def test_single_port_observation_ignores_lower_active_ports_and_respects_protocol(empty_scan, monkeypatch):
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [
+        ListeningPort(port=22, protocol="tcp", ip="0.0.0.0", process_name="sshd", pid=100),
+        ListeningPort(port=8082, protocol="tcp", ip="127.0.0.1", process_name="api", pid=200),
+    ])
+    monkeypatch.setattr(main, "scan_compose_tree", lambda *_a, **_kw: ComposeScan(ports=[
+        ComposePort(8081, "stack/compose.yml", "stack", "dns", protocol="udp", host_ip="0.0.0.0"),
+        ComposePort(8082, "stack/compose.yml", "stack", "api", protocol="udp", host_ip="127.0.0.1"),
+    ]))
+    with TestClient(main.app) as client:
+        free_body = client.get("/api/observations/ports/8080").json()
+        assert free_body["current"]["overall_status"] == "free"
+        assert {entry["status"] for entry in free_body["current"]["entries"]} == {"free"}
+
+        cfg_all = client.get("/api/observations/ports/8081").json()
+        assert cfg_all["current"]["overall_status"] == "configured"
+        cfg_tcp = client.get("/api/observations/ports/8081", params={"protocol": "tcp"}).json()
+        assert cfg_tcp["current"]["overall_status"] == "free"
+        cfg_udp = client.get("/api/observations/ports/8081", params={"protocol": "udp"}).json()
+        assert cfg_udp["current"]["overall_status"] == "configured"
+
+        mixed_all = client.get("/api/observations/ports/8082").json()
+        assert mixed_all["current"]["overall_status"] == "used"
+        mixed_tcp = client.get("/api/observations/ports/8082", params={"protocol": "tcp"}).json()
+        assert mixed_tcp["current"]["overall_status"] == "used"
+        mixed_udp = client.get("/api/observations/ports/8082", params={"protocol": "udp"}).json()
+        assert mixed_udp["current"]["overall_status"] == "configured"
+
+        def fail_docker():
+            raise RuntimeError("docker unavailable")
+
+        monkeypatch.setattr(main, "scan_containers", fail_docker)
+        main._monitor.refresh()
+        incomplete_free = client.get("/api/observations/ports/8080").json()
+        assert incomplete_free["current"]["overall_status"] == "unknown"
+
+
+def test_observation_non_localhost_manual_does_not_mask_localhost_reservation():
+    from backend import port_observations
+
+    local_res = {"port": 8090, "label": "agent", "machine": "localhost", "is_reservation": True}
+    remote_plain = {"port": 8090, "label": "spoof", "machine": "other-box", "is_reservation": False}
+    for manuals in ([local_res, remote_plain], [remote_plain, local_res]):
+        snap = {
+            "listening": [],
+            "containers": [],
+            "compose_scan": ComposeScan(),
+            "user_state": (manuals, []),
+            "scan_complete": True,
+            "sources": {"listen": "ok", "docker": "ok", "compose": "ok"},
+            "capture_id": "obs-test-1",
+            "captured_at": 1_700_000_000,
+        }
+        assert port_observations._manual(snap, 8090) == local_res
+        obs = port_observations.build_port_observation(
+            snap=snap,
+            values={},
+            port=8090,
+            protocol="tcp",
+            show_hidden=False,
+            core_version="0.9.0",
+            monitor_status={"ready": True, "stale": False},
+            events=[],
+        )
+        assert obs["current"]["overall_status"] == "configured"
+        assert obs["current"]["entries"][0]["manual"] is True
+        assert obs["current"]["entries"][0]["reservation"] is True

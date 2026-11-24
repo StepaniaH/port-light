@@ -5,6 +5,7 @@ from fastapi import HTTPException, Query, Request
 from fastapi.responses import Response
 from .. import degradations, history, port_store
 from ..auth import (
+    hidden_ports_withheld,
     request_may_see_hidden,
 )
 from ..classification import free_port_payload
@@ -41,6 +42,7 @@ def get_port(
     if port < 1 or port > 65535:
         raise HTTPException(status_code=400, detail="port out of range")
     may_see = request_may_see_hidden(request)
+    locked = hidden_ports_withheld() and not may_see
     show_hidden = bool(include_hidden and may_see)
     snap = runtime._monitor.latest(runtime._values())
     payload, _body, _etag = runtime._packed_occupancy(request, port, port, include_hidden)
@@ -49,6 +51,8 @@ def get_port(
             if row["status"] == "unknown":
                 raise HTTPException(status_code=503, detail="occupancy scan is incomplete; inspect the scan warning or run port-light doctor, repair the enabled source, then retry")
             return row
+    if locked:
+        raise HTTPException(status_code=404, detail="not found")
     hidden: set[int] = set()
     for raw in snap["user_state"][1]:
         try:
@@ -82,7 +86,11 @@ def port_history(
         raise HTTPException(status_code=400, detail="port out of range")
     if not history.enabled():
         raise HTTPException(status_code=404, detail="not found")
-    if port in port_store.get_hidden_ports() and not request_may_see_hidden(request):
+    if request is not None and hidden_ports_withheld() and not request_may_see_hidden(request):
+        payload, _body, _etag = runtime._packed_occupancy(request, port, port, False)
+        if not any(row["port"] == port for row in payload["ports"]):
+            raise HTTPException(status_code=404, detail="not found")
+    elif port in port_store.get_hidden_ports() and not request_may_see_hidden(request):
         raise HTTPException(status_code=404, detail="not found")
     try:
         events = history.query(port, hours)

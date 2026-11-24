@@ -233,3 +233,21 @@ def test_suggest_self_scope_scans_local_snapshot_once(monkeypatch):
     res = client.get("/api/ports/suggest", params={"count": 1, "start": 7300, "end": 7310})
     assert res.status_code == 200
     assert calls == 1
+
+
+def test_suggest_and_reserve_reject_inverted_explicit_bounds(monkeypatch):
+    from backend import port_store
+
+    client = TestClient(app)
+    assert client.get("/api/ports/suggest", params={"start": 20000}).status_code == 400
+    assert client.get("/api/ports/suggest", params={"start": 200, "end": 100}).status_code == 400
+    monkeypatch.setenv("PORT_RANGE_START", "100")
+    assert client.get("/api/ports/suggest", params={"end": 50}).status_code == 400
+    monkeypatch.delenv("PORT_RANGE_START")
+    rejected = client.post(
+        "/api/reservations",
+        json={"start": 20000},
+        headers={"Idempotency-Key": secrets.token_urlsafe(32)},
+    )
+    assert rejected.status_code == 400
+    assert port_store.get_manual_ports() == []

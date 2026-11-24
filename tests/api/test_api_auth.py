@@ -204,7 +204,7 @@ def test_manual_port_roundtrip_and_lookup(monkeypatch, tmp_path, empty_scan):
     assert free.json()["port"] == 1
 
 
-def test_hidden_port_lookup_is_not_free(monkeypatch, tmp_path):
+def test_hidden_port_lookup_is_not_free(monkeypatch, tmp_path, empty_scan):
     monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("AUTH_USER", raising=False)
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
@@ -552,3 +552,111 @@ def test_two_stage_packed_occupancy_matches_direct_classification_without_reclas
             "compose_files": 0,
         })
         assert response.json() == expected
+
+
+def test_hidden_unlock_eliminates_existence_side_channels(monkeypatch, tmp_path, empty_scan):
+    import secrets
+    import backend.main as main
+    from backend import history
+    from backend.port_scanner import ListeningPort
+
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("HIDDEN_UNLOCK_PASSWORD", "unlock-me")
+    monkeypatch.setenv("METRICS_ENABLED", "1")
+    monkeypatch.setenv("HISTORY_RETENTION_DAYS", "7")
+    for name in ("AUTH_USER", "AUTH_PASSWORD", "AGENT_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setattr(main, "scan_listening_ports", lambda **_kw: [
+        ListeningPort(port=8080, protocol="tcp", ip="0.0.0.0", process_name="nginx", pid=10),
+        ListeningPort(port=8096, protocol="tcp", ip="127.0.0.1", process_name="secret-svc", pid=20),
+    ])
+    port_store.add_manual_port(8096, "secret-label")
+    port_store.add_hidden_port(8096)
+    history.reset()
+    main._monitor.reset()
+
+    with TestClient(app) as client:
+        # 1. /api/ports summary hides per-range hidden count and does not subtract hidden from free.
+        hidden_range = client.get("/api/ports", params={"range_start": 8096, "range_end": 8096})
+        free_range = client.get("/api/ports", params={"range_start": 8097, "range_end": 8097})
+        assert hidden_range.status_code == 200 and free_range.status_code == 200
+        assert [row["port"] for row in hidden_range.json()["ports"]] == [8080]
+        assert [row["port"] for row in free_range.json()["ports"]] == [8080]
+        assert hidden_range.json()["summary"]["hidden"] == 0
+        assert free_range.json()["summary"]["hidden"] == 0
+        assert hidden_range.json()["summary"]["free"] == 1
+        assert free_range.json()["summary"]["free"] == 1
+        assert hidden_range.json()["summary"]["hidden_locked"] is True
+
+        # 2. /api/ports/{port}, /history, and /api/observations/ports/{port} are indistinguishable
+        # for hidden vs free ports, while visible occupied ports remain readable.
+        assert client.get("/api/ports/8080").status_code == 200
+        assert client.get("/api/ports/8096").status_code == 404
+        assert client.get("/api/ports/8097").status_code == 404
+        assert client.get("/api/ports/8080/history").status_code == 200
+        assert client.get("/api/ports/8096/history").status_code == 404
+        assert client.get("/api/ports/8097/history").status_code == 404
+        assert client.get("/api/observations/ports/8080").status_code == 200
+        assert client.get("/api/observations/ports/8096").status_code == 404
+        assert client.get("/api/observations/ports/8097").status_code == 404
+
+        # 3. /api/observations/batch returns identical coverage and empty ports for hidden vs free.
+        b_hidden = client.post(
+            "/api/observations/batch",
+            json={"selection": {"kind": "ports", "ports": [8096]}},
+        ).json()
+        b_free = client.post(
+            "/api/observations/batch",
+            json={"selection": {"kind": "ports", "ports": [8097]}},
+        ).json()
+        assert b_hidden["ports"] == [] == b_free["ports"]
+        assert b_hidden["events"] == [] == b_free["events"]
+        assert b_hidden["coverage"] == b_free["coverage"]
+        assert b_hidden["coverage"]["complete"] is False
+        assert "hidden_withheld" in b_hidden["coverage"]["limitations"]
+
+        # 4. Free-runs, batch manual writes, single manual writes, and unauthenticated allocation
+        # all return uniform 403 while locked (no 403-vs-404 / 403-vs-200 oracle).
+        assert client.get("/api/free-runs", params={"count": 1, "start": 8096, "end": 8097}).status_code == 403
+        assert client.post("/api/manual-ports/batch", json={"start": 8097, "end": 8097}).status_code == 403
+        for target_port in (8096, 8097):
+            assert client.post("/api/manual-ports", json={"port": target_port, "label": "x"}).status_code == 403
+            assert client.patch(f"/api/manual-ports/{target_port}", json={"label": "x"}).status_code == 403
+            assert client.delete(f"/api/manual-ports/{target_port}").status_code == 403
+        assert client.get("/api/ports/suggest", params={"start": 8096, "end": 8096}).status_code == 403
+        assert client.post(
+            "/api/reservations",
+            json={"start": 8097, "end": 8097},
+            headers={"Idempotency-Key": secrets.token_urlsafe(36)},
+        ).status_code == 403
+
+        # 5. /api/metrics omits hidden count while locked, restores it when unlocked.
+        locked_metrics = client.get("/api/metrics").text
+        assert "port_light_hidden 0\n" in locked_metrics
+        unlocked_metrics = client.get("/api/metrics", headers={"X-Hidden-Unlock": "unlock-me"}).text
+        assert "port_light_hidden 1\n" in unlocked_metrics
+
+        # 6. Unlocking restores full access to free-runs, batch writes, single-port lookup, and suggest.
+        hdr = {"X-Hidden-Unlock": "unlock-me"}
+        runs = client.get("/api/free-runs", params={"count": 1, "start": 8096, "end": 8097}, headers=hdr)
+        assert runs.status_code == 200
+        assert runs.json()["runs"] == [{"start": 8097, "end": 8097, "size": 1}]
+        assert client.get("/api/ports/8097", headers=hdr).json()["status"] == "free"
+        assert client.get("/api/ports/8096", params={"include_hidden": True}, headers=hdr).status_code == 200
+        assert client.post(
+            "/api/manual-ports/batch",
+            json={"start": 8097, "end": 8097, "label": "ok"},
+            headers=hdr,
+        ).status_code == 200
+
+        # 7. When AGENT_TOKEN is configured, authorized agents can still call /api/ports/suggest.
+        monkeypatch.setenv("AGENT_TOKEN", "agent-secret")
+        assert client.get("/api/ports/suggest", params={"start": 8098, "end": 8098}).status_code == 403
+        agent_ok = client.get(
+            "/api/ports/suggest",
+            params={"start": 8098, "end": 8098},
+            headers={"X-Agent-Token": "agent-secret"},
+        )
+        assert agent_ok.status_code == 200
+        assert agent_ok.json()["ports"] == [8098]

@@ -110,19 +110,22 @@ def get_doctor_report() -> Response:
 
 
 @router.get("/api/metrics")
-def metrics() -> Response:
+def metrics(request: Request) -> Response:
     """Prometheus text exposition over the current occupancy snapshot.
 
     Disabled unless ``METRICS_ENABLED`` is set. Aggregates only — the
-    endpoint never emits ports, names, or URLs. Hidden rows are included in
-    the aggregates (they are real occupancy) but never identified.
+    endpoint never emits ports, names, or URLs. When hidden ports are locked
+    for the caller, hidden counts are omitted to prevent existence leaks.
     """
     if not runtime._metrics_enabled():
         raise HTTPException(status_code=404, detail="not found")
     values = runtime._values()
     snap = runtime._monitor.latest(values)
+    hidden_locked = hidden_ports_withheld() and not request_may_see_hidden(request)
     result = runtime._classify_snapshot(
-        snap, values, values["port_range_start"], values["port_range_end"])
+        snap, values, values["port_range_start"], values["port_range_end"],
+        show_hidden=not hidden_locked, hidden_locked=hidden_locked,
+    )
     summary = result["summary"]
     lines = [
         "# TYPE port_light_up gauge",

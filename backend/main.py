@@ -396,15 +396,29 @@ async def _suggest(count: int, start: int | None, end: int | None, label: str,
                    ttl: int | None, scope: str, require_count: bool,
                    request_key: str | None = None, rule: str | None = None) -> dict:
     values = _values()
-    lo = start if start is not None else values["port_range_start"]
-    hi = end if end is not None else values["port_range_end"]
-    if hi < lo:
-        lo, hi = hi, lo
     if rule is not None:
         try:
             lo, hi = port_rules.allocation_range(port_store.get_port_rules(), rule, start, end)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    else:
+        lo = start if start is not None else values["port_range_start"]
+        hi = end if end is not None else values["port_range_end"]
+        if hi < lo:
+            if start is None and end is None:
+                lo, hi = hi, lo
+            elif start is not None and end is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"start ({lo}) exceeds configured port_range_end ({hi}); specify end explicitly",
+                )
+            elif start is None and end is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"end ({hi}) is below configured port_range_start ({lo}); specify start explicitly",
+                )
+            else:
+                raise HTTPException(status_code=400, detail="end must be greater than or equal to start")
     snap = _allocation_snapshot(values)
     taken = _scanned_ports(snap, values, lo, hi)
     scope_label = "self"
@@ -491,8 +505,17 @@ def _require_agent_token(request: Request) -> None:
         raise HTTPException(status_code=403, detail="valid X-Agent-Token header required")
 
 
+def _require_allocation_access(request: Request) -> None:
+    if os.environ.get("AGENT_TOKEN", "").strip():
+        _require_agent_token(request)
+        return
+    if hidden_ports_withheld() and not request_may_see_hidden(request):
+        raise HTTPException(status_code=403, detail="hidden ports require authorization")
+
+
 def _require_hidden_write(request: Request, port: int | None = None) -> None:
-    if (port is None or port in port_store.get_hidden_ports()) and not request_may_see_hidden(request):
+    del port
+    if hidden_ports_withheld() and not request_may_see_hidden(request):
         raise HTTPException(status_code=403, detail="hidden ports require authorization")
 
 

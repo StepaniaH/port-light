@@ -28,6 +28,14 @@ def free_port_payload(port: int, *, hidden: bool) -> OccupancyRow:
     }
 
 
+def manual_entry_priority(entry: dict) -> tuple[int, int]:
+    """Precedence when multiple manual rows share a port: reservations and localhost win."""
+    machine = str(entry.get("machine") or "").strip() or "localhost"
+    is_local = 1 if machine == "localhost" else 0
+    is_res = 1 if (entry.get("is_reservation") or entry.get("reservation_hash")) else 0
+    return (is_res, is_local)
+
+
 def classify(
     listening: list,
     containers: list,
@@ -181,19 +189,26 @@ def classify(
     for mp in manual_ports:
         if not isinstance(mp, dict):
             continue
+        raw_port = mp.get("port")
+        if isinstance(raw_port, bool):
+            continue
         try:
-            port = int(mp["port"])
-        except (KeyError, TypeError, ValueError):
+            port = int(raw_port)
+        except (TypeError, ValueError):
             continue
         if port < 1 or port > 65535:
             continue
-        manual_map[port] = {
+        raw_exp = mp.get("expires_at")
+        candidate = {
             "label": mp.get("label", "") or "",
-            "machine": mp.get("machine", "localhost") or "localhost",
+            "machine": str(mp.get("machine") or "").strip() or "localhost",
             "is_reservation": bool(mp.get("is_reservation")),
-            "expires_at": int(mp["expires_at"])
-            if isinstance(mp.get("expires_at"), (int, float)) else None,
+            "expires_at": int(raw_exp)
+            if isinstance(raw_exp, (int, float)) and not isinstance(raw_exp, bool) else None,
         }
+        existing = manual_map.get(port)
+        if existing is None or manual_entry_priority(candidate) >= manual_entry_priority(existing):
+            manual_map[port] = candidate
 
     all_ports = set(listening_map) | set(container_map) | set(compose_map) | set(manual_map)
     hidden_status: dict[int, str] = {}
@@ -328,9 +343,13 @@ def classify(
         1 for p in port_list
         if p["status"] == "configured" and range_start <= p["port"] <= range_end
     )
-    hidden_in_range = sum(1 for p in hidden_ports if range_start <= p <= range_end)
+    hidden_in_range = (
+        0 if hidden_locked
+        else sum(1 for p in hidden_ports if range_start <= p <= range_end)
+    )
     occupied = {p["port"] for p in port_list}
-    occupied.update(hidden_ports)
+    if not hidden_locked:
+        occupied.update(hidden_ports)
     span = range_end - range_start + 1
     in_range = sum(1 for n in occupied if range_start <= n <= range_end)
     free = max(0, span - in_range)

@@ -8,7 +8,7 @@ import sqlite3
 from collections.abc import Callable
 
 from . import degradations, history
-from .classification import binds_overlap, free_port_payload
+from .classification import binds_overlap, manual_entry_priority
 from .models import PortMapping
 from .netaddr import clean_bind_ip, proto_family_of
 from .occupancy_monitor import complete
@@ -18,6 +18,13 @@ PROTOCOLS = ("tcp", "udp")
 MAX_HISTORY_EVENTS = 128
 MAX_OBSERVATION_EVENTS = 64
 RELATION_ID_VERSION = "plr1"
+_STATUS_ORDER = {"used": 3, "configured": 2, "free": 1, "unknown": 0}
+
+
+def _overall_status(entries: list[dict]) -> str:
+    if not entries:
+        return "unknown"
+    return max(entries, key=lambda entry: _STATUS_ORDER.get(entry["status"], 0))["status"]
 
 
 def _number(value) -> int | None:
@@ -35,10 +42,12 @@ def _hidden(snap: dict, port: int) -> bool:
 
 
 def _manual(snap: dict, port: int) -> dict | None:
+    best: dict | None = None
     for entry in snap.get("user_state", ([], []))[0]:
         if isinstance(entry, dict) and _number(entry.get("port")) == port:
-            return entry
-    return None
+            if best is None or manual_entry_priority(entry) >= manual_entry_priority(best):
+                best = entry
+    return best
 
 
 def _bindings(value, source: str) -> list[dict]:
@@ -136,7 +145,9 @@ def _observation_index(snap: dict) -> dict:
             compose.setdefault((port, protocol), []).append(row)
     for row in snap.get("user_state", ([], []))[0]:
         if isinstance(row, dict) and (port := _number(row.get("port"))) is not None:
-            manuals[port] = row
+            existing = manuals.get(port)
+            if existing is None or manual_entry_priority(row) >= manual_entry_priority(existing):
+                manuals[port] = row
     return {"listeners": listeners, "containers": containers, "compose": compose, "manuals": manuals}
 
 
@@ -299,8 +310,7 @@ def batch_port_observation(
         entry, _sources = _protocol_entry(snap, port, selected, capture_id, index)
         entries.append(entry)
         relations.extend(_protocol_relations(index, port, selected))
-    status_order = {"used": 3, "configured": 2, "free": 1, "unknown": 0}
-    overall = max(entries, key=lambda entry: status_order[entry["status"]])["status"]
+    overall = _overall_status(entries)
     return {
         "port": port,
         "identity": {"port": port, "protocol": protocol},
@@ -390,29 +400,32 @@ def build_port_observation(
     port: int,
     protocol: str,
     show_hidden: bool,
+    hidden_locked: bool = False,
     core_version: str,
     monitor_status: dict,
-    classify: Callable[..., dict],
+    classify: Callable[..., dict] | None = None,
     events: list[dict],
 ) -> dict:
     """Build one immutable-looking view from one monitor snapshot."""
+    del values, classify
     requires_hidden_access = _hidden(snap, port)
     if requires_hidden_access and not show_hidden:
         raise LookupError("hidden")
+    if hidden_locked and not show_hidden:
+        visible_ports = set(known_observation_ports(snap, show_hidden=False))
+        if port not in visible_ports:
+            raise LookupError("hidden")
     captured_at = snap.get("captured_at")
     capture_id = snap.get("capture_id")
     if not isinstance(captured_at, int) or not isinstance(capture_id, str):
         raise RuntimeError("capture unavailable")
-    row = next(iter(classify(snap, values, port, port, show_hidden).get("ports", [])), None)
-    if row is None:
-        row = free_port_payload(port, hidden=False)
-        if not complete(snap):
-            row["status"] = "unknown"
+    index = _observation_index(snap)
     protocols = PROTOCOLS if protocol == "all" else (protocol,)
     entries = []
     for selected in protocols:
-        entry, _ = _protocol_entry(snap, port, selected, capture_id)
+        entry, _ = _protocol_entry(snap, port, selected, capture_id, index)
         entries.append(entry)
+    overall = _overall_status(entries)
     recent_events, event_history_state = _recent_events(port, show_hidden, events)
     refs = [{
         "id": f"{capture_id}:port:{port}",
@@ -471,7 +484,7 @@ def build_port_observation(
             "sources": source_states,
         },
         "current": {
-            "overall_status": row.get("status", "unknown"),
+            "overall_status": overall,
             "entries": entries,
         },
         "history": history_document,

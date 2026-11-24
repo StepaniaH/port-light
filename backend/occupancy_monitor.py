@@ -624,12 +624,17 @@ class OccupancyMonitor:
                     configured += 1
         in_range_total = 0
         hidden = 0
-        for row in full_ports:
-            port = row["port"]
-            if start <= port <= end:
-                in_range_total += 1
-                if row.get("is_hidden"):
-                    hidden += 1
+        if hidden_locked:
+            for row in ports:
+                if start <= row["port"] <= end:
+                    in_range_total += 1
+        else:
+            for row in full_ports:
+                port = row["port"]
+                if start <= port <= end:
+                    in_range_total += 1
+                    if row.get("is_hidden"):
+                        hidden += 1
         if hidden_locked:
             hidden_ports: list[int] = []
             hidden_occupancy: list[dict] = []

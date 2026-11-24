@@ -7,7 +7,7 @@ from types import ModuleType
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from ..auth import request_may_see_hidden
+from ..auth import hidden_ports_withheld, request_may_see_hidden
 from ..port_observations import build_port_observation
 
 # Bound by the application after its monitor and services are initialized.
@@ -27,7 +27,9 @@ def port_observation(
         raise HTTPException(status_code=400, detail="port out of range")
     values = runtime._values()
     snap = runtime._monitor.latest(values)
-    show_hidden = bool(include_hidden and request_may_see_hidden(request))
+    may_see = request_may_see_hidden(request)
+    show_hidden = bool(include_hidden and may_see)
+    hidden_locked = hidden_ports_withheld() and not may_see
     try:
         return build_port_observation(
             snap=snap,
@@ -35,6 +37,7 @@ def port_observation(
             port=port,
             protocol=protocol,
             show_hidden=show_hidden,
+            hidden_locked=hidden_locked,
             core_version=runtime.VERSION,
             monitor_status=runtime._monitor.status(),
             classify=runtime._classify_snapshot,

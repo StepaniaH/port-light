@@ -45,9 +45,12 @@ def test_free_runs_finds_largest_gaps(monkeypatch):
         assert not (r["start"] <= 6000 <= r["end"])
 
 
-def test_free_runs_validates_window():
+def test_free_runs_validates_window(monkeypatch):
     client = TestClient(app)
-    assert client.get("/api/free-runs", params={"start": 200, "end": 100}).status_code == 200
+    assert client.get("/api/free-runs", params={"start": 200, "end": 100}).status_code == 400
+    assert client.get("/api/free-runs", params={"start": 20000}).status_code == 400
+    monkeypatch.setenv("PORT_RANGE_START", "100")
+    assert client.get("/api/free-runs", params={"end": 50}).status_code == 400
     bad = client.get("/api/free-runs", params={"count": 65})
     assert bad.status_code == 422
 
