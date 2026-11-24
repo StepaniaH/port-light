@@ -1423,7 +1423,7 @@ function settingValuesEqual(left, right) {
         S.settingsPanel = SETTINGS_PANELS.includes(section) ? section : 'appearance';
         return loadSettingsPage();
       },
-      show(section) { showSettingsPanel(section, true); },
+      show(section, resetScroll = true) { showSettingsPanel(section, resetScroll); },
       close() { settingsLoadGeneration += 1; closeAnalysisSettings(); applyAppearance(); },
       syncPaletteAvailability,
       closeTransient(opts) { return closeLocaleMenu(opts); },

@@ -52,6 +52,7 @@ import { closeDetail, showPortDetail } from './detail.js?v=125';
   export function applyRoute({ render, refresh, settingsPage, doctorPage, managementPage, workspacePage }) {
     const next = parseRoute();
     const prev = S.route.name;
+    const previousPanel = S.settingsPanel;
     const previousHostId = S.focusHostId;
     S.route = next;
     const onSettings = S.route.name === 'settings';
@@ -107,7 +108,7 @@ import { closeDetail, showPortDetail } from './detail.js?v=125';
         (S.settingsPanel === 'analysis' && S.route.analysisSection ? '/' + S.route.analysisSection : '');
       if ((location.hash || '') !== want) history.replaceState(null, '', want);
       if (prev === 'settings') {
-        settingsPage.show(S.settingsPanel);
+        settingsPage.show(S.settingsPanel, previousPanel !== S.settingsPanel);
         return;
       }
       settingsPage.open(S.settingsPanel);

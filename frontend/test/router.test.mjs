@@ -15,6 +15,7 @@ test('entry pins a shared cache-bust version', () => {
 });
 
 const { applyRoute, parseHash } = await import('../js/router.js?' + V);
+const { goSettingsPanel, mountSettingsPage } = await import('../js/settings.js?' + V);
 const { S } = await import('../js/state.js?' + V);
 
 const grid = (hostId) => ({ name: 'grid', hostId: hostId || 'local' });
@@ -102,5 +103,42 @@ test('applyRoute falls back to local when a port URL references a deleted or unk
   } finally {
     location.hash = prevHash;
     Object.assign(S, prevState);
+  }
+});
+
+test('hashchange after goSettingsPanel does not reset scroll a second time, while direct hash changes still do', () => {
+  const prevHash = location.hash;
+  const prevRoute = S.route;
+  const prevPanel = S.settingsPanel;
+  const savedScroll = window.scrollTo;
+  const calls = [];
+  window.scrollTo = (...args) => calls.push(args);
+  try {
+    const settingsPage = mountSettingsPage(document.getElementById('settings-form'));
+    S.route = { name: 'settings', section: 'appearance' };
+    S.settingsPanel = 'appearance';
+    location.hash = '#/settings/appearance';
+
+    // Tab click synchronously switches panel and resets scroll once, then sets location.hash.
+    goSettingsPanel('automation');
+    assert.equal(S.settingsPanel, 'automation');
+    assert.equal(location.hash, '#/settings/automation');
+    assert.deepEqual(calls, [[0, 0]]);
+
+    // Queued hashchange arriving after a subsequent user scroll must not scrollTo(0, 0) again.
+    applyRoute({ render: () => {}, refresh: () => {}, settingsPage });
+    assert.equal(S.settingsPanel, 'automation');
+    assert.deepEqual(calls, [[0, 0]]);
+
+    // Direct hash navigation to a different settings panel still resets scroll.
+    location.hash = '#/settings/advanced';
+    applyRoute({ render: () => {}, refresh: () => {}, settingsPage });
+    assert.equal(S.settingsPanel, 'advanced');
+    assert.deepEqual(calls, [[0, 0], [0, 0]]);
+  } finally {
+    window.scrollTo = savedScroll;
+    location.hash = prevHash;
+    S.route = prevRoute;
+    S.settingsPanel = prevPanel;
   }
 });
