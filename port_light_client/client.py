@@ -118,7 +118,9 @@ class HttpTransport:
                     "could not load the HTTPS CA bundle",
                 ) from exc
             opener = urllib.request.build_opener(
-                _RejectRedirects(), urllib.request.HTTPSHandler(context=context),
+                urllib.request.ProxyHandler({}),
+                _RejectRedirects(),
+                urllib.request.HTTPSHandler(context=context),
             )
         self._opener = opener
 
@@ -203,27 +205,44 @@ def validate_request_key(key: str) -> str:
 
 
 def compact_port(row: Mapping[str, Any]) -> dict[str, Any]:
-    containers = row.get("containers") or []
-    names = [
-        item["name"] for item in containers
+    names: list[str] = []
+
+    def add_name(value: Any) -> None:
+        if isinstance(value, str) and value and value not in names:
+            names.append(value)
+
+    containers = row.get("containers")
+    if isinstance(containers, list):
+        for item in containers:
+            if isinstance(item, Mapping):
+                add_name(item.get("name"))
+    add_name(row.get("process"))
+    add_name(row.get("manual_label"))
+    compose_configs = row.get("compose_configs")
+    if isinstance(compose_configs, list):
+        for item in compose_configs:
+            if isinstance(item, Mapping):
+                add_name(item.get("service_name"))
+    if not names:
+        known = row.get("known_service")
+        if isinstance(known, Mapping):
+            add_name(known.get("name"))
+    raw_violations = row.get("rule_violations")
+    rule_violations = [
+        item["rule"]
+        for item in (raw_violations if isinstance(raw_violations, list) else [])
         if isinstance(item, Mapping)
-        and isinstance(item.get("name"), str)
-        and item["name"]
+        and isinstance(item.get("rule"), str)
+        and item["rule"]
     ]
-    known = row.get("known_service") or {}
-    if (
-        not names
-        and isinstance(known, Mapping)
-        and isinstance(known.get("name"), str)
-        and known["name"]
-    ):
-        names = [known["name"]]
     return {
         "port": row.get("port"),
         "status": row.get("status"),
         "protocol": row.get("protocol"),
         "bind_scope": row.get("bind_scope"),
         "names": names,
+        "conflict": bool(row.get("conflict")),
+        "rule_violations": rule_violations,
     }
 
 
@@ -460,14 +479,16 @@ class PortLightClient:
 
     def list_occupancy(
         self,
-        *,
         start: int = 1,
         end: int = 9999,
-        limit: int = 200,
+        *,
+        limit: int | None = 200,
     ) -> dict[str, Any]:
         _validate_port(start)
         _validate_port(end)
-        if type(limit) is not int or not 1 <= limit <= 500:
+        if end < start:
+            raise PortLightError("invalid_request", "end must be greater than or equal to start")
+        if limit is not None and (type(limit) is not int or not 1 <= limit <= 500):
             raise PortLightError("invalid_request", "limit must be between 1 and 500")
         query = urllib.parse.urlencode({
             "range_start": start,
@@ -488,20 +509,56 @@ class PortLightClient:
             )
         for row in rows:
             _validate_port_row(row)
-            if not start <= row["port"] <= end:
-                raise PortLightError(
-                    "invalid_response",
-                    "Port-Light returned occupancy outside the requested range",
-                )
         if len({row["port"] for row in rows}) != len(rows):
             raise PortLightError(
                 "invalid_response",
                 "Port-Light returned duplicate occupancy rows",
             )
+        ports = [compact_port(row) for row in rows if start <= row["port"] <= end]
         return {
             "summary": dict(summary),
-            "ports": [compact_port(row) for row in rows[:limit]],
+            "ports": ports[:limit],
         }
+
+    def list_rules(self) -> dict[str, Any]:
+        data = self._transport.request("GET", "/api/port-rules")
+        raw_rules = data.get("rules")
+        if not isinstance(raw_rules, list):
+            raise PortLightError(
+                "invalid_response",
+                "Port-Light returned an invalid port rules response",
+            )
+        rules: list[dict[str, Any]] = []
+        for item in raw_rules:
+            if not isinstance(item, Mapping):
+                raise PortLightError(
+                    "invalid_response",
+                    "Port-Light returned an invalid port rules response",
+                )
+            name = item.get("name")
+            start = item.get("start")
+            end = item.get("end")
+            projects = item.get("projects")
+            if (
+                not isinstance(name, str)
+                or not name
+                or type(start) is not int
+                or type(end) is not int
+                or not 1 <= start <= end <= 65535
+                or not isinstance(projects, list)
+                or any(not isinstance(project, str) for project in projects)
+            ):
+                raise PortLightError(
+                    "invalid_response",
+                    "Port-Light returned an invalid port rules response",
+                )
+            rules.append({
+                "name": name,
+                "start": start,
+                "end": end,
+                "projects": list(projects),
+            })
+        return {"rules": rules}
 
     def port_history(self, port: int, *, hours: int = 24) -> dict[str, Any]:
         _validate_port(port)
@@ -557,11 +614,16 @@ def create_client(
 
 def _validate_port_row(row: Mapping[str, Any], *, expected_port: int | None = None) -> None:
     port = row.get("port")
+    allowed_statuses = (
+        ("free", "configured", "used")
+        if expected_port is not None
+        else ("free", "configured", "used", "unknown")
+    )
     if (
         type(port) is not int
         or not 1 <= port <= 65535
         or (expected_port is not None and port != expected_port)
-        or row.get("status") not in ("free", "configured", "used")
+        or row.get("status") not in allowed_statuses
         or not isinstance(row.get("protocol"), str)
         or not row["protocol"]
         or not (row.get("bind_scope") is None or isinstance(row["bind_scope"], str))

@@ -16,6 +16,17 @@ from typing import Any
 
 from .client import PortLightError, normalize_base_url, validate_request_key
 
+_NON_COMMITTING_ERRORS = frozenset({
+    "no_capacity",
+    "invalid_request",
+    "authentication_failed",
+    "authentication_misconfigured",
+    "unsupported_server",
+    "upgrade_required",
+    "forbidden",
+    "settings_readonly",
+})
+
 
 def default_state_dir() -> Path:
     override = os.environ.get("PORT_LIGHT_STATE_DIR", "").strip()
@@ -113,8 +124,18 @@ class ReservationStore:
 
     @contextmanager
     def _request_lock(self, target: Path):
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        descriptor = os.open(target.with_suffix(".lock"), os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            try:
+                os.chmod(target.parent, 0o700)
+            except OSError:
+                pass
+            descriptor = os.open(target.with_suffix(".lock"), os.O_CREAT | os.O_RDWR, 0o600)
+        except OSError as exc:
+            raise PortLightError(
+                "state_write_failed",
+                "could not write pending reservation state",
+            ) from exc
         with os.fdopen(descriptor, "r+b") as lock:
             try:
                 if os.name == "nt":
@@ -181,7 +202,7 @@ class ReservationStore:
             try:
                 yield payload["key"]
             except PortLightError as exc:
-                if exc.code == "no_capacity":
+                if exc.code in _NON_COMMITTING_ERRORS:
                     target.unlink(missing_ok=True)
                 raise
             else:
@@ -222,8 +243,14 @@ class ReservationStore:
                     or not isinstance(parameters, dict)
                     or self._request_id(base_url, parameters) != request_id):
                 raise PortLightError("state_read_failed", "pending request does not match this server")
-            yield payload["key"], parameters
-            target.unlink(missing_ok=True)
+            try:
+                yield payload["key"], parameters
+            except PortLightError as exc:
+                if exc.code == "not_found":
+                    target.unlink(missing_ok=True)
+                raise
+            else:
+                target.unlink(missing_ok=True)
 
     def load(self, base_url: str, port: int) -> str | None:
         target = self._path(base_url, port)

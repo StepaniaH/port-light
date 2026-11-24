@@ -12,10 +12,14 @@ from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from . import __version__
-from .client import PortLightClient, PortLightError, create_client
+from .client import PortLightClient, PortLightError, create_client, validate_request_key
+from .integration import (
+    SUPPORTED_MCP_CLIENTS,
+    connection_environment,
+    mcp_configuration,
+    verify_integration,
+)
 from .state import ReservationStore
-from .integration import connection_environment, mcp_configuration, verify_integration
-from .client import validate_request_key
 from contextlib import nullcontext
 
 SCHEMA_VERSION = 1
@@ -82,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[common],
     )
     setup = commands.add_parser("mcp-config", help="print MCP configuration without writing AI settings", parents=[common])
-    setup.add_argument("--client", required=True, choices=("codex", "claude-code"))
+    setup.add_argument("--client", required=True, choices=SUPPORTED_MCP_CLIENTS)
     commands.add_parser("verify", help="verify the local MCP connection without reserving ports", parents=[common])
 
     check = commands.add_parser(
@@ -91,6 +95,26 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[common],
     )
     check.add_argument("port", type=_bounded_int(1, 65535))
+
+    occupancy = commands.add_parser(
+        "list",
+        help="list occupied and configured ports in a range",
+        parents=[common],
+    )
+    occupancy.add_argument("--start", type=_bounded_int(1, 65535), default=1)
+    occupancy.add_argument("--end", type=_bounded_int(1, 65535), default=9999)
+    occupancy.add_argument("--status", choices=("used", "configured", "unknown"))
+    occupancy.add_argument(
+        "--conflicts",
+        action="store_true",
+        help="only show ports with conflicts or rule violations",
+    )
+
+    commands.add_parser(
+        "rules",
+        help="list named port allocation rules configured on the server",
+        parents=[common],
+    )
 
     reserve = commands.add_parser(
         "reserve",
@@ -234,6 +258,82 @@ def _check(
         suffix = f" ({names})" if names else ""
         stdout.write(f"Port {port} is {status}{suffix}.\n")
     return 0 if free else 1
+
+
+def _list(
+    client: PortLightClient,
+    args: argparse.Namespace,
+    *,
+    json_output: bool,
+    stdout: TextIO,
+) -> int:
+    if args.end < args.start:
+        raise PortLightError("invalid_request", "--end must be greater than or equal to --start")
+    occupancy = client.list_occupancy(start=args.start, end=args.end, limit=None)
+    ports = list(occupancy.get("ports") or [])
+    if args.status is not None:
+        ports = [row for row in ports if row.get("status") == args.status]
+    if args.conflicts:
+        ports = [
+            row for row in ports
+            if row.get("conflict") or row.get("rule_violations")
+        ]
+    if json_output:
+        _json_write(stdout, {
+            "schema_version": SCHEMA_VERSION,
+            "ok": True,
+            "command": "list",
+            "range": {"start": args.start, "end": args.end},
+            "summary": occupancy.get("summary", {}),
+            "ports": ports,
+        })
+        return 0
+    if not ports:
+        stdout.write(f"No matching ports in {args.start}-{args.end}.\n")
+        return 0
+    for row in ports:
+        port_col = f"{row['port']}/{row.get('protocol', 'tcp')}"
+        status_col = str(row.get("status") or "unknown")
+        names = ", ".join(str(name) for name in row.get("names") or [])
+        flags: list[str] = []
+        if row.get("conflict"):
+            flags.append("conflict")
+        violations = row.get("rule_violations") or []
+        if violations:
+            flags.append("rule violation: " + ", ".join(str(item) for item in violations))
+        parts = [f"{port_col:<10} {status_col:<10}"]
+        if names:
+            parts.append(names)
+        if flags:
+            parts.append(f"[{'; '.join(flags)}]")
+        stdout.write("  ".join(parts).rstrip() + "\n")
+    return 0
+
+
+def _rules(
+    client: PortLightClient,
+    *,
+    json_output: bool,
+    stdout: TextIO,
+) -> int:
+    result = client.list_rules()
+    rules = list(result.get("rules") or [])
+    if json_output:
+        _json_write(stdout, {
+            "schema_version": SCHEMA_VERSION,
+            "ok": True,
+            "command": "rules",
+            "rules": rules,
+        })
+        return 0
+    if not rules:
+        stdout.write("No port rules configured.\n")
+        return 0
+    for rule in rules:
+        projects = ", ".join(str(project) for project in rule.get("projects") or [])
+        suffix = f"  projects: {projects}" if projects else ""
+        stdout.write(f"{rule['name']}  {rule['start']}-{rule['end']}{suffix}\n")
+    return 0
 
 
 def _peer_warning(client: PortLightClient, scope_was_default: bool) -> str | None:
@@ -409,7 +509,13 @@ def main(
     except PortLightError as exc:
         if "--json" in raw_argv:
             command = next(
-                (value for value in raw_argv if value in ("doctor", "check", "reserve", "release", "requests", "recover", "mcp-config", "verify")),
+                (
+                    value for value in raw_argv
+                    if value in (
+                        "doctor", "check", "list", "rules", "reserve",
+                        "release", "requests", "recover", "mcp-config", "verify",
+                    )
+                ),
                 None,
             )
             _json_write(stdout, _error_document(command, exc))
@@ -448,6 +554,10 @@ def main(
             return _doctor(active_client, json_output=json_output, stdout=stdout)
         if args.command == "check":
             return _check(active_client, args.port, json_output=json_output, stdout=stdout)
+        if args.command == "list":
+            return _list(active_client, args, json_output=json_output, stdout=stdout)
+        if args.command == "rules":
+            return _rules(active_client, json_output=json_output, stdout=stdout)
         if args.command == "reserve":
             return _reserve(
                 active_client,

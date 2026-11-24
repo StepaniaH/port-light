@@ -15,31 +15,48 @@ from port_light_client.client import PortLightError
 from port_light_client.state import ReservationStore
 
 
-@pytest.mark.parametrize("client", ["codex", "claude-code"])
+@pytest.mark.parametrize("client", ["codex", "claude-code", "cursor", "vscode", "gemini-cli"])
 def test_generated_config_is_parseable_private_and_repeatable(client, tmp_path, monkeypatch):
     python = str(tmp_path / 'tool "环境"' / "bin" / "python")
     monkeypatch.setattr(integration, "launch_command", lambda: [python, "-m", "port_light_client.mcp"])
     state = tmp_path / "persistent state"
     output = io.StringIO()
-    arguments = ["--url", "https://ports.example/port-light/", "mcp-config", "--client", client]
+    arguments = ["--url", "https://ports.example.invalid/port-light/", "mcp-config", "--client", client]
     env = {"PORT_LIGHT_AUTH": "secret-password", "PORT_LIGHT_AGENT_TOKEN": "secret-token",
            "PORT_LIGHT_STATE_DIR": str(state)}
     assert main(arguments, environ=env, stdout=output) == 0
     text = output.getvalue()
     assert "secret-password" not in text and "secret-token" not in text
     assert not state.exists()  # Generating a config creates no state or AI settings.
-    config = tomllib.loads(text)["mcp_servers"] if client == "codex" else json.loads(text)["mcpServers"]
+    if client == "codex":
+        config = tomllib.loads(text)["mcp_servers"]
+    elif client == "vscode":
+        config = json.loads(text)["servers"]
+    else:
+        config = json.loads(text)["mcpServers"]
     entry = config["port-light"]
     assert entry["command"] == python
-    assert entry["env"]["PORT_LIGHT_URL"] == "https://ports.example/port-light"
+    assert entry["args"] == ["-m", "port_light_client.mcp"]
+    assert entry["env"]["PORT_LIGHT_URL"] == "https://ports.example.invalid/port-light"
     assert entry["env"]["PORT_LIGHT_STATE_DIR"] == str(state)
     if client == "codex":
         assert "PORT_LIGHT_AUTH" in entry["env_vars"]
-    else:
+    elif client == "claude-code":
         assert entry["env"]["PORT_LIGHT_AUTH"] == "${PORT_LIGHT_AUTH:-}"
+    elif client == "vscode":
+        assert entry["type"] == "stdio"
+        assert "PORT_LIGHT_AUTH" not in entry["env"]
+    else:
+        assert "PORT_LIGHT_AUTH" not in entry["env"]
     again = io.StringIO()
     assert main(arguments, environ=env, stdout=again) == 0
     assert again.getvalue() == text
+
+
+def test_mcp_configuration_rejects_unsupported_client():
+    with pytest.raises(PortLightError) as caught:
+        integration.mcp_configuration("unknown-editor", {"PORT_LIGHT_URL": "https://ports.example.invalid"})
+    assert caught.value.code == "invalid_request"
 
 
 def test_launch_keeps_virtualenv_python_symlink(tmp_path, monkeypatch):
@@ -77,7 +94,12 @@ def test_verification_reports_agent_gate_failure_without_claiming_registration(t
         assert kwargs["env"]["PORT_LIGHT_AUTH"] == "private-password"
         results = [
             {"protocolVersion": integration.PROTOCOL_VERSION},
-            {"tools": [{"name": name} for name in ("doctor", "reserve_ports", "release_port", "suggest_ports")]},
+            {
+                "tools": [
+                    {"name": name}
+                    for name in ("doctor", "reserve_ports", "release_port", "suggest_ports", "list_rules")
+                ],
+            },
             {"content": [{"text": json.dumps({"overall": "healthy", "context": {"version": "0.8.3"}})}]},
             {"isError": True, "content": [{"text": json.dumps({"code": "authentication_failed", "message": "Invalid agent token"})}]},
         ]

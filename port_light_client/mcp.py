@@ -3,13 +3,15 @@
 
 Exposes Port-Light's occupancy data as agent-callable tools:
 
-    doctor           connection and scan diagnostics
-    suggest_ports    plan free ports (legacy reservation options supported)
-    reserve_ports    reserve expiring ports with privately saved credentials
-    check_port       status of one port on this host
-    list_occupancy   compact occupancy map for a range
-    port_history     recent state transitions for one port
-    release_port     drop a previous reservation
+    doctor             connection and scan diagnostics
+    suggest_ports      plan free ports (legacy reservation options supported)
+    reserve_ports      reserve expiring ports with privately saved credentials
+    check_port         status of one port on this host
+    list_occupancy     compact occupancy map for a range
+    list_rules         named port allocation rules on this server
+    port_history       recent state transitions for one port
+    list_degradations  recent degraded-scan events
+    release_port       drop a previous reservation
 
 Configuration (environment):
 
@@ -102,6 +104,11 @@ TOOLS = [
                           "default": 200},
             },
         },
+    },
+    {
+        "name": "list_rules",
+        "description": "Named port allocation rules (range and projects) configured on this server.",
+        "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "port_history",
@@ -256,6 +263,9 @@ def run_tool(name: str, args: dict) -> dict:
             end=int(args.get("end", 9999)),
             limit=int(args.get("limit", 200)),
         )
+
+    if name == "list_rules":
+        return port_light.list_rules()
 
     if name == "port_history":
         return port_light.port_history(

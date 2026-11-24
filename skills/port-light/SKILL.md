@@ -13,7 +13,8 @@ not authorize stopping another service or changing an unrelated deployment.
 ## Choose and use ports
 
 - Inspect existing mappings and check their ports before proposing replacements.
-  For planning, use `check_port` / `suggest_ports` without `reserve` or `ttl`.
+  For planning, use `check_port`, `list_occupancy`, `list_rules`, or
+  `suggest_ports` without `reserve` or `ttl`.
 - When ready to start a new service, use `reserve_ports` with a short
   `project/service` label and the needed count, range or `rule`. It claims the
   whole count or fails. The default lease is one hour; `ttl` accepts 60–604800
@@ -37,6 +38,8 @@ Never use both interfaces to reserve the same service twice.
 ```bash
 port-light doctor
 port-light check 5432
+port-light list --start 8000 --end 8999
+port-light rules
 port-light reserve --count 2 --start 8000 --end 8999 --ttl 1h --label my-project/preview
 ```
 
@@ -44,7 +47,8 @@ Record the returned port numbers. After each service stops, run
 `port-light release <port>` for that service's actual reserved port.
 
 `check` exits 0 for free and 1 for occupied/configured; an error is not a free
-port. CLI reservations also default to one hour. Persistent claims require
+port. `list` inspects range occupancy (`--status`, `--conflicts`), and `rules`
+lists named allocation ranges. CLI reservations also default to one hour. Persistent claims require
 explicit `--no-expiry`. Release uses the saved token. `--json` supplies structured
 CLI output but reservation JSON contains secret tokens: keep it out of shared logs.
 The new MCP `reserve_ports` saves tokens and omits them from tool results.
@@ -77,9 +81,10 @@ instance address only if the task and existing configuration do not identify it.
 If a web reader cannot access the instance guide, use
 https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/ai-setup.md
 with the same target URL. This does not make an unreachable LAN server accessible.
-On clients that offer it, `port-light verify` tests the local adapter and access
-without reserving ports. It does not confirm that the AI tool loaded its config;
-reload the tool and call MCP `doctor` to check that final step.
+On clients that offer it, `port-light mcp-config --client <codex|claude-code|cursor|vscode|gemini-cli>`
+prints MCP configuration without writing AI settings, and `port-light verify` tests
+the local adapter and access without reserving ports. It does not confirm that the
+AI tool loaded its config; reload the tool and call MCP `doctor` to check that final step.
 
 Report the chosen host, ports, relevant configuration changes and lease expiry
 briefly. For failures, state the cause and next action. Keep successful check

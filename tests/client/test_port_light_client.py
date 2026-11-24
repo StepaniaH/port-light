@@ -92,11 +92,199 @@ def test_check_port_uses_client_interface_and_compacts_row():
         "protocol": "tcp",
         "bind_scope": "loopback",
         "names": ["web"],
+        "conflict": False,
+        "rule_violations": [],
     }
     assert transport.requests == [
         ("GET", "/api/meta", None),
         ("GET", "/api/ports/8080?include_hidden=false", None),
     ]
+
+
+def test_compact_port_collects_deduplicated_holders_before_known_service_fallback():
+    transport = FakeTransport({
+        "port": 5432,
+        "status": "used",
+        "protocol": "tcp",
+        "bind_scope": "public",
+        "containers": [{"name": "db-primary"}, {"name": ""}, {"name": "db-primary"}],
+        "process": "postgres",
+        "manual_label": "team-db",
+        "compose_configs": [
+            {"service_name": "postgres"},
+            {"service_name": "db-replica"},
+        ],
+        "known_service": {"name": "PostgreSQL"},
+        "conflict": 1,
+        "rule_violations": [
+            {"rule": "database-tier", "project": "billing"},
+            {"rule": ""},
+            "ignored",
+        ],
+    })
+    client = PortLightClient(transport=transport)
+    assert client.check_port(5432) == {
+        "port": 5432,
+        "status": "used",
+        "protocol": "tcp",
+        "bind_scope": "public",
+        "names": ["db-primary", "postgres", "team-db", "db-replica"],
+        "conflict": True,
+        "rule_violations": ["database-tier"],
+    }
+
+    fallback_client = PortLightClient(transport=FakeTransport({
+        "port": 5432,
+        "status": "free",
+        "protocol": "tcp",
+        "bind_scope": None,
+        "containers": [],
+        "process": "",
+        "manual_label": None,
+        "compose_configs": [{"project_dir": "/srv/compose"}],
+        "known_service": {"name": "PostgreSQL"},
+    }))
+    assert fallback_client.check_port(5432)["names"] == ["PostgreSQL"]
+
+
+def test_list_occupancy_validates_all_rows_and_filters_to_requested_range():
+    transport = FakeTransport({
+        "summary": {"used": 1, "configured": 1, "free": 998},
+        "ports": [
+            {
+                "port": 22,
+                "status": "used",
+                "protocol": "tcp",
+                "bind_scope": "public",
+                "process": "sshd",
+            },
+            {
+                "port": 8080,
+                "status": "used",
+                "protocol": "tcp",
+                "bind_scope": "loopback",
+                "manual_label": "preview/api",
+                "conflict": True,
+            },
+            {
+                "port": 8443,
+                "status": "unknown",
+                "protocol": "tcp",
+                "bind_scope": None,
+                "compose_configs": [{"service_name": "gateway"}],
+                "rule_violations": [{"rule": "ingress"}],
+            },
+            {
+                "port": 19000,
+                "status": "configured",
+                "protocol": "tcp",
+                "bind_scope": "loopback",
+                "manual_label": "outside-range",
+            },
+        ],
+    })
+    client = PortLightClient(transport=transport)
+    result = client.list_occupancy(8000, 8999)
+    assert result == {
+        "summary": {"used": 1, "configured": 1, "free": 998},
+        "ports": [
+            {
+                "port": 8080,
+                "status": "used",
+                "protocol": "tcp",
+                "bind_scope": "loopback",
+                "names": ["preview/api"],
+                "conflict": True,
+                "rule_violations": [],
+            },
+            {
+                "port": 8443,
+                "status": "unknown",
+                "protocol": "tcp",
+                "bind_scope": None,
+                "names": ["gateway"],
+                "conflict": False,
+                "rule_violations": ["ingress"],
+            },
+        ],
+    }
+    assert transport.requests == [
+        ("GET", "/api/ports?range_start=8000&range_end=8999&include_hidden=false", None),
+    ]
+
+
+@pytest.mark.parametrize(("start", "end"), [
+    (0, 100),
+    (1, 65536),
+    (5000, 4999),
+    (True, 100),
+    (1, False),
+    ("1", 100),
+])
+def test_list_occupancy_rejects_invalid_ranges_before_request(start, end):
+    transport = FakeTransport()
+    client = PortLightClient(transport=transport)
+    with pytest.raises(PortLightError) as caught:
+        client.list_occupancy(start, end)
+    assert caught.value.code == "invalid_request"
+    assert transport.requests == []
+
+
+def test_list_occupancy_rejects_corrupt_out_of_range_or_duplicate_rows():
+    corrupt_outside = PortLightClient(transport=FakeTransport({
+        "summary": {},
+        "ports": [
+            {"port": 22, "status": "used", "protocol": "", "bind_scope": "public"},
+            {"port": 8080, "status": "used", "protocol": "tcp", "bind_scope": "loopback"},
+        ],
+    }))
+    with pytest.raises(PortLightError) as caught:
+        corrupt_outside.list_occupancy(8000, 8999)
+    assert caught.value.code == "invalid_response"
+
+    duplicate_rows = PortLightClient(transport=FakeTransport({
+        "summary": {},
+        "ports": [
+            {"port": 22, "status": "used", "protocol": "tcp", "bind_scope": "public"},
+            {"port": 22, "status": "configured", "protocol": "tcp", "bind_scope": "public"},
+        ],
+    }))
+    with pytest.raises(PortLightError) as caught:
+        duplicate_rows.list_occupancy(8000, 8999)
+    assert caught.value.code == "invalid_response"
+
+
+def test_list_rules_validates_and_normalizes_server_rules():
+    transport = FakeTransport({
+        "rules": [
+            {"name": "frontend", "start": 3000, "end": 3999, "projects": ["web", "docs"]},
+            {"name": "metrics", "start": 9100, "end": 9100, "projects": []},
+        ],
+    })
+    client = PortLightClient(transport=transport)
+    assert client.list_rules() == {
+        "rules": [
+            {"name": "frontend", "start": 3000, "end": 3999, "projects": ["web", "docs"]},
+            {"name": "metrics", "start": 9100, "end": 9100, "projects": []},
+        ],
+    }
+    assert transport.requests == [("GET", "/api/port-rules", None)]
+
+
+@pytest.mark.parametrize("payload", [
+    {},
+    {"rules": "invalid"},
+    {"rules": [{"name": "", "start": 3000, "end": 3999, "projects": []}]},
+    {"rules": [{"name": "bad", "start": True, "end": 3999, "projects": []}]},
+    {"rules": [{"name": "bad", "start": 4000, "end": 3999, "projects": []}]},
+    {"rules": [{"name": "bad", "start": 3000, "end": 70000, "projects": []}]},
+    {"rules": [{"name": "bad", "start": 3000, "end": 3999, "projects": [123]}]},
+])
+def test_list_rules_rejects_malformed_payloads(payload):
+    client = PortLightClient(transport=FakeTransport(payload))
+    with pytest.raises(PortLightError) as caught:
+        client.list_rules()
+    assert caught.value.code == "invalid_response"
 
 
 def test_reserve_encodes_options_and_sends_agent_token():
@@ -228,7 +416,7 @@ def test_capability_versions_must_be_integers():
 @pytest.mark.parametrize("response", [
     {},
     {"port": 9999, "status": "free"},
-    {"port": 8080, "status": "unknown"},
+    {"port": 8080, "status": "unknown", "protocol": "tcp", "bind_scope": None},
 ])
 def test_check_rejects_untrustworthy_port_responses(response):
     client = PortLightClient(transport=FakeTransport(response))
@@ -421,3 +609,130 @@ def test_named_rule_reaches_post_body():
     client.reserve_ports(rule='development', request_key='k' * 43)
     assert transport.body['rule'] == 'development'
     assert transport.requests[-1][0:2] == ('POST', '/api/reservations')
+
+
+def test_http_transport_ignores_environment_proxies(monkeypatch):
+    import urllib.request
+
+    observed = []
+
+    class OKResponse(Response):
+        code = 200
+        msg = "OK"
+
+        def info(self):
+            return {}
+
+    class CapturingHTTPHandler(urllib.request.BaseHandler):
+        def http_open(self, req):
+            observed.append((req.host, getattr(req, "_tunnel_host", None), req.get_header("Authorization")))
+            return OKResponse(b'{"status":"ok"}')
+
+    class CapturingHTTPSHandler(urllib.request.BaseHandler):
+        def __init__(self, context=None):
+            self.context = context
+
+        def https_open(self, req):
+            observed.append((req.host, getattr(req, "_tunnel_host", None), req.get_header("Authorization")))
+            return OKResponse(b'{"status":"ok"}')
+
+    monkeypatch.setattr(urllib.request, "HTTPHandler", CapturingHTTPHandler)
+    monkeypatch.setattr(urllib.request, "HTTPSHandler", CapturingHTTPSHandler)
+    for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.setenv(name, "http://192.0.2.10:3128")
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.setenv(name, "")
+
+    for scheme in ("http", "https"):
+        transport = HttpTransport(f"{scheme}://192.0.2.50:2100", basic_auth="operator:secret")
+        assert transport.request("GET", "/api/health") == {"status": "ok"}
+
+    assert observed == [
+        ("192.0.2.50:2100", None, "Basic b3BlcmF0b3I6c2VjcmV0"),
+        ("192.0.2.50:2100", None, "Basic b3BlcmF0b3I6c2VjcmV0"),
+    ]
+
+
+@pytest.mark.parametrize("code", [
+    "no_capacity",
+    "invalid_request",
+    "authentication_failed",
+    "authentication_misconfigured",
+    "unsupported_server",
+    "upgrade_required",
+    "forbidden",
+    "settings_readonly",
+])
+def test_pending_request_unlinks_journal_on_non_committing_rejection(tmp_path, code):
+    store = ReservationStore(tmp_path / "state")
+    url = "https://ports.example.invalid"
+    params = {"count": 1, "scope": "self"}
+    with pytest.raises(PortLightError):
+        with store.pending_request(url, params):
+            raise PortLightError(code, "server rejected request")
+    assert store.pending_requests(url) == []
+    if os.name != "nt":
+        assert ((tmp_path / "state" / "requests").stat().st_mode & 0o777) == 0o700
+    assert len(list((tmp_path / "state" / "requests").glob("*.lock"))) == 1
+
+
+@pytest.mark.parametrize("code", [
+    "unreachable",
+    "timeout",
+    "occupancy_unavailable",
+    "server_error",
+])
+def test_pending_request_preserves_journal_on_uncertain_failure(tmp_path, code):
+    store = ReservationStore(tmp_path / "state")
+    url = "https://ports.example.invalid"
+    params = {"count": 1, "scope": "self"}
+    seen_keys = []
+    with pytest.raises(PortLightError):
+        with store.pending_request(url, params) as key:
+            seen_keys.append(key)
+            raise PortLightError(code, "uncertain outcome")
+    assert len(store.pending_requests(url)) == 1
+    with store.pending_request(url, params) as retry_key:
+        seen_keys.append(retry_key)
+    assert seen_keys[0] == seen_keys[1]
+    assert store.pending_requests(url) == []
+
+
+def test_pending_request_serializes_concurrent_identical_callers(tmp_path):
+    store = ReservationStore(tmp_path / "state")
+    url = "https://ports.example.invalid"
+    params = {"count": 1, "scope": "self"}
+    with store.pending_request(url, params):
+        with pytest.raises(PortLightError) as caught:
+            with store.pending_request(url, params):
+                pass
+        assert caught.value.code == "reservation_in_progress"
+
+
+def test_recovery_request_cleans_up_unrecorded_pending_request_on_not_found(tmp_path):
+    store = ReservationStore(tmp_path / "state")
+    url = "https://ports.example.invalid"
+    params = {"count": 1, "scope": "self"}
+    first_key = None
+    with pytest.raises(PortLightError):
+        with store.pending_request(url, params) as key:
+            first_key = key
+            raise PortLightError("unreachable", "network drop before server received request")
+    pending = store.pending_requests(url)
+    assert len(pending) == 1
+    request_id = pending[0]["id"]
+
+    with pytest.raises(PortLightError) as transient:
+        with store.recovery_request(url, request_id):
+            raise PortLightError("unreachable", "still offline")
+    assert transient.value.code == "unreachable"
+    assert len(store.pending_requests(url)) == 1
+
+    with pytest.raises(PortLightError) as missing:
+        with store.recovery_request(url, request_id):
+            raise PortLightError("not_found", "server never recorded request")
+    assert missing.value.code == "not_found"
+    assert store.pending_requests(url) == []
+
+    with store.pending_request(url, params) as fresh_key:
+        assert fresh_key != first_key

@@ -39,6 +39,53 @@ class FakeClient:
             "range": {"start": 1, "end": 9999},
         }
         self.meta_result = {"automation": {"suggest_peers": False}}
+        self.occupancy_result = {
+            "summary": {"used": 2, "configured": 1, "free": 996},
+            "ports": [
+                {
+                    "port": 3000,
+                    "status": "used",
+                    "protocol": "tcp",
+                    "bind_scope": "loopback",
+                    "names": ["web"],
+                    "conflict": False,
+                    "rule_violations": [],
+                },
+                {
+                    "port": 5432,
+                    "status": "used",
+                    "protocol": "tcp",
+                    "bind_scope": "public",
+                    "names": ["postgres", "dev-db"],
+                    "conflict": True,
+                    "rule_violations": ["database"],
+                },
+                {
+                    "port": 8080,
+                    "status": "configured",
+                    "protocol": "tcp",
+                    "bind_scope": "loopback",
+                    "names": ["preview/api"],
+                    "conflict": False,
+                    "rule_violations": ["frontend"],
+                },
+                {
+                    "port": 9090,
+                    "status": "unknown",
+                    "protocol": "tcp",
+                    "bind_scope": None,
+                    "names": ["prometheus"],
+                    "conflict": False,
+                    "rule_violations": [],
+                },
+            ],
+        }
+        self.rules_result = {
+            "rules": [
+                {"name": "frontend", "start": 3000, "end": 3999, "projects": ["web", "docs"]},
+                {"name": "sandbox", "start": 28000, "end": 28999, "projects": []},
+            ],
+        }
 
     def doctor(self):
         self.calls.append(("doctor",))
@@ -47,6 +94,14 @@ class FakeClient:
     def check_port(self, port):
         self.calls.append(("check_port", port))
         return self.check_result
+
+    def list_occupancy(self, start=1, end=9999, *, limit=200):
+        self.calls.append(("list_occupancy", start, end, limit))
+        return self.occupancy_result
+
+    def list_rules(self):
+        self.calls.append(("list_rules",))
+        return self.rules_result
 
     def reserve_ports(self, **kwargs):
         self.calls.append(("reserve_ports", kwargs))
@@ -441,3 +496,104 @@ def test_rule_is_part_of_journal_and_allocation_request():
     assert captured[0]['rule'] == 'development'
     call = next(call for call in client.calls if call[0] == 'reserve_ports')
     assert call[1]['rule'] == 'development'
+
+
+def test_list_filters_by_status_and_conflicts_in_text_and_json():
+    client = FakeClient()
+    code, output, error = invoke(["list", "--start", "3000", "--end", "9500"], client=client)
+    assert code == 0
+    assert error == ""
+    assert ("list_occupancy", 3000, 9500, None) in client.calls
+    assert "3000/tcp" in output and "web" in output
+    assert "5432/tcp" in output and "[conflict; rule violation: database]" in output
+    assert "8080/tcp" in output and "[rule violation: frontend]" in output
+    assert "9090/tcp" in output and "unknown" in output
+
+    code, output, error = invoke(["list", "--conflicts", "--json"], client=client)
+    payload = json.loads(output)
+    assert code == 0
+    assert error == ""
+    assert payload["ok"] is True
+    assert payload["command"] == "list"
+    assert [row["port"] for row in payload["ports"]] == [5432, 8080]
+
+    code, output, _ = invoke(["list", "--status", "unknown", "--json"], client=client)
+    assert code == 0
+    assert [row["port"] for row in json.loads(output)["ports"]] == [9090]
+
+    code, output, _ = invoke(["list", "--status", "unknown", "--conflicts"], client=client)
+    assert code == 0
+    assert "No matching ports in 1-9999." in output
+
+
+def test_list_rejects_inverted_range_and_invalid_status_without_server_call():
+    client = FakeClient()
+    code, output, error = invoke(["list", "--start", "9000", "--end", "8000", "--json"], client=client)
+    payload = json.loads(output)
+    assert code == 2
+    assert error == ""
+    assert payload["command"] == "list"
+    assert payload["error"]["code"] == "invalid_request"
+    assert client.calls == []
+
+    code, output, error = invoke(["list", "--status", "free", "--json"], client=client)
+    payload = json.loads(output)
+    assert code == 2
+    assert payload["command"] == "list"
+    assert payload["error"]["code"] == "invalid_arguments"
+    assert client.calls == []
+
+
+def test_rules_supports_human_and_json_output():
+    client = FakeClient()
+    code, output, error = invoke(["rules"], client=client)
+    assert code == 0
+    assert error == ""
+    assert "frontend  3000-3999  projects: web, docs" in output
+    assert "sandbox  28000-28999" in output
+
+    code, output, _ = invoke(["rules", "--json"], client=client)
+    payload = json.loads(output)
+    assert code == 0
+    assert payload == {
+        "schema_version": 1,
+        "ok": True,
+        "command": "rules",
+        "rules": client.rules_result["rules"],
+    }
+
+    client.rules_result = {"rules": []}
+    code, output, _ = invoke(["rules"], client=client)
+    assert code == 0
+    assert output == "No port rules configured.\n"
+
+
+def test_recover_not_found_cleans_up_stale_pending_request(tmp_path):
+    from port_light_client.state import ReservationStore
+
+    store = ReservationStore(tmp_path / "state")
+    client = FakeClient()
+    client.base_url = "https://ports.example.invalid"
+
+    def fail_unreachable(**_kwargs):
+        raise PortLightError("unreachable", "connection dropped")
+
+    client.reserve_ports = fail_unreachable
+    code, _, _ = invoke(["reserve", "--label", "preview"], client=client, store=store)
+    assert code == 3
+
+    code, req_out, _ = invoke(["requests", "--json"], client=client, store=store)
+    assert code == 0
+    request_id = json.loads(req_out)["requests"][0]["id"]
+
+    def fail_not_found(_key, _params):
+        raise PortLightError("not_found", "request was never recorded", status=404)
+
+    client.recover_reservation = fail_not_found
+    code, rec_out, _ = invoke(["recover", request_id, "--json"], client=client, store=store)
+    assert code == 1
+    assert json.loads(rec_out)["error"]["code"] == "not_found"
+
+    code, req_after, _ = invoke(["requests", "--json"], client=client, store=store)
+    assert code == 0
+    assert json.loads(req_after)["requests"] == []

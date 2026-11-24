@@ -16,6 +16,7 @@ from .mcp import PROTOCOL_VERSION
 from .state import ReservationStore
 
 SECRET_VARIABLES = ("PORT_LIGHT_AUTH", "PORT_LIGHT_AGENT_TOKEN", "AGENT_TOKEN")
+SUPPORTED_MCP_CLIENTS = ("codex", "claude-code", "cursor", "vscode", "gemini-cli")
 
 
 def launch_command() -> list[str]:
@@ -45,7 +46,7 @@ def connection_environment(
 
 def mcp_configuration(client: str, environment: dict[str, str]) -> dict[str, Any]:
     command, *args = launch_command()
-    server = {"command": command, "args": args, "env": environment}
+    server: dict[str, Any] = {"command": command, "args": args, "env": dict(environment)}
     if client == "codex":
         lines = ["[mcp_servers.port-light]", f"command = {json.dumps(command, ensure_ascii=False)}",
                  f"args = {json.dumps(args, ensure_ascii=False)}",
@@ -56,7 +57,14 @@ def mcp_configuration(client: str, environment: dict[str, str]) -> dict[str, Any
         server["env"] = {**environment, **{key: "${" + key + ":-}" for key in SECRET_VARIABLES}}
         return {"client": client, "format": "json",
                 "config": json.dumps({"mcpServers": {"port-light": server}}, indent=2, ensure_ascii=False) + "\n"}
-    raise PortLightError("invalid_request", "supported AI clients: codex, claude-code")
+    if client in ("cursor", "gemini-cli"):
+        return {"client": client, "format": "json",
+                "config": json.dumps({"mcpServers": {"port-light": server}}, indent=2, ensure_ascii=False) + "\n"}
+    if client == "vscode":
+        vscode_server = {"type": "stdio", "command": command, "args": args, "env": dict(environment)}
+        return {"client": client, "format": "json",
+                "config": json.dumps({"servers": {"port-light": vscode_server}}, indent=2, ensure_ascii=False) + "\n"}
+    raise PortLightError("invalid_request", f"supported AI clients: {', '.join(SUPPORTED_MCP_CLIENTS)}")
 
 
 def verify_integration(environment: dict[str, str], environ: Mapping[str, str], store: ReservationStore) -> dict:
@@ -93,7 +101,7 @@ def verify_integration(environment: dict[str, str], environ: Mapping[str, str], 
         if rows[0]["result"]["protocolVersion"] != PROTOCOL_VERSION:
             raise ValueError("Unexpected protocol version")
         names = {tool["name"] for tool in rows[1]["result"]["tools"]}
-        if not {"doctor", "reserve_ports", "release_port", "suggest_ports"} <= names:
+        if not {"doctor", "reserve_ports", "release_port", "suggest_ports", "list_rules"} <= names:
             raise ValueError("Missing tools")
         checks = [{"id": "mcp", "status": "pass", "detail": "Adapter started; handshake and tool discovery passed"},
                   {"id": "state", "status": "pass", "detail": "Reservation state directory is writable"}]

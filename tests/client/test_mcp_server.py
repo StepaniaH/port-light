@@ -38,6 +38,10 @@ class FakeClient:
         self.calls.append(("list_occupancy", kwargs))
         return {"summary": {"scan_complete": True}, "ports": []}
 
+    def list_rules(self):
+        self.calls.append(("list_rules",))
+        return {"rules": [{"name": "frontend", "start": 3000, "end": 3999, "projects": ["web"]}]}
+
     def port_history(self, port, *, hours):
         self.calls.append(("port_history", port, hours))
         return {"port": port, "events": []}
@@ -115,17 +119,25 @@ def test_client_factory_reports_invalid_timeout(monkeypatch):
 
 def test_tools_list_exposes_all_tools():
     reply = session().handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-    names = {tool["name"] for tool in reply["result"]["tools"]}
-    assert names == {
+    tools = {tool["name"]: tool for tool in reply["result"]["tools"]}
+    assert set(tools) == {
         "suggest_ports",
         "check_port",
         "list_occupancy",
+        "list_rules",
         "port_history",
         "list_degradations",
         "release_port",
         "doctor",
         "reserve_ports",
     }
+    assert tools["list_rules"]["inputSchema"] == {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+    assert tools["list_rules"]["annotations"]["readOnlyHint"] is True
+    assert tools["list_rules"]["annotations"]["destructiveHint"] is False
 
 
 def test_notification_returns_nothing():
@@ -169,13 +181,16 @@ def test_list_history_and_degradations_use_shared_client(fake_client):
         "end": 2000,
         "limit": 10,
     }))
+    rules = tool_data(call_tool("list_rules"))
     history = tool_data(call_tool("port_history", {"port": 1234, "hours": 48}))
     degradations = tool_data(call_tool("list_degradations"))
     assert occupancy["summary"]["scan_complete"] is True
+    assert rules == {"rules": [{"name": "frontend", "start": 3000, "end": 3999, "projects": ["web"]}]}
     assert history == {"port": 1234, "events": []}
     assert degradations["degradations"][0]["source"] == "docker"
     assert fake_client.calls == [
         ("list_occupancy", {"start": 1000, "end": 2000, "limit": 10}),
+        ("list_rules",),
         ("port_history", 1234, 48),
         ("health",),
     ]
@@ -306,6 +321,7 @@ def test_release_failure_keeps_token_and_cleanup_failure_reports_remote_success(
 @pytest.mark.parametrize(('name', 'arguments'), [
     ('check_port', {}), ('check_port', {'port': True}),
     ('check_port', {'port': '8000'}), ('check_port', {'port': 65536}),
+    ('list_rules', {'rule': 'frontend'}),
     ('reserve_ports', {'ttl': None}), ('reserve_ports', {'ttl': 0}),
     ('reserve_ports', {'reserve': False}), ('reserve_ports', []),
     ('suggest_ports', {'reserve': 'false'}), ('suggest_ports', {'scope': 'unknown'}),
