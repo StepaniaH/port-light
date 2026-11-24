@@ -453,7 +453,10 @@
         "fact_stale": "古いデータ",
         "observations_events": "変更記録",
         "port_count": "{count} ポート",
-        "problem_count": "{count} 件"
+        "problem_count": "{count} 件",
+        "delete_report": "削除",
+        "clear_reports": "保存済みレポートをすべて削除",
+        "report_quota": "{used} / {limit} 件保存済み"
       },
       "settings": {
         "ai_title": "AI 接続",
@@ -655,7 +658,8 @@
     "portDesc": "ポート ↓",
     "nameAsc": "名前 A–Z",
     "nameDesc": "名前 Z–A",
-    "byStatus": "状態"
+    "byStatus": "状態",
+    "conflicts": "競合"
   },
   "scanner": {
     "diagnostics": {
@@ -746,7 +750,8 @@
     "publicBindHint": "0.0.0.0 はすべてのローカル IPv4 アドレス、:: はすべてのローカル IPv6 アドレスを表します。外部から接続できるかどうかは、ファイアウォールとネットワーク設定にも依存します。",
     "remoteReadOnly": "読み取り専用 — このマップは {name} のものです。非表示・ラベル・追加はこのマシンにだけ効きます。",
     "expiresIn": "{time}後に失効",
-    "reservationHint": "この予約を変更または解放するには、作成時に返されたトークンが必要です。"
+    "reservationHint": "この予約を変更または解放するには、作成時に返されたトークンが必要です。",
+    "otherMachines": "ほかのマシン"
   },
   "hosts": {
     "title": "ほかのマシン",
@@ -1100,7 +1105,8 @@
         "none": "有効なリースはありません。",
         "release": "解放",
         "remaining": "残り{time}",
-        "tokenPrompt": "予約トークンを貼り付けてください"
+        "tokenPrompt": "予約トークンを貼り付けてください",
+        "releaseFailed": "予約を解放できませんでした。トークンを確認してもう一度お試しください。"
       }
     },
     "bindFamilies": "アドレスファミリー"
@@ -1257,7 +1263,8 @@
     "ownershipTitle": "予約の解除権限",
     "conflictsEmpty": "設定の競合はありません。",
     "rulesEmpty": "ポートルールはまだありません。",
-    "reservationsEmpty": "予約済みのポートはありません。"
+    "reservationsEmpty": "予約済みのポートはありません。",
+    "discardPending": "保留中のリクエストを破棄"
   },
   "preview": {
     "nasName": "NAS · メディアとストレージ",

@@ -453,7 +453,10 @@
         "fact_stale": "Stale",
         "observations_events": "Recorded changes",
         "port_count": "{count} ports",
-        "problem_count": "{count} findings"
+        "problem_count": "{count} findings",
+        "delete_report": "Delete",
+        "clear_reports": "Clear saved reports",
+        "report_quota": "{used} / {limit} saved"
       },
       "settings": {
         "ai_title": "AI connections",
@@ -655,7 +658,8 @@
     "portDesc": "Port ↓",
     "nameAsc": "Name A–Z",
     "nameDesc": "Name Z–A",
-    "byStatus": "Status"
+    "byStatus": "Status",
+    "conflicts": "Conflicts"
   },
   "scanner": {
     "diagnostics": {
@@ -746,7 +750,8 @@
     "publicBindHint": "0.0.0.0 binds all local IPv4 addresses; :: binds all local IPv6 addresses. External access still depends on firewall and network configuration.",
     "remoteReadOnly": "Read-only — this map is from {name}. Hide, labels, and add stay on this machine.",
     "expiresIn": "Expires in {time}",
-    "reservationHint": "This reservation can only be changed or released with the token returned when it was created."
+    "reservationHint": "This reservation can only be changed or released with the token returned when it was created.",
+    "otherMachines": "Other machines"
   },
   "hosts": {
     "title": "Other machines",
@@ -1101,7 +1106,8 @@
         "none": "No active leases.",
         "release": "Release",
         "remaining": "{time} left",
-        "tokenPrompt": "Paste the reservation token"
+        "tokenPrompt": "Paste the reservation token",
+        "releaseFailed": "Could not release that reservation. Check the token and try again."
       }
     }
   },
@@ -1257,7 +1263,8 @@
     "ownershipTitle": "Reservation access",
     "conflictsEmpty": "No configuration conflicts found.",
     "rulesEmpty": "No port rules yet.",
-    "reservationsEmpty": "No reserved ports yet."
+    "reservationsEmpty": "No reserved ports yet.",
+    "discardPending": "Discard pending request"
   },
   "preview": {
     "nasName": "NAS · Media & storage",

@@ -35,3 +35,36 @@ test('unlock aborts a pending poll and does not reuse its conditional cache', as
   assert.equal((await pending).stale, true);
   assert.equal((await fetchPorts()).ok, true);
 });
+
+test('failed isolated unlock probe preserves the conditional poll ETag and cached body', async () => {
+  S.rangeStart = 42200;
+  S.rangeEnd = 42210;
+  S.showHidden = false;
+  S.hiddenUnlock = '';
+  const cached = { ports: [{ port: 42200, status: 'used' }], summary: { hidden_locked: true } };
+  globalThis.fetch = async () => new Response(JSON.stringify(cached), { headers: { etag: '"poll-etag"' } });
+  await fetchPorts();
+
+  S.showHidden = true;
+  S.hiddenUnlock = 'wrong-password';
+  globalThis.fetch = async (_url, opts) => {
+    assert.equal(opts.headers['If-None-Match'], undefined);
+    assert.equal(opts.headers['X-Hidden-Unlock'], 'wrong-password');
+    return new Response(JSON.stringify({ ports: [], summary: { hidden_locked: true } }), {
+      headers: { etag: '"probe-etag"' },
+    });
+  };
+  await fetchPorts({ isolated: true });
+
+  S.showHidden = false;
+  S.hiddenUnlock = '';
+  let seenIfNoneMatch = null;
+  globalThis.fetch = async (_url, opts) => {
+    seenIfNoneMatch = opts.headers['If-None-Match'];
+    return new Response(null, { status: 304 });
+  };
+  const resumed = await fetchPorts();
+  assert.equal(seenIfNoneMatch, '"poll-etag"');
+  assert.equal(resumed.unchanged, true);
+  assert.deepEqual(resumed.data, cached);
+});

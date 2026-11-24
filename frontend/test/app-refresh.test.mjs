@@ -13,7 +13,7 @@ const coordinator = source.slice(start, end);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const data = { ports: [], summary: { hidden_locked: false } };
 
-function createApp(fetchOccupancy) {
+function createApp(fetchOccupancy, options = {}) {
   const listeners = {};
   const streams = [];
   const document = { hidden: false };
@@ -28,10 +28,13 @@ function createApp(fetchOccupancy) {
     lockedHitCache: {}, lockedHitInflight: {}, hostRetrying: {},
   };
   const app = runInNewContext(coordinator + '\n({loadPorts, tick, startEventStream, syncEventStream, inFlight: () => refreshInFlight})', {
-    S, refreshFleet, hasPeers: () => true, usesFocusedHostView: () => false,
+    S, refreshFleet, hasPeers: options.hasPeers || (() => true), usesFocusedHostView: () => false,
     listedHosts: () => ['local', 'peer1', 'peer2', 'peer3'].map(id => ({ id })),
+    fetchPorts: options.fetchPorts || (opts => fetchOccupancy('local', opts)),
     fetchHostOccupancy: fetchOccupancy,
-    fetchHostHealth: async () => ({ scanners: {} }),
+    fetchHostHealth: options.fetchHostHealth || (async () => ({ scanners: {} })),
+    renderScanners: options.renderScanners || (() => {}),
+    grid: { setAttribute() {} },
     dataForHost: id => S.hostMaps[id]?.data || null,
     hostBoards: { querySelectorAll: () => [] }, modalOpen: () => false,
     occupancyFingerprint: () => 'snapshot', render() {}, markRefreshed() {}, setSyncError() {},
@@ -132,4 +135,71 @@ test('local events remain local when a remote machine is focused and respect aut
   S.route.name = 'settings';
   listeners.refresh();
   assert.deepEqual(fetched, ['local']);
+});
+
+test('304 Not Modified polls skip /health until occupancy changes, degrades, or is manually refreshed', async () => {
+  const healthCalls = [];
+  let mode = 'initial';
+  const healthy = { ports: [], summary: { scan_complete: true, stale: false, sources: { listen: 'ok' } } };
+  const degraded = { ports: [], summary: { scan_complete: false, stale: true, sources: { listen: 'failed' } } };
+  const { app } = createApp(
+    async id => {
+      if (mode === 'initial' || mode === 'changed') return { ok: true, data: healthy };
+      if (mode === 'degraded-304') return { ok: true, unchanged: true, data: degraded };
+      return { ok: true, unchanged: true, data: healthy };
+    },
+    {
+      fetchHostHealth: async id => {
+        healthCalls.push(id);
+        return { scanners: { proc: true, listen_source: 'proc' } };
+      },
+    },
+  );
+
+  await app.tick();
+  assert.deepEqual(healthCalls, ['local', 'peer1', 'peer2', 'peer3']);
+
+  healthCalls.length = 0;
+  mode = 'unchanged';
+  await app.tick();
+  assert.deepEqual(healthCalls, [], 'idle 304 poll must not re-fetch /health');
+
+  await app.tick({ manual: true });
+  assert.deepEqual(healthCalls, ['local', 'peer1', 'peer2', 'peer3'], 'manual refresh re-checks /health');
+
+  healthCalls.length = 0;
+  mode = 'degraded-304';
+  await app.tick();
+  assert.deepEqual(healthCalls, ['local', 'peer1', 'peer2', 'peer3'], 'non-ok scanner summary refreshes /health');
+
+  healthCalls.length = 0;
+  mode = 'changed';
+  await app.tick();
+  assert.deepEqual(healthCalls, ['local', 'peer1', 'peer2', 'peer3'], 'changed occupancy refreshes /health');
+});
+
+test('single-host 304 polls also reuse cached scanner health', async () => {
+  let healthCount = 0;
+  let unchanged = false;
+  const snapshot = { ports: [], summary: { scan_complete: true, stale: false } };
+  const { app } = createApp(
+    async () => ({ ok: true, unchanged, data: snapshot }),
+    {
+      hasPeers: () => false,
+      fetchHostHealth: async () => {
+        healthCount += 1;
+        return { scanners: { proc: true, listen_source: 'ss' } };
+      },
+    },
+  );
+
+  await app.tick();
+  assert.equal(healthCount, 1);
+
+  unchanged = true;
+  await app.tick();
+  assert.equal(healthCount, 1);
+
+  await app.tick({ manual: true });
+  assert.equal(healthCount, 2);
 });

@@ -5,7 +5,7 @@ import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
 const { S } = await import('../js/state.js?v=' + version);
-const { bindAddressView, buildSearchContext, renderGrid, renderHostBoards, renderSummary, renderScanners } = await import('../js/grid.js?v=' + version);
+const { bindAddressView, buildSearchContext, matchesFilter, renderGrid, renderHostBoards, renderSummary, renderScanners, snapshotGridFocus } = await import('../js/grid.js?v=' + version);
 
 test('machine descriptions are optional escaped text below each title', () => {
   const previous = { settings: S.settings, hostCatalog: S.hostCatalog, hostMaps: S.hostMaps, focusHostId: S.focusHostId };
@@ -138,5 +138,67 @@ test('bind address accessibility labels use complete locale templates', () => {
     }
   } finally {
     window.PortLightI18n = previous;
+  }
+});
+
+test('collapsed grouped runs surface rule violation badges and preserve summary focus across multi-host refreshes', () => {
+  const previous = {
+    groupMode: S.groupMode,
+    kindFilters: new Set(S.kindFilters),
+    hostCatalog: S.hostCatalog,
+    hostMaps: S.hostMaps,
+    focusHostId: S.focusHostId,
+    settings: S.settings,
+  };
+  const boards = document.getElementById('host-boards');
+  try {
+    S.groupMode = 'project';
+    S.kindFilters = new Set();
+    S.settings = { ...S.settings, host_layout: 'waterfall' };
+    const cfg = { project_name: 'stack', project_dir: 'apps/stack', service_name: 'worker' };
+    const makeRun = (start, violating) => Array.from({ length: 5 }, (_, i) => ({
+      port: start + i,
+      status: 'configured',
+      protocol: 'tcp',
+      compose_configs: [cfg],
+      rule_violations: violating ? [{ project: 'stack', service: 'worker', rule: 'apps', start: 30000, end: 30999 }] : [],
+    }));
+    S.hostCatalog = {
+      local: { id: 'local', name: 'Hub', local: true },
+      peers: [{ id: 'peer0001', name: 'Worker Node' }],
+    };
+    S.hostMaps = {
+      local: { data: { ports: makeRun(8000, false), summary: { scan_complete: true, used: 0, configured: 5, free: 90 } } },
+      peer0001: { data: { ports: makeRun(8000, true), summary: { scan_complete: true, used: 0, configured: 5, free: 90 } } },
+    };
+    S.focusHostId = 'local';
+
+    renderHostBoards();
+    const peerSummary = boards.querySelector('#host-grid-peer0001 details[data-run] > summary');
+    assert.ok(peerSummary, 'peer collapsed run summary rendered');
+    assert.ok(peerSummary.querySelector('.port-run-rule'), 'rule violation badge rendered on collapsed summary');
+    assert.match(document.getElementById('host-grid-peer0001').innerHTML, /manage\.outsideRule/);
+    assert.doesNotMatch(document.getElementById('host-grid-local').innerHTML, /manage\.outsideRule/);
+
+    peerSummary.focus();
+    assert.deepEqual(snapshotGridFocus(), {
+      run: peerSummary.parentNode.getAttribute('data-run'),
+      host: 'peer0001',
+    });
+
+    renderHostBoards();
+    const refreshedPeerSummary = boards.querySelector('#host-grid-peer0001 details[data-run] > summary');
+    assert.equal(document.activeElement, refreshedPeerSummary, 'focus stays on the same host run summary');
+
+    S.kindFilters = new Set(['conflicts']);
+    assert.equal(matchesFilter({ status: 'configured', conflict: false, rule_violations: [{ rule: 'apps' }] }), true);
+    assert.equal(matchesFilter({ status: 'configured', conflict: false, rule_violations: [] }), false);
+    renderHostBoards();
+    assert.match(boards.querySelector('#host-grid-local').innerHTML, /grid\.empty/);
+    assert.ok(boards.querySelector('#host-grid-peer0001 details[data-run]'));
+  } finally {
+    Object.assign(S, previous);
+    boards.innerHTML = '';
+    document.activeElement = null;
   }
 });

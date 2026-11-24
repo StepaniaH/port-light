@@ -1026,7 +1026,18 @@ a:focus-visible,
 .tag.running { background: var(--tag-running-bg); color: var(--free); }
 .tag.paused, .tag.restarting { background: var(--tag-configured-bg); color: var(--configured); }
 .tag.exited, .tag.created, .tag.dead, .tag.removing { background: var(--tag-exited-bg); color: var(--danger); }
-.tag.scope { background: var(--card); border: 1px solid var(--border); color: var(--text-dim); }
+.tag.scope, .tag.unknown { background: var(--card); border: 1px solid var(--border); color: var(--text-dim); }
+.detail-other-machines { margin-top: 4px; }
+.detail-other-machine {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 7px 8px; margin: 0 -8px; border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: inherit; text-decoration: none; font-size: 0.84rem;
+}
+.detail-other-machine:last-child { border-bottom: 0; }
+.detail-other-machine:hover { background: var(--card-hover); }
+.detail-other-name { font-weight: 550; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-other-meta { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-shrink: 0; max-width: 65%; }
+.detail-other-holder { color: var(--text-dim); font-size: 0.78rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .info-box {
   margin-top: 12px; padding: 10px 12px; border-radius: var(--radius-sm);

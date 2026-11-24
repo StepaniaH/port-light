@@ -1,8 +1,8 @@
 /* Host catalog, occupancy selectors, and route URLs. */
 
-import { S } from './state.js?v=121';
-import { t } from './text.js?v=121';
-import { usesFocusedFleet } from './fleet.js?v=121';
+import { S } from './state.js?v=122';
+import { t } from './text.js?v=122';
+import { usesFocusedFleet } from './fleet.js?v=122';
 
   export function hasPeers() {
     return !!(S.hostCatalog.peers && S.hostCatalog.peers.length);

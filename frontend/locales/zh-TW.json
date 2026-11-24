@@ -453,7 +453,10 @@
         "fact_stale": "已過期",
         "observations_events": "變更紀錄",
         "port_count": "{count} 個連接埠",
-        "problem_count": "{count} 項"
+        "problem_count": "{count} 項",
+        "delete_report": "刪除",
+        "clear_reports": "清除已儲存報告",
+        "report_quota": "已儲存 {used} / {limit}"
       },
       "settings": {
         "ai_title": "AI 連線",
@@ -655,7 +658,8 @@
     "portDesc": "連接埠 ↓",
     "nameAsc": "名稱 A–Z",
     "nameDesc": "名稱 Z–A",
-    "byStatus": "狀態"
+    "byStatus": "狀態",
+    "conflicts": "衝突"
   },
   "scanner": {
     "diagnostics": {
@@ -746,7 +750,8 @@
     "publicBindHint": "0.0.0.0 表示所有本機 IPv4 位址，:: 表示所有本機 IPv6 位址；是否能從外部存取仍取決於防火牆與網路設定。",
     "remoteReadOnly": "唯讀 — 這張佔用圖來自 {name}。隱藏、標籤與新增仍只作用於此機器。",
     "expiresIn": "{time} 後到期",
-    "reservationHint": "此預約只能使用建立時傳回的憑證修改或釋放。"
+    "reservationHint": "此預約只能使用建立時傳回的憑證修改或釋放。",
+    "otherMachines": "其他機器"
   },
   "hosts": {
     "title": "其他機器",
@@ -1100,7 +1105,8 @@
         "none": "目前沒有活躍租約。",
         "release": "釋放",
         "remaining": "剩餘 {time}",
-        "tokenPrompt": "貼上預約憑證"
+        "tokenPrompt": "貼上預約憑證",
+        "releaseFailed": "無法釋放該預約。請檢查憑證後重試。"
       }
     },
     "bindFamilies": "位址類型"
@@ -1257,7 +1263,8 @@
     "ownershipTitle": "預留的釋放權限",
     "conflictsEmpty": "未發現設定衝突。",
     "rulesEmpty": "尚無連接埠規則。",
-    "reservationsEmpty": "尚無預留連接埠。"
+    "reservationsEmpty": "尚無預留連接埠。",
+    "discardPending": "放棄待處理請求"
   },
   "preview": {
     "nasName": "NAS · 媒體與儲存",

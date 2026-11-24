@@ -1,15 +1,15 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { groupPorts, portRuns } from './port-groups.js?v=121';
-import { S } from './state.js?v=121';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=121';
-import { KIND_MATCHERS } from './kinds.js?v=121';
-import { isLease } from './leases.js?v=121';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=121';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=121';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=121';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=121';
-import { api } from './api.js?v=121';
+import { groupPorts, portRuns } from './port-groups.js?v=122';
+import { S } from './state.js?v=122';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=122';
+import { KIND_MATCHERS } from './kinds.js?v=122';
+import { isLease } from './leases.js?v=122';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=122';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=122';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=122';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=122';
+import { api } from './api.js?v=122';
 
 const expandedRuns = new Set();
 const boardSizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
@@ -24,7 +24,10 @@ function sizeHostBoard(board) {
 
   export function syncFilterUI() {
     document.querySelectorAll('#filters .chip').forEach(function (c) {
-      const on = S.kindFilters.has(c.dataset.filter);
+      const key = (c.dataset && (c.dataset.filter || c.dataset.kind))
+        || c.getAttribute('data-filter')
+        || c.getAttribute('data-kind');
+      const on = S.kindFilters.has(key);
       c.classList.toggle('active', on);
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
@@ -42,8 +45,38 @@ function sizeHostBoard(board) {
 
   export function snapshotGridFocus() {
     const el = document.activeElement;
-    if (!el || !el.classList || !el.classList.contains('port-cell')) return null;
-    return { port: el.getAttribute('data-port'), host: el.getAttribute('data-host') || 'local' };
+    if (!el) return null;
+    if ((el.classList && el.classList.contains('port-cell')) || (el.closest && el.closest('.port-cell') === el)) {
+      return { port: el.getAttribute('data-port'), host: el.getAttribute('data-host') || 'local' };
+    }
+    if (String(el.tagName || '').toLowerCase() === 'summary' && el.closest) {
+      const detail = el.closest('details[data-run]');
+      if (detail && detail.querySelector('summary') === el) {
+        const host = detail.getAttribute('data-host')
+          || detail.closest('[data-host]')?.getAttribute('data-host')
+          || 'local';
+        return { run: detail.getAttribute('data-run'), host: host };
+      }
+    }
+    return null;
+  }
+
+  export function restoreGridFocus(rootEl, hostId, snap) {
+    if (!rootEl || !snap) return;
+    const targetHost = hostId || 'local';
+    if (snap.host && snap.host !== targetHost) return;
+    if (snap.port) {
+      const again = rootEl.querySelector('.port-cell[data-port="' + snap.port + '"]');
+      if (again) again.focus({ preventScroll: true });
+      return;
+    }
+    if (snap.run) {
+      const detail = Array.from(rootEl.querySelectorAll('details[data-run]')).find(
+        el => el.getAttribute('data-run') === snap.run
+      );
+      const summaryEl = detail && detail.querySelector('summary');
+      if (summaryEl) summaryEl.focus({ preventScroll: true });
+    }
   }
 
   export function applyPendingGridFocus() {
@@ -620,13 +653,8 @@ function sizeHostBoard(board) {
 
     displayPorts = sortPorts(displayPorts.slice());
 
-    let restorePort = restore && restore.port;
-    let restoreHost = restore && restore.host;
-    if (!restore && document.activeElement && document.activeElement.classList &&
-        document.activeElement.classList.contains('port-cell')) {
-      restorePort = document.activeElement.getAttribute('data-port');
-      restoreHost = document.activeElement.getAttribute('data-host') || hostId;
-    }
+    const focusSnap = restore !== undefined ? restore : snapshotGridFocus();
+    const restorePort = focusSnap && (!focusSnap.host || focusSnap.host === hostId) ? focusSnap.port : null;
 
     const cellSelected = function (p) {
       return p.port === S.selectedPort && (S.selectedHostId || 'local') === hostId;
@@ -693,7 +721,6 @@ function sizeHostBoard(board) {
         '<div class="cell-meta"><span class="indicator"></span>' + protoBadge + accessBadge + leaseBadge + ruleBadge + statusText + '</div>' +
         '</button>';
     };
-    const focusedRun = document.activeElement?.closest?.('details[data-run]')?.dataset.run;
     rootEl._portRuns = new Map();
     rootEl._renderPortRun = run => sortPorts(run.slice()).map(renderCell).join('');
     if (!rootEl._runListener) {
@@ -701,10 +728,12 @@ function sizeHostBoard(board) {
       rootEl.addEventListener('toggle', event => {
         const detail = event.target;
         if (!detail.matches?.('details[data-run]')) return;
-        const run = rootEl._portRuns.get(detail.dataset.run);
+        const runKey = detail.getAttribute('data-run');
+        const run = rootEl._portRuns.get(runKey);
         const container = detail.querySelector('.group-ports');
         if (!run || !container) return;
-        const key = hostId + ':' + detail.dataset.run;
+        const runHost = detail.getAttribute('data-host') || hostId;
+        const key = runHost + ':' + runKey;
         if (detail.open) {
           expandedRuns.add(key);
           if (expandedRuns.size > 1024) expandedRuns.delete(expandedRuns.values().next().value);
@@ -712,31 +741,25 @@ function sizeHostBoard(board) {
         } else { expandedRuns.delete(key); container.innerHTML = ''; }
       }, true);
     }
-    const opened = new Set(Array.from(rootEl.querySelectorAll('details[data-run][open]')).map(el => el.dataset.run));
+    const opened = new Set(Array.from(rootEl.querySelectorAll('details[data-run][open]')).map(el => el.getAttribute('data-run')));
     if (S.groupMode && S.groupMode !== 'none' && !S.searchTerm && S.searchPortNum === null) {
       rootEl.innerHTML = groupPorts(displayPorts, S.groupMode).map(group => '<section class="port-group"><h3>' +
         escapeHtml(group.label || t('manage.other')) + '</h3><div class="group-ports">' + sortPortRuns(group.rows).map(run => {
           if (run.length < 4) return rootEl._renderPortRun(run);
           const key = group.key + ':' + run[0].port;
           rootEl._portRuns.set(key, run);
-          const open = opened.has(key) || expandedRuns.has(hostId + ':' + key) || run.some(p => p.port === S.selectedPort || String(p.port) === String(restorePort));
-          return '<details class="port-run" data-run="' + escapeHtml(key) + '"' + (open ? ' open' : '') + '><summary>' +
+          const open = opened.has(key) || expandedRuns.has(hostId + ':' + key) || run.some(p => cellSelected(p) || String(p.port) === String(restorePort));
+          return '<details class="port-run" data-run="' + escapeHtml(key) + '" data-host="' + escapeHtml(hostId) + '"' + (open ? ' open' : '') + '><summary>' +
             '<span class="port-run-heading"><strong>' + run[0].port + '–' + run.at(-1).port + '</strong><span>' +
             escapeHtml(t('manage.portCount', { count: run.length })) + '</span><span class="port-run-state">' +
             escapeHtml(t('status.' + run[0].status)) + '</span>' +
-            (run[0].conflict ? '<span class="port-run-conflict">' + escapeHtml(t('manage.conflicts')) + '</span>' : '') + '</span>' +
+            (run[0].conflict ? '<span class="port-run-conflict">' + escapeHtml(t('manage.conflicts')) + '</span>' : '') +
+            (run[0].rule_violations?.length ? '<span class="port-run-conflict port-run-rule">' + escapeHtml(t('manage.outsideRule')) + '</span>' : '') + '</span>' +
             '</summary><div class="group-ports">' + (open ? rootEl._renderPortRun(run) : '') + '</div></details>';
         }).join('') + '</div></section>').join('');
     } else rootEl.innerHTML = displayPorts.map(renderCell).join('');
 
-    if (focusedRun && !restorePort) {
-      const detail = Array.from(rootEl.querySelectorAll('details[data-run]')).find(el => el.dataset.run === focusedRun);
-      detail?.querySelector('summary')?.focus({ preventScroll: true });
-    }
-    if (restorePort && (!restoreHost || restoreHost === hostId)) {
-      const again = rootEl.querySelector('.port-cell[data-port="' + restorePort + '"]');
-      if (again) again.focus({ preventScroll: true });
-    }
+    restoreGridFocus(rootEl, hostId, focusSnap);
   }
 
   export function renderScanners(scanners, hostEl, data) {

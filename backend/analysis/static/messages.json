@@ -443,7 +443,10 @@
       "fact_stale": "Stale",
       "observations_events": "Recorded changes",
       "port_count": "{count} ports",
-      "problem_count": "{count} findings"
+      "problem_count": "{count} findings",
+      "delete_report": "Delete",
+      "clear_reports": "Clear saved reports",
+      "report_quota": "{used} / {limit} saved"
     },
     "settings": {
       "ai_title": "AI connections",
@@ -977,7 +980,10 @@
       "fact_stale": "已过期",
       "observations_events": "变化记录",
       "port_count": "{count} 个端口",
-      "problem_count": "{count} 项"
+      "problem_count": "{count} 项",
+      "delete_report": "删除",
+      "clear_reports": "清空已保存报告",
+      "report_quota": "已保存 {used} / {limit}"
     },
     "settings": {
       "ai_title": "AI 连接",
@@ -1511,7 +1517,10 @@
       "fact_stale": "已過期",
       "observations_events": "變更紀錄",
       "port_count": "{count} 個連接埠",
-      "problem_count": "{count} 項"
+      "problem_count": "{count} 項",
+      "delete_report": "刪除",
+      "clear_reports": "清除已儲存報告",
+      "report_quota": "已儲存 {used} / {limit}"
     },
     "settings": {
       "ai_title": "AI 連線",
@@ -2045,7 +2054,10 @@
       "fact_stale": "Veraltet",
       "observations_events": "Erfasste Änderungen",
       "port_count": "{count} Ports",
-      "problem_count": "{count} Befunde"
+      "problem_count": "{count} Befunde",
+      "delete_report": "Löschen",
+      "clear_reports": "Gespeicherte Berichte löschen",
+      "report_quota": "{used} / {limit} gespeichert"
     },
     "settings": {
       "ai_title": "KI-Verbindungen",
@@ -2579,7 +2591,10 @@
       "fact_stale": "Desactualizada",
       "observations_events": "Cambios registrados",
       "port_count": "{count} puertos",
-      "problem_count": "{count} hallazgos"
+      "problem_count": "{count} hallazgos",
+      "delete_report": "Eliminar",
+      "clear_reports": "Borrar informes guardados",
+      "report_quota": "{used} / {limit} guardados"
     },
     "settings": {
       "ai_title": "Conexiones de IA",
@@ -3113,7 +3128,10 @@
       "fact_stale": "Obsolète",
       "observations_events": "Changements enregistrés",
       "port_count": "{count} ports",
-      "problem_count": "{count} constats"
+      "problem_count": "{count} constats",
+      "delete_report": "Supprimer",
+      "clear_reports": "Effacer les rapports enregistrés",
+      "report_quota": "{used} / {limit} enregistrés"
     },
     "settings": {
       "ai_title": "Connexions IA",
@@ -3647,7 +3665,10 @@
       "fact_stale": "古いデータ",
       "observations_events": "変更記録",
       "port_count": "{count} ポート",
-      "problem_count": "{count} 件"
+      "problem_count": "{count} 件",
+      "delete_report": "削除",
+      "clear_reports": "保存済みレポートをすべて削除",
+      "report_quota": "{used} / {limit} 件保存済み"
     },
     "settings": {
       "ai_title": "AI 接続",

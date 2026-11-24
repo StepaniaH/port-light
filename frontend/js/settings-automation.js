@@ -1,9 +1,9 @@
 /* Automation examples, activity, and lease controls. */
-import { S } from './state.js?v=121';
-import { t, escapeHtml } from './text.js?v=121';
-import { api } from './api.js?v=121';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=121';
-import { settingsCard, kvRow } from './settings-format.js?v=121';
+import { S } from './state.js?v=122';
+import { t, escapeHtml } from './text.js?v=122';
+import { api } from './api.js?v=122';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=122';
+import { settingsCard, kvRow } from './settings-format.js?v=122';
 
   function copyButton(id, labelKey, primary = false) {
     const label = escapeHtml(t(labelKey));
@@ -133,7 +133,8 @@ import { settingsCard, kvRow } from './settings-format.js?v=121';
           { time: fmtRemaining(remainingSeconds(l.expires_at)) })) + '</span>' +
         '<button type="button" class="btn-delete" data-release-port="' + l.port +
         '" data-reservation="' + !!l.is_reservation + '">' +
-        escapeHtml(t('settings.auto.leases.release')) + '</button></div>').join('')
+        escapeHtml(t('settings.auto.leases.release')) + '</button></div>').join('') +
+        '<p id="lease-release-status" class="action-status" role="status" aria-live="polite"></p>'
       : '<p class="auto-empty">' + escapeHtml(t('settings.auto.leases.none')) + '</p>';
 
     return settingsCard('settings.auto.connect.title', 'settings.auto.connect.blurb', connect) +
@@ -143,23 +144,74 @@ import { settingsCard, kvRow } from './settings-format.js?v=121';
       settingsCard('settings.auto.leases.title', 'settings.auto.leases.blurb', leases);
   }
 
+  const RESERVATION_SESSION_KEY = 'port-light-reservation-session';
+
+  function readStoredReservationToken(port) {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(RESERVATION_SESSION_KEY) || '{}');
+      const tokens = parsed && typeof parsed.tokens === 'object' && parsed.tokens ? parsed.tokens : null;
+      return tokens && typeof tokens[port] === 'string' && tokens[port] ? tokens[port] : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function clearStoredReservationToken(port) {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(RESERVATION_SESSION_KEY) || '{}');
+      if (parsed && typeof parsed.tokens === 'object' && parsed.tokens &&
+          Object.prototype.hasOwnProperty.call(parsed.tokens, port)) {
+        delete parsed.tokens[port];
+        sessionStorage.setItem(RESERVATION_SESSION_KEY, JSON.stringify(parsed));
+      }
+    } catch (e) {}
+  }
+
+  function setLeaseReleaseError(msg) {
+    const el = document.getElementById('lease-release-status');
+    if (!el) return;
+    el.className = msg ? 'action-status is-error' : 'action-status';
+    el.textContent = msg || '';
+  }
+
   export async function releaseLease(port, btn) {
-    const reservation = btn.getAttribute && btn.getAttribute('data-reservation') === 'true';
-    const token = reservation ? window.prompt(t('settings.auto.leases.tokenPrompt')) : '';
-    if (reservation && !token) return;
+    const reservation = !!(btn && btn.getAttribute && btn.getAttribute('data-reservation') === 'true');
+    const storedToken = reservation ? readStoredReservationToken(port) : '';
+    let token = storedToken;
+    if (reservation && !token) {
+      token = typeof window.prompt === 'function' ? window.prompt(t('settings.auto.leases.tokenPrompt')) : '';
+      if (!token) return;
+    }
+    setLeaseReleaseError('');
     btn.disabled = true;
     try {
-      const res = await api((reservation ? '/api/reservations/' : '/api/manual-ports/') + port, {
+      let res = await api((reservation ? '/api/reservations/' : '/api/manual-ports/') + port, {
         method: 'DELETE', headers: reservation ? { 'X-Reservation-Token': token } : {},
       });
+      if (reservation && storedToken && res.status === 403) {
+        clearStoredReservationToken(port);
+        const prompted = typeof window.prompt === 'function' ? window.prompt(t('settings.auto.leases.tokenPrompt')) : '';
+        if (!prompted) {
+          btn.disabled = false;
+          setLeaseReleaseError(t('settings.auto.leases.releaseFailed'));
+          return;
+        }
+        token = prompted;
+        res = await api('/api/reservations/' + port, {
+          method: 'DELETE', headers: { 'X-Reservation-Token': token },
+        });
+      }
       if (!res.ok) {
         btn.disabled = false;
+        setLeaseReleaseError(t('settings.auto.leases.releaseFailed'));
         return;
       }
+      if (reservation) clearStoredReservationToken(port);
       const metaRes = await api('/api/meta');
       if (metaRes.ok) S.meta = await metaRes.json();
     } catch (err) {
       btn.disabled = false;
+      setLeaseReleaseError(t('settings.auto.leases.releaseFailed'));
       return;
     }
     rerenderAutomationCards();

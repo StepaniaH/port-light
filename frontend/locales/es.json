@@ -453,7 +453,10 @@
         "fact_stale": "Desactualizada",
         "observations_events": "Cambios registrados",
         "port_count": "{count} puertos",
-        "problem_count": "{count} hallazgos"
+        "problem_count": "{count} hallazgos",
+        "delete_report": "Eliminar",
+        "clear_reports": "Borrar informes guardados",
+        "report_quota": "{used} / {limit} guardados"
       },
       "settings": {
         "ai_title": "Conexiones de IA",
@@ -655,7 +658,8 @@
     "portDesc": "Puerto ↓",
     "nameAsc": "Nombre A–Z",
     "nameDesc": "Nombre Z–A",
-    "byStatus": "Estado"
+    "byStatus": "Estado",
+    "conflicts": "Conflictos"
   },
   "scanner": {
     "diagnostics": {
@@ -746,7 +750,8 @@
     "publicBindHint": "0.0.0.0 enlaza todas las direcciones IPv4 locales; :: enlaza todas las direcciones IPv6 locales. El acceso externo sigue dependiendo del cortafuegos y de la configuración de red.",
     "remoteReadOnly": "Solo lectura — este mapa procede de {name}. Ocultar, las etiquetas y añadir permanecen en este equipo.",
     "expiresIn": "Caduca en {time}",
-    "reservationHint": "Esta reserva solo se puede cambiar o liberar con el token devuelto al crearla."
+    "reservationHint": "Esta reserva solo se puede cambiar o liberar con el token devuelto al crearla.",
+    "otherMachines": "Otros equipos"
   },
   "hosts": {
     "title": "Otros equipos",
@@ -1100,7 +1105,8 @@
         "none": "No hay reservas activas.",
         "release": "Liberar",
         "remaining": "Quedan {time}",
-        "tokenPrompt": "Pega el token de reserva"
+        "tokenPrompt": "Pega el token de reserva",
+        "releaseFailed": "No se pudo liberar esa reserva. Comprueba el token y vuelve a intentarlo."
       }
     },
     "bindFamilies": "Familias de direcciones"
@@ -1257,7 +1263,8 @@
     "ownershipTitle": "Acceso a las reservas",
     "conflictsEmpty": "No se encontraron conflictos de configuración.",
     "rulesEmpty": "Aún no hay reglas de puertos.",
-    "reservationsEmpty": "Aún no hay puertos reservados."
+    "reservationsEmpty": "Aún no hay puertos reservados.",
+    "discardPending": "Descartar solicitud pendiente"
   },
   "preview": {
     "nasName": "NAS · Multimedia y almacenamiento",

@@ -1,29 +1,29 @@
 /* Port-Light frontend */
 
-import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=121';
-import { errorText, escapeHtml, t } from './text.js?v=121';
-import { moveChipFocus, trapTab } from './a11y.js?v=121';
+import { S, applyTheme, applyAppearance, hydrateCachedAppearance, saveView } from './state.js?v=122';
+import { errorText, escapeHtml, t } from './text.js?v=122';
+import { moveChipFocus, trapTab } from './a11y.js?v=122';
 import {
   grid, hostBoards, hostSwitcher, summary,
   detailPanel, detailBackdrop,
   searchInput, rangeStartInput, rangeEndInput,
   sortSelect, unhideBtn,
   syncHeaderHeight, markRefreshed, setSyncError,
-} from './dom.js?v=121';
-import { openModal, closeModals, modalOpen } from './modal.js?v=121';
-import { applyRoute as updateRoute } from './router.js?v=121';
-import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=121';
-import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=121';
-import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=121';
-import { refreshFleet } from './fleet.js?v=121';
-import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=121';
-import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=121';
-import { mountManagementPage } from './management.js?v=121';
-import { mountActionMenu } from './action-menu.js?v=121';
-import { mountDoctorPage } from './doctor.js?v=121';
-import { renderUiLinks } from './ui-links.js?v=121';
-import { mountWorkspacePage } from './workspace.js?v=121';
-import { observeSelects, enhanceSelects } from './select.js?v=121';
+} from './dom.js?v=122';
+import { openModal, closeModals, modalOpen } from './modal.js?v=122';
+import { applyRoute as updateRoute } from './router.js?v=122';
+import { render as renderGridView, renderScanners, portFromList, showCopyToast, syncFilterUI, syncHiddenButton, gridRootFrom, moveGridFocus } from './grid.js?v=122';
+import { api, fetchMeta, fetchHosts, fetchSettings, fetchPorts, fetchHostOccupancy, fetchHostHealth } from './api.js?v=122';
+import { hasPeers, listedHosts, usesFocusedHostView, hostById, dataForHost, occupancyFingerprint, gridHash, portHash } from './hosts.js?v=122';
+import { refreshFleet } from './fleet.js?v=122';
+import { configureDetail, closeDetail, showPortDetail, renderDetail, syncDetailModal, unlockHidden, addManualPort } from './detail.js?v=122';
+import { applyServerSettings, mountSettingsPage, moveLocaleHighlight } from './settings.js?v=122';
+import { mountManagementPage } from './management.js?v=122';
+import { mountActionMenu } from './action-menu.js?v=122';
+import { mountDoctorPage } from './doctor.js?v=122';
+import { renderUiLinks } from './ui-links.js?v=122';
+import { mountWorkspacePage } from './workspace.js?v=122';
+import { observeSelects, enhanceSelects } from './select.js?v=122';
 
 (function () {
   'use strict';
@@ -64,11 +64,26 @@ import { observeSelects, enhanceSelects } from './select.js?v=121';
     return ['settings', 'doctor', 'manage', 'workspace'].includes(S.route.name);
   }
 
+  function summaryNeedsHealth(data) {
+    const s = data && data.summary;
+    if (!s) return false;
+    if (s.scan_complete === false || s.stale || s.compose_truncated || s.compose_incomplete) return true;
+    const sources = s.sources;
+    if (sources && Object.keys(sources).some(function (k) { return sources[k] !== 'ok' && sources[k] !== 'disabled'; })) {
+      return true;
+    }
+    return false;
+  }
+
   async function loadAllOccupancy(opts, generation) {
-    let ids = listedHosts().map(function (h) { return h.id; });
     if (opts && opts.isolated) {
-      ids = [S.focusHostId || 'local'];
-    } else if (opts && opts.localOnly) {
+      const targetId = opts.hostId || S.focusHostId || 'local';
+      const result = await fetchHostOccupancy(targetId, opts);
+      if (generation !== loadGeneration || !result || result.stale || !result.ok) return null;
+      return result.data || null;
+    }
+    let ids = listedHosts().map(function (h) { return h.id; });
+    if (opts && opts.localOnly) {
       ids = ['local'];
     } else {
       const focusIndex = ids.indexOf(S.focusHostId);
@@ -76,11 +91,20 @@ import { observeSelects, enhanceSelects } from './select.js?v=121';
     }
     const results = await refreshFleet(ids, async function (id) {
       if (generation !== loadGeneration) return { id, stale: true };
-      const [occupancy, health] = await Promise.all([fetchHostOccupancy(id, opts), fetchHostHealth(id)]);
+      const eagerHealth = !(S.hostMaps[id] && S.hostMaps[id].scanners) || !!(opts && opts.manual);
+      const [occupancy, initialHealth] = await Promise.all([
+        fetchHostOccupancy(id, opts),
+        eagerHealth ? fetchHostHealth(id) : Promise.resolve(null),
+      ]);
       if (generation !== loadGeneration) return { id, stale: true };
       const result = occupancy;
       if (!S.hostMaps[id]) S.hostMaps[id] = {};
       if (!result || result.stale) return { id, stale: true };
+      let health = initialHealth;
+      if (!eagerHealth && (!result.ok || !result.unchanged || summaryNeedsHealth(result.data))) {
+        health = await fetchHostHealth(id);
+        if (generation !== loadGeneration) return { id, stale: true };
+      }
       if (health) S.hostMaps[id].scanners = health.scanners || {};
       if (result.ok) {
         if (result.data) S.hostMaps[id].data = result.data;
@@ -113,12 +137,31 @@ import { observeSelects, enhanceSelects } from './select.js?v=121';
     roots.forEach(root => root.setAttribute('aria-busy', 'true'));
     try {
       if (hasPeers()) return await loadAllOccupancy(opts, generation);
-      const result = await fetchPorts(opts);
+      if (opts && opts.isolated) {
+        const probe = await fetchPorts(opts);
+        if (generation !== loadGeneration || !probe || probe.stale || !probe.ok) return null;
+        return probe.data || null;
+      }
+      const eagerHealth = !(S.hostMaps.local && S.hostMaps.local.scanners) || !!(opts && opts.manual);
+      const [result, initialHealth] = await Promise.all([
+        fetchPorts(opts),
+        eagerHealth ? fetchHostHealth('local') : Promise.resolve(null),
+      ]);
       if (generation !== loadGeneration || !result || result.stale) return null;
       setSyncError(!result.ok);
+      const data = result.ok ? (result.data || (result.unchanged ? S.currentData : null)) : null;
+      let health = initialHealth;
+      if (!eagerHealth && (!result.ok || !result.unchanged || summaryNeedsHealth(data))) {
+        health = await fetchHostHealth('local');
+        if (generation !== loadGeneration) return null;
+      }
+      if (health) {
+        if (!S.hostMaps.local) S.hostMaps.local = {};
+        S.hostMaps.local.scanners = health.scanners || {};
+      }
       if (!result.ok) return null;
       markRefreshed();
-      return result.data || (result.unchanged ? S.currentData : null);
+      return data;
     } finally {
       if (generation === loadGeneration) roots.forEach(root => root.setAttribute('aria-busy', 'false'));
     }
@@ -165,6 +208,9 @@ import { observeSelects, enhanceSelects } from './select.js?v=121';
       if (onWorkspacePage()) return;
       if (S.showHidden !== wantHidden) return;
       if (!hasPeers()) {
+        if (S.hostMaps.local && S.hostMaps.local.scanners && typeof renderScanners === 'function') {
+          renderScanners(S.hostMaps.local.scanners, null, data || S.currentData);
+        }
         if (!data) return;
         if (data === S.currentData && S.occupancyKey) return;
         S.currentData = data;
@@ -184,10 +230,6 @@ import { observeSelects, enhanceSelects } from './select.js?v=121';
         S.occupancyKey = key;
         render();
       }
-    }).then(function () {
-      if (!hasPeers()) fetchHostHealth('local').then(function (body) {
-        if (body) renderScanners(body.scanners || {}, null, S.currentData);
-      });
     });
   }
   let refreshInFlight = null;
@@ -196,12 +238,16 @@ import { observeSelects, enhanceSelects } from './select.js?v=121';
   function tick(opts) {
     if (onWorkspacePage() || modalOpen()) return Promise.resolve(null);
     const localOnly = !!(opts && opts.localOnly);
+    const manual = !!(opts && opts.manual);
     if (refreshInFlight) {
       // A local event must not replace an already queued timer/manual fleet refresh.
-      refreshQueued = { localOnly: localOnly && (!refreshQueued || refreshQueued.localOnly) };
+      refreshQueued = {
+        localOnly: localOnly && (!refreshQueued || refreshQueued.localOnly),
+        manual: manual || !!(refreshQueued && refreshQueued.manual),
+      };
       return refreshInFlight;
     }
-    refreshInFlight = Promise.resolve(runTick({ localOnly })).finally(function () {
+    refreshInFlight = Promise.resolve(runTick({ localOnly, manual })).finally(function () {
       refreshInFlight = null;
       if (refreshQueued) {
         const queued = refreshQueued;
@@ -355,7 +401,7 @@ import { observeSelects, enhanceSelects } from './select.js?v=121';
   document.getElementById('filters').addEventListener('click', function (e) {
     const chip = e.target.closest('.chip');
     if (!chip) return;
-    const f = chip.dataset.filter;
+    const f = chip.dataset.filter || chip.dataset.kind;
     if (S.kindFilters.has(f)) S.kindFilters.delete(f);
     else {
       if (f === 'hidden') {
@@ -450,7 +496,7 @@ import { observeSelects, enhanceSelects } from './select.js?v=121';
 
   document.getElementById('btn-refresh').addEventListener('click', function () {
     if (S.route.name === 'manage') managementPage.open(S.route.section);
-    else tick();
+    else tick({ manual: true });
   });
 
   document.getElementById('btn-add').addEventListener('click', function () {

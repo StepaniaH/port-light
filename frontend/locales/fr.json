@@ -453,7 +453,10 @@
         "fact_stale": "Obsolète",
         "observations_events": "Changements enregistrés",
         "port_count": "{count} ports",
-        "problem_count": "{count} constats"
+        "problem_count": "{count} constats",
+        "delete_report": "Supprimer",
+        "clear_reports": "Effacer les rapports enregistrés",
+        "report_quota": "{used} / {limit} enregistrés"
       },
       "settings": {
         "ai_title": "Connexions IA",
@@ -655,7 +658,8 @@
     "portDesc": "Port ↓",
     "nameAsc": "Nom A–Z",
     "nameDesc": "Nom Z–A",
-    "byStatus": "Statut"
+    "byStatus": "Statut",
+    "conflicts": "Conflits"
   },
   "scanner": {
     "diagnostics": {
@@ -746,7 +750,8 @@
     "publicBindHint": "0.0.0.0 correspond à toutes les adresses IPv4 locales ; :: à toutes les adresses IPv6 locales. L’accès externe dépend toujours du pare-feu et de la configuration réseau.",
     "remoteReadOnly": "Lecture seule — cette carte provient de {name}. Masquage, libellés et ajouts restent sur cette machine.",
     "expiresIn": "Expire dans {time}",
-    "reservationHint": "Cette réservation ne peut être modifiée ou libérée qu’avec le jeton renvoyé lors de sa création."
+    "reservationHint": "Cette réservation ne peut être modifiée ou libérée qu’avec le jeton renvoyé lors de sa création.",
+    "otherMachines": "Autres machines"
   },
   "hosts": {
     "title": "Autres machines",
@@ -1100,7 +1105,8 @@
         "none": "Aucune réservation active.",
         "release": "Libérer",
         "remaining": "Il reste {time}",
-        "tokenPrompt": "Collez le jeton de réservation"
+        "tokenPrompt": "Collez le jeton de réservation",
+        "releaseFailed": "Impossible de libérer cette réservation. Vérifiez le jeton et réessayez."
       }
     },
     "bindFamilies": "Familles d’adresses"
@@ -1257,7 +1263,8 @@
     "ownershipTitle": "Accès aux réservations",
     "conflictsEmpty": "Aucun conflit de configuration détecté.",
     "rulesEmpty": "Aucune règle de ports pour le moment.",
-    "reservationsEmpty": "Aucun port réservé pour le moment."
+    "reservationsEmpty": "Aucun port réservé pour le moment.",
+    "discardPending": "Abandonner la requête en attente"
   },
   "preview": {
     "nasName": "NAS · Médias et stockage",

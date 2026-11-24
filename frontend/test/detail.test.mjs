@@ -5,7 +5,7 @@ import './helpers/env.mjs';
 
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
 const { S } = await import('../js/state.js?v=' + version);
-const { renderDetail, showPortDetail } = await import('../js/detail.js?v=' + version);
+const { renderDetail, showPortDetail, unlockHidden } = await import('../js/detail.js?v=' + version);
 const { portFromList } = await import('../js/grid.js?v=' + version);
 const detail = document.getElementById('detail-content');
 const PEER = 'abcdef123456';
@@ -109,4 +109,95 @@ test('unavailable occupancy never renders a free port or mutation controls', asy
   assert.match(detail.innerHTML, /scanner.snapshotUnavailable/);
   assert.doesNotMatch(detail.innerHTML, /status.free/);
   assert.equal(detail.querySelector('[data-hide-port]'), null);
+});
+
+test('unlockHidden validates against local even when a remote host is focused and refreshes the fleet', async () => {
+  sessionStorage.removeItem('port-light-hidden-unlock');
+  S.hostCatalog = {
+    local: { id: 'local', name: 'Hub', local: true },
+    peers: [{ id: PEER, name: 'Peer Box' }],
+  };
+  S.focusHostId = PEER;
+  S.showHidden = false;
+  S.hiddenUnlock = '';
+
+  const pwdInput = document.getElementById('unhide-password');
+  pwdInput.value = 'bogus-password';
+  const bogusCalls = [];
+  globalThis.fetch = async url => {
+    bogusCalls.push(String(url));
+    // Even if the peer were unlocked, local rejects the password.
+    const locked = String(url).includes('/api/hosts/local/');
+    return new Response(JSON.stringify({ ports: [], summary: { hidden_locked: locked } }));
+  };
+  await unlockHidden();
+  assert.ok(bogusCalls[0].startsWith('/api/hosts/local/ports?'), 'must probe local, not focused peer');
+  assert.equal(sessionStorage.getItem('port-light-hidden-unlock'), null);
+  assert.equal(S.hiddenUnlock, '');
+  assert.equal(S.showHidden, false);
+
+  pwdInput.value = 'valid-local-secret';
+  const okCalls = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    okCalls.push({ url: String(url), unlock: opts.headers?.['X-Hidden-Unlock'] });
+    if (String(url).includes('/api/hosts/' + PEER + '/ports')) {
+      return new Response(JSON.stringify({
+        ports: [{ port: 9443, status: 'used', is_hidden: true, process: 'vault' }],
+        summary: { hidden_locked: false, scan_complete: true, used: 1, configured: 0, free: 99, hidden: 1 },
+      }));
+    }
+    return new Response(JSON.stringify({
+      ports: [{ port: 8443, status: 'used', is_hidden: true, process: 'admin' }],
+      summary: { hidden_locked: false, scan_complete: true, used: 1, configured: 0, free: 99, hidden: 1 },
+    }));
+  };
+  await unlockHidden();
+  assert.equal(sessionStorage.getItem('port-light-hidden-unlock'), 'valid-local-secret');
+  assert.equal(S.showHidden, true);
+  assert.ok(okCalls.some(c => c.url.includes('/api/hosts/' + PEER + '/ports') && c.unlock === 'valid-local-secret'));
+  assert.equal(S.hostMaps[PEER]?.data?.ports?.[0]?.port, 9443);
+});
+
+test('detail drawer renders other machines from loaded hostMaps with zero extra network requests', async () => {
+  const PEER_FREE = '112233445566';
+  const PEER_UNLOADED = '665544332211';
+  const PEER_STALE = '998877665544';
+  S.hostCatalog = {
+    local: { id: 'local', name: 'Hub', local: true },
+    peers: [
+      { id: PEER, name: 'Apps <Node>' },
+      { id: PEER_FREE, name: 'Backup NAS' },
+      { id: PEER_STALE, name: 'Edge Box' },
+      { id: PEER_UNLOADED, name: 'Offline Node' },
+    ],
+  };
+  S.hostMaps = {
+    local: { data: { ports: [row(45000)], summary: { scan_complete: true } } },
+    [PEER]: { data: { ports: [{ port: 45000, status: 'used', process: ' caddy <edge> ' }], summary: { scan_complete: true } } },
+    [PEER_FREE]: { data: { ports: [], summary: { scan_complete: true, stale: false } } },
+    [PEER_STALE]: { data: { ports: [], summary: { scan_complete: true, stale: true } } },
+  };
+  const calls = [];
+  globalThis.fetch = async url => {
+    calls.push(String(url));
+    return { ok: false, status: 404 };
+  };
+  renderDetail(row(45000));
+  await flush();
+
+  // Only the local port history endpoint is fetched; zero requests go to peers.
+  assert.deepEqual(calls, ['/api/hosts/local/ports/45000/history?hours=24']);
+  const section = detail.querySelector('[data-other-machines]');
+  assert.ok(section, 'renders otherMachines section');
+  assert.match(detail.innerHTML, /detail\.otherMachines/);
+  assert.doesNotMatch(detail.innerHTML, /<Node>|<edge>/, 'escapes peer and holder names');
+  assert.match(detail.innerHTML, /Apps &lt;Node&gt;/);
+  assert.match(detail.innerHTML, /caddy &lt;edge&gt;/);
+
+  const peerLinks = section.querySelectorAll('.detail-other-machine');
+  assert.equal(peerLinks.length, 3, 'lists only other machines with loaded data');
+  assert.equal(peerLinks[0].getAttribute('href'), '#/h/' + PEER + '/port/45000');
+  assert.ok(peerLinks[0].querySelector('.tag.used'));
+  assert.ok(peerLinks[1].querySelector('.tag.free'));
+  assert.ok(peerLinks[2].querySelector('.tag.unknown'));
 });

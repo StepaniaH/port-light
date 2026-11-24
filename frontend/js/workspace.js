@@ -1,10 +1,10 @@
 /* Optional local modules use the same shell, appearance and navigation as core views. */
-import { S } from './state.js?v=121';
-import { t } from './text.js?v=121';
-import { enhanceSelects } from './select.js?v=121';
-import { workspaceAssets } from './extension-assets.js?v=121';
+import { S } from './state.js?v=122';
+import { t } from './text.js?v=122';
+import { enhanceSelects } from './select.js?v=122';
+import { workspaceAssets } from './extension-assets.js?v=122';
 
-export { workspaceAssets } from './extension-assets.js?v=121';
+export { workspaceAssets } from './extension-assets.js?v=122';
 
 export function mountWorkspacePage(container) {
   let controller;

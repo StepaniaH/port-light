@@ -4,6 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { KIND_MATCHERS } from '../js/kinds.js';
 
@@ -58,4 +59,14 @@ test('scope and hidden matchers read their row fields', () => {
   assert.equal(KIND_MATCHERS.hidden(row({ is_hidden: true })), true);
   assert.equal(KIND_MATCHERS.hidden(row({ is_hidden: false })), false);
   assert.equal(KIND_MATCHERS.hidden(row()), false);
+});
+
+test('conflicts matcher catches compose conflicts and port rule violations', () => {
+  assert.equal(KIND_MATCHERS.conflicts(row({ conflict: true })), true);
+  assert.equal(KIND_MATCHERS.conflicts(row({ conflict: false, rule_violations: [{ rule: 'apps' }] })), true);
+  assert.equal(KIND_MATCHERS.conflicts(row({ conflict: false, rule_violations: [] })), false);
+  assert.equal(KIND_MATCHERS.conflicts(row()), false);
+
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /<button[^>]*class="chip"[^>]*data-kind="conflicts"[^>]*data-i18n="filter\.conflicts"/);
 });

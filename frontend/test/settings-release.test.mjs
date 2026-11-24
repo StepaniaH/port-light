@@ -25,8 +25,11 @@ async function withFetch(routes, fn) {
   globalThis.fetch = function (url, opts) {
     const hit = String(url);
     const method = (opts && opts.method) || 'GET';
-    calls.push({ url: hit, method: method });
-    const route = routes.filter(function (r) { return r.url === hit && (r.method || 'GET') === method; })[0];
+    const headers = (opts && opts.headers) || {};
+    calls.push({ url: hit, method: method, headers: headers });
+    const matching = routes.filter(function (r) { return r.url === hit && (r.method || 'GET') === method; });
+    const route = matching.length > 1 ? matching.shift() : matching[0];
+    if (matching.length > 0 && route && route.once) routes.splice(routes.indexOf(route), 1);
     if (!route) return Promise.resolve({ ok: false, status: 404, json: function () { return Promise.resolve({}); } });
     return Promise.resolve({
       ok: route.ok !== false,
@@ -98,7 +101,7 @@ test('releaseLease sends DELETE to the manual port endpoint', async () => {
   ], async function () {
     await releaseLease(8081, btn);
   });
-  assert.deepEqual(calls[0], { url: '/api/manual-ports/8081', method: 'DELETE' });
+  assert.deepEqual(calls[0], { url: '/api/manual-ports/8081', method: 'DELETE', headers: {} });
 });
 
 test('agent reservation release sends its returned ownership token', async () => {
@@ -113,9 +116,61 @@ test('agent reservation release sends its returned ownership token', async () =>
     ], async function () {
       await releaseLease(8081, btn);
     });
-    assert.deepEqual(calls[0], { url: '/api/reservations/8081', method: 'DELETE' });
+    assert.equal(calls[0].url, '/api/reservations/8081');
+    assert.equal(calls[0].method, 'DELETE');
+    assert.equal(calls[0].headers['X-Reservation-Token'], 'reservation-token');
   } finally {
     window.prompt = savedPrompt;
+  }
+});
+
+test('stored session reservation token releases directly without prompt and falls back on 403', async () => {
+  const restoreI18n = useI18n();
+  const savedPrompt = window.prompt;
+  try {
+    S.meta = metaPayload(2, 1, [{ port: 8081, label: 'smoke', expires_at: NOW + 600, is_reservation: true }]);
+    const panel = document.getElementById('settings-panel-automation');
+    panel.innerHTML = '';
+    sessionStorage.setItem('port-light-reservation-session', JSON.stringify({
+      tokens: { 8081: 'stored-session-token' },
+    }));
+    let promptCount = 0;
+    window.prompt = () => { promptCount += 1; return 'prompted-token'; };
+    const btn = { disabled: false, getAttribute: key => (key === 'data-reservation' ? 'true' : null) };
+
+    const directCalls = await withFetch([
+      { url: '/api/reservations/8081', method: 'DELETE', body: {} },
+      { url: '/api/meta', body: metaPayload(2, 0, []) },
+    ], async function () {
+      await releaseLease(8081, btn);
+    });
+    assert.equal(promptCount, 0, 'stored token skips window.prompt');
+    assert.equal(directCalls[0].headers['X-Reservation-Token'], 'stored-session-token');
+    assert.equal(JSON.parse(sessionStorage.getItem('port-light-reservation-session')).tokens[8081], undefined);
+
+    S.meta = metaPayload(2, 1, [{ port: 8082, label: 'smoke', expires_at: NOW + 600, is_reservation: true }]);
+    const { automationCardsHtml } = await import('../js/settings.js?' + V);
+    panel.innerHTML = automationCardsHtml(S.meta.automation);
+    sessionStorage.setItem('port-light-reservation-session', JSON.stringify({
+      tokens: { 8082: 'stale-token' },
+    }));
+    window.prompt = () => { promptCount += 1; return 'bad-fallback-token'; };
+    const failBtn = panel.querySelector('[data-release-port="8082"]');
+    const fallbackCalls = await withFetch([
+      { url: '/api/reservations/8082', method: 'DELETE', ok: false, status: 403, body: { detail: 'forbidden' }, once: true },
+      { url: '/api/reservations/8082', method: 'DELETE', ok: false, status: 403, body: { detail: 'forbidden' } },
+    ], async function () {
+      await releaseLease(8082, failBtn);
+    });
+    assert.equal(promptCount, 1, '403 falls back to window.prompt');
+    assert.equal(fallbackCalls[0].headers['X-Reservation-Token'], 'stale-token');
+    assert.equal(fallbackCalls[1].headers['X-Reservation-Token'], 'bad-fallback-token');
+    assert.equal(failBtn.disabled, false);
+    assert.equal(document.getElementById('lease-release-status').textContent, 'settings.auto.leases.releaseFailed');
+  } finally {
+    window.prompt = savedPrompt;
+    sessionStorage.removeItem('port-light-reservation-session');
+    restoreI18n();
   }
 });
 

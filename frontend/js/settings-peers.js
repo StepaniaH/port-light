@@ -1,7 +1,7 @@
 /* Peer editor and payload serialization. */
-import { S } from './state.js?v=121';
-import { t, escapeHtml } from './text.js?v=121';
-import { api } from './api.js?v=121';
+import { S } from './state.js?v=122';
+import { t, escapeHtml } from './text.js?v=122';
+import { api } from './api.js?v=122';
 
 const testRevisions = new WeakMap();
 

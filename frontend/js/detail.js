@@ -1,18 +1,18 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=121';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=121';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=121';
-import { trapTab } from './a11y.js?v=121';
-import { api } from './api.js?v=121';
-import { portApiUrl, hasPeers, hostName, gridHash, dataForHost } from './hosts.js?v=121';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=121';
+import { S, saveView } from './state.js?v=122';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=122';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=122';
+import { trapTab } from './a11y.js?v=122';
+import { api, fetchHostOccupancy } from './api.js?v=122';
+import { portApiUrl, hasPeers, listedHosts, hostName, gridHash, portHash, dataForHost } from './hosts.js?v=122';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=122';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=121';
-import { closeModals, modalOpen, openModal } from './modal.js?v=121';
+} from './grid.js?v=122';
+import { closeModals, modalOpen, openModal } from './modal.js?v=122';
 
 let tick;
 let loadPorts;
@@ -104,6 +104,46 @@ export function configureDetail(actions) {
     });
   }
 
+  function otherMachinesHtml(portNum, currentHostId) {
+    if (!hasPeers()) return '';
+    const activeHost = currentHostId || 'local';
+    const others = listedHosts().filter(function (h) {
+      return h.id !== activeHost && S.hostMaps[h.id] && S.hostMaps[h.id].data;
+    });
+    if (!others.length) return '';
+    const rows = others.map(function (h) {
+      const hostData = S.hostMaps[h.id].data;
+      const match = (hostData.ports || []).find(function (r) {
+        return r.port === portNum && (S.showHidden || !r.is_hidden);
+      });
+      let state = 'unknown';
+      let holder = '';
+      if (match) {
+        state = match.status || 'unknown';
+        if (state === 'used' || state === 'configured') holder = getCellLabel(match);
+      } else {
+        const hiddenNums = (hostData.summary && hostData.summary.hidden_ports) || [];
+        if (hiddenNums.indexOf(portNum) >= 0) {
+          state = hiddenOccupancy(portNum, hostData);
+        } else if (hostData.summary && hostData.summary.hidden_locked) {
+          state = S.lockedHitCache[h.id + ':' + portNum] === 'free' ? 'free' : 'unknown';
+        } else if (hostData.summary && hostData.summary.scan_complete === true && !hostData.summary.stale) {
+          state = 'free';
+        }
+      }
+      return '<a class="detail-other-machine" href="' + escapeHtml(portHash(h.id, portNum)) +
+        '" data-other-host="' + escapeHtml(h.id) + '">' +
+        '<span class="detail-other-name">' + escapeHtml(hostName(h.id)) + '</span>' +
+        '<span class="detail-other-meta">' +
+        (holder ? '<span class="detail-other-holder">' + escapeHtml(holder) + '</span>' : '') +
+        '<span class="tag ' + escapeHtml(state) + '">' + escapeHtml(t('status.' + state) || state) + '</span>' +
+        '</span></a>';
+    }).join('');
+    return '<section class="detail-other-machines" data-other-machines>' +
+      '<div class="section-title">' + escapeHtml(t('detail.otherMachines')) + '</div>' +
+      rows + '</section>';
+  }
+
   export function renderDetail(p) {
     const opening = detailPanel.classList.contains('hidden');
     setDetailOpen(true);
@@ -117,6 +157,7 @@ export function configureDetail(actions) {
 
     if (p._pending || p._unavailable || p.status === 'unknown') {
       html += '<p class="modal-hint">' + escapeHtml(t(p._unavailable || p.status === 'unknown' ? 'scanner.snapshotUnavailable' : 'detail.loading')) + '</p>';
+      if (!p._pending) html += otherMachinesHtml(p.port, S.selectedHostId || 'local');
     } else {
     const remote = S.selectedHostId && S.selectedHostId !== 'local';
     if (remote) {
@@ -235,6 +276,8 @@ export function configureDetail(actions) {
       html += '<p class="modal-hint">' + escapeHtml(t('detail.reservationHint')) + '</p>';
     }
 
+    html += otherMachinesHtml(p.port, S.selectedHostId || 'local');
+
     if (!remote && !p.is_reservation && (p.manual_label != null || p.source_type === 'manual')) {
       html += '<form class="detail-label-form" data-label-form="' + p.port + '"><label><span class="key">' +
         escapeHtml(t('detail.label')) + '</span><input type="text" maxlength="80" value="' +
@@ -351,7 +394,9 @@ export function configureDetail(actions) {
     const prevShow = S.showHidden;
     S.hiddenUnlock = password;
     S.showHidden = true;
-    const data = await loadPorts({ isolated: true });
+    const data = loadPorts
+      ? await loadPorts({ isolated: true, hostId: 'local' })
+      : await fetchHostOccupancy('local', { isolated: true }).then(function (r) { return r && r.ok ? r.data : null; });
     if (!data || (data.summary && data.summary.hidden_locked)) {
       S.hiddenUnlock = prevUnlock;
       S.showHidden = prevShow;
@@ -372,13 +417,36 @@ export function configureDetail(actions) {
     }
     sessionStorage.setItem('port-light-hidden-unlock', password);
     S.showHidden = true;
-    S.currentData = data;
+    if (hasPeers()) {
+      if (!S.hostMaps.local) S.hostMaps.local = {};
+      S.hostMaps.local.data = data;
+      S.hostMaps.local.error = '';
+      if (S.focusHostId === 'local' || !S.currentData) S.currentData = data;
+    } else {
+      S.currentData = data;
+    }
     const followup = S.pendingAfterUnlock;
     S.pendingAfterUnlock = null;
     closeModals();
     document.getElementById('unhide-password').value = '';
     syncHiddenButton();
     saveView();
+    if (tick) {
+      await tick();
+    } else if (loadPorts) {
+      const refreshed = await loadPorts();
+      if (refreshed) S.currentData = hasPeers() ? (dataForHost(S.focusHostId) || refreshed) : refreshed;
+    } else if (hasPeers()) {
+      await Promise.all(listedHosts().map(async function (h) {
+        const res = await fetchHostOccupancy(h.id);
+        if (res && res.ok && res.data) {
+          if (!S.hostMaps[h.id]) S.hostMaps[h.id] = {};
+          S.hostMaps[h.id].data = res.data;
+          S.hostMaps[h.id].error = '';
+        }
+      }));
+      S.currentData = dataForHost(S.focusHostId) || data;
+    }
     if (followup) followup();
     else render();
     const focusKey = S.pendingUnlockFocus;
@@ -494,4 +562,4 @@ export function configureDetail(actions) {
       host.hidden = false;
     } catch (err) { /* history is best-effort */ }
   }
-import { portUiLinksHtml } from './ui-links.js?v=121';
+import { portUiLinksHtml } from './ui-links.js?v=122';

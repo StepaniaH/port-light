@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const version = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/\?v=(\d+)/)[1];
 import { groupPorts, portRuns } from '../js/port-groups.js';
-import { composeSnippet, releaseCommand } from '../js/management.js';
+const { composeSnippet, mountManagementPage, releaseCommand } = await import('../js/management.js?v=' + version);
 
 const config = { project_name: 'wiki', project_dir: 'apps/wiki', service_name: 'web', container_port: 80, protocol: 'tcp', host_ip: '127.0.0.1' };
 const rows = Array.from({ length: 256 }, (_, i) => ({ port: 20000 + i, status: 'configured', protocol: 'tcp', compose_configs: [config] }));
@@ -22,7 +22,26 @@ test('projects with equal display names remain distinct and all conflict owners 
   const groups = groupPorts([{ ...rows[0], compose_configs: [config, other] }], 'project');
   assert.equal(groups.length, 2);
   assert.notEqual(groups[0].key, groups[1].key);
+  assert.notEqual(groups[0].label, groups[1].label);
+  assert.equal(groups[0].label, 'wiki (apps/wiki)');
+  assert.equal(groups[1].label, 'wiki (other/wiki)');
   assert.equal(groups[0].rows[0], groups[1].rows[0]);
+
+  const serviceGroups = groupPorts([{ ...rows[0], compose_configs: [config, { ...other, service_name: 'web' }] }], 'service');
+  assert.deepEqual(serviceGroups.map(g => g.label), ['wiki (apps/wiki) / web', 'wiki (other/wiki) / web']);
+});
+
+test('portRuns never merges rule-violating ports into compliant contiguous runs', () => {
+  const sample = Array.from({ length: 8 }, (_, i) => ({
+    port: 21000 + i,
+    status: 'configured',
+    protocol: 'tcp',
+    rule_violations: i === 3 || i === 4 ? [{ rule: 'apps' }] : [],
+  }));
+  assert.deepEqual(
+    portRuns(sample).map(r => [r[0].port, r.at(-1).port]),
+    [[21000, 21002], [21003, 21004], [21005, 21007]],
+  );
 });
 test('Compose replacement preserves target, bind and protocol; Swarm uses deploy.ports', () => {
   const snippet = composeSnippet({ ...config, protocol: 'udp', host_ip: '::1' }, 28000);
@@ -76,4 +95,61 @@ test('grouped runs respect name and status sorting across noncontiguous ports', 
       assert.deepEqual(sortPortRuns(entries).map(run => run[0].port), expected);
     }
   } finally { S.sortMode = original; }
+});
+
+test('discardPending clears stuck reservation state and conflicts include unlocked hidden ports', async () => {
+  const { S } = await import('../js/state.js?v=' + version);
+  const root = document.createElement('main');
+  const savedFetch = globalThis.fetch;
+  const savedUnlock = S.hiddenUnlock;
+  try {
+    sessionStorage.setItem('port-light-reservation-session', JSON.stringify({
+      tokens: { 24001: 'keep-token' },
+      pending: { key: 'stuck-idempotency-key', body: { count: 1 } },
+    }));
+    S.hiddenUnlock = 'local-secret';
+    const seenRequests = [];
+    globalThis.fetch = async (url, opts = {}) => {
+      seenRequests.push({ url: String(url), unlock: opts.headers?.['X-Hidden-Unlock'] });
+      if (String(url).startsWith('/api/port-rules')) return new Response(JSON.stringify({ rules: [], readonly: false }));
+      if (String(url).startsWith('/api/reservations')) return new Response(JSON.stringify({ reservations: [] }));
+      return new Response(JSON.stringify({
+        ports: [{
+          port: 24500, status: 'configured', protocol: 'tcp', is_hidden: true, conflict: true,
+          compose_configs: [config],
+        }],
+        summary: { scan_complete: true, stale: false },
+      }));
+    };
+
+    const page = mountManagementPage(root);
+    await page.open('reservations');
+    const retryBtn = root.querySelector('[data-action="retry"]');
+    const discardBtn = root.querySelector('[data-action="discardPending"]');
+    assert.ok(retryBtn && !retryBtn.hidden);
+    assert.ok(discardBtn && !discardBtn.hidden);
+
+    root.dispatchEvent({
+      type: 'click',
+      target: { closest: sel => (sel === '[data-action]' ? { dataset: { action: 'discardPending' } } : null) },
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    const stored = JSON.parse(sessionStorage.getItem('port-light-reservation-session'));
+    assert.equal(stored.pending, undefined);
+    assert.equal(stored.tokens[24001], 'keep-token');
+    assert.equal(retryBtn.hidden, true);
+    assert.equal(discardBtn.hidden, true);
+
+    await page.open('conflicts');
+    const portsCall = seenRequests.find(r => r.url.startsWith('/api/ports?'));
+    assert.ok(portsCall, 'conflicts view fetches /api/ports');
+    assert.match(portsCall.url, /include_hidden=true/);
+    assert.equal(portsCall.unlock, 'local-secret');
+    assert.match(root.innerHTML, /24500/);
+  } finally {
+    globalThis.fetch = savedFetch;
+    S.hiddenUnlock = savedUnlock;
+    sessionStorage.removeItem('port-light-reservation-session');
+  }
 });

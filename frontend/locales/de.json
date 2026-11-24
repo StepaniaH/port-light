@@ -453,7 +453,10 @@
         "fact_stale": "Veraltet",
         "observations_events": "Erfasste Änderungen",
         "port_count": "{count} Ports",
-        "problem_count": "{count} Befunde"
+        "problem_count": "{count} Befunde",
+        "delete_report": "Löschen",
+        "clear_reports": "Gespeicherte Berichte löschen",
+        "report_quota": "{used} / {limit} gespeichert"
       },
       "settings": {
         "ai_title": "KI-Verbindungen",
@@ -655,7 +658,8 @@
     "portDesc": "Port ↓",
     "nameAsc": "Name A–Z",
     "nameDesc": "Name Z–A",
-    "byStatus": "Status"
+    "byStatus": "Status",
+    "conflicts": "Konflikte"
   },
   "scanner": {
     "diagnostics": {
@@ -746,7 +750,8 @@
     "publicBindHint": "0.0.0.0 bindet an alle lokalen IPv4-Adressen, :: an alle lokalen IPv6-Adressen. Der externe Zugriff hängt weiterhin von Firewall und Netzwerkkonfiguration ab.",
     "remoteReadOnly": "Schreibgeschützt — diese Karte stammt von {name}. Ausblenden, Bezeichnungen und Hinzufügen bleiben auf diesem Rechner.",
     "expiresIn": "Läuft ab in {time}",
-    "reservationHint": "Diese Reservierung kann nur mit dem bei der Erstellung zurückgegebenen Token geändert oder freigegeben werden."
+    "reservationHint": "Diese Reservierung kann nur mit dem bei der Erstellung zurückgegebenen Token geändert oder freigegeben werden.",
+    "otherMachines": "Andere Rechner"
   },
   "hosts": {
     "title": "Andere Rechner",
@@ -1100,7 +1105,8 @@
         "none": "Keine aktiven Reservierungen.",
         "release": "Freigeben",
         "remaining": "Noch {time}",
-        "tokenPrompt": "Reservierungstoken einfügen"
+        "tokenPrompt": "Reservierungstoken einfügen",
+        "releaseFailed": "Diese Reservierung konnte nicht freigegeben werden. Prüfen Sie das Token und versuchen Sie es erneut."
       }
     },
     "bindFamilies": "Adressfamilien"
@@ -1257,7 +1263,8 @@
     "ownershipTitle": "Zugriff auf Reservierungen",
     "conflictsEmpty": "Keine Konfigurationskonflikte gefunden.",
     "rulesEmpty": "Noch keine Portregeln.",
-    "reservationsEmpty": "Noch keine reservierten Ports."
+    "reservationsEmpty": "Noch keine reservierten Ports.",
+    "discardPending": "Ausstehende Anfrage verwerfen"
   },
   "preview": {
     "nasName": "NAS · Medien & Speicher",

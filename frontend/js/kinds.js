@@ -24,6 +24,9 @@ export const KIND_MATCHERS = {
   public: function (p) {
     return p.bind_scope === 'public';
   },
+  conflicts: function (p) {
+    return Boolean(p.conflict || p.rule_violations?.length);
+  },
   hidden: function (p) {
     return !!p.is_hidden;
   },

@@ -1,9 +1,9 @@
 /* Local reservation ownership, allocation rules, and Compose conflict review. */
-import { S } from './state.js?v=121';
-import { hostName } from './hosts.js?v=121';
-import { api } from './api.js?v=121';
-import { t, escapeHtml } from './text.js?v=121';
-import { copyReportText } from './doctor.js?v=121';
+import { S } from './state.js?v=122';
+import { hostName } from './hosts.js?v=122';
+import { api } from './api.js?v=122';
+import { t, escapeHtml } from './text.js?v=122';
+import { copyReportText } from './doctor.js?v=122';
 
 const storageKey = 'port-light-reservation-session';
 const e = escapeHtml;
@@ -101,9 +101,12 @@ export function mountManagementPage(root) {
     } else trigger.focus();
   }
   function syncRecovery() {
-    const retry = root.querySelector('[data-action="retry"]');
-    if (!retry) return;
-    try { retry.hidden = !session().pending; } catch { retry.hidden = true; }
+    let hasPending = false;
+    try { hasPending = Boolean(session().pending); } catch { hasPending = false; }
+    for (const action of ['retry', 'discardPending']) {
+      const btn = root.querySelector('[data-action="' + action + '"]');
+      if (btn) btn.hidden = !hasPending;
+    }
   }
   function render() {
     let html = '';
@@ -115,7 +118,7 @@ export function mountManagementPage(root) {
         [...new Set(reservations.map(r => r.machine))].map(m => '<option>' + e(m) + '</option>').join('') + '</select></label>' +
         '<label>' + tr('expiry') + '<select data-filter="expiry">' + ['all', 'permanent', 'expiring'].map(f => '<option value="' + f + '">' + tr(f) + '</option>').join('') + '</select></label></div>';
       html = editor('newReservation', '', form) + card('reservations', '', filters + '<div id="reservation-list" class="manage-list"></div>') +
-        '<aside class="manage-help">' + button('retry', 'retry') + '<details><summary>' + tr('ownershipTitle') + '</summary><p>' + tr('ownership') + '</p></details></aside>';
+        '<aside class="manage-help">' + button('retry', 'retry') + button('discardPending', 'discardPending') + '<details><summary>' + tr('ownershipTitle') + '</summary><p>' + tr('ownership') + '</p></details></aside>';
     } else if (section === 'rules') {
       const form = '<form data-form="rule" class="manage-form">' + input('name', 'text', '', 'required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*"') +
         input('start', 'number', 20000, 'required min="1" max="65535"') + input('end', 'number', 29999, 'required min="1" max="65535"') +
@@ -160,7 +163,7 @@ export function mountManagementPage(root) {
     root.innerHTML = shell('');
     status(t('manage.loading'));
     try {
-      const results = await Promise.all([json('/api/port-rules'), json('/api/reservations'), section === 'conflicts' ? json('/api/ports?range_start=1&range_end=65535') : null]);
+      const results = await Promise.all([json('/api/port-rules'), json('/api/reservations'), section === 'conflicts' ? json('/api/ports?range_start=1&range_end=65535&include_hidden=true') : null]);
       if (current !== generation) return;
       rules = results[0].rules; rulesReadonly = results[0].readonly === true; reservations = results[1].reservations; rows = results[2]?.ports || [];
       render();
@@ -247,6 +250,11 @@ export function mountManagementPage(root) {
           }
         }
         else status(t('manage.noPending'));
+      } else if (action === 'discardPending') {
+        const saved = session();
+        delete saved.pending;
+        save(saved);
+        status('');
       } else if (action === 'copySnippet') { await copyReportText(btn.parentElement.querySelector('pre').textContent); status(t('manage.copied')); }
       else if (action === 'copyRelease' || action === 'release') {
         const saved = session(); const port = Number(btn.dataset.port); const token = saved.tokens[port];

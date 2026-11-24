@@ -453,7 +453,10 @@
         "fact_stale": "已过期",
         "observations_events": "变化记录",
         "port_count": "{count} 个端口",
-        "problem_count": "{count} 项"
+        "problem_count": "{count} 项",
+        "delete_report": "删除",
+        "clear_reports": "清空已保存报告",
+        "report_quota": "已保存 {used} / {limit}"
       },
       "settings": {
         "ai_title": "AI 连接",
@@ -655,7 +658,8 @@
     "portDesc": "端口 ↓",
     "nameAsc": "名称 A–Z",
     "nameDesc": "名称 Z–A",
-    "byStatus": "状态"
+    "byStatus": "状态",
+    "conflicts": "冲突"
   },
   "scanner": {
     "diagnostics": {
@@ -746,7 +750,8 @@
     "publicBindHint": "0.0.0.0 表示所有本地 IPv4 地址，:: 表示所有本地 IPv6 地址；是否能从外部访问还取决于防火墙和网络配置。",
     "remoteReadOnly": "只读 — 这张占用图来自 {name}。隐藏、标签和添加仍只作用于本机。",
     "expiresIn": "{time} 后到期",
-    "reservationHint": "此预约只能使用创建时返回的凭证修改或释放。"
+    "reservationHint": "此预约只能使用创建时返回的凭证修改或释放。",
+    "otherMachines": "其他机器"
   },
   "hosts": {
     "title": "其他机器",
@@ -1101,7 +1106,8 @@
         "none": "当前没有活跃租约。",
         "release": "释放",
         "remaining": "剩余 {time}",
-        "tokenPrompt": "粘贴预约凭证"
+        "tokenPrompt": "粘贴预约凭证",
+        "releaseFailed": "无法释放该预约。请检查凭证后重试。"
       }
     }
   },
@@ -1257,7 +1263,8 @@
     "ownershipTitle": "预留的释放权限",
     "conflictsEmpty": "未发现配置冲突。",
     "rulesEmpty": "还没有端口规则。",
-    "reservationsEmpty": "还没有预留端口。"
+    "reservationsEmpty": "还没有预留端口。",
+    "discardPending": "放弃待处理请求"
   },
   "preview": {
     "nasName": "NAS · 媒体与存储",

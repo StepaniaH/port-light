@@ -1,12 +1,23 @@
 /* Group declarations without changing the underlying per-port records. */
 export function groupPorts(rows, mode = 'service') {
+  const dirsByName = new Map();
+  for (const row of rows) {
+    for (const c of row.compose_configs || []) {
+      if (!c.project_name) continue;
+      if (!dirsByName.has(c.project_name)) dirsByName.set(c.project_name, new Set());
+      dirsByName.get(c.project_name).add(c.project_dir || c.project_name);
+    }
+  }
   const groups = new Map();
   for (const row of rows) {
     const configs = row.compose_configs || [];
     const identities = [...new Map(configs.map(c => {
       const project = c.project_name || c.project_dir;
+      const disambiguate = c.project_name && c.project_dir && c.project_dir !== c.project_name &&
+        dirsByName.get(c.project_name)?.size > 1;
+      const projectTitle = disambiguate ? c.project_name + ' (' + c.project_dir + ')' : project;
       const key = JSON.stringify([c.project_dir || project, mode === 'service' ? c.service_name : '']);
-      return [key, { key, label: project + (mode === 'service' ? ' / ' + c.service_name : '') }];
+      return [key, { key, label: projectTitle + (mode === 'service' ? ' / ' + c.service_name : '') }];
     })).values()];
     if (!identities.length) identities.push({ key: 'other', label: '' });
     for (const identity of identities) {
@@ -21,9 +32,10 @@ export function portRuns(rows) {
   const runs = [];
   for (const row of [...rows].sort((a, b) => a.port - b.port)) {
     const last = runs[runs.length - 1];
-    // Keep conflicts, visibility and status boundaries visible in the summary.
+    // Keep conflicts, rule violations, visibility and status boundaries visible in the summary.
     if (last && last.at(-1).port + 1 === row.port &&
         last[0].status === row.status && !!last[0].conflict === !!row.conflict &&
+        Boolean(last[0].rule_violations?.length) === Boolean(row.rule_violations?.length) &&
         !!last[0].is_hidden === !!row.is_hidden && last[0].protocol === row.protocol) last.push(row);
     else runs.push([row]);
   }

@@ -208,6 +208,63 @@ test('valid legacy port-interpretation reports retain structured templates only'
   assert.doesNotMatch(JSON.stringify(output), /UNTRUSTED/);
 });
 
+test('persisted legacy report documents render saved validated interpretations and checks', () => {
+  const t = display.translator(catalogs, 'en');
+  const persisted = {
+    id: 'legacy-report-1',
+    created_at: 1700000010,
+    versions: {
+      schema: 1,
+      evidence: 'port-evidence.v1',
+      baseline: 'port-rules.v1',
+      interpretation: 'port-interpretation.v1',
+    },
+    evidence: {
+      port: 8080,
+      question_type: 'current_occupancy',
+      observation: {
+        captured_at: 1700000000,
+        current: {
+          entries: [{
+            protocol: 'tcp',
+            status: 'configured',
+            compose_declared: true,
+            compose_conflict: false,
+            compose_relation: 'declared_without_live_mapping',
+            bind: [{ family: 'ipv4', scope: 'loopback', source: 'compose' }],
+          }],
+        },
+        events: [],
+      },
+    },
+    baseline: {
+      version: 'port-rules.v1',
+      conclusion: { code: 'declaration_without_mapping' },
+    },
+    validated_interpretation: {
+      schema_version: 1,
+      summary_kind: 'current_occupancy',
+      evidence_ids: ['current'],
+      hypotheses: [{
+        kind: 'declaration_runtime_gap',
+        evidence_ids: ['current'],
+        missing_evidence: ['runtime_configuration'],
+        text: 'UNTRUSTED',
+      }],
+      checks: [{ action: 'mapping', evidence_ids: ['current'] }],
+    },
+    interpretation_view: { summary: { text: 'UNTRUSTED' } },
+  };
+  const view = display.legacyPresentation(persisted, t);
+  assert.ok(view.structured.interpretation);
+  assert.equal(
+    view.structured.interpretation.hypotheses[0].text,
+    catalogs.en.hypothesis_declaration_runtime_gap,
+  );
+  assert.deepEqual(view.structured.interpretation.checks, [{ action: 'mapping', evidence_ids: ['current'] }]);
+  assert.doesNotMatch(JSON.stringify(view), /UNTRUSTED/);
+});
+
 test('stable failures remain localized without echoing upstream messages', () => {
   for (const locale of Object.keys(catalogs)) {
     const t = display.translator(catalogs, locale);
