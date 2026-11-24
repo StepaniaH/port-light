@@ -418,26 +418,24 @@ try {
   assert.equal(unavailableReads, 1, 'A 404 receipt stops polling instead of creating an infinite retry loop');
   await page.unroute('**/analysis/api/workbench/captures/*');
 
-  // Older single-port reports still use the local structured renderer and never echo free-form model text.
-  const legacyPreview = await responseJson(await page.request.post(base + '/analysis/api/analysis/previews', {
-    headers: { 'X-Port-Light-Analysis': '1' },
-    data: { port: 8080, include_history: true, protocol: 'tcp', question_type: 'recorded_changes', max_records: 8 },
-  }), 201);
-  const legacyPath = base + '/analysis/api/analysis/' + encodeURIComponent(legacyPreview.id);
-  await responseJson(await page.request.post(legacyPath + '/start', {
-    headers: { 'X-Port-Light-Analysis': '1' }, data: { provider: 'demo', model: 'synthetic-demo', confirmed: true },
-  }), 202);
-  await expect.poll(async () => (await responseJson(await page.request.get(legacyPath))).status, { timeout: 10000 }).toBe('completed');
-  await responseJson(await page.request.post(base + '/analysis/api/reports', {
-    headers: { 'X-Port-Light-Analysis': '1' }, data: { completed_analysis_id: legacyPreview.id },
-  }), 201);
+  // Older single-port reports still use the local structured renderer, show saved structured interpretations, and support deletion.
+  const analysisCookie = (await page.context().cookies()).find(item => item.name === 'port_light_analysis_session');
+  assert.ok(analysisCookie?.value, 'Analysis session cookie is set with persistent Max-Age');
+  assert.ok(analysisCookie.expires > Math.floor(Date.now() / 1000) + 80 * 86400, 'Analysis session cookie carries 90-day Max-Age');
+  await responseJson(await page.request.post(base + '/__preview/workbench/seed-legacy-report', {
+    data: { session: analysisCookie.value },
+  }), 200);
   await page.goto(base + '/#/workspace/port-analysis', { waitUntil: 'networkidle' });
   await expect(page.locator('#analysis-legacy-reports')).toBeVisible();
   await page.locator('#analysis-legacy-reports > summary').click();
-  await expect(page.locator('#analysis-legacy-report-list button')).toHaveCount(1);
-  await page.locator('#analysis-legacy-report-list button').click();
+  await expect(page.locator('#analysis-legacy-report-list button.report-open')).toHaveCount(1);
+  await page.locator('#analysis-legacy-report-list button.report-open').click();
   await expect(page.locator('#analysis-results')).toBeVisible();
-  assert.ok(!(await page.locator('#workspace-page').innerText()).includes('UNTRUSTED'));
+  const legacyRenderedText = await page.locator('#workspace-page').innerText();
+  assert.ok(!legacyRenderedText.includes('UNTRUSTED'));
+  await expect(page.locator('#analysis-priority-queue')).toContainText('Compose');
+  await page.locator('#analysis-legacy-report-list button.report-delete').click();
+  await expect(page.locator('#analysis-legacy-reports')).toBeHidden();
 
   // Contiguous resources retain every port behind one disclosure, with working deep links.
   await advance(page, base, 'port_range');

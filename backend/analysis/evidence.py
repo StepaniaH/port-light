@@ -7,6 +7,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 EVIDENCE_VERSION = "port-observation.v2"
+CORE_VERSION_PATTERN = r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?$"
 Identifier = Annotated[str, Field(pattern=r"^[A-Za-z0-9_:.-]{1,200}$")]
 Timestamp = Annotated[int, Field(ge=0, le=32503680000)]
 Port = Annotated[int, Field(ge=1, le=65535)]
@@ -128,7 +129,7 @@ class Observation(Whitelist):
     schema_version: Literal[1]
     capture_id: Identifier
     captured_at: Timestamp
-    core_version: Annotated[str, Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")]
+    core_version: Annotated[str, Field(pattern=CORE_VERSION_PATTERN)]
     requires_hidden_access: bool
     scope: Scope
     identity: Identity
@@ -192,7 +193,9 @@ def prepare_evidence(
                 raise ValueError("Event kind and before/after shape disagree")
     except (ValidationError, ValueError, TypeError, KeyError):
         raise AnalysisError(
-            "core_incompatible", "端口观察格式不兼容，未生成分析数据。", 503
+            "core_incompatible",
+            "Port observation format is incompatible; no evidence was prepared.",
+            503,
         ) from None
     captured = document["captured_at"]
     history = document["history"]
@@ -204,9 +207,9 @@ def prepare_evidence(
         event for event in document["events"] if cutoff <= event["observed_at"] <= captured
     ]
     limitations = [
-        "状态只涵盖已启用的扫描来源；禁用来源并未被检查。",
-        "配置声明不等于服务正在运行；绑定范围不等于实际公网可达范围。",
-        "没有采集防火墙、远端连通性、进程日志或应用健康检查。",
+        "Status covers enabled scan sources only; disabled sources were not checked.",
+        "Declared configuration is not a running service; bind scope is not external reachability.",
+        "Firewall rules, remote connectivity, process logs, and health checks are not collected.",
     ]
     limitation_codes = ["sources", "declarations", "health"]
     if (
@@ -214,35 +217,39 @@ def prepare_evidence(
         or not document["scan"]["complete"]
         or document["scan"]["stale"]
     ):
-        limitations.append("扫描尚未完整就绪或数据已过期，不能据此确认端口空闲或服务停止。")
+        limitations.append(
+            "Scan is incomplete or stale; absence of observations does not confirm a free port."
+        )
         limitation_codes.append("scan")
     if include_history:
         history["truncated"] = history["truncated"] or len(selected_history) > max_records
         history["events"] = selected_history[-max_records:]
         document["events"] = selected_events[-max_records:]
         limitations.append(
-            "旧历史只记录端口状态，不提供完整的协议、占用者或绑定变化。新事件按实际记录的粒度呈现。"
+            "Legacy history records port state only without protocol, holder, or bind transitions."
         )
         limitation_codes.append("history_resolution")
         if history["state"] != "available":
-            limitations.append("历史未启用或暂不可用；不能推断未记录的变化。")
+            limitations.append("History is disabled or unavailable; unrecorded changes are unknown.")
             limitation_codes.append("history_unavailable")
         if any(code.startswith("event_history_") for code in document["limitations"]):
-            limitations.append("持久变化记录未启用或暂不可用，本次可能只有当前进程观察到的事件。")
+            limitations.append(
+                "Persistent change history is disabled or unavailable; only in-memory events may appear."
+            )
             limitation_codes.append("event_history")
         if not history["events"] and not document["events"]:
-            limitations.append("没有可用的历史记录；这不能证明期间从未发生变化。")
+            limitations.append("No history records are available; prior changes cannot be ruled out.")
             limitation_codes.append("no_history")
         if history["truncated"] or len(selected_events) > max_records:
             limitation_codes.append("truncated")
             limitations.append(
-                f"预览最多包含最近 24 小时内的 {max_records} 条状态记录和 {max_records} 个事件，可能存在未包含的记录。"
+                f"Preview includes at most {max_records} state records and {max_records} events from the last 24 hours."
             )
     else:
         history["events"] = []
         history["state"] = "not_selected"
         document["events"] = []
-        limitations.append("用户未选择发送历史记录或变化事件。")
+        limitations.append("History and change events were excluded from this selection.")
         limitation_codes.append("not_selected")
     used_refs = {f"{document['capture_id']}:port:{identity['port']}"}
     for entry in entries:
@@ -319,7 +326,7 @@ async def read_port(client, port, protocol="all"):
     if response.status_code != 200:
         raise AnalysisError(
             "core_unavailable",
-            "无法读取该端口，请检查当前访问权限和核心状态。",
+            "Unable to read port observation from core.",
             response.status_code,
         )
     return response.json()
@@ -344,13 +351,17 @@ async def read_evidence(
         metadata = await client.get("/api/meta")
         if metadata.status_code != 200:
             raise AnalysisError(
-                "core_unavailable", "无法读取当前核心接口信息。", metadata.status_code
+                "core_unavailable", "Unable to read core metadata.", metadata.status_code
             )
         if metadata.json().get("capabilities", {}).get("port_observation") != 1:
-            raise AnalysisError("core_incompatible", "当前核心不支持所需的端口观察接口。", 503)
+            raise AnalysisError(
+                "core_incompatible", "Core does not support port observations.", 503
+            )
         observation = await read_port(client, port, protocol)
         if observation.get("identity") != {"port": port, "protocol": protocol}:
-            raise AnalysisError("core_incompatible", "端口观察与所选对象不一致。", 503)
+            raise AnalysisError(
+                "core_incompatible", "Port observation identity does not match requested port.", 503
+            )
         evidence = prepare_evidence(
             observation,
             core_version=core_version,

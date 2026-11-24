@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 import time
@@ -7,9 +8,9 @@ import httpx
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from tests.analysis.observation_fixture import observation
+from pydantic import ValidationError
+
 from backend.analysis.evidence import AnalysisError
-from backend.analysis.interpretation import demo_selection
 from backend.analysis.module import create_module
 from backend.analysis.provider import ChatGateway
 from backend.analysis.settings import (
@@ -18,7 +19,8 @@ from backend.analysis.settings import (
     AIConnectionInput,
     BYOKStore,
 )
-from pydantic import ValidationError
+from tests.analysis.observation_fixture import observation
+from tests.analysis.test_workbench import batch_document
 
 ACTION = {"X-Port-Light-Analysis": "1"}
 SAVED_KEY = "fixture-saved-key-not-a-real-secret"
@@ -35,11 +37,20 @@ def host(data_dir, state, *, settings_reader=...):
 
     @app.get("/api/meta")
     def metadata():
-        return {"capabilities": {"port_observation": 1}}
+        return {"capabilities": {"batch_port_observation": 1, "port_observation": 1}}
 
     @app.get("/api/observations/ports/{port}")
     def port(port: int, request: Request):
         return observation(port)
+
+    @app.post("/api/observations/batch")
+    async def batch(request: Request):
+        values = await request.json()
+        document = batch_document(
+            ports=values["selection"].get("ports", [8080]), protocol=values["protocol"]
+        )
+        document["selection"]["kind"] = values["selection"]["kind"]
+        return document
 
     context = {
         "module_api": 1,
@@ -65,12 +76,19 @@ def save_profile(client, *, provider="openai", model="fixture-model", key=SAVED_
     )
 
 
-def preview(client):
+def create_capture(client):
     response = client.post(
-        "/analysis/api/analysis/previews", json={"port": 8080}, headers=ACTION
+        "/analysis/api/workbench/captures",
+        json={
+            "kind": "triage",
+            "scope": {"kind": "single_port", "port": 8080},
+            "protocol": "all",
+            "history_hours": 6,
+        },
+        headers=ACTION,
     )
     assert response.status_code == 201, response.text
-    return "/analysis/api/analysis/" + response.json()["id"]
+    return "/analysis/api/workbench/captures/" + response.json()["id"]
 
 
 def completed(client, path):
@@ -143,12 +161,13 @@ def test_settings_document_persists_one_profile_without_disclosing_key(tmp_path,
             and isinstance(item["name"], str)
             for item in initial.json()["providers"]
         )
-        legacy_meta = client.get("/analysis/api/meta").json()
-        assert legacy_meta["capabilities"] == {
+        meta = client.get("/analysis/api/meta").json()
+        assert meta["capabilities"] == {
             "byok_port_analysis": 1,
             "troubleshooting_workbench": 1,
         }
-        assert legacy_meta["enabled"] == {"byok_port_analysis": True}
+        assert meta["enabled"] == {"byok_port_analysis": True}
+        assert "check_catalog" not in meta and "analysis_limits" not in meta
 
         saved = save_profile(client)
         assert saved.status_code == 200
@@ -223,7 +242,6 @@ def test_settings_writes_require_action_and_origin_and_allow_clear(tmp_path, mon
         assert cross_origin.status_code == 403
         assert save_profile(client).status_code == 200
 
-        assert save_profile(client).status_code == 200
         invalid_delete = client.request(
             "DELETE", "/analysis/api/settings/ai", content=b"{}", headers=ACTION
         )
@@ -241,9 +259,15 @@ def test_settings_writes_require_action_and_origin_and_allow_clear(tmp_path, mon
         assert not (tmp_path / "byok" / PROFILE_FILE).exists()
 
 
-def test_settings_readonly_fails_closed_without_an_exact_false_host_value(tmp_path, monkeypatch):
-    monkeypatch.setenv("PORT_LIGHT_ANALYSIS_DEMO", "1")
+def test_settings_readonly_fails_closed_for_writes_and_connection_tests(tmp_path, monkeypatch):
+    monkeypatch.delenv("PORT_LIGHT_ANALYSIS_DEMO", raising=False)
     state = {"capabilities": {"byok_port_analysis": True}}
+    probe_calls = []
+
+    async def probe(_self, *_args, **_kwargs):
+        probe_calls.append(True)
+
+    monkeypatch.setattr(ChatGateway, "probe", probe)
 
     def broken():
         raise RuntimeError("fixture")
@@ -260,43 +284,85 @@ def test_settings_readonly_fails_closed_without_an_exact_false_host_value(tmp_pa
     for index, reader in enumerate(readers):
         with TestClient(host(tmp_path / str(index), state, settings_reader=reader)) as client:
             assert client.get("/analysis/api/settings").json()["readonly"] is True
-            denied = save_profile(client, provider="demo", model="synthetic-demo", key="")
+            denied = save_profile(client, provider="openai", model="fixture-model", key=SAVED_KEY)
             assert denied.status_code == 403
+            assert denied.json()["error"]["code"] == "settings_readonly"
+            denied_probe = client.post(
+                "/analysis/api/settings/ai/test",
+                headers={**ACTION, "X-Port-Light-Model-Key": SAVED_KEY},
+                json={
+                    "confirmed": True,
+                    "draft": {
+                        "provider": "custom",
+                        "model": "draft-model",
+                        "base_url": "https://example.invalid/v1",
+                    },
+                },
+            )
+            assert denied_probe.status_code == 403
+            assert denied_probe.json()["error"]["code"] == "settings_readonly"
+            assert probe_calls == []
 
-    with TestClient(host(tmp_path / "writable", state, settings_reader=lambda: False)) as client:
+    readonly = [False]
+    with TestClient(
+        host(tmp_path / "writable", state, settings_reader=lambda: readonly[0])
+    ) as client:
         assert client.get("/analysis/api/settings").json()["readonly"] is False
-        assert save_profile(client, provider="demo", model="synthetic-demo", key="").status_code == 200
+        saved = save_profile(client, provider="openai", model="fixture-model", key=SAVED_KEY)
+        assert saved.status_code == 200
+        revision = saved.json()["ai"]["revision"]
+        readonly[0] = True
+        blocked_saved_probe = client.post(
+            "/analysis/api/settings/ai/test",
+            headers=ACTION,
+            json={"config_revision": revision, "confirmed": True},
+        )
+        assert blocked_saved_probe.status_code == 403
+        assert blocked_saved_probe.json()["error"]["code"] == "settings_readonly"
+        assert probe_calls == []
 
 
-def test_saved_connection_uses_exact_revision_and_legacy_key_still_works(tmp_path, monkeypatch):
+def test_saved_connection_uses_exact_revision_and_explicit_key_still_works(tmp_path, monkeypatch):
     monkeypatch.delenv("PORT_LIGHT_ANALYSIS_DEMO", raising=False)
     calls = []
 
-    async def gateway(provider, model, key, evidence, **_kwargs):
+    async def gateway(provider, model, key, payload, **_kwargs):
         calls.append((provider, model, key))
-        return demo_selection(evidence), {}
+        return (
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "conclusion": {
+                        "text": "Review the observed state.",
+                        "evidence_ids": [next(iter(payload["facts"]))],
+                    },
+                    "recommendations": [],
+                }
+            ),
+            {},
+        )
 
-    monkeypatch.setattr("backend.analysis.routes.ChatGateway", lambda **_kwargs: gateway)
+    monkeypatch.setattr("backend.analysis.routes.WorkbenchGateway", lambda **_kwargs: gateway)
     state = {"capabilities": {"byok_port_analysis": True}}
     with TestClient(host(tmp_path, state, settings_reader=lambda: False)) as client:
         saved = save_profile(client)
         revision = saved.json()["ai"]["revision"]
 
-        saved_path = preview(client)
+        saved_path = create_capture(client)
         started = client.post(
-            saved_path + "/start",
+            saved_path + "/ai",
             json={"connection": "saved", "config_revision": revision, "confirmed": True},
             headers=ACTION,
         )
-        assert started.status_code == 202
+        assert started.status_code == 200
         assert completed(client, saved_path)["status"] == "completed"
         assert calls == [("openai", "fixture-model", SAVED_KEY)]
         assert SAVED_KEY not in started.text
 
-        stale_path = preview(client)
+        stale_path = create_capture(client)
         assert save_profile(client, model="changed-model", key=None).status_code == 200
         stale = client.post(
-            stale_path + "/start",
+            stale_path + "/ai",
             json={"connection": "saved", "config_revision": revision, "confirmed": True},
             headers=ACTION,
         )
@@ -304,24 +370,24 @@ def test_saved_connection_uses_exact_revision_and_legacy_key_still_works(tmp_pat
         assert stale.json()["error"]["code"] == "configuration_changed"
         assert calls == [("openai", "fixture-model", SAVED_KEY)]
 
-        legacy_path = preview(client)
-        legacy = client.post(
-            legacy_path + "/start",
-            json={"provider": "openai", "model": "legacy-model", "confirmed": True},
+        explicit_path = create_capture(client)
+        explicit = client.post(
+            explicit_path + "/ai",
+            json={"provider": "openai", "model": "explicit-model", "confirmed": True},
             headers={**ACTION, "X-Port-Light-Model-Key": REPLACEMENT_KEY},
         )
-        assert legacy.status_code == 202
-        assert completed(client, legacy_path)["status"] == "completed"
-        assert calls[-1] == ("openai", "legacy-model", REPLACEMENT_KEY)
+        assert explicit.status_code == 200
+        assert completed(client, explicit_path)["status"] == "completed"
+        assert calls[-1] == ("openai", "explicit-model", REPLACEMENT_KEY)
 
         for malformed in (
             {"provider": None, "model": "fixture-model", "confirmed": True},
             {"provider": "openai", "model": None, "confirmed": True},
             {"connection": "saved", "config_revision": None, "confirmed": True},
         ):
-            rejected = client.post(legacy_path + "/start", json=malformed, headers=ACTION)
+            rejected = client.post(explicit_path + "/ai", json=malformed, headers=ACTION)
             assert rejected.status_code == 422
-        result = client.get(legacy_path)
+        result = client.get(explicit_path)
         assert SAVED_KEY not in result.text and REPLACEMENT_KEY not in result.text
 
 
@@ -401,13 +467,13 @@ def test_corrupt_profile_does_not_break_module_startup_or_non_saved_analysis(tmp
         unavailable = client.get("/analysis/api/settings")
         assert unavailable.status_code == 503
         assert "corrupt fixture profile" not in unavailable.text
-        path = preview(client)
+        path = create_capture(client)
         started = client.post(
-            path + "/start",
+            path + "/ai",
             json={"provider": "demo", "model": "synthetic-demo", "confirmed": True},
             headers=ACTION,
         )
-        assert started.status_code == 202
+        assert started.status_code == 200
         assert completed(client, path)["status"] == "completed"
 
 
@@ -430,7 +496,7 @@ def test_connection_probe_keeps_browser_session_out_of_provider_headers(tmp_path
     with TestClient(host(tmp_path, {}, settings_reader=lambda: False)) as client:
         saved = save_profile(client, provider="opencode-go")
         assert saved.status_code == 200
-        preview(client)
+        create_capture(client)
         browser_session = client.cookies.get("port_light_analysis_session")
         assert browser_session
         for _ in range(2):

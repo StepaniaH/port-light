@@ -121,3 +121,24 @@ def test_ai_cannot_complete_without_a_conclusion():
         validate_recommendations(
             {"schema_version": 1, "recommendations": []}, observed_capture()
         )
+
+
+def test_mapped_count_tracks_live_docker_mappings_not_stopped_containers():
+    batch = batch_document(ports=[8080, 8081], protocol="tcp", conflict=False)
+    # Port 8080 belongs to a stopped container (docker_mapped=True, docker_live=False).
+    batch["ports"][0]["current"]["entries"][0].update(docker_mapped=True, docker_live=False)
+    # Port 8081 belongs to a running container (docker_mapped=True, docker_live=True).
+    batch["ports"][1]["current"]["entries"][0].update(docker_mapped=True, docker_live=True)
+    capture = build_capture(
+        batch,
+        identifier="docker-live-summary",
+        kind="triage",
+        scope_requested={
+            "kind": "selected_ports",
+            "scope": {"kind": "selected_ports", "ports": [8080, 8081]},
+            "protocol": "tcp",
+            "history_hours": 6,
+        },
+    )
+    assert capture["summary"]["mapped_count"] == 1
+    assert capture["ai_preview"]["payload"]["resource_summary"]["mapped_count"] == 1

@@ -19,14 +19,14 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   const byId = id => root.querySelector('#analysis-' + id);
   const on = (id, event, handler) => byId(id).addEventListener(event, handler, { signal });
   const VISIT_KEY = 'port-light-workbench-visit-v1';
-  const LEGACY_ANALYSIS_KEY = 'port-light-analysis-id';
   const LEGACY_REPORT_KEY = 'port-light-analysis-report-id';
   const state = {
     capture: null, report: null, sourceReport: null, legacy: null, options: null,
     task: 'triage', selectedPorts: [], busy: false, initializing: true, capturing: false, enabled: false, reportsAvailable: false,
     demo: false, settings: null, settingsError: null, consentedRevision: null, dirty: false, generation: 0, timer: null,
     visibleSelected: 40, visibleProblems: 12, visibleFacts: 20, remainingOpen: false,
-    reports: [], reportsCursor: null, legacyReports: [], restoring: null, pollFailures: 0, aiUncertain: false, liveCapture: false, payloadKey: null, aiResultKey: null,
+    reports: [], reportsCursor: null, legacyReports: [], reportQuota: { used: null, limit: 128 },
+    restoring: null, pollFailures: 0, aiUncertain: false, liveCapture: false, payloadKey: null, aiResultKey: null,
   };
 
   signal.addEventListener('abort', () => {
@@ -63,6 +63,9 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Port-Light-Analysis': '1', 'Accept-Language': locale, ...extra },
       body: JSON.stringify(body),
     };
+  }
+  function deleteAction() {
+    return { method: 'DELETE', headers: { 'X-Port-Light-Analysis': '1', 'Accept-Language': locale } };
   }
   function isPort(value) { return Number.isInteger(value) && value >= 1 && value <= 65535; }
   function portNumber(id) {
@@ -130,9 +133,6 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       };
       sessionStorage.setItem(VISIT_KEY, JSON.stringify(value));
     } catch (_) { /* Recovery is optional when browser storage is unavailable. */ }
-  }
-  function clearLegacyKeys() {
-    try { sessionStorage.removeItem(LEGACY_ANALYSIS_KEY); sessionStorage.removeItem(LEGACY_REPORT_KEY); } catch (_) { /* Optional. */ }
   }
   function safeSet(select, value, fallback) {
     if ([...select.options].some(option => option.value === value)) select.value = value;
@@ -932,6 +932,8 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     byId('cancel-ai').disabled = state.busy || ai.status !== 'running';
     byId('retry-ai').disabled = running || !state.enabled || !state.liveCapture || state.dirty || !['failed', 'cancelled'].includes(ai.status);
     byId('consent').disabled = running || !connection || !settingsEnableAI() || ai.status !== 'not_started';
+    byId('load-more-reports').disabled = running;
+    byId('clear-reports').disabled = running;
     for (const button of root.querySelectorAll('#analysis-report-list button, #analysis-legacy-report-list button')) button.disabled = running;
     enhanceSelects(root);
   }
@@ -1032,6 +1034,33 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     catch (item) { if (!signal.aborted) error(display.failureText(item, t)); }
     finally { state.busy = false; controls(); }
   }
+  function applyMetaQuota(meta) {
+    const storage = meta?.report_storage;
+    if (!storage) return;
+    if (Number.isInteger(storage.used_workbench_reports)) state.reportQuota.used = storage.used_workbench_reports;
+    if (Number.isInteger(storage.workbench?.max_reports)) state.reportQuota.limit = storage.workbench.max_reports;
+  }
+  async function refreshQuota() {
+    try {
+      const meta = await api('/analysis/api/meta');
+      if (!signal.aborted) { applyMetaQuota(meta); renderReportQuota(); }
+    } catch (_) { /* Quota refresh is optional. */ }
+  }
+  function renderReportQuota() {
+    const hasWorkbench = state.reports.length > 0;
+    if (!hasWorkbench) {
+      setText('report-list-status', '');
+    } else {
+      const used = Number.isInteger(state.reportQuota.used) && state.reportQuota.used >= state.reports.length
+        ? state.reportQuota.used
+        : state.reports.length;
+      const limit = state.reportQuota.limit || 128;
+      setText('report-list-status', t('report_quota', { used, limit }));
+    }
+    const hasAny = hasWorkbench || state.legacyReports.length > 0;
+    byId('clear-reports').hidden = !hasAny;
+    byId('report-list-actions').hidden = byId('load-more-reports').hidden && byId('clear-reports').hidden;
+  }
   function reportLabel(report) {
     const kind = ['triage', 'changes', 'recheck'].includes(report?.kind) ? report.kind : 'triage';
     return t('report_link', {
@@ -1043,24 +1072,70 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   function renderReportList() {
     byId('saved-empty').hidden = state.reports.length > 0;
     byId('report-list').replaceChildren(...state.reports.map(report => {
-      const row = document.createElement('li'); const button = document.createElement('button'); button.type = 'button';
-      button.dataset.reportId = report.id; button.setAttribute('aria-label', reportLabel(report));
+      const row = document.createElement('li'); row.className = 'report-row';
+      const labelText = reportLabel(report);
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'report-open';
+      button.dataset.reportId = report.id; button.setAttribute('aria-label', labelText);
       const title = document.createElement('span'); title.className = 'report-title';
       const kind = ['triage', 'changes', 'recheck'].includes(report.kind) ? report.kind : 'triage';
       title.textContent = t('capture_kind_' + kind);
       const scope = document.createElement('span'); scope.className = 'report-scope'; scope.textContent = scopeSummary(report.scope_summary);
       const time = document.createElement('span'); time.className = 'report-time'; time.textContent = date(report.created_at);
       button.append(title, scope, time);
-      button.addEventListener('click', () => loadReport(report.id), { signal }); row.append(button); return row;
+      button.addEventListener('click', () => loadReport(report.id), { signal });
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'report-delete';
+      remove.dataset.deleteReportId = report.id; remove.textContent = t('delete_report');
+      remove.setAttribute('aria-label', t('delete_report') + ': ' + labelText);
+      remove.addEventListener('click', () => deleteReport(report.id), { signal });
+      row.append(button, remove); return row;
+    }));
+    byId('load-more-reports').hidden = !state.reportsCursor;
+    syncReportSelection();
+    renderReportQuota();
+  }
+  function renderLegacyReportList() {
+    byId('legacy-reports').hidden = state.legacyReports.length === 0;
+    byId('legacy-report-list').replaceChildren(...state.legacyReports.map(report => {
+      const row = document.createElement('li'); row.className = 'report-row';
+      const labelText = t('legacy_report_link', { port: report.port, time: date(report.created_at) });
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'report-open';
+      button.dataset.legacyReportId = report.id; button.textContent = labelText;
+      button.addEventListener('click', () => loadLegacyReport(report.id), { signal });
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'report-delete';
+      remove.dataset.deleteLegacyReportId = report.id; remove.textContent = t('delete_report');
+      remove.setAttribute('aria-label', t('delete_report') + ': ' + labelText);
+      remove.addEventListener('click', () => deleteLegacyReport(report.id), { signal });
+      row.append(button, remove); return row;
     }));
     syncReportSelection();
-    byId('load-more-reports').hidden = !state.reportsCursor;
+    renderReportQuota();
   }
   function syncReportSelection() {
-    for (const button of byId('report-list').querySelectorAll('button')) {
+    for (const button of byId('report-list').querySelectorAll('button[data-report-id]')) {
       if (button.dataset.reportId === state.report?.id) button.setAttribute('aria-current', 'true');
       else button.removeAttribute('aria-current');
     }
+    for (const button of byId('legacy-report-list').querySelectorAll('button[data-legacy-report-id]')) {
+      if (button.dataset.legacyReportId === state.legacy?.reportId) button.setAttribute('aria-current', 'true');
+      else button.removeAttribute('aria-current');
+    }
+  }
+  function clearViewedWorkbenchReport(identifier) {
+    if (identifier && state.sourceReport?.id === identifier) state.sourceReport = null;
+    if (identifier && state.report?.id !== identifier) return;
+    if (!state.report) return;
+    if (state.liveCapture) {
+      state.report = null;
+    } else {
+      state.capture = null; state.report = null; state.sourceReport = null; state.liveCapture = false;
+      state.dirty = false; resetConsent();
+    }
+  }
+  function clearViewedLegacyReport(identifier) {
+    if (identifier && state.legacy?.reportId !== identifier) return;
+    if (!state.legacy) return;
+    state.legacy = null; state.dirty = false;
+    try { sessionStorage.removeItem(LEGACY_REPORT_KEY); } catch (_) { /* Optional. */ }
   }
   async function loadReports(reset = false) {
     const cursor = reset ? null : state.reportsCursor;
@@ -1097,8 +1172,66 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     try {
       const report = await api('/analysis/api/workbench/reports', action({ capture_id: state.capture.id }));
       if (signal.aborted) return;
+      if (Number.isInteger(state.reportQuota.used) && !state.reports.some(item => item.id === report.id)) {
+        state.reportQuota.used = Math.min(state.reportQuota.limit || 128, state.reportQuota.used + 1);
+      }
       updateCapture(report.capture, { report, sourceReport: state.sourceReport, live: true });
-      await loadReports(true);
+      await Promise.all([loadReports(true), refreshQuota()]);
+    } catch (item) { if (!signal.aborted) error(display.failureText(item, t)); }
+    finally { state.busy = false; controls(); }
+  }
+  async function deleteReport(identifier) {
+    if (state.busy || state.capture?.status === 'running') return;
+    state.busy = true; error(); controls();
+    try {
+      await api('/analysis/api/workbench/reports/' + encodeURIComponent(identifier), deleteAction());
+      if (signal.aborted) return;
+      if (Number.isInteger(state.reportQuota.used)) state.reportQuota.used = Math.max(0, state.reportQuota.used - 1);
+      clearViewedWorkbenchReport(identifier);
+      await Promise.all([loadReports(true), refreshQuota()]);
+      if (signal.aborted) return;
+      renderResults(); renderAI(); syncReportSelection(); saveVisit();
+    } catch (item) { if (!signal.aborted) error(display.failureText(item, t)); }
+    finally { state.busy = false; controls(); }
+  }
+  async function deleteLegacyReport(identifier) {
+    if (state.busy || state.capture?.status === 'running') return;
+    state.busy = true; error(); controls();
+    try {
+      await api('/analysis/api/reports/' + encodeURIComponent(identifier), deleteAction());
+      if (signal.aborted) return;
+      state.legacyReports = state.legacyReports.filter(item => item.id !== identifier);
+      clearViewedLegacyReport(identifier);
+      renderLegacyReportList(); renderResults(); renderAI(); saveVisit();
+    } catch (item) { if (!signal.aborted) error(display.failureText(item, t)); }
+    finally { state.busy = false; controls(); }
+  }
+  async function clearReports() {
+    if (state.busy || state.capture?.status === 'running') return;
+    state.busy = true; error(); controls();
+    try {
+      const tasks = [];
+      if (state.reportsAvailable && state.reports.length) {
+        tasks.push(api('/analysis/api/workbench/reports', deleteAction()).then(result => {
+          if (Number.isInteger(state.reportQuota.used)) {
+            state.reportQuota.used = Math.max(0, state.reportQuota.used - (result.deleted_count || 0));
+          }
+        }));
+      }
+      if (state.legacyReports.length) {
+        tasks.push(api('/analysis/api/reports', deleteAction()));
+      }
+      await Promise.all(tasks);
+      if (signal.aborted) return;
+      state.sourceReport = null;
+      clearViewedWorkbenchReport();
+      clearViewedLegacyReport();
+      state.legacyReports = [];
+      renderLegacyReportList();
+      if (state.reportsAvailable) await Promise.all([loadReports(true), refreshQuota()]);
+      else { state.reports = []; state.reportsCursor = null; renderReportList(); }
+      if (signal.aborted) return;
+      renderResults(); renderAI(); syncReportSelection(); saveVisit();
     } catch (item) { if (!signal.aborted) error(display.failureText(item, t)); }
     finally { state.busy = false; controls(); }
   }
@@ -1117,12 +1250,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       const data = await api('/analysis/api/reports');
       if (signal.aborted || !Array.isArray(data.reports) || !data.reports.length) return;
       state.legacyReports = data.reports.slice(0, 20);
-      byId('legacy-reports').hidden = false;
-      byId('legacy-report-list').replaceChildren(...state.legacyReports.map(report => {
-        const row = document.createElement('li'); const button = document.createElement('button'); button.type = 'button';
-        button.textContent = t('legacy_report_link', { port: report.port, time: date(report.created_at) });
-        button.addEventListener('click', () => loadLegacyReport(report.id), { signal }); row.append(button); return row;
-      }));
+      renderLegacyReportList();
     } catch (_) { /* Existing reports are a compatibility convenience, not a blocker. */ }
   }
   async function loadLegacyReport(identifier) {
@@ -1136,15 +1264,6 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
       state.dirty = false; renderResults(); renderAI(); syncReportSelection(); controls(); saveVisit();
     } catch (item) { if (!signal.aborted) error(display.failureText(item, t)); }
     finally { state.busy = false; controls(); }
-  }
-  async function loadLegacyAnalysis(identifier) {
-    try {
-      const document = await api('/analysis/api/analysis/' + encodeURIComponent(identifier));
-      if (signal.aborted) return false;
-      state.capture = null; state.report = null; state.sourceReport = null; state.liveCapture = false;
-      state.legacy = { reportId: null, document, exportPath: '/analysis/api/analysis/' + encodeURIComponent(identifier) + '/report' };
-      state.dirty = false; renderResults(); renderAI(); syncReportSelection(); controls(); return true;
-    } catch (_) { return false; }
   }
   async function restoreResult(saved) {
     if (isPort(port) && saved?.routePort !== port) return;
@@ -1186,9 +1305,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     if (saved?.legacyReportId) { await loadLegacyReport(saved.legacyReportId); return; }
     try {
       const legacyReport = sessionStorage.getItem(LEGACY_REPORT_KEY);
-      if (legacyReport) { await loadLegacyReport(legacyReport); return; }
-      const legacyAnalysis = sessionStorage.getItem(LEGACY_ANALYSIS_KEY);
-      if (legacyAnalysis && await loadLegacyAnalysis(legacyAnalysis)) return;
+      if (legacyReport) { await loadLegacyReport(legacyReport); }
     } catch (_) { /* No browser recovery is still usable. */ }
   }
 
@@ -1233,6 +1350,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
   on('retry-ai', 'click', () => { if (!byId('retry-ai').disabled) capture(); });
   on('save-report', 'click', saveReport); on('recheck', 'click', recheck);
   on('load-more-reports', 'click', () => loadReports(false).catch(item => error(display.failureText(item, t))));
+  on('clear-reports', 'click', clearReports);
 
   async function init() {
     const saved = storedVisit(); restoreForm(saved);
@@ -1241,6 +1359,7 @@ export async function mount({ root, locale, port, signal, enhanceSelects, revisi
     state.enabled = meta.enabled?.byok_port_analysis === true;
     state.reportsAvailable = meta.report_storage?.available === true;
     state.demo = meta.analysis_mode === 'demo';
+    applyMetaQuota(meta);
     await loadSettings();
     if (signal.aborted) return;
     setText('report-storage-note', state.reportsAvailable ? t('storage_note') : t('error_storage'));

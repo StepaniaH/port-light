@@ -7,7 +7,6 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 
-from .baseline import CHECKS, MAX_INPUT_BYTES
 from .provider import configured_providers
 from .reports import ReportStore
 from .routes import analysis_router
@@ -30,7 +29,7 @@ def create_module(context: Mapping) -> FastAPI:
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     demo = os.environ.get("PORT_LIGHT_ANALYSIS_DEMO") == "1"
     providers = (
-        {"demo": {"name": "演示（不调用模型）"}} if demo else configured_providers()
+        {"demo": {"name": "Demo (no model call)"}} if demo else configured_providers()
     )
     reports = ReportStore(context["data_dir"])
     settings_store = BYOKStore(context["data_dir"])
@@ -67,8 +66,6 @@ def create_module(context: Mapping) -> FastAPI:
             },
             "analysis_mode": "demo" if demo else "byok",
             "report_storage": reports.metadata(),
-            "check_catalog": CHECKS,
-            "analysis_limits": {"max_input_bytes": MAX_INPUT_BYTES, "max_output_tokens": 1800},
             "workbench_limits": {
                 "max_ports": MAX_PORTS,
                 "max_report_bytes": 2 * 1024 * 1024,

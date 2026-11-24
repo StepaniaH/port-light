@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
 import secrets
+import socket
 import stat
 import threading
 import uuid
@@ -178,7 +180,7 @@ def model_contains_key(model: str, key: str) -> bool:
 
 def _require_model_identifier(model: str, key: str) -> None:
     if model_contains_key(model, key):
-        raise AnalysisError("invalid_model", "模型 ID 不能包含 API 密钥，请重新填写模型 ID。", 422)
+        raise AnalysisError("invalid_model", "Model identifier must not contain an API key.", 422)
 
 
 def empty_profile() -> dict:
@@ -192,10 +194,85 @@ def empty_profile() -> dict:
 
 
 def _storage_error() -> AnalysisError:
-    return AnalysisError("settings_unavailable", "本机 AI 配置不可用。", 503)
+    return AnalysisError("settings_unavailable", "Local AI settings are unavailable.", 503)
 
 
-def normalize_base_url(value: object) -> str:
+_METADATA_HOSTS = frozenset({"metadata.google.internal", "metadata.goog"})
+_IPV4_LINK_LOCAL = ipaddress.ip_network("169.254.0.0/16")
+_IPV6_LINK_LOCAL = ipaddress.ip_network("fe80::/10")
+_IPV4_MULTICAST = ipaddress.ip_network("224.0.0.0/4")
+_IPV6_MULTICAST = ipaddress.ip_network("ff00::/8")
+
+
+def _parse_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    candidate = host.split("%", 1)[0]
+    try:
+        return ipaddress.ip_address(candidate)
+    except ValueError:
+        pass
+    parts = candidate.split(".")
+    if all(re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|[0-9]+)", part) for part in parts):
+        try:
+            return ipaddress.IPv4Address(socket.inet_aton(candidate))
+        except OSError:
+            pass
+    return None
+
+
+def _forbidden_ip(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        if _forbidden_ip(address.ipv4_mapped):
+            return True
+    if address.is_unspecified:
+        return True
+    if isinstance(address, ipaddress.IPv4Address):
+        return address in _IPV4_LINK_LOCAL or address in _IPV4_MULTICAST
+    return address in _IPV6_LINK_LOCAL or address in _IPV6_MULTICAST
+
+
+def _is_loopback_host(
+    host: str, address: ipaddress.IPv4Address | ipaddress.IPv6Address | None
+) -> bool:
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    if address is None:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        return address.is_loopback or address.ipv4_mapped.is_loopback
+    return address.is_loopback
+
+
+def _configured_hub_port() -> int | None:
+    raw = os.environ.get("PORT_LIGHT_PORT", "").strip()
+    if not raw:
+        return None
+    try:
+        port = int(raw)
+    except ValueError:
+        return None
+    return port if 1 <= port <= 65535 else None
+
+
+def validate_target_url(value: str, *, check_runtime_port: bool = True) -> None:
+    """Reject cloud metadata, link-local, unspecified, multicast, and self-loopback targets."""
+    parsed = urlsplit(value)
+    raw_host = parsed.hostname or ""
+    host = raw_host.rstrip(".").lower()
+    if host in _METADATA_HOSTS or host.endswith((".metadata.google.internal", ".metadata.goog")):
+        raise AnalysisError("invalid_input", "Target base URL is not allowed.", 422)
+    address = _parse_ip(raw_host)
+    if address is not None and _forbidden_ip(address):
+        raise AnalysisError("invalid_input", "Target base URL is not allowed.", 422)
+    if check_runtime_port and _is_loopback_host(host, address):
+        hub_port = _configured_hub_port()
+        effective_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        if hub_port is not None and effective_port == hub_port:
+            raise AnalysisError(
+                "invalid_input", "Target base URL cannot point to Port-Light itself.", 422
+            )
+
+
+def normalize_base_url(value: object, *, check_runtime_port: bool = True) -> str:
     """Accept an explicit Chat Completions destination without embedded secrets."""
     try:
         if not isinstance(value, str):
@@ -216,9 +293,15 @@ def normalize_base_url(value: object) -> str:
         normalized = str(httpx.URL(value)).rstrip("/")
         if len(normalized) > MAX_BASE_URL_BYTES:
             raise ValueError("URL is too long")
-        return normalized
     except (ValueError, httpx.InvalidURL):
-        raise AnalysisError("invalid_base_url", "请填写不含凭据、查询参数或片段的 HTTP(S) API 地址。", 422) from None
+        raise AnalysisError(
+            "invalid_base_url",
+            "Base URL must be an HTTP(S) URL without credentials, query, or fragment.",
+            422,
+        ) from None
+    validate_target_url(value, check_runtime_port=check_runtime_port)
+    validate_target_url(normalized, check_runtime_port=check_runtime_port)
+    return normalized
 
 
 def _invalid_profile() -> AnalysisError:
@@ -351,7 +434,7 @@ class BYOKStore:
         if version == 2:
             try:
                 if (document["provider"] != "custom"
-                        or normalize_base_url(document["base_url"]) != document["base_url"]
+                        or normalize_base_url(document["base_url"], check_runtime_port=False) != document["base_url"]
                         or document["token_parameter"] not in {"max_tokens", "max_completion_tokens"}
                         or type(document["json_mode"]) is not bool):
                     raise _invalid_profile()
@@ -485,23 +568,27 @@ class BYOKStore:
         token_parameter: str = "max_tokens", json_mode: bool = False,
     ) -> BYOKProfile:
         if provider not in allowed_providers:
-            raise AnalysisError("unsupported_provider", "当前模式不支持该模型服务。", 422)
+            raise AnalysisError(
+                "unsupported_provider", "Provider is not supported in the current mode.", 422
+            )
         if not _valid_profile_value(model, MODEL_PATTERN):
-            raise AnalysisError("invalid_input", "请填写有效的模型 ID。", 422)
+            raise AnalysisError("invalid_input", "Invalid model identifier.", 422)
         if provider == "custom":
             base_url = normalize_base_url(base_url)
             if token_parameter not in {"max_tokens", "max_completion_tokens"} or type(json_mode) is not bool:
-                raise AnalysisError("invalid_input", "接口选项无效。", 422)
+                raise AnalysisError("invalid_input", "Invalid connection options.", 422)
         if demo and provider == "demo":
             if supplied_key not in (None, ""):
-                raise AnalysisError("invalid_key", "演示模式不需要模型 API 密钥。", 422)
+                raise AnalysisError("invalid_key", "Demo mode does not accept an API key.", 422)
             key = ""
         elif supplied_key is None:
             if current is None or current.provider != provider or current.base_url != base_url:
-                raise AnalysisError("key_required", "更换模型服务时请重新填写模型 API 密钥。", 422)
+                raise AnalysisError(
+                    "key_required", "Enter an API key when changing provider or base URL.", 422
+                )
             key = current.key
         elif not _valid_key(supplied_key):
-            raise AnalysisError("invalid_key", "请填写有效的模型 API 密钥。", 422)
+            raise AnalysisError("invalid_key", "Enter a valid API key.", 422)
         else:
             key = supplied_key
         _require_model_identifier(model, key)
@@ -518,14 +605,18 @@ class BYOKStore:
     def _match(connections: SavedConnections, identifier: str, revision: str) -> BYOKProfile:
         profile = connections.find(identifier)
         if profile is None or not isinstance(revision, str) or not secrets.compare_digest(profile.revision, revision):
-            raise AnalysisError("configuration_changed", "AI 配置已变更，请重新读取设置。", 409)
+            raise AnalysisError(
+                "configuration_changed",
+                "AI configuration changed; reload settings and try again.",
+                409,
+            )
         return profile
 
     @staticmethod
     def _replaced(connections: SavedConnections, profile: BYOKProfile) -> tuple[BYOKProfile, ...]:
         if connections.find(profile.identifier) is None:
             if len(connections.profiles) >= MAX_CONNECTIONS:
-                raise AnalysisError("connection_limit", "已达到保存连接的数量上限。", 422)
+                raise AnalysisError("connection_limit", "Saved connection limit reached.", 422)
             return (*connections.profiles, profile)
         return tuple(profile if item.identifier == profile.identifier else item for item in connections.profiles)
 
@@ -609,17 +700,21 @@ class BYOKStore:
             return profile
         draft = values.draft
         if draft.provider not in allowed_providers:
-            raise AnalysisError("unsupported_provider", "当前模式不支持该模型服务。", 422)
+            raise AnalysisError(
+                "unsupported_provider", "Provider is not supported in the current mode.", 422
+            )
         if supplied_key is None:
             if values.config_revision is None:
-                raise AnalysisError("key_required", "请填写模型 API 密钥。", 422)
+                raise AnalysisError("key_required", "Enter an API key.", 422)
             current = self._resolve_saved(values.config_revision, identifier=values.profile_id,
                                           allowed_providers=allowed_providers, demo=False)
             if current.provider != draft.provider or current.base_url != draft.base_url:
-                raise AnalysisError("key_required", "更换服务或地址时请重新填写密钥。", 422)
+                raise AnalysisError(
+                    "key_required", "Enter an API key when changing provider or base URL.", 422
+                )
             key = current.key
         elif not _valid_key(supplied_key):
-            raise AnalysisError("invalid_key", "请填写有效的模型 API 密钥。", 422)
+            raise AnalysisError("invalid_key", "Enter a valid API key.", 422)
         else:
             key = supplied_key
         self.require_safe_model(draft.model, key)
@@ -661,7 +756,11 @@ class BYOKStore:
         if profile.provider not in allowed_providers or (
             profile.provider == "custom" and profile.base_url is None
         ):
-            raise AnalysisError("configuration_changed", "AI 配置已变更，请回到设置页面重新确认。", 409)
+            raise AnalysisError(
+                "configuration_changed",
+                "AI configuration changed; reload settings and try again.",
+                409,
+            )
         if demo and profile.provider == "demo" and not _valid_demo_key(profile.key):
             raise _invalid_profile()
         if not demo and not _valid_key(profile.key):
@@ -673,7 +772,9 @@ class BYOKStore:
         profile = connections.find(identifier) if identifier is not None else connections.active
         if profile is None or not secrets.compare_digest(profile.revision, revision):
             raise AnalysisError(
-                "configuration_changed", "AI 配置已变更，请回到设置页面重新确认。", 409
+                "configuration_changed",
+                "AI configuration changed; reload settings and try again.",
+                409,
             )
         self._validate_saved(profile, allowed_providers=allowed_providers, demo=demo)
         return profile

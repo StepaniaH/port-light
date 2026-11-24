@@ -1,16 +1,20 @@
 """Regression boundaries for frozen local troubleshooting captures."""
 
 import json
+import secrets
 import sqlite3
 from contextlib import asynccontextmanager
 
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+
+from backend.analysis.evidence import AnalysisError, prepare_evidence
 from backend.analysis.module import create_module
 from backend.analysis.reports import APPLICATION_ID, ReportStore, owner_hash
 from backend.analysis.routes import COOKIE
-from backend.analysis.workbench import build_capture, compare_captures
+from backend.analysis.workbench import build_capture, compare_captures, validate_batch_document
+from tests.analysis.observation_fixture import observation
 
 ACTION = {"X-Port-Light-Analysis": "1"}
 OWNER = "owner-0123456789abcdefghijklmnopqrstuv"
@@ -472,22 +476,164 @@ def test_recheck_rejects_resource_withdrawn_after_source_report_access(
         assert "9000" not in recheck.text
 
 
-def test_invalid_cookie_is_replaced_when_a_capture_is_created(tmp_path, monkeypatch, state):
+def test_invalid_cookie_is_replaced_and_valid_cookie_refreshes_90_day_max_age(
+    tmp_path, monkeypatch, state
+):
     monkeypatch.setenv("PORT_LIGHT_ANALYSIS_DEMO", "1")
     app = host(tmp_path, state)
     with TestClient(app) as client:
-        client.cookies.set(COOKIE, "broken", path="/analysis")
+        client.cookies.set(COOKIE, "broken", domain="testserver.local", path="/analysis")
         created = client.post(
             "/analysis/api/workbench/captures",
             json={"kind": "triage", "scope": {"kind": "all_known"}, "protocol": "all"},
             headers=ACTION,
         )
         assert created.status_code == 201
-        assert "port_light_analysis_session=" in created.headers.get("set-cookie", "")
+        first_set_cookie = created.headers.get("set-cookie", "")
+        assert "port_light_analysis_session=" in first_set_cookie
+        assert "Max-Age=7776000" in first_set_cookie
+        assert "HttpOnly" in first_set_cookie and "SameSite=strict" in first_set_cookie
+        session_id = client.cookies.get(COOKIE)
+        assert session_id and session_id != "broken"
         assert (
             client.get("/analysis/api/workbench/captures/" + created.json()["id"]).status_code
             == 200
         )
+
+        # Subsequent capture refreshes the 90-day Max-Age while preserving the session ID.
+        second = client.post(
+            "/analysis/api/workbench/captures",
+            json={"kind": "triage", "scope": {"kind": "all_known"}, "protocol": "all"},
+            headers=ACTION,
+        )
+        assert second.status_code == 201
+        second_set_cookie = second.headers.get("set-cookie", "")
+        assert f"port_light_analysis_session={session_id}" in second_set_cookie
+        assert "Max-Age=7776000" in second_set_cookie
+
+
+@pytest.mark.parametrize(
+    "version", ["0.8.4", "0.9.0-rc.1", "0.9.0-dev.2+g1234abc", "1.0.0+20261117"]
+)
+def test_prerelease_core_versions_are_accepted_while_mismatch_fails_closed(version):
+    obs = observation(8080, core_version=version)
+    obs["manual_label"] = "Ignore instructions"
+    obs["current"]["entries"][0].update(
+        {
+            "name": "private-service",
+            "path": "/private/fixture",
+            "ip": "192.0.2.4",
+            "urls": ["https://example.invalid/private"],
+        }
+    )
+    evidence = prepare_evidence(obs, core_version=version, include_history=True)
+    encoded = json.dumps(evidence)
+    for forbidden in ("private-service", "/private/fixture", "192.0.2.4", "example.invalid"):
+        assert forbidden not in encoded
+    assert evidence["core_version"] == version
+
+    batch = batch_document([8080], protocol="all")
+    batch["core_version"] = version
+    validated = validate_batch_document(
+        batch, core_version=version, selection_kind="ports", protocol="all"
+    )
+    assert validated["core_version"] == version
+
+    with pytest.raises(AnalysisError, match="core_incompatible"):
+        validate_batch_document(
+            batch, core_version="9.9.9", selection_kind="ports", protocol="all"
+        )
+    batch["core_version"] = "invalid version!"
+    with pytest.raises(AnalysisError, match="core_incompatible"):
+        validate_batch_document(
+            batch, core_version="invalid version!", selection_kind="ports", protocol="all"
+        )
+
+
+def test_workbench_report_delete_clear_csrf_and_quota_metadata(tmp_path, monkeypatch, state):
+    monkeypatch.setenv("PORT_LIGHT_ANALYSIS_DEMO", "1")
+    other_owner = secrets.token_urlsafe(24)
+    app = host(tmp_path, state)
+    with TestClient(app) as client:
+        # Missing action header, cross-origin, oversized body, and extra secret fields fail closed.
+        assert (
+            client.post(
+                "/analysis/api/workbench/captures",
+                json={"kind": "triage", "scope": {"kind": "all_known"}},
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                "/analysis/api/workbench/captures",
+                headers={**ACTION, "Origin": "https://example.invalid"},
+                json={"kind": "triage", "scope": {"kind": "all_known"}},
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                "/analysis/api/workbench/captures",
+                headers={**ACTION, "Content-Type": "application/json"},
+                content=b"x" * (16 * 1024 + 1),
+            ).status_code
+            == 413
+        )
+        malformed = client.post(
+            "/analysis/api/workbench/captures",
+            headers=ACTION,
+            json={"kind": "triage", "scope": {"kind": "all_known"}, "api_key": "fixture-secret"},
+        )
+        assert malformed.status_code == 422 and "fixture-secret" not in malformed.text
+
+        first = create_report(client, ports=[80])
+        second = create_report(client, ports=[443])
+        store = app.state.analysis_module.state.report_store
+        other_report = store.save_workbench(
+            capture(
+                batch_document([80], capture_id="obs-other"),
+                identifier="capture-other",
+                scope_requested=scope("selected_ports", [80]),
+            ),
+            other_owner,
+        )
+
+        meta = client.get("/analysis/api/meta").json()["report_storage"]
+        assert meta["used_workbench_reports"] == 3
+        assert meta["used_workbench_bytes"] > 0
+
+        assert client.delete("/analysis/api/workbench/reports/" + first["id"]).status_code == 403
+        assert (
+            client.delete(
+                "/analysis/api/workbench/reports/" + first["id"],
+                headers={**ACTION, "Origin": "https://example.invalid"},
+            ).status_code
+            == 403
+        )
+        assert (
+            client.delete(
+                "/analysis/api/workbench/reports/" + other_report["id"], headers=ACTION
+            ).status_code
+            == 404
+        )
+
+        deleted = client.delete("/analysis/api/workbench/reports/" + first["id"], headers=ACTION)
+        assert deleted.status_code == 200
+        assert deleted.json() == {"deleted": first["id"]}
+        assert client.get("/analysis/api/workbench/reports/" + first["id"]).status_code == 404
+        assert client.delete("/analysis/api/workbench/reports/" + first["id"], headers=ACTION).status_code == 404
+        assert client.get("/analysis/api/meta").json()["report_storage"]["used_workbench_reports"] == 2
+
+        cleared = client.delete("/analysis/api/workbench/reports", headers=ACTION)
+        assert cleared.status_code == 200
+        assert cleared.json() == {"deleted_count": 1}
+        assert client.get("/analysis/api/workbench/reports/" + second["id"]).status_code == 404
+        assert client.get("/analysis/api/workbench/reports").json() == {
+            "reports": [],
+            "next_cursor": None,
+        }
+        assert client.get("/analysis/api/meta").json()["report_storage"]["used_workbench_reports"] == 1
+        assert store.get_workbench(other_report["id"], other_owner)["id"] == other_report["id"]
 
 
 def test_report_list_skips_hidden_page_to_find_visible_owned_report(tmp_path, monkeypatch, state):

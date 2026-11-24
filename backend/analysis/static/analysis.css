@@ -149,14 +149,17 @@
 .analysis-workspace .recommendation > .resource-links { margin-top: 8px; }
 
 .analysis-workspace .report-list { display: grid; gap: 8px; margin: 11px 0 0; padding: 0; list-style: none; }
-.analysis-workspace .report-list button { width: 100%; min-height: 36px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); text-align: start; cursor: pointer; }
-.analysis-workspace .report-list button:hover { border-color: var(--accent); }
-.analysis-workspace .report-list button[aria-current="true"] { border-color: var(--accent); box-shadow: inset 2px 0 var(--accent); }
+.analysis-workspace .report-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: start; }
+.analysis-workspace .report-list .report-open { width: 100%; min-width: 0; min-height: 36px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); text-align: start; cursor: pointer; }
+.analysis-workspace .report-list .report-open:hover { border-color: var(--accent); }
+.analysis-workspace .report-list .report-open[aria-current="true"] { border-color: var(--accent); box-shadow: inset 2px 0 var(--accent); }
+.analysis-workspace .report-list .report-delete { min-height: 36px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text-dim); font-size: .74rem; white-space: nowrap; cursor: pointer; }
+.analysis-workspace .report-list .report-delete:hover { border-color: var(--danger); color: var(--danger); }
 .analysis-workspace .report-title, .analysis-workspace .report-time { display: block; overflow-wrap: anywhere; }
 .analysis-workspace .report-title { font-size: .8rem; }
 .analysis-workspace .report-scope { display: block; margin-top: 3px; color: var(--text-dim); font-size: .75rem; }
 .analysis-workspace .report-time { margin-top: 4px; color: var(--text-dim); font-size: .72rem; font-variant-numeric: tabular-nums; }
-.analysis-workspace #analysis-load-more-reports { margin-top: 10px; }
+.analysis-workspace .report-list-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .analysis-workspace #analysis-legacy-reports { margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border); }
 .analysis-workspace .report-storage-details { margin-top: 14px; font-size: .75rem; }
 

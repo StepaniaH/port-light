@@ -12,15 +12,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
 
-from . import __version__
-from .baseline import baseline
 from .evidence import AnalysisError
-from .interpretation import (
-    INTERPRETATION_VERSION,
-    RENDER_VERSION,
-    render_interpretation,
-    validate_interpretation,
-)
 
 SCHEMA_VERSION = 2
 REPORT_DOCUMENT_SCHEMA = 1
@@ -28,7 +20,6 @@ APPLICATION_ID = 0x504C4152
 MAX_REPORTS = 256
 MAX_TOTAL_BYTES = 16 * 1024 * 1024
 MAX_REPORT_BYTES = 256 * 1024
-MAX_JOB_RECEIPTS = 512
 MAX_WORKBENCH_REPORTS = 128
 MAX_WORKBENCH_TOTAL_BYTES = 32 * 1024 * 1024
 MAX_WORKBENCH_REPORT_BYTES = 2 * 1024 * 1024
@@ -38,12 +29,16 @@ RECEIPT_TTL = 24 * 3600
 
 def owner_hash(owner):
     if not owner:
-        raise AnalysisError("report_not_found", "找不到当前会话的报告或任务。", 404)
+        raise AnalysisError("report_not_found", "Report not found for current session.", 404)
     return hashlib.sha256(b"port-light-report-owner-v1\0" + owner.encode("ascii")).hexdigest()
 
 
 def storage_error():
-    return AnalysisError("report_storage_unavailable", "报告存储暂不可用，已有数据未被清除。", 503)
+    return AnalysisError(
+        "report_storage_unavailable",
+        "Report storage is unavailable; existing data was preserved.",
+        503,
+    )
 
 
 class ReportStore:
@@ -178,8 +173,6 @@ class ReportStore:
         tables = connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         if version != 0 or application != 0 or tables:
             raise sqlite3.DatabaseError("Unsupported report schema; preserve the original database")
-        # Only an empty database has a first-install path.  A failed transaction
-        # cannot leave either the legacy API or the workbench tables partially initialized.
         with connection:
             connection.execute("BEGIN IMMEDIATE")
             ReportStore._create_legacy_tables(connection)
@@ -207,138 +200,47 @@ class ReportStore:
                 self.connection = None
 
     def metadata(self):
-        return {
-            "available": self.connection is not None,
-            "max_reports": self.max_reports,
-            "max_total_bytes": self.max_total_bytes,
-            "max_report_bytes": self.max_report_bytes,
-            "workbench": {
-                "max_reports": self.max_workbench_reports,
-                "max_total_bytes": self.max_workbench_total_bytes,
-                "max_report_bytes": self.max_workbench_report_bytes,
-            },
-        }
-
-    def begin_job(self, identifier, owner, port):
-        digest, now = owner_hash(owner), int(self.clock())
-        with self._database(write=True) as database:
-            database.execute(
-                "DELETE FROM jobs WHERE status != 'running' AND updated_at < ?",
-                (now - RECEIPT_TTL,),
-            )
-            if database.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] >= MAX_JOB_RECEIPTS:
-                raise AnalysisError("job_capacity", "任务状态记录已满，请稍后再试。", 429)
-            database.execute(
-                "INSERT INTO jobs VALUES (?, ?, ?, 'running', ?, ?)",
-                (identifier, digest, port, now, now),
-            )
-
-    def finish_job(self, identifier, owner, status):
-        with self._database(write=True) as database:
-            database.execute(
-                "UPDATE jobs SET status=?, updated_at=? WHERE id=? AND owner_hash=?",
-                (status, int(self.clock()), identifier, owner_hash(owner)),
-            )
-
-    def job(self, identifier, owner):
-        with self._database() as database:
-            row = database.execute(
-                "SELECT id, port, status FROM jobs WHERE id=? AND owner_hash=?",
-                (identifier, owner_hash(owner)),
-            ).fetchone()
-            if row is None:
-                raise AnalysisError("not_found", "预览或任务已过期，请重新预览。", 404)
+        with self.lock:
+            used_reports = 0
+            used_bytes = 0
+            available = self.connection is not None
+            if available:
+                try:
+                    used_reports, used_bytes = self.connection.execute(
+                        "SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM workbench_reports"
+                    ).fetchone()
+                except sqlite3.Error:
+                    available = False
             return {
-                **dict(row),
-                "result_available": False,
-                "error": {
-                    "code": "interrupted"
-                    if row["status"] == "interrupted"
-                    else "result_unavailable",
-                    "message": "服务已停止这项任务，不会自动重新调用模型。请查看已保存的报告，或重新预览。",
+                "available": available,
+                "max_reports": self.max_reports,
+                "max_total_bytes": self.max_total_bytes,
+                "max_report_bytes": self.max_report_bytes,
+                "used_workbench_reports": int(used_reports),
+                "used_workbench_bytes": int(used_bytes),
+                "workbench": {
+                    "max_reports": self.max_workbench_reports,
+                    "max_total_bytes": self.max_workbench_total_bytes,
+                    "max_report_bytes": self.max_workbench_report_bytes,
                 },
             }
 
-    def save(self, snapshot, owner):
-        if snapshot.get("status") != "completed" or not snapshot.get("interpretation"):
-            raise AnalysisError("not_ready", "只有已完成且仍可读取的分析才能保存。", 409)
-        evidence = snapshot["evidence"]
-        interpretation = validate_interpretation(json.dumps(snapshot["interpretation"]), evidence)
-        digest = owner_hash(owner)
-        document = {
-            "id": secrets.token_urlsafe(24),
-            "schema_version": REPORT_DOCUMENT_SCHEMA,
-            "created_at": int(self.clock()),
-            "source_analysis_id": snapshot["id"],
-            "requires_hidden_access": snapshot["requires_hidden_access"],
-            "evidence": evidence,
-            "baseline": baseline(evidence),
-            "validated_interpretation": interpretation,
-            "interpretation_view": render_interpretation(interpretation, evidence),
-            "versions": {
-                "core": evidence["core_version"],
-                "module": __version__,
-                "evidence": evidence["evidence_version"],
-                "prompt": snapshot["prompt_version"],
-                "baseline": baseline(evidence)["version"],
-                "interpretation": INTERPRETATION_VERSION,
-                "render": RENDER_VERSION,
-            },
-            "mode": snapshot["mode"],
-            "provider": snapshot["provider"],
-            "model": snapshot["model"],
-            "usage": {
-                key: value
-                for key in ("prompt_tokens", "completion_tokens", "total_tokens")
-                if type(value := snapshot["usage"].get(key)) is int and 0 <= value <= 10**9
-            },
-        }
-        body = json.dumps(document, ensure_ascii=False, sort_keys=True, allow_nan=False)
-        size = len(body.encode("utf-8"))
-        if size > self.max_report_bytes:
-            raise AnalysisError("report_too_large", "报告超过单份大小限制，未保存任何内容。", 413)
-        with self._database(write=True) as database:
-            previous = database.execute(
-                "SELECT body FROM reports WHERE owner_hash=? AND source_analysis_id=?",
-                (digest, snapshot["id"]),
-            ).fetchone()
-            if previous is not None:
-                return json.loads(previous[0])
-            count, total = database.execute(
-                "SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM reports"
-            ).fetchone()
-            if count >= self.max_reports or total + size > self.max_total_bytes:
-                raise AnalysisError(
-                    "report_limit", "报告保存空间已满；已有报告仍可查看和导出。", 409
-                )
-            database.execute(
-                "INSERT INTO reports VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    document["id"],
-                    digest,
-                    snapshot["id"],
-                    evidence["port"],
-                    document["created_at"],
-                    int(document["requires_hidden_access"]),
-                    body,
-                    size,
-                ),
-            )
-        return document
-
     def get(self, identifier, owner):
+        if not isinstance(identifier, str) or not 1 <= len(identifier) <= 64:
+            raise AnalysisError("report_not_found", "Report not found for current session.", 404)
         with self._database() as database:
             row = database.execute(
                 "SELECT body FROM reports WHERE id=? AND owner_hash=?",
                 (identifier, owner_hash(owner)),
             ).fetchone()
             if row is None:
-                raise AnalysisError("report_not_found", "找不到当前会话的报告。", 404)
+                raise AnalysisError("report_not_found", "Report not found for current session.", 404)
             return json.loads(row[0])
 
     def list(self, owner):
         if not owner:
-            return []
+            with self._database():
+                return []
         with self._database() as database:
             rows = database.execute(
                 "SELECT id, port, created_at, requires_hidden_access FROM reports WHERE owner_hash=? ORDER BY created_at DESC, id",
@@ -349,10 +251,34 @@ class ReportStore:
                 for row in rows
             ]
 
+    def delete(self, identifier, owner):
+        if not isinstance(identifier, str) or not 1 <= len(identifier) <= 64:
+            raise AnalysisError("report_not_found", "Report not found for current session.", 404)
+        digest = owner_hash(owner)
+        with self._database(write=True) as database:
+            cursor = database.execute(
+                "DELETE FROM reports WHERE id=? AND owner_hash=?",
+                (identifier, digest),
+            )
+            if cursor.rowcount == 0:
+                raise AnalysisError(
+                    "report_not_found", "Report not found for current session.", 404
+                )
+
+    def delete_all(self, owner) -> int:
+        with self._database(write=True) as database:
+            if not owner:
+                return 0
+            cursor = database.execute(
+                "DELETE FROM reports WHERE owner_hash=?",
+                (owner_hash(owner),),
+            )
+            return cursor.rowcount
+
     @staticmethod
     def _workbench_resources(value):
         if not isinstance(value, list):
-            raise AnalysisError("not_ready", "排障采集缺少可核对的资源集合。", 409)
+            raise AnalysisError("not_ready", "Capture is missing verifiable resources.", 409)
         resources = []
         for item in value:
             if (
@@ -361,20 +287,22 @@ class ReportStore:
                 or not 1 <= item["port"] <= 65535
                 or item.get("protocol") not in {"tcp", "udp"}
             ):
-                raise AnalysisError("not_ready", "排障采集资源格式无效。", 409)
+                raise AnalysisError("not_ready", "Capture resource entry is invalid.", 409)
             resources.append({"port": item["port"], "protocol": item["protocol"]})
         resources = sorted(
             {(item["port"], item["protocol"]): item for item in resources}.values(),
             key=lambda item: (item["port"], item["protocol"]),
         )
         if len({item["port"] for item in resources}) > 1024:
-            raise AnalysisError("not_ready", "排障采集超出可保存的资源上限。", 409)
+            raise AnalysisError("not_ready", "Capture exceeds the savable resource limit.", 409)
         return resources
 
     @staticmethod
     def _workbench_document(snapshot, *, identifier, created_at):
         if not isinstance(snapshot, dict) or snapshot.get("status") == "running":
-            raise AnalysisError("not_ready", "采集仍在运行，暂时不能保存报告。", 409)
+            raise AnalysisError(
+                "not_ready", "Capture is still running and cannot be saved yet.", 409
+            )
         required = {
             "id": str,
             "capture_id": str,
@@ -389,9 +317,9 @@ class ReportStore:
             "ai": dict,
         }
         if any(not isinstance(snapshot.get(key), expected) for key, expected in required.items()):
-            raise AnalysisError("not_ready", "排障采集不完整，不能保存报告。", 409)
+            raise AnalysisError("not_ready", "Capture is incomplete and cannot be saved.", 409)
         if not snapshot["id"] or not snapshot["capture_id"] or not snapshot["result_revision"]:
-            raise AnalysisError("not_ready", "排障采集标识无效。", 409)
+            raise AnalysisError("not_ready", "Capture identifier is invalid.", 409)
         resources = ReportStore._workbench_resources(snapshot.get("resources"))
         capture = deepcopy(snapshot)
         # Report IDs belong to storage and must not become mutable capture data.
@@ -420,7 +348,9 @@ class ReportStore:
         size = len(body.encode("utf-8"))
         if size > self.max_workbench_report_bytes:
             raise AnalysisError(
-                "report_too_large", "排障报告超过单份大小限制，未保存任何内容。", 413
+                "report_too_large",
+                "Report exceeds the single-report size limit; nothing was saved.",
+                413,
             )
         resources = json.dumps(document["resources"], sort_keys=True, separators=(",", ":"))
         with self._database(write=True) as database:
@@ -430,13 +360,31 @@ class ReportStore:
             ).fetchone()
             if previous is not None:
                 return json.loads(previous[0])
-            count, total = database.execute(
-                "SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM workbench_reports"
-            ).fetchone()
-            if count >= self.max_workbench_reports or total + size > self.max_workbench_total_bytes:
+            if self.max_workbench_reports < 1 or size > self.max_workbench_total_bytes:
                 raise AnalysisError(
-                    "report_limit", "排障报告保存空间已满；已有报告仍可查看和导出。", 409
+                    "report_limit",
+                    "Report storage limit reached; existing reports remain readable.",
+                    409,
                 )
+            while True:
+                count, total = database.execute(
+                    "SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM workbench_reports"
+                ).fetchone()
+                if (
+                    count < self.max_workbench_reports
+                    and total + size <= self.max_workbench_total_bytes
+                ):
+                    break
+                oldest = database.execute(
+                    "SELECT id FROM workbench_reports ORDER BY created_at ASC, id ASC LIMIT 1"
+                ).fetchone()
+                if oldest is None:
+                    raise AnalysisError(
+                        "report_limit",
+                        "Report storage limit reached; existing reports remain readable.",
+                        409,
+                    )
+                database.execute("DELETE FROM workbench_reports WHERE id=?", (oldest["id"],))
             database.execute(
                 "INSERT INTO workbench_reports VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
@@ -456,22 +404,49 @@ class ReportStore:
         return document
 
     def get_workbench(self, identifier, owner):
+        if not isinstance(identifier, str) or not 1 <= len(identifier) <= 64:
+            raise AnalysisError("report_not_found", "Report not found for current session.", 404)
         with self._database() as database:
             row = database.execute(
                 "SELECT body FROM workbench_reports WHERE id=? AND owner_hash=?",
                 (identifier, owner_hash(owner)),
             ).fetchone()
             if row is None:
-                raise AnalysisError("report_not_found", "找不到当前会话的排障报告。", 404)
+                raise AnalysisError("report_not_found", "Report not found for current session.", 404)
             return json.loads(row[0])
 
+    def delete_workbench(self, identifier, owner):
+        if not isinstance(identifier, str) or not 1 <= len(identifier) <= 64:
+            raise AnalysisError("report_not_found", "Report not found for current session.", 404)
+        digest = owner_hash(owner)
+        with self._database(write=True) as database:
+            cursor = database.execute(
+                "DELETE FROM workbench_reports WHERE id=? AND owner_hash=?",
+                (identifier, digest),
+            )
+            if cursor.rowcount == 0:
+                raise AnalysisError(
+                    "report_not_found", "Report not found for current session.", 404
+                )
+
+    def delete_all_workbench(self, owner) -> int:
+        with self._database(write=True) as database:
+            if not owner:
+                return 0
+            cursor = database.execute(
+                "DELETE FROM workbench_reports WHERE owner_hash=?",
+                (owner_hash(owner),),
+            )
+            return cursor.rowcount
+
     def list_workbench(self, owner, *, limit=20, cursor=None):
-        if not owner:
-            return [], None
         if type(limit) is not int or not 1 <= limit <= 50:
-            raise AnalysisError("invalid_input", "报告列表分页参数无效。", 422)
+            raise AnalysisError("invalid_input", "Invalid report pagination parameters.", 422)
         if cursor is not None and (not isinstance(cursor, str) or not 1 <= len(cursor) <= 64):
-            raise AnalysisError("invalid_input", "报告列表游标无效。", 422)
+            raise AnalysisError("invalid_input", "Invalid report list cursor.", 422)
+        if not owner:
+            with self._database():
+                return [], None
         digest = owner_hash(owner)
         with self._database() as database:
             parameters = [digest]
@@ -482,7 +457,7 @@ class ReportStore:
                     (cursor, digest),
                 ).fetchone()
                 if row is None:
-                    raise AnalysisError("invalid_input", "报告列表游标无效。", 422)
+                    raise AnalysisError("invalid_input", "Invalid report list cursor.", 422)
                 where += " AND (created_at < ? OR (created_at = ? AND id < ?))"
                 parameters.extend((row["created_at"], row["created_at"], row["id"]))
             rows = database.execute(
@@ -530,7 +505,9 @@ class ReportStore:
                 database.execute("SELECT COUNT(*) FROM workbench_jobs").fetchone()[0]
                 >= MAX_WORKBENCH_JOB_RECEIPTS
             ):
-                raise AnalysisError("job_capacity", "任务状态记录已满，请稍后再试。", 429)
+                raise AnalysisError(
+                    "job_capacity", "Job receipt capacity is full; try again shortly.", 429
+                )
             database.execute(
                 "INSERT INTO workbench_jobs VALUES (?, ?, ?, 'running', ?, ?)",
                 (identifier, digest, encoded, now, now),
@@ -550,7 +527,7 @@ class ReportStore:
                 (identifier, owner_hash(owner)),
             ).fetchone()
             if row is None:
-                raise AnalysisError("not_found", "排障采集已过期，请重新采集。", 404)
+                raise AnalysisError("not_found", "Capture has expired; run a new capture.", 404)
             try:
                 resources = json.loads(row["resources"])
             except (TypeError, ValueError):
@@ -564,6 +541,9 @@ class ReportStore:
                     "code": "interrupted"
                     if row["status"] == "interrupted"
                     else "result_unavailable",
-                    "message": "服务已停止这项模型检查，不会自动重新调用模型。请重新采集后再试。",
+                    "message": (
+                        "The service stopped this model check without retrying. "
+                        "Run a new capture to try again."
+                    ),
                 },
             }

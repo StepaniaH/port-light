@@ -1,3 +1,4 @@
+import asyncio
 import json
 import socket
 import threading
@@ -11,10 +12,10 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from backend.analysis.evidence import AnalysisError
-from backend.analysis.interpretation import demo_selection
 from backend.analysis.module import create_module
-from backend.analysis.provider import ChatGateway
+from backend.analysis.provider import ChatGateway, configured_providers
 from backend.analysis.settings import BYOKStore, normalize_base_url
+from backend.analysis.workbench import WorkbenchGateway
 from tests.analysis.observation_fixture import observation
 from tests.analysis.test_workbench import batch_document
 
@@ -86,9 +87,8 @@ def completed(client, path):
     raise AssertionError("Fixture completion timed out")
 
 
-@pytest.mark.parametrize("api", ["analysis", "workbench"])
 @pytest.mark.parametrize("key_source", ["request", "saved"])
-def test_explicit_analysis_rejects_keys_in_model_ids(tmp_path, monkeypatch, api, key_source):
+def test_explicit_analysis_rejects_keys_in_model_ids(tmp_path, monkeypatch, key_source):
     monkeypatch.setenv("PORT_LIGHT_ANALYSIS_DEMO", "0")
     calls = []
 
@@ -96,25 +96,30 @@ def test_explicit_analysis_rejects_keys_in_model_ids(tmp_path, monkeypatch, api,
         calls.append(True)
         raise AssertionError("Invalid model must not reach the provider")
 
-    monkeypatch.setattr("backend.analysis.routes.ChatGateway", lambda **_kwargs: gateway)
+    monkeypatch.setattr("backend.analysis.routes.WorkbenchGateway", lambda **_kwargs: gateway)
     with TestClient(host(tmp_path)) as client:
         if key_source == "saved":
             assert save(client).status_code == 200
-        if api == "analysis":
-            preview = client.post("/analysis/api/analysis/previews", headers=ACTION, json={"port": 8080})
-            path = "/analysis/api/analysis/" + preview.json()["id"]
-            action = "/start"
-        else:
-            preview = client.post("/analysis/api/workbench/captures", headers=ACTION, json={
-                "kind": "triage", "scope": {"kind": "single_port", "port": 8080},
-                "protocol": "tcp", "history_hours": 6,
-            })
-            path = "/analysis/api/workbench/captures/" + preview.json()["id"]
-            action = "/ai"
+        preview = client.post(
+            "/analysis/api/workbench/captures",
+            headers=ACTION,
+            json={
+                "kind": "triage",
+                "scope": {"kind": "single_port", "port": 8080},
+                "protocol": "tcp",
+                "history_hours": 6,
+            },
+        )
         assert preview.status_code == 201
-        rejected = client.post(path + action, headers={
-            **ACTION, "X-Port-Light-Model-Key": KEY if key_source == "request" else "fixture-other-key",
-        }, json={"provider": "openai", "model": KEY, "confirmed": True})
+        path = "/analysis/api/workbench/captures/" + preview.json()["id"]
+        rejected = client.post(
+            path + "/ai",
+            headers={
+                **ACTION,
+                "X-Port-Light-Model-Key": KEY if key_source == "request" else "fixture-other-key",
+            },
+            json={"provider": "openai", "model": KEY, "confirmed": True},
+        )
         assert rejected.status_code == 422
         assert rejected.json()["error"]["code"] == "invalid_model"
         assert KEY not in rejected.text
@@ -222,8 +227,11 @@ def test_mixed_legacy_profile_hides_key_and_allows_model_repair(tmp_path, monkey
         assert calls == []
         repaired_draft = client.post(
             "/analysis/api/settings/ai/test",
-            json={"confirmed": True, "config_revision": profile["revision"],
-                  "draft": {"provider": "custom", "model": "repaired-model", "base_url": BASE_URL}},
+            json={
+                "confirmed": True,
+                "config_revision": profile["revision"],
+                "draft": {"provider": "custom", "model": "repaired-model", "base_url": BASE_URL},
+            },
             headers=ACTION,
         )
         assert repaired_draft.status_code == 200
@@ -244,7 +252,8 @@ def test_draft_probe_never_sends_a_key_as_the_model(tmp_path, monkeypatch):
     monkeypatch.setattr(ChatGateway, "probe", probe)
     with TestClient(host(tmp_path)) as client:
         response = client.post(
-            "/analysis/api/settings/ai/test", headers={**ACTION, "X-Port-Light-Model-Key": KEY},
+            "/analysis/api/settings/ai/test",
+            headers={**ACTION, "X-Port-Light-Model-Key": KEY},
             json={"confirmed": True, "draft": {"provider": "custom", "model": KEY, "base_url": BASE_URL}},
         )
         assert response.status_code == 422
@@ -275,7 +284,8 @@ def test_probe_accepts_valid_model_response_at_its_small_token_limit(tmp_path, m
                         lambda self, **kwargs: original(self, httpx.MockTransport(handler), **kwargs))
     with TestClient(host(tmp_path)) as client:
         response = client.post(
-            "/analysis/api/settings/ai/test", headers={**ACTION, "X-Port-Light-Model-Key": KEY},
+            "/analysis/api/settings/ai/test",
+            headers={**ACTION, "X-Port-Light-Model-Key": KEY},
             json={"confirmed": True, "draft": {"provider": "custom", "model": "fixture-model", "base_url": BASE_URL}},
         )
         assert response.status_code == 200
@@ -348,9 +358,7 @@ def test_provider_uses_only_its_explicit_proxy(tmp_path, monkeypatch, explicit_p
             thread.join(timeout=2)
 
 
-def test_saved_custom_connection_is_used_by_test_legacy_and_workbench(
-    tmp_path, monkeypatch
-):
+def test_saved_custom_connection_is_used_by_test_and_workbench(tmp_path, monkeypatch):
     monkeypatch.setenv("PORT_LIGHT_ANALYSIS_DEMO", "0")
     monkeypatch.delenv("PORT_LIGHT_BYOK_BASE_URL", raising=False)
     calls = []
@@ -366,19 +374,14 @@ def test_saved_custom_connection_is_used_by_test_legacy_and_workbench(
         if len(body["messages"]) == 1:
             result = {"ok": True}
         else:
-            evidence = json.loads(body["messages"][-1]["content"])
-            result = (
-                {
-                    "schema_version": 1,
-                    "recommendations": [],
-                    "conclusion": {
-                        "text": "Review the observed state.",
-                        "evidence_ids": ["scan"],
-                    },
-                }
-                if "problems" in evidence
-                else demo_selection(evidence)
-            )
+            result = {
+                "schema_version": 2,
+                "recommendations": [],
+                "conclusion": {
+                    "text": "Review the observed state.",
+                    "evidence_ids": ["scan"],
+                },
+            }
         return httpx.Response(
             200,
             json={
@@ -427,15 +430,6 @@ def test_saved_custom_connection_is_used_by_test_legacy_and_workbench(
             json={"config_revision": profile["revision"], "confirmed": True},
         )
         assert tested.status_code == 200, tested.text
-        preview = client.post(
-            "/analysis/api/analysis/previews", headers=ACTION, json={"port": 8080}
-        )
-        path = "/analysis/api/analysis/" + preview.json()["id"]
-        assert (
-            client.post(path + "/start", headers=ACTION, json=connection).status_code
-            == 202
-        )
-        assert completed(client, path)["status"] == "completed"
         captured = client.post(
             "/analysis/api/workbench/captures",
             headers=ACTION,
@@ -454,7 +448,64 @@ def test_saved_custom_connection_is_used_by_test_legacy_and_workbench(
         assert result["status"] == "completed"
         assert result["ai"]["recommendations"] == []
         assert KEY not in json.dumps(result) and BASE_URL not in json.dumps(result)
-        assert [body["max_completion_tokens"] for body in calls] == [64, 1800, 2000]
+        assert [body["max_completion_tokens"] for body in calls] == [64, 2000]
+
+
+def test_operator_can_configure_a_compatible_provider(monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_BYOK_BASE_URL", "https://example.invalid/models/v1/")
+    monkeypatch.setenv("PORT_LIGHT_BYOK_NAME", "Fixture provider")
+    monkeypatch.setenv("PORT_LIGHT_BYOK_JSON_MODE", "1")
+    monkeypatch.setenv("PORT_LIGHT_BYOK_TOKEN_PARAMETER", "max_completion_tokens")
+    providers = configured_providers()
+
+    def handler(request):
+        assert str(request.url) == "https://example.invalid/models/v1/chat/completions"
+        body = json.loads(request.content)
+        assert body["max_completion_tokens"] == 2000
+        assert body["response_format"] == {"type": "json_object"}
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "schema_version": 2,
+                                    "conclusion": {"text": "OK", "evidence_ids": ["scan"]},
+                                    "recommendations": [],
+                                }
+                            )
+                        },
+                    }
+                ]
+            },
+        )
+
+    content, _ = asyncio.run(
+        WorkbenchGateway(httpx.MockTransport(handler), providers=providers)(
+            "custom", "fixture-model", "fixture-key", {"facts": {"scan": {}}, "problems": []}
+        )
+    )
+    assert json.loads(content)["schema_version"] == 2
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ftp://example.invalid/v1",
+        "https://user:fixture-secret@example.invalid/v1",
+        "https://example.invalid/v1?token=fixture-secret",
+        "https://example.invalid/v1#fragment",
+        "http://169.254.169.254/v1",
+    ],
+)
+def test_custom_destinations_must_not_embed_credentials_or_metadata_hosts(url, monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_BYOK_BASE_URL", url)
+    with pytest.raises(ValueError) as caught:
+        configured_providers()
+    assert "fixture-secret" not in str(caught.value)
 
 
 def test_endpoint_change_never_reuses_the_saved_key(tmp_path, monkeypatch):
@@ -516,14 +567,89 @@ def test_invalid_custom_address_does_not_change_the_profile(tmp_path, monkeypatc
         assert client.get("/analysis/api/settings").json()["ai"] == initial
 
 
-def test_local_http_and_ipv6_addresses_are_supported():
-    assert (
-        normalize_base_url("http://localhost:11434/v1/") == "http://localhost:11434/v1"
-    )
+def test_local_http_lan_and_ipv6_addresses_are_supported(monkeypatch):
+    monkeypatch.setenv("PORT_LIGHT_PORT", "8080")
+    assert normalize_base_url("http://localhost:11434/v1/") == "http://localhost:11434/v1"
+    assert normalize_base_url("http://127.0.0.1:11434/v1") == "http://127.0.0.1:11434/v1"
     assert (
         normalize_base_url("http://[::1]:1234/v1/chat/completions")
         == "http://[::1]:1234/v1"
     )
+    assert normalize_base_url("http://192.168.1.50:8080/v1") == "http://192.168.1.50:8080/v1"
+    assert normalize_base_url("http://192.0.2.10:8080/v1") == "http://192.0.2.10:8080/v1"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data",
+        "http://169.254.0.1:8000/v1",
+        "http://[::ffff:169.254.169.254]/v1",
+        "http://[fe80::1]:8000/v1",
+        "http://metadata.google.internal/computeMetadata/v1",
+        "http://metadata.goog/v1",
+        "http://0.0.0.0:11434/v1",
+        "http://[::]:11434/v1",
+        "http://224.0.0.1:8000/v1",
+        "http://[ff02::1]:8000/v1",
+    ],
+)
+def test_denylisted_metadata_link_local_unspecified_and_multicast_targets_fail(
+    tmp_path, monkeypatch, url
+):
+    monkeypatch.setenv("PORT_LIGHT_ANALYSIS_DEMO", "0")
+    with pytest.raises(AnalysisError) as caught:
+        normalize_base_url(url)
+    assert caught.value.status == 422
+    assert caught.value.code == "invalid_input"
+
+    with TestClient(host(tmp_path)) as client:
+        rejected = save(client, base_url=url)
+        assert rejected.status_code == 422
+        assert rejected.json()["error"]["code"] == "invalid_input"
+
+
+@pytest.mark.parametrize(
+    "hub_port, blocked_url",
+    [
+        ("8080", "http://localhost:8080/v1"),
+        ("8080", "http://127.0.0.1:8080/v1"),
+        ("8080", "http://127.0.0.5:8080/v1"),
+        ("8080", "http://[::1]:8080/v1"),
+        ("8080", "http://[::ffff:127.0.0.1]:8080/v1"),
+        ("80", "http://localhost/v1"),
+        ("443", "https://localhost/v1"),
+    ],
+)
+def test_port_light_own_loopback_port_is_blocked_at_save_and_request_time(
+    monkeypatch, hub_port, blocked_url
+):
+    monkeypatch.delenv("PORT_LIGHT_PORT", raising=False)
+    assert normalize_base_url(blocked_url)
+
+    monkeypatch.setenv("PORT_LIGHT_PORT", hub_port)
+    with pytest.raises(AnalysisError) as caught:
+        normalize_base_url(blocked_url)
+    assert caught.value.status == 422
+    assert caught.value.code == "invalid_input"
+
+    calls = []
+    gateway = ChatGateway(
+        httpx.MockTransport(lambda req: (calls.append(req), httpx.Response(200))[1]),
+        providers={
+            "custom": {
+                "name": "Custom",
+                "endpoint": blocked_url.rstrip("/") + "/chat/completions",
+                "token_parameter": "max_tokens",
+                "json_mode": False,
+            }
+        },
+    )
+    with pytest.raises(AnalysisError) as post_caught:
+        asyncio.run(gateway.probe("custom", "fixture-model", KEY))
+    assert post_caught.value.status == 422
+    assert post_caught.value.code == "invalid_input"
+    assert calls == []
 
 
 def test_legacy_custom_profile_requires_binding_the_key_to_an_address(tmp_path):

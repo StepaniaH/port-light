@@ -340,8 +340,9 @@ export function presentation(snapshot, t) {
   const changes = (observation.events || []).filter(event => ['state_changed', 'bind_scope_changed', 'configuration_mismatch'].includes(event.kind));
   const conclusion = rules?.version === 'port-rules.v1' ? t('conclusion_' + rules.conclusion.code, { count: changes.length }) : t('legacy');
   let interpretation = null;
-  const selection = snapshot?.interpretation;
-  if (snapshot?.interpretation_version === 'port-interpretation.v1' && selection?.schema_version === 1) {
+  const selection = snapshot?.interpretation || snapshot?.validated_interpretation;
+  const version = snapshot?.interpretation_version || snapshot?.versions?.interpretation;
+  if (version === 'port-interpretation.v1' && selection?.schema_version === 1) {
     const text = selection.summary_kind === 'current_occupancy' ? conclusion : observed.filter(item => item.evidence_ids.every(id => selection.evidence_ids.includes(id))).map(item => item.text).join(' ');
     interpretation = {
       summary: { text: t('port') + ' ' + evidence.port + '\n' + text, evidence_ids: selection.evidence_ids },

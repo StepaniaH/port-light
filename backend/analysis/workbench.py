@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .evidence import AnalysisError, core_client
+from .evidence import CORE_VERSION_PATTERN, AnalysisError, core_client
 from .provider import PROVIDERS, ChatGateway, decode_completion
 
 MAX_PORTS = 1024
@@ -214,7 +214,7 @@ class BatchResponse(PublicDocument):
     scope: dict
     capture_id: Identifier
     captured_at: int = Field(ge=0, le=32503680000)
-    core_version: Annotated[str, Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")]
+    core_version: Annotated[str, Field(pattern=CORE_VERSION_PATTERN)]
     selection: dict
     coverage: Coverage
     scan: Scan
@@ -350,7 +350,7 @@ def validate_batch_document(raw, *, core_version: str, selection_kind: str, prot
         return document
     except (ValidationError, TypeError, ValueError, KeyError):
         raise AnalysisError(
-            "core_incompatible", "批量端口观察格式不兼容，未生成排障数据。", 503
+            "core_incompatible", "Batch port observation format is incompatible.", 503
         ) from None
 
 
@@ -370,11 +370,13 @@ async def read_batch(
         metadata = await client.get("/api/meta")
         if metadata.status_code != 200:
             raise AnalysisError(
-                "core_unavailable", "无法读取当前核心接口信息。", metadata.status_code
+                "core_unavailable", "Unable to read core metadata.", metadata.status_code
             )
         capabilities = metadata.json().get("capabilities", {})
         if capabilities.get("batch_port_observation") != 1:
-            raise AnalysisError("core_incompatible", "当前核心不支持批量端口观察接口。", 503)
+            raise AnalysisError(
+                "core_incompatible", "Core does not support batch port observations.", 503
+            )
         response = await client.post(
             "/api/observations/batch",
             json={
@@ -392,15 +394,19 @@ async def read_batch(
             detail = {}
         if detail.get("code") == "selection_too_large":
             raise AnalysisError(
-                "scope_too_large", "所选范围超过 1024 个端口；请缩小范围后重新采集。", 422
+                "scope_too_large",
+                "Selected scope exceeds 1024 ports; narrow the scope and recapture.",
+                422,
             )
-        raise AnalysisError("invalid_input", "端口范围或协议不符合批量观察限制。", 422)
+        raise AnalysisError(
+            "invalid_input", "Port scope or protocol exceeds batch observation limits.", 422
+        )
     if response.status_code != 200:
         code = "access_restricted" if response.status_code in {403, 404} else "core_unavailable"
         message = (
-            "当前访问权限不能读取所选范围。"
+            "Current access permissions cannot read the selected scope."
             if code == "access_restricted"
-            else "无法读取批量端口观察。"
+            else "Unable to read batch port observations."
         )
         raise AnalysisError(code, message, response.status_code)
     return validate_batch_document(
@@ -453,7 +459,9 @@ def _facts(batch: dict) -> tuple[dict, dict]:
     for event in batch["events"]:
         identifier = _event_fact_id(event["event_id"])
         if identifier in facts:
-            raise AnalysisError("core_incompatible", "批量观察包含冲突的证据标识。", 503)
+            raise AnalysisError(
+                "core_incompatible", "Batch observation contains conflicting fact identifiers.", 503
+            )
         data = {
             key: deepcopy(event[key])
             for key in (
@@ -1000,7 +1008,7 @@ def build_capture(
         )
         problems.extend(_change_problems(batch, facts))
     else:
-        raise AnalysisError("invalid_input", "不支持的排障任务。", 422)
+        raise AnalysisError("invalid_input", "Unsupported troubleshooting task.", 422)
     problems = _sort_problems(problems)
     priority_queue = _priority_queue(problems, facts)
     if not batch["ports"] and not batch["events"]:
@@ -1059,7 +1067,7 @@ def build_capture(
                 entry["listening"] for row in batch["ports"] for entry in row["current"]["entries"]
             ),
             "mapped_count": sum(
-                entry["docker_mapped"] for row in batch["ports"] for entry in row["current"]["entries"]
+                entry["docker_live"] for row in batch["ports"] for entry in row["current"]["entries"]
             ),
             "declared_count": sum(
                 entry["compose_declared"] for row in batch["ports"] for entry in row["current"]["entries"]
@@ -1126,7 +1134,9 @@ def validate_model_result(content, capture: dict) -> dict:
         return {"conclusion": conclusion.model_dump(), "recommendations": output}
     except (ValidationError, TypeError, ValueError, KeyError, UnicodeError):
         raise AnalysisError(
-            "invalid_output", "模型返回了无效的问题、证据或只读检查引用。", 502
+            "invalid_output",
+            "Model returned invalid problem, evidence, or check references.",
+            502,
         ) from None
 
 
@@ -1228,7 +1238,7 @@ class WorkbenchDemoGateway:
 
 
 class AttemptGate:
-    """Share the pre-existing two-attempt limit between legacy and workbench AI."""
+    """Bound concurrent model requests globally and per browser session."""
 
     def __init__(self, *, capacity=2):
         self.capacity = capacity
@@ -1236,7 +1246,11 @@ class AttemptGate:
 
     def acquire(self, identifier: str, owner: str):
         if len(self.running) >= self.capacity or owner in self.running.values():
-            raise AnalysisError("busy", "已有分析正在进行，请等待完成或取消后再试。", 429)
+            raise AnalysisError(
+                "busy",
+                "Another model check is already running; wait or cancel before retrying.",
+                429,
+            )
         self.running[identifier] = owner
 
     def release(self, identifier: str):
@@ -1296,7 +1310,7 @@ class Workbench:
         self._prune()
         entry = self.entries.get(identifier)
         if not entry or not owner or not secrets.compare_digest(entry.owner, owner):
-            raise AnalysisError("not_found", "排障采集已过期，请重新采集。", 404)
+            raise AnalysisError("not_found", "Capture has expired; run a new capture.", 404)
         return entry
 
     def create(
@@ -1312,8 +1326,14 @@ class Workbench:
         language="en",
     ) -> dict:
         self._prune()
-        if len(self.entries) >= self.capacity:
-            raise AnalysisError("busy", "临时排障采集空间已满，请稍后再试。", 429)
+        while len(self.entries) >= self.capacity:
+            evictable = [
+                key for key, item in self.entries.items() if item.capture["status"] != "running"
+            ]
+            if not evictable:
+                raise AnalysisError("busy", "Capture capacity is full; try again shortly.", 429)
+            oldest = min(evictable, key=lambda key: self.entries[key].expires)
+            del self.entries[oldest]
         identifier = secrets.token_urlsafe(24)
         capture = build_capture(
             batch,
@@ -1345,23 +1365,41 @@ class Workbench:
         if capture["status"] == "running":
             if (capture.get("provider"), capture.get("model"), entry.connection) == (provider, model, connection):
                 return self.get(identifier, owner)
-            raise AnalysisError("already_started", "该采集已用于另一项模型检查。", 409)
+            raise AnalysisError(
+                "already_started", "Capture was already used for another model check.", 409
+            )
         if capture["ai"]["status"] in {"completed", "failed", "cancelled", "interrupted"}:
             raise AnalysisError(
-                "already_started", "该采集已经进行过一次模型检查，请重新采集后再试。", 409
+                "already_started",
+                "Capture has already completed a model check; run a new capture to retry.",
+                409,
             )
         if not capture["ai_preview"]["eligible"]:
-            raise AnalysisError("not_ready", "当前采集没有端口或变化记录可供分析。", 409)
+            raise AnalysisError(
+                "not_ready", "Capture has no port or change observations to analyze.", 409
+            )
         allowed = {"demo"} if self.demo else set(self.providers)
         if provider not in allowed:
-            raise AnalysisError("unsupported_provider", "当前模式不支持该模型服务。")
+            raise AnalysisError(
+                "unsupported_provider", "Provider is not supported in the current mode."
+            )
         if not self.demo and (
             not 1 <= len(key) <= 2048 or not all(33 <= ord(char) <= 126 for char in key)
         ):
-            raise AnalysisError("invalid_key", "请填写有效的模型 API 密钥。")
+            raise AnalysisError("invalid_key", "Enter a valid API key.")
         gate_id = "workbench:" + identifier
         if self.attempt_gate is not None:
             self.attempt_gate.acquire(gate_id, owner)
+        else:
+            running = [
+                item for item in self.entries.values() if item.capture["status"] == "running"
+            ]
+            if len(running) >= 2 or any(item.owner == owner for item in running):
+                raise AnalysisError(
+                    "busy",
+                    "Another model check is already running; wait or cancel before retrying.",
+                    429,
+                )
         if self.reports is not None:
             try:
                 self.reports.begin_workbench_job(identifier, owner, capture["scope_ports"])
@@ -1391,7 +1429,9 @@ class Workbench:
                 )
             result = validate_model_result(selection, capture)
             if key and key in result["conclusion"]["text"]:
-                raise AnalysisError("invalid_output", "模型返回了无效的分析结论。", 502)
+                raise AnalysisError(
+                    "invalid_output", "Model returned an invalid conclusion.", 502
+                )
             capture["ai"] = {
                 "status": "completed",
                 **result,
@@ -1404,14 +1444,17 @@ class Workbench:
                 "status": capture["status"],
                 "error": {
                     "code": capture["status"],
-                    "message": "模型检查已停止；供应商可能已产生用量。",
+                    "message": "Model check stopped; provider usage may still apply.",
                 },
             }
         except TimeoutError:
             capture["status"] = "failed"
             capture["ai"] = {
                 "status": "failed",
-                "error": {"code": "provider_timeout", "message": "模型检查超时，本次未自动重试。"},
+                "error": {
+                    "code": "provider_timeout",
+                    "message": "Model check timed out and was not retried.",
+                },
             }
         except AnalysisError as error:
             capture["status"] = "failed"
@@ -1423,7 +1466,10 @@ class Workbench:
             capture["status"] = "failed"
             capture["ai"] = {
                 "status": "failed",
-                "error": {"code": "analysis_failed", "message": "模型检查未完成，本次未自动重试。"},
+                "error": {
+                    "code": "analysis_failed",
+                    "message": "Model check failed and was not retried.",
+                },
             }
         finally:
             key = ""
@@ -1441,7 +1487,7 @@ class Workbench:
                 # Keep a valid result even if its restart receipt cannot be updated.
                 entry.capture["error"] = {
                     "code": "receipt_unavailable",
-                    "message": "任务状态未能写入存储；本次不会重新调用模型。",
+                    "message": "Job status could not be persisted; model request was not repeated.",
                 }
 
     async def cancel(self, identifier: str, owner: str) -> dict:
@@ -1453,7 +1499,7 @@ class Workbench:
                 entry.capture["status"] = "cancelled"
                 entry.capture["ai"] = {
                     "status": "cancelled",
-                    "error": {"code": "cancelled", "message": "模型检查已取消。"},
+                    "error": {"code": "cancelled", "message": "Model check cancelled."},
                 }
                 if self.attempt_gate is not None:
                     self.attempt_gate.release("workbench:" + identifier)

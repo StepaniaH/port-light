@@ -182,11 +182,109 @@ def _install_workbench_fixture(main, app):
             "sources": snapshot.get("sources", {}),
         }
 
+    async def seed_legacy_report(request: Request):
+        import json
+        import time
+        from backend.analysis.reports import owner_hash
+        from backend.analysis.routes import COOKIE
+
+        payload = {}
+        if request.headers.get("content-type", "").startswith("application/json"):
+            payload = await request.json()
+        session = (payload.get("session") if isinstance(payload, dict) else None) or request.cookies.get(COOKIE, "")
+        if not session:
+            raise HTTPException(status_code=400, detail="missing analysis session cookie")
+        store = app.state.analysis.state.report_store
+        report_id = "legacy-fixture-report-8080"
+        created_at = int(time.time())
+        document = {
+            "id": report_id,
+            "created_at": created_at,
+            "versions": {
+                "schema": 1,
+                "evidence": "port-evidence.v1",
+                "baseline": "port-rules.v1",
+                "interpretation": "port-interpretation.v1",
+            },
+            "evidence": {
+                "port": 8080,
+                "question_type": "recorded_changes",
+                "captured_at": created_at - 10,
+                "observation": {
+                    "captured_at": created_at - 10,
+                    "current": {
+                        "entries": [
+                            {
+                                "protocol": "tcp",
+                                "status": "configured",
+                                "compose_declared": True,
+                                "compose_conflict": False,
+                                "compose_relation": "declared_without_live_mapping",
+                                "bind": [{"family": "ipv4", "scope": "loopback", "source": "compose"}],
+                            }
+                        ]
+                    },
+                    "events": [
+                        {
+                            "event_id": "event-1",
+                            "kind": "state_changed",
+                            "observed_at": created_at - 20,
+                            "before": {"status": "configured"},
+                            "after": {"status": "used"},
+                        }
+                    ],
+                },
+            },
+            "baseline": {
+                "version": "port-rules.v1",
+                "conclusion": {"code": "recorded_changes"},
+            },
+            "validated_interpretation": {
+                "schema_version": 1,
+                "summary_kind": "recorded_changes",
+                "evidence_ids": ["event-1"],
+                "hypotheses": [
+                    {
+                        "kind": "declaration_runtime_gap",
+                        "evidence_ids": ["current"],
+                        "missing_evidence": ["runtime_configuration"],
+                        "text": "UNTRUSTED",
+                    }
+                ],
+                "checks": [{"action": "mapping", "evidence_ids": ["current"]}],
+            },
+            "interpretation_view": {"summary": {"text": "UNTRUSTED"}},
+        }
+        encoded = json.dumps(document, ensure_ascii=False, separators=(",", ":"))
+        with store._database(write=True) as database:
+            database.execute(
+                """INSERT OR REPLACE INTO reports (
+                    id, owner_hash, source_analysis_id, port, created_at,
+                    requires_hidden_access, body, bytes
+                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
+                (
+                    report_id,
+                    owner_hash(session),
+                    "legacy-source-8080",
+                    8080,
+                    created_at,
+                    encoded,
+                    len(encoded.encode("utf-8")),
+                ),
+            )
+        return {"id": report_id, "port": 8080}
+
     app.add_api_route(
         "/__preview/workbench/advance", advance, methods=["POST"], include_in_schema=False
     )
     app.add_api_route(
         "/__preview/workbench/state", fixture_state, methods=["GET"], include_in_schema=False
+    )
+    app.add_api_route(
+        "/__preview/workbench/seed-legacy-report",
+        seed_legacy_report,
+        methods=["POST"],
+        include_in_schema=False,
     )
 
 

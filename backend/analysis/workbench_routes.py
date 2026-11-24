@@ -13,6 +13,7 @@ from .evidence import AnalysisError
 from .settings import AIConnectionInput
 from .workbench import MAX_PORTS, build_capture, compare_captures, read_batch
 
+COOKIE_MAX_AGE = 90 * 86400
 Port = Annotated[int, Field(ge=1, le=65535)]
 
 
@@ -83,18 +84,20 @@ def _failure(error: AnalysisError):
 async def _read_body(request: Request, schema, check_action):
     check_action(request)
     if request.headers.get("content-type", "").split(";", 1)[0] != "application/json":
-        raise AnalysisError("invalid_input", "请求需要 JSON 数据。", 415)
+        raise AnalysisError("invalid_input", "Request body must be JSON.", 415)
     body = bytearray()
     async for chunk in request.stream():
         body.extend(chunk)
         # 1024 decimal ports plus the surrounding scope fits comfortably.  Do
         # not reuse the legacy 4 KiB single-port action limit here.
         if len(body) > 16 * 1024:
-            raise AnalysisError("invalid_input", "请求数据过大。", 413)
+            raise AnalysisError("invalid_input", "Request body exceeds size limit.", 413)
     try:
         return schema.model_validate_json(body)
     except (ValidationError, ValueError):
-        raise AnalysisError("invalid_input", "请检查范围、协议和请求字段。", 422) from None
+        raise AnalysisError(
+            "invalid_input", "Invalid scope, protocol, or request fields.", 422
+        ) from None
 
 
 def _batch_selection(scope) -> dict:
@@ -132,19 +135,17 @@ def _requested_ports(scope) -> set[int] | None:
     return set(range(scope.start, scope.end + 1))
 
 
-def _session_response(
-    document: dict, request: Request, session: str, *, replace_session: bool
-) -> JSONResponse:
+def _session_response(document: dict, request: Request, session: str) -> JSONResponse:
     response = JSONResponse(document, status_code=201)
-    if replace_session:
-        response.set_cookie(
-            "port_light_analysis_session",
-            session,
-            httponly=True,
-            samesite="strict",
-            secure=request.url.scheme == "https",
-            path="/analysis",
-        )
+    response.set_cookie(
+        "port_light_analysis_session",
+        session,
+        max_age=COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="strict",
+        secure=request.url.scheme == "https",
+        path="/analysis",
+    )
     return response
 
 
@@ -158,7 +159,7 @@ def workbench_router(
     check_action,
     resolve_connection,
 ):
-    """Return routes mounted below the legacy module's `/api` prefix."""
+    """Return routes mounted below the module's `/api` prefix."""
 
     router = APIRouter(prefix="/workbench", tags=["analysis"])
 
@@ -188,7 +189,11 @@ def workbench_router(
         if not set(ports) <= visible:
             # Do not say which member was withheld.  The caller can only learn
             # that this multi-resource object is not currently readable.
-            raise AnalysisError("access_restricted", "当前访问权限不能读取该排障对象。", 404)
+            raise AnalysisError(
+                "access_restricted",
+                "Current access permissions cannot read this troubleshooting object.",
+                404,
+            )
 
     async def readable_capture(identifier: str, request: Request):
         document = workbench.get(identifier, owner(request))
@@ -248,9 +253,12 @@ def workbench_router(
             requested = _requested_ports(values.scope)
             visible = {item["port"] for item in batch["ports"]}
             if requested is not None and not requested <= visible:
-                raise AnalysisError("access_restricted", "当前访问权限不能读取所选范围。", 404)
-            existing_owner = owner(request)
-            session = existing_owner or secrets.token_urlsafe(24)
+                raise AnalysisError(
+                    "access_restricted",
+                    "Current access permissions cannot read the selected scope.",
+                    404,
+                )
+            session = owner(request) or secrets.token_urlsafe(24)
             document = workbench.create(
                 batch,
                 owner=session,
@@ -258,9 +266,7 @@ def workbench_router(
                 scope_requested=_scope_requested(values),
                 language=_language(request),
             )
-            return _session_response(
-                document, request, session, replace_session=not bool(existing_owner)
-            )
+            return _session_response(document, request, session)
         except AnalysisError as error:
             return _failure(error)
 
@@ -277,7 +283,9 @@ def workbench_router(
             values = await _read_body(request, AIConnectionInput, check_action)
             if values.confirmed is not True:
                 raise AnalysisError(
-                    "confirmation_required", "请先检查发送内容并确认本次调用。", 409
+                    "confirmation_required",
+                    "Review the payload and confirm this model request before starting.",
+                    409,
                 )
             await readable_capture(identifier, request)
             provider, model, key, connection = resolve_connection(values, request)
@@ -296,7 +304,7 @@ def workbench_router(
     async def cancel_ai(identifier: str, request: Request):
         try:
             check_action(request)
-            # Preserve the legacy behavior of stopping an owned provider attempt
+            # Preserve the behavior of stopping an owned provider attempt
             # even if disclosure access was revoked just before this request.
             document = await workbench.cancel(identifier, owner(request))
             await require_resources(request, document.get("resources", []))
@@ -318,7 +326,9 @@ def workbench_router(
     async def list_reports(request: Request, limit: int = 20, cursor: str | None = None):
         try:
             if not 1 <= limit <= 50:
-                raise AnalysisError("invalid_input", "报告列表分页参数无效。", 422)
+                raise AnalysisError(
+                    "invalid_input", "Invalid report pagination parameters.", 422
+                )
             visible = []
             scan_cursor = cursor
             while len(visible) < limit:
@@ -348,10 +358,27 @@ def workbench_router(
         except AnalysisError as error:
             return _failure(error)
 
+    @router.delete("/reports")
+    async def clear_reports(request: Request):
+        try:
+            check_action(request)
+            return {"deleted_count": reports.delete_all_workbench(owner(request))}
+        except AnalysisError as error:
+            return _failure(error)
+
     @router.get("/reports/{identifier}")
     async def get_report(identifier: str, request: Request):
         try:
             return await readable_report(identifier, request)
+        except AnalysisError as error:
+            return _failure(error)
+
+    @router.delete("/reports/{identifier}")
+    async def delete_report(identifier: str, request: Request):
+        try:
+            check_action(request)
+            reports.delete_workbench(identifier, owner(request))
+            return {"deleted": identifier}
         except AnalysisError as error:
             return _failure(error)
 
@@ -381,7 +408,7 @@ def workbench_router(
             elif ports:
                 selection = {"kind": "ports", "ports": ports}
             else:
-                raise AnalysisError("not_ready", "原始范围没有可复查的资源。", 409)
+                raise AnalysisError("not_ready", "Source report has no resources to recheck.", 409)
             batch = await read_batch(
                 app,
                 request,
@@ -394,7 +421,11 @@ def workbench_router(
                 # Rights can change between the saved-report authorization and
                 # the new frozen batch.  Do not create a smaller report that
                 # still carries comparison evidence for a now-hidden member.
-                raise AnalysisError("access_restricted", "当前访问权限不能读取该排障对象。", 404)
+                raise AnalysisError(
+                    "access_restricted",
+                    "Current access permissions cannot read this troubleshooting object.",
+                    404,
+                )
             # This candidate uses a throwaway ID only to calculate facts and
             # stable problem IDs before the owned capture is materialized.
             candidate = build_capture(
@@ -416,7 +447,7 @@ def workbench_router(
                 source_report_id=report["id"],
                 language=_language(request),
             )
-            return JSONResponse(document, status_code=201)
+            return _session_response(document, request, session)
         except AnalysisError as error:
             return _failure(error)
 
