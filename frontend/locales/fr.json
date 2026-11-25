@@ -1308,6 +1308,7 @@
       "fleet": "Soutien équipe / flotte"
     },
     "plaque": {
+      "eyebrow": "BALISE PORTUAIRE · ED25519",
       "lit": "Balise allumée",
       "since": "Balise allumée depuis le {date}",
       "thanksPersonal": "Merci de soutenir la maintenance indépendante de Port-Light. Chaque fonctionnalité reste open source sous licence MIT, sans télémétrie.",

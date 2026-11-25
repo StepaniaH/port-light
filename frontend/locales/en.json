@@ -1308,6 +1308,7 @@
       "fleet": "Team / Fleet Supporter"
     },
     "plaque": {
+      "eyebrow": "HARBOR BEACON · ED25519",
       "lit": "Beacon lit",
       "since": "Lighting the beacon since {date}",
       "thanksPersonal": "Thank you for supporting independent maintenance of Port-Light. Every feature stays MIT open source with zero telemetry.",

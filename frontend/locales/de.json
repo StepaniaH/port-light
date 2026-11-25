@@ -1308,6 +1308,7 @@
       "fleet": "Team- / Flotten-Supporter"
     },
     "plaque": {
+      "eyebrow": "HAFEN-LEUCHTFEUER · ED25519",
       "lit": "Leuchtfeuer aktiv",
       "since": "Leuchtfeuer aktiv seit {date}",
       "thanksPersonal": "Vielen Dank für die Unterstützung der unabhängigen Pflege von Port-Light. Alle Funktionen bleiben MIT-Open-Source ohne Telemetrie.",

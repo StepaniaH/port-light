@@ -168,12 +168,15 @@ try {
   await page.locator('#supporter-key-input').fill(vectors.personal);
   await page.locator('[data-supporter-activate]').click();
   await expect(page.locator('#settings-panel-supporter .supporter-plaque')).toBeVisible();
+  await expect(page.locator('#settings-panel-supporter .plaque-eyebrow')).toHaveText('HARBOR BEACON · ED25519');
   await expect(page.locator('#settings-panel-supporter .plaque-title')).toHaveText('Personal Supporter');
   await expect(page.locator('#settings-tab-supporter-dot')).toBeVisible();
   await expect(page.locator('#supporter-badge')).toBeVisible();
   await expect(page.locator('#supporter-badge-label')).toHaveText('Supporter');
   await expect(page.locator('#app-header')).toHaveClass(/has-supporter-beacon/);
   await expect(page.locator('.settings-footer')).toBeVisible();
+  const darkSupMain = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--sup-main').trim().toLowerCase());
+  assert.equal(darkSupMain, '#2dd4bf', `Default dark --sup-main mismatch: ${darkSupMain}`);
   await shot(page, '03-settings-plaque-personal-dark.png');
 
   // 4. Dashboard with Personal Supporter badge across Dark, Light, Catppuccin Mocha, and Mobile 390px / 360px
@@ -182,6 +185,14 @@ try {
   await expect(page.locator('#btn-settings')).not.toHaveClass(/\bactive\b/);
   await expect(page.locator('#supporter-badge')).toBeVisible();
   await expect(page.locator('#grid .port-cell').first()).toBeVisible();
+  // Verify #port-menu dropdown stays unclipped while has-supporter-beacon is active
+  await page.locator('#btn-manage').click();
+  await expect(page.locator('#port-menu')).toBeVisible();
+  const menuBox = await page.locator('#port-menu').boundingBox();
+  assert.ok(menuBox && menuBox.height > 120, 'Manage menu clipped by app-header');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#port-menu')).toBeHidden();
+  await page.locator('#btn-manage').evaluate(el => el.blur());
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await shot(page, '04-dashboard-personal-dark-1280.png');
 
@@ -215,6 +226,8 @@ try {
   await page.locator('[data-theme-preview="catppuccin"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'catppuccin');
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
+  const catSupMain = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--sup-main').trim().toLowerCase());
+  assert.equal(catSupMain, '#cba6f7', `Catppuccin Mocha --sup-main mismatch: ${catSupMain}`);
   await page.getByRole('link', { name: /^Port-Light/ }).click();
   await expect(page.locator('#view-grid')).toBeVisible();
   await expect(page.locator('#btn-settings')).not.toHaveClass(/\bactive\b/);

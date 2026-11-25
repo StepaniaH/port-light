@@ -1308,6 +1308,7 @@
       "fleet": "Apoyo equipo / flota"
     },
     "plaque": {
+      "eyebrow": "FARO PORTUARIO · ED25519",
       "lit": "Faro encendido",
       "since": "Encendiendo el faro desde {date}",
       "thanksPersonal": "Gracias por apoyar el mantenimiento independiente de Port-Light. Todas las funciones siguen siendo código abierto MIT y sin telemetría.",

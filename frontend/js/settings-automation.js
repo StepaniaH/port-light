@@ -1,9 +1,9 @@
 /* Automation examples, activity, and lease controls. */
-import { S } from './state.js?v=127';
-import { t, escapeHtml } from './text.js?v=127';
-import { api } from './api.js?v=127';
-import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=127';
-import { settingsCard, kvRow } from './settings-format.js?v=127';
+import { S } from './state.js?v=128';
+import { t, escapeHtml } from './text.js?v=128';
+import { api } from './api.js?v=128';
+import { remainingSeconds, fmtRemaining, formatAgo } from './leases.js?v=128';
+import { settingsCard, kvRow } from './settings-format.js?v=128';
 
   function copyButton(id, labelKey, primary = false) {
     const label = escapeHtml(t(labelKey));

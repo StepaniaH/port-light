@@ -1308,6 +1308,7 @@
       "fleet": "团队 / 机群赞助者"
     },
     "plaque": {
+      "eyebrow": "港口灯标 · ED25519",
       "lit": "灯标已点亮",
       "since": "自 {date} 起持续点亮灯标",
       "thanksPersonal": "感谢你支持 Port-Light 的独立维护。全部功能保持 MIT 开源、零遥测。",

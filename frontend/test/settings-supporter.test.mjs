@@ -63,6 +63,9 @@ test('supporterCardsHtml renders activated plaque, fleet env override, readonly,
     show_in_header: true,
   }, SHOW_HEADER_FIELD, true, false);
   assert.match(personal, /supporter-plaque/);
+  assert.match(personal, /plaque-eyebrow/);
+  assert.match(personal, /supporter\.plaque\.eyebrow/);
+  assert.match(personal, /class="beacon-glyph"/);
   assert.match(personal, /supporter\.tier\.personal/);
   assert.match(personal, /PL1\.eyJpYXQiOiIyMD…/);
   assert.match(personal, /ord_•••••433/);

@@ -1,10 +1,10 @@
 /* Settings → Supporter Key panel: Harbor Beacon Plaque and offline key activation. */
 
-import { S } from './state.js?v=127';
-import { t, escapeHtml } from './text.js?v=127';
-import { api } from './api.js?v=127';
-import { kvRow } from './settings-format.js?v=127';
-import { syncSupporterHeader } from './supporter-header.js?v=127';
+import { S } from './state.js?v=128';
+import { t, escapeHtml } from './text.js?v=128';
+import { api } from './api.js?v=128';
+import { kvRow } from './settings-format.js?v=128';
+import { syncSupporterHeader } from './supporter-header.js?v=128';
 
 const SUPPORT_URL = 'https://portlight.stepaniah.me/#support';
 
@@ -87,9 +87,14 @@ export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValu
       '<div class="plaque-top">' +
       '<div class="plaque-emblem">' + plaqueLogoHtml() + '</div>' +
       '<div class="plaque-meta">' +
+      '<div class="plaque-eyebrow" data-i18n="supporter.plaque.eyebrow">' + escapeHtml(t('supporter.plaque.eyebrow')) + '</div>' +
       '<div class="plaque-title-row">' +
       '<h2 class="plaque-title" data-i18n="' + tierKey + '">' + escapeHtml(t(tierKey)) + '</h2>' +
-      '<span class="plaque-tier-tag"><i class="supporter-beacon-dot" aria-hidden="true"></i>' +
+      '<span class="plaque-tier-tag">' +
+      '<svg class="beacon-glyph" width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+      '<path d="M8 1.5v2.4M2.8 4.1l1.9 1.3M13.2 4.1l-1.9 1.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+      '<path d="M5.6 7.5h4.8l.95 6.5h-6.7l.95-6.5Z" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/>' +
+      '<circle cx="8" cy="5.7" r="1.35" fill="currentColor"/></svg>' +
       '<span data-i18n="supporter.plaque.lit">' + escapeHtml(t('supporter.plaque.lit')) + '</span></span>' +
       '</div>' +
       sinceHtml +
