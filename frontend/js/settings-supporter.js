@@ -1,10 +1,10 @@
 /* Settings → Supporter Key panel: Harbor Beacon Plaque and offline key activation. */
 
-import { S } from './state.js?v=130';
-import { t, escapeHtml } from './text.js?v=130';
-import { api } from './api.js?v=130';
-import { kvRow } from './settings-format.js?v=130';
-import { syncSupporterHeader } from './supporter-header.js?v=130';
+import { S } from './state.js?v=131';
+import { t, escapeHtml } from './text.js?v=131';
+import { api } from './api.js?v=131';
+import { kvRow } from './settings-format.js?v=131';
+import { syncSupporterHeader } from './supporter-header.js?v=131';
 
 const SUPPORT_URL = 'https://portlight.stepaniah.me/#support';
 const BEACON_GLYPH_SVG =
@@ -58,11 +58,13 @@ function keyFormHtml(canClear) {
     removeBtn + '</div>';
 }
 
-function composeHintHtml() {
-  const text = escapeHtml(t('supporter.inactive.composeHint', { env: 'PORT_LIGHT_SUPPORTER_KEY' }))
-    .replace('PORT_LIGHT_SUPPORTER_KEY', '<code>PORT_LIGHT_SUPPORTER_KEY</code>');
+function composeHintHtml(showEnvHint) {
+  const envSpan = showEnvHint
+    ? '<span>' + escapeHtml(t('supporter.inactive.composeHint', { env: 'PORT_LIGHT_SUPPORTER_KEY' }))
+      .replace('PORT_LIGHT_SUPPORTER_KEY', '<code>PORT_LIGHT_SUPPORTER_KEY</code>') + '</span>'
+    : '';
   return '<div class="supporter-inactive-foot">' +
-    '<span>' + text + '</span>' +
+    envSpan +
     '<span class="supporter-inactive-offline" data-i18n="supporter.inactive.offlineNote">' +
     escapeHtml(t('supporter.inactive.offlineNote')) + '</span></div>';
 }
@@ -191,10 +193,13 @@ export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValu
       clearBtn + '</div>';
   }
 
+  const showReadonlyInactive = !canEdit && s.status !== 'invalid';
   const formHtml = canEdit
     ? keyFormHtml(false)
-    : '<p class="field-help" data-i18n="supporter.manage.readonly">' +
-      escapeHtml(t('supporter.manage.readonly')) + '</p>';
+    : (showReadonlyInactive
+      ? '<p class="field-help" data-i18n="supporter.manage.readonly">' +
+        escapeHtml(t('supporter.manage.readonly')) + '</p>'
+      : '');
 
   const activateCard = '<section class="settings-card supporter-inactive">' +
     '<header class="settings-card-head">' +
@@ -204,7 +209,7 @@ export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValu
     alertHtml +
     formHtml +
     '<p id="supporter-action-status" class="action-status" role="status" aria-live="polite"></p>' +
-    composeHintHtml() +
+    composeHintHtml(canEdit || showReadonlyInactive) +
     '</div></section>';
 
   const showcaseCard = showcaseCardHtml();
@@ -279,6 +284,42 @@ function extractSupporterResponse(body, requireActive) {
   return body.supporter;
 }
 
+function captureHeaderPrefState() {
+  const dirty = !!(S.settingsDirtyKeys && S.settingsDirtyKeys.has('supporter_show_header'));
+  const submitting = !!(S.settingsSubmittingKeys && S.settingsSubmittingKeys.has('supporter_show_header'));
+  const hasConfirmed = !!(S.settingsConfirmed && Object.prototype.hasOwnProperty.call(S.settingsConfirmed, 'supporter_show_header'));
+  return {
+    pendingAtStart: dirty || submitting,
+    settingsRevision: S.settingsRevision || 0,
+    hasConfirmed: hasConfirmed,
+    confirmedValue: hasConfirmed ? !!S.settingsConfirmed.supporter_show_header : undefined,
+  };
+}
+
+function mergeHeaderPref(supporterDoc, snapshot) {
+  if (!supporterDoc || typeof supporterDoc !== 'object') return supporterDoc;
+  const dirty = !!(S.settingsDirtyKeys && S.settingsDirtyKeys.has('supporter_show_header'));
+  const submitting = !!(S.settingsSubmittingKeys && S.settingsSubmittingKeys.has('supporter_show_header'));
+  const hasConfirmed = !!(S.settingsConfirmed && Object.prototype.hasOwnProperty.call(S.settingsConfirmed, 'supporter_show_header'));
+  const confirmedChanged = snapshot && (
+    hasConfirmed !== snapshot.hasConfirmed ||
+    (hasConfirmed && !!S.settingsConfirmed.supporter_show_header !== snapshot.confirmedValue)
+  );
+  const revisionChanged = snapshot && (S.settingsRevision || 0) !== snapshot.settingsRevision;
+  if (!dirty && !submitting && !(snapshot && snapshot.pendingAtStart) && !confirmedChanged && !revisionChanged) {
+    return supporterDoc;
+  }
+  let localShow;
+  if (S.settingsDraft && Object.prototype.hasOwnProperty.call(S.settingsDraft, 'supporter_show_header')) {
+    localShow = !!S.settingsDraft.supporter_show_header;
+  } else if (hasConfirmed) {
+    localShow = !!S.settingsConfirmed.supporter_show_header;
+  } else {
+    return supporterDoc;
+  }
+  return Object.assign({}, supporterDoc, { show_in_header: localShow });
+}
+
 export async function submitSupporterKey(rawKey) {
   if (_inFlight) return false;
   const trimmed = String(rawKey || '').trim();
@@ -287,6 +328,7 @@ export async function submitSupporterKey(rawKey) {
     return false;
   }
   _inFlight = true;
+  const headerPrefAtStart = captureHeaderPrefState();
   S.supporterRevision = (S.supporterRevision || 0) + 1;
   setSupporterControlsBusy(true, 'activate');
   setSupporterStatus('', 'action-status');
@@ -302,12 +344,13 @@ export async function submitSupporterKey(rawKey) {
       setSupporterStatus(supporterErrorKey(body, res.status), 'action-status is-error');
       return false;
     }
-    const next = extractSupporterResponse(body, true);
-    if (!next) {
+    const rawNext = extractSupporterResponse(body, true);
+    if (!rawNext) {
       setSupporterControlsBusy(false, 'activate');
       setSupporterStatus('supporter.error.failed', 'action-status is-error');
       return false;
     }
+    const next = mergeHeaderPref(rawNext, headerPrefAtStart);
     S.supporterRevision = (S.supporterRevision || 0) + 1;
     if (S.settingsDoc) S.settingsDoc.supporter = next;
     syncSupporterMeta(next);
@@ -325,6 +368,7 @@ export async function submitSupporterKey(rawKey) {
 export async function clearSupporterKey() {
   if (_inFlight) return false;
   _inFlight = true;
+  const headerPrefAtStart = captureHeaderPrefState();
   S.supporterRevision = (S.supporterRevision || 0) + 1;
   setSupporterControlsBusy(true, 'remove');
   setSupporterStatus('', 'action-status');
@@ -336,12 +380,13 @@ export async function clearSupporterKey() {
       setSupporterStatus(supporterErrorKey(body, res.status), 'action-status is-error');
       return false;
     }
-    const next = extractSupporterResponse(body, false);
-    if (!next) {
+    const rawNext = extractSupporterResponse(body, false);
+    if (!rawNext) {
       setSupporterControlsBusy(false, 'remove');
       setSupporterStatus('supporter.error.failed', 'action-status is-error');
       return false;
     }
+    const next = mergeHeaderPref(rawNext, headerPrefAtStart);
     S.supporterRevision = (S.supporterRevision || 0) + 1;
     if (S.settingsDoc) S.settingsDoc.supporter = next;
     syncSupporterMeta(next);

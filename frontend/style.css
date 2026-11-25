@@ -1743,7 +1743,7 @@ a:focus-visible,
   margin-bottom: 4px;
 }
 [data-mode="light"] .plaque-eyebrow {
-  color: var(--sup-main);
+  color: var(--sup-ink);
 }
 .plaque-title-row {
   display: flex;
@@ -1950,7 +1950,7 @@ a:focus-visible,
   text-transform: uppercase;
   color: var(--sup-hi);
 }
-[data-mode="light"] .supporter-showcase-badge { color: var(--sup-main); }
+[data-mode="light"] .supporter-showcase-badge { color: var(--sup-ink); }
 .supporter-preview-btn {
   appearance: none;
   display: inline-flex;
@@ -2000,7 +2000,7 @@ a:focus-visible,
   color: var(--sup-hi);
   border: 1px solid color-mix(in srgb, var(--sup-main) 34%, transparent);
 }
-[data-mode="light"] .supporter-preview-pill { color: var(--sup-main); }
+[data-mode="light"] .supporter-preview-pill { color: var(--sup-ink); }
 
 .supporter-showcase-pillars {
   display: flex;
@@ -2138,7 +2138,9 @@ a:focus-visible,
   color: var(--sup-hi);
   opacity: 1;
 }
-[data-mode="light"] .app-footer-support:hover,
+[data-mode="light"] .app-footer-support:hover {
+  color: var(--sup-ink);
+}
 [data-mode="light"] .app-footer-support:hover .beacon-glyph,
 [data-mode="light"] .app-footer-support.is-lit .beacon-glyph {
   color: var(--sup-main);

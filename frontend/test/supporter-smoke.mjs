@@ -352,8 +352,85 @@ try {
   await expect(page.locator('#settings-tab-supporter-dot')).toBeHidden();
   await expect(page.locator('#settings-tab-supporter-glyph')).toBeVisible();
 
+  // Verify WCAG AA (>= 4.5:1) contrast on showcase pill, badge, eyebrow, and CTA across all 11 light themes
+  const lightPalettes = ['', 'gruvbox', 'catppuccin', 'nord', 'dracula', 'tokyo-night', 'one-dark', 'solarized', 'everforest', 'rose-pine', 'kanagawa'];
+  const contrastReport = await page.evaluate((palettes) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const parseColor = (cssColor) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+      ctx.fillStyle = cssColor;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b, a / 255];
+    };
+    const composite = (fg, bg) => {
+      const a = fg[3];
+      return [
+        fg[0] * a + bg[0] * (1 - a),
+        fg[1] * a + bg[1] * (1 - a),
+        fg[2] * a + bg[2] * (1 - a),
+        1,
+      ];
+    };
+    const lum = ([r, g, b]) => {
+      const c = [r, g, b].map(v => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const ratio = (c1, c2) => {
+      const l1 = lum(c1);
+      const l2 = lum(c2);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    };
+    const effectiveBg = (el) => {
+      const layers = [];
+      let cur = el;
+      while (cur && cur.nodeType === 1) {
+        const bg = parseColor(getComputedStyle(cur).backgroundColor);
+        if (bg[3] > 0) layers.push(bg);
+        cur = cur.parentElement;
+      }
+      let out = [255, 255, 255, 1];
+      for (let i = layers.length - 1; i >= 0; i--) out = composite(layers[i], out);
+      return out;
+    };
+    const rootEl = document.documentElement;
+    const prevMode = rootEl.getAttribute('data-mode');
+    const prevPal = rootEl.getAttribute('data-palette');
+    const results = [];
+    rootEl.setAttribute('data-mode', 'light');
+    for (const pal of palettes) {
+      if (pal) rootEl.setAttribute('data-palette', pal);
+      else rootEl.removeAttribute('data-palette');
+      for (const sel of ['.supporter-preview-pill', '.supporter-showcase-badge', '.plaque-eyebrow']) {
+        const el = document.querySelector(sel);
+        const fg = parseColor(getComputedStyle(el).color);
+        const bg = effectiveBg(el);
+        results.push({ palette: pal || 'default', selector: sel, ratio: Number(ratio(fg, bg).toFixed(2)) });
+      }
+    }
+    if (prevMode) rootEl.setAttribute('data-mode', prevMode); else rootEl.removeAttribute('data-mode');
+    if (prevPal) rootEl.setAttribute('data-palette', prevPal); else rootEl.removeAttribute('data-palette');
+    return results;
+  }, lightPalettes);
+  let minContrast = Infinity;
+  let minLabel = '';
+  for (const row of contrastReport) {
+    assert.ok(Number.isFinite(row.ratio) && row.ratio >= 4.5, `Light contrast < 4.5:1 on ${row.palette} ${row.selector}: ${row.ratio}:1`);
+    if (row.ratio < minContrast) {
+      minContrast = row.ratio;
+      minLabel = `${row.palette} ${row.selector}`;
+    }
+  }
+
   assert.deepEqual(errors, []);
-  console.log('Supporter browser smoke passed: free/personal/fleet states, header nameplate, horizon shimmer, live toggle, themes (dark/light/catppuccin), zh-CN locale, 390px/360px mobile overflow checks, zero raw-key leakage.');
+  console.log(`Supporter browser smoke passed: free/personal/fleet states, header nameplate, horizon shimmer, live toggle, themes (dark/light/catppuccin), 11-theme light WCAG contrast (min ${minContrast}:1 on ${minLabel}), zh-CN locale, 390px/360px mobile overflow checks, zero raw-key leakage.`);
 } finally {
   if (browser) await browser.close();
   if (child && child.exitCode === null) {
