@@ -137,9 +137,17 @@ try {
   await put('/api/hosts', { peers: [peers[0]] });
   await page.setViewportSize({ width: 2560, height: 1000 });
   await page.reload();
-  await expect(page.locator('.host-board')).toHaveCount(2);
-  const widths = await page.locator('.host-board').evaluateAll(els => els.map(el => el.clientWidth));
-  assert.ok(widths.every(width => width > 1200), JSON.stringify(widths));
+  // Read populated boards in one evaluation: locator.evaluateAll spans two CDP
+  // steps and can read detached placeholder nodes (clientWidth === 0) if the
+  // initial occupancy refresh replaces hostBoards.innerHTML in between.
+  await expect.poll(async () => {
+    const widths = await page.evaluate(() => {
+      const boards = Array.from(document.querySelectorAll('.host-board'));
+      if (boards.length !== 2 || !boards.every(el => el.querySelector('.port-cell'))) return null;
+      return boards.map(el => el.clientWidth);
+    });
+    return !!widths && widths.every(width => width > 1200);
+  }, { message: 'two-machine fleet boards must expand above 1200px once populated' }).toBe(true);
   const columnsByDensity = [];
   const gridLayout = () => page.evaluate(() => {
     // Reload creates placeholders before occupancy arrives and replaces them.
