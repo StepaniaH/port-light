@@ -80,9 +80,29 @@ def test_analysis_inherits_basic_auth_and_same_origin_protection(
         assert client.get("/analysis/api/settings").status_code == 401
         client.auth = ("fixture", "fixture-password")
         assert client.get("/analysis/api/settings").status_code == 200
-        result = client.put(
-            "/analysis/api/settings/ai",
-            headers={**ACTION, "Origin": "https://example.invalid"},
-            json={"provider": "openai", "model": "fixture"},
-        )
-        assert result.status_code == 403
+        for bad_headers in (
+            {**ACTION, "Origin": "https://example.invalid"},
+            {**ACTION, "Sec-Fetch-Site": "same-site", "Origin": "http://testserver:3000"},
+            {**ACTION, "Origin": "null"},
+        ):
+            result = client.put(
+                "/analysis/api/settings/ai",
+                headers=bad_headers,
+                json={"provider": "openai", "model": "fixture"},
+            )
+            assert result.status_code == 403
+        for good_headers in (
+            {**ACTION, "Origin": "https://ports.example.com", "Sec-Fetch-Site": "same-origin"},
+            {
+                **ACTION,
+                "Origin": "https://ports.example.com",
+                "Host": "ports.example.com",
+                "X-Forwarded-Proto": "https",
+            },
+        ):
+            capture = client.post(
+                "/analysis/api/workbench/captures",
+                headers=good_headers,
+                json={"kind": "triage", "scope": {"kind": "single_port", "port": 8080}, "protocol": "all"},
+            )
+            assert capture.status_code == 201, capture.text

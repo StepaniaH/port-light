@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from ..auth import is_same_origin_request
 from .evidence import AnalysisError, require_port_access
 from .provider import ChatGateway
 from .settings import (
@@ -40,10 +41,7 @@ def check_action(request):
             "Analysis requests must include the workspace action header.",
             403,
         )
-    origin = request.headers.get("origin")
-    if (
-        origin and origin != str(request.base_url.replace(path="/")).rstrip("/")
-    ) or request.headers.get("sec-fetch-site") == "cross-site":
+    if not is_same_origin_request(request):
         raise AnalysisError(
             "invalid_origin", "Cross-origin analysis requests are not allowed.", 403
         )

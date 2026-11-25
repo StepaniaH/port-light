@@ -25,6 +25,7 @@ from .auth import (
     basic_auth_middleware,
     hidden_ports_withheld,
     hidden_unlock_configured,
+    is_same_origin_request,
     request_may_see_hidden,
 )
 from .classification import classify
@@ -123,15 +124,12 @@ _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 async def csrf_middleware(request: Request, call_next):
     if (request.method in _MUTATING_METHODS
-            and (request.url.path == "/api" or request.url.path.startswith("/api/"))):
-        sec_fetch_site = (request.headers.get("sec-fetch-site") or "").strip().lower()
-        origin = request.headers.get("origin")
-        expected_origin = str(request.base_url.replace(path="/")).rstrip("/")
-        if sec_fetch_site == "cross-site" or (origin is not None and origin != expected_origin):
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "cross-origin requests are not allowed"},
-            )
+            and (request.url.path == "/api" or request.url.path.startswith("/api/"))
+            and not is_same_origin_request(request)):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "cross-origin requests are not allowed"},
+        )
     return await call_next(request)
 
 

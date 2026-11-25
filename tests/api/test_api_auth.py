@@ -428,8 +428,16 @@ def test_health_hides_scopes_until_configured_gate_is_unlocked(monkeypatch, auth
     "headers",
     [
         {"Sec-Fetch-Site": "cross-site"},
+        {"Sec-Fetch-Site": "same-site"},
+        {"Sec-Fetch-Site": "same-site", "Origin": "http://testserver:3000"},
+        {"Sec-Fetch-Site": "same-origin", "Origin": "null"},
+        {"Sec-Fetch-Site": "none", "Origin": "https://attacker.example.invalid"},
+        {"Sec-Fetch-Site": "unknown", "Origin": "http://testserver"},
         {"Origin": "https://attacker.example.invalid"},
         {"Origin": "null"},
+        {"Origin": ""},
+        {"Origin": "http://testserver/path"},
+        {"Origin": "http://ports.example.com", "Host": "ports.example.com", "X-Forwarded-Proto": "https"},
     ],
 )
 def test_mutating_api_endpoints_reject_cross_origin_requests(monkeypatch, tmp_path, headers):
@@ -439,6 +447,7 @@ def test_mutating_api_endpoints_reject_cross_origin_requests(monkeypatch, tmp_pa
     client = TestClient(app)
     for method, path, body in (
         ("POST", "/api/manual-ports", {"port": 42000, "label": "csrf"}),
+        ("PUT", "/api/settings", {"locale": "zh-CN"}),
         ("PUT", "/api/hosts", {"peers": []}),
         ("PATCH", "/api/manual-ports/42000", {"label": "csrf"}),
         ("DELETE", "/api/manual-ports/42000", None),
@@ -447,6 +456,7 @@ def test_mutating_api_endpoints_reject_cross_origin_requests(monkeypatch, tmp_pa
         assert res.status_code == 403
         assert res.json() == {"detail": "cross-origin requests are not allowed"}
     assert port_store.get_manual_ports() == []
+    assert port_store.get_stored_settings() == {}
     assert client.get("/api/ports", headers=headers).status_code == 200
 
 
@@ -463,6 +473,80 @@ def test_mutating_api_allows_same_origin_and_headless_clients(monkeypatch, tmp_p
     assert browser_ok.status_code == 200
     cli_ok = client.post("/api/manual-ports", json={"port": 42011, "label": "cli"})
     assert cli_ok.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        # Modern browser behind a TLS-terminating or host-rewriting reverse proxy.
+        {"Origin": "https://ports.example.com", "Sec-Fetch-Site": "same-origin"},
+        {"Origin": "https://ports.example.com:8443", "Sec-Fetch-Site": "same-origin", "Host": "127.0.0.1:2100"},
+        {"Sec-Fetch-Site": "none"},
+        # Proxy-forwarded HTTPS / host / port when Sec-Fetch-Site is absent.
+        {"Origin": "https://ports.example.com", "Host": "ports.example.com", "X-Forwarded-Proto": "https"},
+        {
+            "Origin": "https://ports.example.com:8443",
+            "Host": "ports.example.com",
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Port": "8443",
+        },
+        {
+            "Origin": "https://ports.example.com:8443",
+            "Host": "127.0.0.1:2100",
+            "X-Forwarded-Proto": "https, http",
+            "X-Forwarded-Host": "ports.example.com:8443, internal:2100",
+        },
+        {
+            "Origin": "https://ports.example.com:8443",
+            "Host": "127.0.0.1:2100",
+            "Forwarded": 'for=192.0.2.1;proto=https;host="ports.example.com:8443", for=10.0.0.1;proto=http',
+        },
+        # Direct HTTP LAN access with default port, uppercase Host, or IPv6 literal.
+        {"Origin": "http://nas.lan", "Host": "nas.lan:80"},
+        {"Origin": "http://mynas.local:2100", "Host": "MyNAS.local:2100"},
+        {"Origin": "http://[::1]:2100", "Host": "[::1]:2100"},
+    ],
+)
+def test_settings_save_allows_same_origin_through_proxies_and_normalized_hosts(
+    monkeypatch, tmp_path, headers
+):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PORT_LIGHT_SETTINGS_SOURCE", "file")
+    for name in ("AUTH_USER", "AUTH_PASSWORD", "HIDDEN_UNLOCK_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    client = TestClient(app)
+    res = client.put(
+        "/api/settings",
+        json={"locale": "zh-CN", "copy_on_click": True},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["values"]["locale"] == "zh-CN"
+    assert res.json()["values"]["copy_on_click"] is True
+    reloaded = client.get("/api/settings")
+    assert reloaded.status_code == 200
+    assert reloaded.json()["values"]["locale"] == "zh-CN"
+    assert reloaded.json()["values"]["copy_on_click"] is True
+
+
+def test_mutating_api_rejects_duplicate_origin_or_fetch_metadata_headers(monkeypatch, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    for name in ("AUTH_USER", "AUTH_PASSWORD", "HIDDEN_UNLOCK_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    client = TestClient(app)
+    dup_origin = client.put(
+        "/api/settings",
+        json={"locale": "ja"},
+        headers=[("Origin", "http://testserver"), ("Origin", "https://attacker.example.invalid")],
+    )
+    assert dup_origin.status_code == 403
+    dup_fetch = client.put(
+        "/api/settings",
+        json={"locale": "ja"},
+        headers=[("Sec-Fetch-Site", "same-origin"), ("Sec-Fetch-Site", "cross-site")],
+    )
+    assert dup_fetch.status_code == 403
+    assert port_store.get_stored_settings() == {}
 
 
 def test_two_stage_packed_occupancy_matches_direct_classification_without_reclassifying(
