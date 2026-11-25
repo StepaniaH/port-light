@@ -200,6 +200,13 @@ try {
   await page.getByRole('link', { name: /^Port-Light/ }).click();
   await expect(page.locator('#view-grid')).toBeVisible();
   await expect(page.locator('#btn-settings')).not.toHaveClass(/\bactive\b/);
+  // Verify Light-mode keyboard focus-visible ring is visible on #supporter-badge
+  await page.locator('#brand-link').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#supporter-badge')).toBeFocused();
+  const lightFocusShadow = await page.locator('#supporter-badge').evaluate(el => getComputedStyle(el).boxShadow);
+  assert.ok(lightFocusShadow.includes('4px'), `Light-mode focus ring missing on #supporter-badge: ${lightFocusShadow}`);
+  await page.locator('#supporter-badge').evaluate(el => el.blur());
   await shot(page, '06-dashboard-personal-light-1280.png');
 
   // Switch to Catppuccin Mocha (dark) and capture dashboard
@@ -239,10 +246,27 @@ try {
   await expect(page.locator('#settings-status')).toHaveClass('is-ok');
   await expect(page.locator('#supporter-badge')).toBeVisible();
 
-  // Check mobile 390px and ultra-narrow 360px with Fleet badge active
+  // Check mid-width 900px & 768px (EN + DE with #ui-links visible) plus mobile 390px and 360px
   await page.getByRole('link', { name: /^Port-Light/ }).click();
   await expect(page.locator('#view-grid')).toBeVisible();
   await expect(page.locator('#btn-settings')).not.toHaveClass(/\bactive\b/);
+  for (const width of [900, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.locator('#supporter-badge')).toBeVisible();
+    const layout = await page.evaluate(() => {
+      const search = document.getElementById('search').getBoundingClientRect();
+      const settings = document.getElementById('btn-settings').getBoundingClientRect();
+      return {
+        sw: document.documentElement.scrollWidth,
+        iw: window.innerWidth,
+        searchW: search.width,
+        settingsRight: settings.right,
+      };
+    });
+    assert.ok(layout.sw <= layout.iw, `Overflow at ${width}px: ${layout.sw} > ${layout.iw}`);
+    assert.ok(layout.searchW >= 220, `Crushed search at ${width}px: ${layout.searchW}`);
+    assert.ok(layout.settingsRight <= layout.iw + 1, `Settings clipped at ${width}px: ${layout.settingsRight}`);
+  }
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#supporter-badge')).toBeVisible();
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'No overflow at 390px');
@@ -251,6 +275,23 @@ try {
   await page.setViewportSize({ width: 360, height: 780 });
   await expect(page.locator('#supporter-badge')).toBeVisible();
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'No overflow at 360px');
+
+  // Verify German (longest European labels) at 900px has zero overflow and uncrushed search
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(baseUrl + '/#/settings/appearance');
+  await page.locator('.locale-trigger').click();
+  await page.locator('#locale-opt-de').click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+  await page.getByRole('link', { name: /^Port-Light/ }).click();
+  await expect(page.locator('#view-grid')).toBeVisible();
+  await page.setViewportSize({ width: 900, height: 844 });
+  const deLayout = await page.evaluate(() => ({
+    sw: document.documentElement.scrollWidth,
+    iw: window.innerWidth,
+    searchW: document.getElementById('search').getBoundingClientRect().width,
+  }));
+  assert.ok(deLayout.sw <= deLayout.iw, `DE overflow at 900px: ${deLayout.sw} > ${deLayout.iw}`);
+  assert.ok(deLayout.searchW >= 220, `DE crushed search at 900px: ${deLayout.searchW}`);
 
   // Check zh-CN locale renders localized plaque & header tooltip
   await page.setViewportSize({ width: 1280, height: 900 });

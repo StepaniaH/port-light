@@ -128,7 +128,9 @@ export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValu
 
   let alertHtml = '';
   if (s.status === 'invalid') {
-    const alertKey = s.origin === 'env' ? 'supporter.invalid.env' : 'supporter.invalid.file';
+    const alertKey = s.origin === 'env'
+      ? (canEdit ? 'supporter.invalid.env' : 'supporter.invalid.envReadonly')
+      : (canEdit ? 'supporter.invalid.file' : 'supporter.invalid.fileReadonly');
     const clearBtn = s.origin === 'file' && canClear
       ? '<button type="button" class="btn-secondary supporter-btn-remove" data-supporter-clear data-i18n="supporter.action.remove">' +
         escapeHtml(t('supporter.action.remove')) + '</button>'
@@ -165,7 +167,6 @@ function setSupporterStatus(key, className) {
 
 function supporterErrorKey(body, status) {
   const detail = body && typeof body.detail === 'string' ? body.detail : '';
-  if (detail === 'supporter_key_empty') return 'supporter.error.empty';
   if (detail === 'supporter_key_format') return 'supporter.error.format';
   if (detail === 'supporter_key_invalid') return 'supporter.error.invalid';
   if (status === 403 || detail === 'readonly') return 'supporter.error.readonly';
@@ -175,11 +176,15 @@ function supporterErrorKey(body, status) {
 export function syncSupporterMeta(supporterDoc) {
   if (!supporterDoc || typeof supporterDoc !== 'object') return;
   if (!S.meta) S.meta = {};
+  const dirtyShow = S.settingsDirtyKeys && S.settingsDirtyKeys.has('supporter_show_header');
+  const showInHeader = dirtyShow && S.settingsDraft && Object.prototype.hasOwnProperty.call(S.settingsDraft, 'supporter_show_header')
+    ? !!S.settingsDraft.supporter_show_header
+    : supporterDoc.show_in_header !== false;
   S.meta.supporter = {
     active: !!supporterDoc.active,
     tier: supporterDoc.tier || null,
     issued_at: supporterDoc.issued_at || null,
-    show_in_header: supporterDoc.show_in_header !== false,
+    show_in_header: showInHeader,
   };
   syncSupporterHeader();
 }
@@ -195,17 +200,33 @@ export function rerenderSupporter(statusKey, statusClass) {
   if (statusKey) setSupporterStatus(statusKey, statusClass || 'action-status');
 }
 
+let _inFlight = false;
+
+function setSupporterControlsBusy(busy, action) {
+  const input = document.getElementById('supporter-key-input');
+  const activateBtn = document.querySelector('[data-supporter-activate]');
+  const clearBtn = document.querySelector('[data-supporter-clear]');
+  if (input) input.disabled = busy;
+  if (activateBtn) {
+    activateBtn.disabled = busy;
+    activateBtn.textContent = t(busy && action === 'activate' ? 'supporter.action.activating' : 'supporter.action.activate');
+  }
+  if (clearBtn) {
+    clearBtn.disabled = busy;
+    clearBtn.textContent = t(busy && action === 'remove' ? 'supporter.action.removing' : 'supporter.action.remove');
+  }
+}
+
 export async function submitSupporterKey(rawKey) {
+  if (_inFlight) return false;
   const trimmed = String(rawKey || '').trim();
   if (!trimmed) {
     setSupporterStatus('supporter.error.empty', 'action-status is-error');
     return false;
   }
-  const btn = document.querySelector('[data-supporter-activate]');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = t('supporter.action.activating');
-  }
+  _inFlight = true;
+  S.supporterRevision = (S.supporterRevision || 0) + 1;
+  setSupporterControlsBusy(true, 'activate');
   setSupporterStatus('', 'action-status');
   try {
     const res = await api('/api/supporter-key', {
@@ -215,58 +236,51 @@ export async function submitSupporterKey(rawKey) {
     });
     const body = await res.json().catch(function () { return {}; });
     if (!res.ok) {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = t('supporter.action.activate');
-      }
+      setSupporterControlsBusy(false, 'activate');
       setSupporterStatus(supporterErrorKey(body, res.status), 'action-status is-error');
       return false;
     }
     const next = body && body.supporter ? body.supporter : body;
+    S.supporterRevision = (S.supporterRevision || 0) + 1;
     if (S.settingsDoc) S.settingsDoc.supporter = next;
     syncSupporterMeta(next);
     rerenderSupporter('supporter.status.activated', 'action-status is-ok');
     return true;
   } catch (err) {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = t('supporter.action.activate');
-    }
+    setSupporterControlsBusy(false, 'activate');
     setSupporterStatus('supporter.error.failed', 'action-status is-error');
     return false;
+  } finally {
+    _inFlight = false;
   }
 }
 
 export async function clearSupporterKey() {
-  const btn = document.querySelector('[data-supporter-clear]');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = t('supporter.action.removing');
-  }
+  if (_inFlight) return false;
+  _inFlight = true;
+  S.supporterRevision = (S.supporterRevision || 0) + 1;
+  setSupporterControlsBusy(true, 'remove');
   setSupporterStatus('', 'action-status');
   try {
     const res = await api('/api/supporter-key', { method: 'DELETE' });
     const body = await res.json().catch(function () { return {}; });
     if (!res.ok) {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = t('supporter.action.remove');
-      }
+      setSupporterControlsBusy(false, 'remove');
       setSupporterStatus(supporterErrorKey(body, res.status), 'action-status is-error');
       return false;
     }
     const next = body && body.supporter ? body.supporter : body;
+    S.supporterRevision = (S.supporterRevision || 0) + 1;
     if (S.settingsDoc) S.settingsDoc.supporter = next;
     syncSupporterMeta(next);
     rerenderSupporter('supporter.status.removed', 'action-status is-ok');
     return true;
   } catch (err) {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = t('supporter.action.remove');
-    }
+    setSupporterControlsBusy(false, 'remove');
     setSupporterStatus('supporter.error.failed', 'action-status is-error');
     return false;
+  } finally {
+    _inFlight = false;
   }
 }
 

@@ -1348,7 +1348,9 @@
     },
     "invalid": {
       "file": "La verificación sin conexión de la clave guardada falló. Pega una clave válida o elimina la clave guardada.",
-      "env": "La verificación sin conexión de PORT_LIGHT_SUPPORTER_KEY falló. Revisa la variable de entorno o pega una clave válida abajo."
+      "env": "La verificación sin conexión de PORT_LIGHT_SUPPORTER_KEY falló. Revisa la variable de entorno o pega una clave válida abajo.",
+      "fileReadonly": "La verificación sin conexión de la clave guardada en port_light.json falló. Los ajustes son de solo lectura en este equipo; elimina supporter_key de port_light.json o define PORT_LIGHT_SETTINGS_SOURCE=env.",
+      "envReadonly": "La verificación sin conexión de PORT_LIGHT_SUPPORTER_KEY falló. Actualiza o elimina la variable de entorno en este equipo."
     },
     "error": {
       "empty": "Pega una clave Supporter que empiece por PL1.",

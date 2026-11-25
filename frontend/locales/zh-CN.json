@@ -1348,7 +1348,9 @@
     },
     "invalid": {
       "file": "已保存的赞助者密钥离线验签失败。请粘贴有效密钥，或移除已保存的密钥。",
-      "env": "PORT_LIGHT_SUPPORTER_KEY 离线验签失败。请检查环境变量配置，或在下方粘贴有效密钥。"
+      "env": "PORT_LIGHT_SUPPORTER_KEY 离线验签失败。请检查环境变量配置，或在下方粘贴有效密钥。",
+      "fileReadonly": "port_light.json 中已保存的赞助者密钥离线验签失败。当前主机处于只读模式，请从 port_light.json 移除 supporter_key 或设置 PORT_LIGHT_SETTINGS_SOURCE=env。",
+      "envReadonly": "PORT_LIGHT_SUPPORTER_KEY 离线验签失败。请在主机环境中更新或移除该环境变量。"
     },
     "error": {
       "empty": "请粘贴以 PL1. 开头的赞助者密钥。",

@@ -1052,7 +1052,10 @@ function settingValuesEqual(left, right) {
     for (const key of keys) {
       const field = fieldByKey(key);
       if (!field) continue;
-      const value = readFieldValue(field);
+      let value = readFieldValue(field);
+      if (value === undefined && Object.prototype.hasOwnProperty.call(S.settingsDraft, key)) {
+        value = S.settingsDraft[key];
+      }
       S.settingsDraft[key] = value;
       if (field.type === 'multi_choice' && !value.length) {
         setPageStatus('settings-status', 'settings.scanners.required', 'is-error', 0);
@@ -1071,7 +1074,8 @@ function settingValuesEqual(left, right) {
     return patch;
   }
 
-  function acceptSettingsResponse(body, keys, revisions, themesAtStart) {
+  function acceptSettingsResponse(body, keys, revisions, themesAtStart, supporterRevAtStart) {
+    const prevSupporter = S.settingsDoc && S.settingsDoc.supporter;
     if (S.customThemes !== themesAtStart) {
       body.custom_themes = S.customThemes;
       const oldPalette = fieldByKey('theme_palette');
@@ -1080,6 +1084,14 @@ function settingValuesEqual(left, right) {
           if (field.key === 'theme_palette') field.choices = oldPalette.choices;
         });
       }
+    }
+    if (supporterRevAtStart !== undefined && S.supporterRevision !== supporterRevAtStart && prevSupporter) {
+      const preserved = Object.assign({}, prevSupporter);
+      if (body && body.values && Object.prototype.hasOwnProperty.call(body.values, 'supporter_show_header') &&
+          !S.settingsDirtyKeys.has('supporter_show_header')) {
+        preserved.show_in_header = !!body.values.supporter_show_header;
+      }
+      body.supporter = preserved;
     }
     S.settingsDoc = body;
     S.settingsConfirmed = Object.assign({}, body.values || {});
@@ -1163,6 +1175,7 @@ function settingValuesEqual(left, right) {
       S.settingsSubmittingKeys.add(key);
     });
     const themesAtStart = S.customThemes;
+    const supporterRevAtStart = S.supporterRevision;
     setPageStatus('settings-status', 'settings.saving', '', 0);
     let res;
     let body;
@@ -1184,7 +1197,7 @@ function settingValuesEqual(left, right) {
       if (status) { status.className = 'is-error'; status.textContent = errorText(body, res.status); }
       return false;
     }
-    acceptSettingsResponse(body, keys, revisions, themesAtStart);
+    acceptSettingsResponse(body, keys, revisions, themesAtStart, supporterRevAtStart);
     if (S.settingsDirtyKeys.size) setPageStatus('settings-status', 'settings.unsaved', '', 0);
     else setPageStatus('settings-status', 'settings.saved', 'is-ok', 1800);
     return true;

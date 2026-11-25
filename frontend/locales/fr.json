@@ -1348,7 +1348,9 @@
     },
     "invalid": {
       "file": "La vérification hors ligne de la clé enregistrée a échoué. Collez une clé valide ou supprimez la clé enregistrée.",
-      "env": "La vérification hors ligne de PORT_LIGHT_SUPPORTER_KEY a échoué. Vérifiez la variable d’environnement ou collez une clé valide ci-dessous."
+      "env": "La vérification hors ligne de PORT_LIGHT_SUPPORTER_KEY a échoué. Vérifiez la variable d’environnement ou collez une clé valide ci-dessous.",
+      "fileReadonly": "La vérification hors ligne de la clé enregistrée dans port_light.json a échoué. Les réglages sont en lecture seule sur cet hôte ; supprimez supporter_key de port_light.json ou définissez PORT_LIGHT_SETTINGS_SOURCE=env.",
+      "envReadonly": "La vérification hors ligne de PORT_LIGHT_SUPPORTER_KEY a échoué. Mettez à jour ou supprimez cette variable d’environnement sur cet hôte."
     },
     "error": {
       "empty": "Collez une clé Supporter commençant par PL1.",

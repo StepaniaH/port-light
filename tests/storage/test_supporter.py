@@ -158,3 +158,53 @@ def test_masking_helpers_never_expose_signature_or_full_order_id():
     assert supporter.mask_order_id("ord_555444333") == "ord_•••••333"
     assert supporter.mask_order_id("ord_123") == "•••••123"
     assert supporter.mask_order_id("12") == "•••••12"
+
+
+def test_verify_ed25519_and_pem_reject_small_order_and_non_canonical_points():
+    # Identity point (0, 1) and order-2 point (0, p-1) must be rejected as weak-order public keys
+    p = (1 << 255) - 19
+    identity = (1).to_bytes(32, "little")
+    order2 = (p - 1).to_bytes(32, "little")
+    forged_sig = identity + (0).to_bytes(32, "little")
+    assert supporter.verify_ed25519(identity, b"anything", forged_sig) is False
+    assert supporter.verify_ed25519(order2, b"anything", forged_sig) is False
+
+    spki_prefix = bytes.fromhex("302a300506032b6570032100")
+    for weak in (identity, order2):
+        pem = (
+            "-----BEGIN PUBLIC KEY-----\n"
+            + base64.b64encode(spki_prefix + weak).decode("ascii")
+            + "\n-----END PUBLIC KEY-----"
+        )
+        with pytest.raises(ValueError):
+            supporter.parse_public_key_pem(pem)
+
+    # Non-canonical encodings: y >= p, negative zero (x=0, sign=1), and off-curve y
+    pub = supporter.parse_public_key_pem(TEST_PUB1_PEM)
+    y_eq_p = p.to_bytes(32, "little")
+    neg_zero = bytearray(identity)
+    neg_zero[31] |= 0x80
+    # Find an off-curve y (e.g. y = 2 -> u = 3, v = 4d+1; check _decode_point returns None)
+    off_curve = (2).to_bytes(32, "little")
+    assert supporter._decode_point(y_eq_p) is None
+    assert supporter._decode_point(bytes(neg_zero)) is None
+    assert supporter._decode_point(off_curve) is None
+    for bad_r in (y_eq_p, bytes(neg_zero), off_curve):
+        assert supporter.verify_ed25519(pub, b"msg", bad_r + (1).to_bytes(32, "little")) is False
+
+
+def test_validate_supporter_key_rejects_invalid_utf8_and_non_dict_json():
+    pub1 = (supporter.parse_public_key_pem(TEST_PUB1_PEM),)
+    sig = _b64u(b"\x01" * 64)
+    bad_utf8 = _b64u(b"\xff\xfe")
+    # Invalid UTF-8 bytes
+    payload, err = supporter.validate_supporter_key(f"PL1.{bad_utf8}.{sig}", public_keys=pub1)
+    assert payload is None and err == "supporter_key_format"
+    # Malformed JSON
+    bad_json = _b64u(b"{not-json")
+    payload, err = supporter.validate_supporter_key(f"PL1.{bad_json}.{sig}", public_keys=pub1)
+    assert payload is None and err == "supporter_key_format"
+    # Valid JSON but non-dict
+    for raw in (b"[]", b'"hello"', b"123", b"null"):
+        payload, err = supporter.validate_supporter_key(f"PL1.{_b64u(raw)}.{sig}", public_keys=pub1)
+        assert payload is None and err == "supporter_key_format"

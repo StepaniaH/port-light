@@ -178,6 +178,37 @@ test('supporterCardsHtml renders activated plaque, fleet env override, readonly,
   assert.match(invalidEnv, /supporter-alert/);
   assert.match(invalidEnv, /supporter\.invalid\.env/);
   assert.doesNotMatch(invalidEnv, /data-supporter-clear/);
+
+  const invalidFileReadonly = supporterCardsHtml({
+    active: false,
+    status: 'invalid',
+    tier: null,
+    issued_at: null,
+    key_preview: null,
+    order_preview: null,
+    origin: 'file',
+    env_configured: false,
+    can_edit: false,
+    can_clear: false,
+    show_in_header: true,
+  }, SHOW_HEADER_FIELD, true, true);
+  assert.match(invalidFileReadonly, /supporter\.invalid\.fileReadonly/);
+  assert.doesNotMatch(invalidFileReadonly, /data-supporter-clear/);
+
+  const invalidEnvReadonly = supporterCardsHtml({
+    active: false,
+    status: 'invalid',
+    tier: null,
+    issued_at: null,
+    key_preview: null,
+    order_preview: null,
+    origin: 'env',
+    env_configured: true,
+    can_edit: false,
+    can_clear: false,
+    show_in_header: true,
+  }, SHOW_HEADER_FIELD, true, true);
+  assert.match(invalidEnvReadonly, /supporter\.invalid\.envReadonly/);
 });
 
 test('renderSettingsForm mounts #settings-panel-supporter without duplicating supporter_show_header into Advanced', async () => {
@@ -323,6 +354,146 @@ test('submitSupporterKey, clearSupporterKey, and saving supporter_show_header sy
     };
     assert.equal(await clearSupporterKey(), true);
     assert.equal(S.meta.supporter.active, false);
+    assert.equal(badge.hidden, true);
+  } finally {
+    globalThis.fetch = prevFetch;
+    form.elements = prevElements;
+    panel.remove();
+    Object.assign(S, prevState);
+  }
+});
+
+test('concurrent settings autosave and supporter key mutations preserve newer state and lock in-flight requests', async () => {
+  const { submitSupporterKey, clearSupporterKey } = await import('../js/settings-supporter.js?' + V);
+  const { saveSettingsFields } = await import('../js/settings.js?' + V);
+  const { S } = await import('../js/state.js?' + V);
+
+  const prevFetch = globalThis.fetch;
+  const prevState = {
+    meta: S.meta,
+    settings: { ...S.settings },
+    settingsDoc: S.settingsDoc,
+    settingsConfirmed: { ...S.settingsConfirmed },
+    settingsDraft: { ...S.settingsDraft },
+    settingsDirtyKeys: new Set(S.settingsDirtyKeys),
+    settingsSubmittingKeys: new Set(S.settingsSubmittingKeys),
+    settingsKeyRevisions: { ...S.settingsKeyRevisions },
+    supporterRevision: S.supporterRevision,
+  };
+
+  const header = document.getElementById('app-header');
+  header.classList = makeClassList();
+  const badge = document.getElementById('supporter-badge');
+  const panel = document.createElement('div');
+  panel.id = 'settings-panel-supporter';
+  document.body.appendChild(panel);
+  const form = document.getElementById('settings-form');
+  const prevElements = form.elements;
+
+  try {
+    // Race 1: PUT /api/settings started while active, then DELETE /api/supporter-key completes first.
+    // The stale PUT /api/settings response must NOT resurrect the removed badge.
+    S.meta = { supporter: { active: true, tier: 'personal', issued_at: '2026-11-25', show_in_header: true } };
+    S.settingsDoc = {
+      readonly: false,
+      values: { supporter_show_header: true },
+      fields: [SHOW_HEADER_FIELD],
+      supporter: {
+        active: true, status: 'active', tier: 'personal', issued_at: '2026-11-25',
+        key_preview: 'PL1.abc…', order_preview: 'ord_•••••333',
+        origin: 'file', env_configured: false, can_edit: true, can_clear: true, show_in_header: true,
+      },
+    };
+    S.settingsDraft = { supporter_show_header: false };
+    S.settingsConfirmed = { supporter_show_header: true };
+    S.settingsDirtyKeys = new Set(['supporter_show_header']);
+    S.settingsSubmittingKeys = new Set();
+    S.settingsKeyRevisions = { supporter_show_header: 1 };
+    // Simulate missing DOM checkbox (removed by clearSupporterKey before saveSettingsFields flushes)
+    form.elements = {};
+
+    let resolveSettingsPut;
+    let sentSettingsPatch = null;
+    globalThis.fetch = async (url, init) => {
+      if (url === '/api/settings' && init.method === 'PUT') {
+        sentSettingsPatch = JSON.parse(init.body);
+        return await new Promise(resolve => { resolveSettingsPut = resolve; });
+      }
+      if (url === '/api/supporter-key' && init.method === 'DELETE') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            supporter: {
+              active: false, status: 'inactive', tier: null, issued_at: null,
+              key_preview: null, order_preview: null,
+              origin: 'none', env_configured: false, can_edit: true, can_clear: false, show_in_header: true,
+            },
+          }),
+        };
+      }
+      throw new Error('Unexpected fetch: ' + url);
+    };
+
+    const settingsSavePromise = saveSettingsFields();
+    // Race 2 check: patch must still carry supporter_show_header: false from S.settingsDraft!
+    assert.deepEqual(sentSettingsPatch, { supporter_show_header: false });
+
+    // Clear key finishes while PUT /api/settings is still in flight
+    assert.equal(await clearSupporterKey(), true);
+    assert.equal(S.meta.supporter.active, false);
+    assert.equal(badge.hidden, true);
+
+    // Now stale PUT /api/settings resolves carrying old active supporter snapshot
+    resolveSettingsPut({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        readonly: false,
+        values: { supporter_show_header: false },
+        fields: [SHOW_HEADER_FIELD],
+        custom_themes: [],
+        supporter: {
+          active: true, status: 'active', tier: 'personal', issued_at: '2026-11-25',
+          key_preview: 'PL1.abc…', order_preview: 'ord_•••••333',
+          origin: 'file', env_configured: false, can_edit: true, can_clear: true, show_in_header: false,
+        },
+      }),
+    });
+    assert.equal(await settingsSavePromise, true);
+    assert.equal(S.settingsDoc.supporter.active, false, 'stale settings response must not resurrect removed supporter');
+    assert.equal(S.meta.supporter.active, false);
+    assert.equal(badge.hidden, true);
+
+    // Race 3: Double submitSupporterKey while in-flight is ignored + dirty supporter_show_header preserved
+    S.settingsDraft = { supporter_show_header: false };
+    S.settingsDirtyKeys = new Set(['supporter_show_header']);
+    let putCalls = 0;
+    let releaseKeyPut;
+    globalThis.fetch = async (url, init) => {
+      if (url === '/api/supporter-key' && init.method === 'PUT') {
+        putCalls += 1;
+        return await new Promise(resolve => { releaseKeyPut = resolve; });
+      }
+      throw new Error('Unexpected fetch: ' + url);
+    };
+    const p1 = submitSupporterKey('PL1.first.sig');
+    const p2 = submitSupporterKey('PL1.second.sig');
+    assert.equal(await p2, false, 'concurrent submission while in-flight must be ignored');
+    assert.equal(putCalls, 1);
+    releaseKeyPut({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        supporter: {
+          active: true, status: 'active', tier: 'fleet', issued_at: '2026-11-25',
+          key_preview: 'PL1.first…', order_preview: 'ord_•••••999',
+          origin: 'file', env_configured: false, can_edit: true, can_clear: true, show_in_header: true,
+        },
+      }),
+    });
+    assert.equal(await p1, true);
+    assert.equal(S.meta.supporter.show_in_header, false, 'dirty supporter_show_header draft must stay applied in header');
     assert.equal(badge.hidden, true);
   } finally {
     globalThis.fetch = prevFetch;

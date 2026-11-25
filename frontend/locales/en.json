@@ -1348,7 +1348,9 @@
     },
     "invalid": {
       "file": "The saved Supporter Key failed offline verification. Paste a valid key or remove the saved key.",
-      "env": "PORT_LIGHT_SUPPORTER_KEY failed offline verification. Check the environment value or paste a valid key below."
+      "env": "PORT_LIGHT_SUPPORTER_KEY failed offline verification. Check the environment value or paste a valid key below.",
+      "fileReadonly": "The saved Supporter Key in port_light.json failed offline verification. Settings are read-only on this host; remove supporter_key from port_light.json or set PORT_LIGHT_SETTINGS_SOURCE=env.",
+      "envReadonly": "PORT_LIGHT_SUPPORTER_KEY failed offline verification. Update or clear the environment variable on this host."
     },
     "error": {
       "empty": "Paste a Supporter Key starting with PL1.",

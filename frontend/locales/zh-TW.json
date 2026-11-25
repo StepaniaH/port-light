@@ -1348,7 +1348,9 @@
     },
     "invalid": {
       "file": "已儲存的贊助者金鑰離線驗證失敗。請貼上有效金鑰，或移除已儲存的金鑰。",
-      "env": "PORT_LIGHT_SUPPORTER_KEY 離線驗證失敗。請檢查環境變數設定，或於下方貼上有效金鑰。"
+      "env": "PORT_LIGHT_SUPPORTER_KEY 離線驗證失敗。請檢查環境變數設定，或於下方貼上有效金鑰。",
+      "fileReadonly": "port_light.json 中已儲存的贊助者金鑰離線驗證失敗。目前主機為唯讀模式，請從 port_light.json 移除 supporter_key 或設定 PORT_LIGHT_SETTINGS_SOURCE=env。",
+      "envReadonly": "PORT_LIGHT_SUPPORTER_KEY 離線驗證失敗。請於主機環境中更新或移除該環境變數。"
     },
     "error": {
       "empty": "請貼上以 PL1. 開頭的贊助者金鑰。",

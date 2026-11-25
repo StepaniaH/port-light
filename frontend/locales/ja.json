@@ -1348,7 +1348,9 @@
     },
     "invalid": {
       "file": "保存済みのサポーターキーはオフライン検証に失敗しました。有効なキーを貼り付けるか、保存済みキーを削除してください。",
-      "env": "PORT_LIGHT_SUPPORTER_KEY のオフライン検証に失敗しました。環境変数の値を確認するか、下で有効なキーを貼り付けてください。"
+      "env": "PORT_LIGHT_SUPPORTER_KEY のオフライン検証に失敗しました。環境変数の値を確認するか、下で有効なキーを貼り付けてください。",
+      "fileReadonly": "port_light.json に保存されたサポーターキーのオフライン検証に失敗しました。このホストは読み取り専用のため、port_light.json から supporter_key を削除するか PORT_LIGHT_SETTINGS_SOURCE=env を設定してください。",
+      "envReadonly": "PORT_LIGHT_SUPPORTER_KEY のオフライン検証に失敗しました。このホストの環境変数を更新または削除してください。"
     },
     "error": {
       "empty": "PL1. で始まるサポーターキーを貼り付けてください。",

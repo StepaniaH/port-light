@@ -104,6 +104,7 @@ export const S = {
   settingsKeyRevisions: {},
   settingsDirty: false,
   settingsRevision: 0,
+  supporterRevision: 0,
   peersDirty: false,
   peersRevision: 0,
   peersSubmitting: false,

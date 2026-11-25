@@ -53,33 +53,6 @@ class SupporterKeyPayload:
     issued_at: str
 
 
-def parse_public_key_pem(pem: str) -> bytes:
-    """Parse an Ed25519 SPKI PEM public key into its 32-byte raw form."""
-    if not isinstance(pem, str) or not pem.strip():
-        raise ValueError("empty public key PEM")
-    normalized = pem.strip().replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
-    begin = "-----BEGIN PUBLIC KEY-----"
-    end = "-----END PUBLIC KEY-----"
-    if begin not in normalized or end not in normalized:
-        raise ValueError("missing PUBLIC KEY PEM markers")
-    body = normalized.split(begin, 1)[1].split(end, 1)[0]
-    body = re.sub(r"\s+", "", body)
-    if not body:
-        raise ValueError("empty PUBLIC KEY PEM body")
-    try:
-        der = base64.b64decode(body, validate=True)
-    except (ValueError, TypeError) as exc:
-        raise ValueError("invalid base64 in PUBLIC KEY PEM") from exc
-    if len(der) != 44 or not der.startswith(_SPKI_ED25519_PREFIX):
-        raise ValueError("not an Ed25519 SPKI public key")
-    return der[len(_SPKI_ED25519_PREFIX):]
-
-
-TRUSTED_PUBLIC_KEYS: tuple[bytes, ...] = tuple(
-    parse_public_key_pem(pem) for pem in TRUSTED_PUBLIC_KEYS_PEM
-)
-
-
 def _point_add(
     p1: tuple[int, int, int, int],
     p2: tuple[int, int, int, int],
@@ -143,6 +116,41 @@ def _decode_point(raw: bytes) -> tuple[int, int, int, int] | None:
     return x, y, 1, (x * y) % _P
 
 
+def _is_small_order(point: tuple[int, int, int, int]) -> bool:
+    return _points_equal(_scalar_mul(8, point), _IDENTITY)
+
+
+def parse_public_key_pem(pem: str) -> bytes:
+    """Parse an Ed25519 SPKI PEM public key into its 32-byte raw form."""
+    if not isinstance(pem, str) or not pem.strip():
+        raise ValueError("empty public key PEM")
+    normalized = pem.strip().replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
+    begin = "-----BEGIN PUBLIC KEY-----"
+    end = "-----END PUBLIC KEY-----"
+    if begin not in normalized or end not in normalized:
+        raise ValueError("missing PUBLIC KEY PEM markers")
+    body = normalized.split(begin, 1)[1].split(end, 1)[0]
+    body = re.sub(r"\s+", "", body)
+    if not body:
+        raise ValueError("empty PUBLIC KEY PEM body")
+    try:
+        der = base64.b64decode(body, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("invalid base64 in PUBLIC KEY PEM") from exc
+    if len(der) != 44 or not der.startswith(_SPKI_ED25519_PREFIX):
+        raise ValueError("not an Ed25519 SPKI public key")
+    raw = der[len(_SPKI_ED25519_PREFIX):]
+    point = _decode_point(raw)
+    if point is None or _is_small_order(point):
+        raise ValueError("invalid or small-order Ed25519 public key")
+    return raw
+
+
+TRUSTED_PUBLIC_KEYS: tuple[bytes, ...] = tuple(
+    parse_public_key_pem(pem) for pem in TRUSTED_PUBLIC_KEYS_PEM
+)
+
+
 def verify_ed25519(public_key: bytes, message: bytes, signature: bytes) -> bool:
     """Verify an RFC 8032 Ed25519 signature using pure Python stdlib math."""
     if not isinstance(public_key, (bytes, bytearray)) or len(public_key) != 32:
@@ -158,7 +166,7 @@ def verify_ed25519(public_key: bytes, message: bytes, signature: bytes) -> bool:
         return False
     point_a = _decode_point(pub_bytes)
     point_r = _decode_point(r_bytes)
-    if point_a is None or point_r is None:
+    if point_a is None or point_r is None or _is_small_order(point_a):
         return False
     h = hashlib.sha512(r_bytes + pub_bytes + bytes(message)).digest()
     k = int.from_bytes(h, "little") % _L
@@ -211,34 +219,8 @@ def verify_supporter_key(
     public_keys: Sequence[bytes] | None = None,
 ) -> SupporterKeyPayload | None:
     """Verify a ``PL1.<payload_b64u>.<sig_b64u>`` Supporter Key completely offline."""
-    if not isinstance(key_string, str):
-        return None
-    trimmed = key_string.strip()
-    if not trimmed or len(trimmed) > 2048:
-        return None
-    parts = trimmed.split(".")
-    if len(parts) != 3 or parts[0] != "PL1":
-        return None
-    _, payload_b64u, sig_b64u = parts
-    payload_bytes = _b64u_decode(payload_b64u)
-    sig_bytes = _b64u_decode(sig_b64u)
-    if payload_bytes is None or sig_bytes is None or len(sig_bytes) != 64:
-        return None
-    try:
-        raw_payload = json.loads(payload_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
-        return None
-    payload = parse_supporter_payload(raw_payload)
-    if payload is None:
-        return None
-    keys = TRUSTED_PUBLIC_KEYS if public_keys is None else tuple(public_keys)
-    if not keys:
-        return None
-    signing_input = f"PL1.{payload_b64u}".encode("ascii")
-    for pub in keys:
-        if verify_ed25519(pub, signing_input, sig_bytes):
-            return payload
-    return None
+    payload, _ = validate_supporter_key(key_string, public_keys=public_keys)
+    return payload
 
 
 def mask_key(key_string: str) -> str:

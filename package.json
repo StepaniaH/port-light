@@ -8,7 +8,8 @@
     "smoke:browser": "node frontend/test/browser-smoke.mjs",
     "smoke:management": "node frontend/test/management-smoke.mjs",
     "smoke:fleet": "node frontend/test/fleet-regression.mjs",
-    "smoke:analysis": "node frontend/test/analysis-smoke.mjs"
+    "smoke:analysis": "node frontend/test/analysis-smoke.mjs",
+    "smoke:supporter": "node frontend/test/supporter-smoke.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

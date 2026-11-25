@@ -1348,7 +1348,9 @@
     },
     "invalid": {
       "file": "Die Offline-Prüfung des gespeicherten Supporter-Schlüssels ist fehlgeschlagen. Fügen Sie einen gültigen Schlüssel ein oder entfernen Sie den gespeicherten Schlüssel.",
-      "env": "Die Offline-Prüfung von PORT_LIGHT_SUPPORTER_KEY ist fehlgeschlagen. Prüfen Sie die Umgebungsvariable oder fügen Sie unten einen gültigen Schlüssel ein."
+      "env": "Die Offline-Prüfung von PORT_LIGHT_SUPPORTER_KEY ist fehlgeschlagen. Prüfen Sie die Umgebungsvariable oder fügen Sie unten einen gültigen Schlüssel ein.",
+      "fileReadonly": "Die Offline-Prüfung des in port_light.json gespeicherten Supporter-Schlüssels ist fehlgeschlagen. Die Einstellungen sind schreibgeschützt; entfernen Sie supporter_key aus port_light.json oder setzen Sie PORT_LIGHT_SETTINGS_SOURCE=env.",
+      "envReadonly": "Die Offline-Prüfung von PORT_LIGHT_SUPPORTER_KEY ist fehlgeschlagen. Aktualisieren oder entfernen Sie die Umgebungsvariable auf diesem Host."
     },
     "error": {
       "empty": "Fügen Sie einen Supporter-Schlüssel ein, der mit PL1. beginnt.",
