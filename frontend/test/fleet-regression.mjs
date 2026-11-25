@@ -37,10 +37,11 @@ try {
   await page.goto(base);
   await expect(page.locator('.host-board')).toHaveCount(4);
   const peers = catalog.peers;
-  await expect(page.locator('.app-actions > .toolbar-btn, #btn-manage')).toHaveCount(4);
+  await expect(page.locator('.app-actions > .toolbar-btn, #btn-manage')).toHaveCount(3);
+  await expect(page.locator('#btn-language')).toHaveCount(0);
   await expect(page.locator('#btn-more')).toHaveCount(0);
   for (const id of ['btn-refresh', 'btn-manage', 'btn-settings']) assert.ok((await page.locator('#' + id).innerText()).trim());
-  await page.locator('#btn-language').click();
+  await page.locator('#btn-settings').click();
   await expect(page).toHaveURL(/#\/settings\/appearance$/);
   await expect(page.locator('[data-setting="locale"] .locale-trigger')).toBeVisible();
   await page.locator('#theme-editor summary').click();
@@ -66,6 +67,9 @@ try {
     await expect(page.locator('.peer-summary-name')).toHaveText([copy.preview.appsName, copy.preview.devName, copy.preview.edgeName]);
     await expect(page.locator('#peer-add')).toHaveText(copy.hosts.add);
   }
+  await expect.poll(async () => (await (await fetch(base + '/api/settings')).json()).values.locale).toBe('zh-CN');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   await page.goto(base);
   await page.locator('#btn-manage').click();
   await expect(page.locator('#port-menu')).toBeVisible();

@@ -1,9 +1,9 @@
 /* Local reservation ownership, allocation rules, and Compose conflict review. */
-import { S } from './state.js?v=125';
-import { hostName } from './hosts.js?v=125';
-import { api } from './api.js?v=125';
-import { t, escapeHtml } from './text.js?v=125';
-import { copyReportText } from './doctor.js?v=125';
+import { S } from './state.js?v=126';
+import { hostName } from './hosts.js?v=126';
+import { api } from './api.js?v=126';
+import { t, escapeHtml } from './text.js?v=126';
+import { copyReportText } from './doctor.js?v=126';
 
 const storageKey = 'port-light-reservation-session';
 const e = escapeHtml;

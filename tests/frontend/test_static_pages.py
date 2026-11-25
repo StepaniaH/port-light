@@ -14,6 +14,9 @@ def test_index_loads_module_entry(monkeypatch):
     assert 'src="/static/boot.js?v=' in res.text
     assert "<script>" not in res.text
     assert 'type="module" src="/static/js/app.js?v=' in res.text
+    assert 'id="btn-settings"' in res.text
+    assert 'id="btn-language"' not in res.text
+    assert "language-shortcut" not in res.text
     assert res.headers.get("cache-control") == "no-cache"
     csp = res.headers.get("content-security-policy") or ""
     assert "script-src 'self';" in csp

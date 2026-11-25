@@ -1770,7 +1770,6 @@ a:focus-visible,
 
 /* Port actions share one disclosure beside refresh and settings. */
 .toolbar-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex-shrink: 0; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font-size: .8rem; text-decoration: none; cursor: pointer; white-space: nowrap; }
-.language-shortcut { width: 34px; padding: 0; }
 .toolbar-btn:hover, .toolbar-btn[aria-expanded="true"] { border-color: var(--accent); }
 .toolbar-btn.active { color: var(--accent); background: var(--chip-active-bg); border-color: var(--accent); }
 .action-menu { position: relative; }
@@ -1785,7 +1784,6 @@ a:focus-visible,
 @media (max-width: 720px) {
   .toolbar-btn { padding: 0 8px; gap: 4px; font-size: .76rem; }
   .toolbar-btn > svg { display: none; }
-  .language-shortcut > svg { display: block; }
   .app-actions { flex-wrap: nowrap; gap: 5px; }
 }
 @media (max-width: 360px) {
