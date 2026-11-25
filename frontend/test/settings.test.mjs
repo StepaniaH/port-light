@@ -211,7 +211,7 @@ test('lease rows show remaining time through the remaining key', () => {
 });
 
 test('settings categories separate machine setup from occupancy preferences', () => {
-  assert.deepEqual(SETTINGS_PANELS, ['appearance', 'occupancy', 'hosts', 'automation', 'analysis', 'advanced']);
+  assert.deepEqual(SETTINGS_PANELS, ['appearance', 'occupancy', 'hosts', 'automation', 'analysis', 'advanced', 'supporter']);
   assert.deepEqual(parseHash('#/settings/automation'), { name: 'settings', section: 'automation' });
 });
 

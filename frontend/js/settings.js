@@ -15,6 +15,8 @@ import { api, fetchHosts, fetchSettings } from './api.js?v=126';
 import { bindAddressView } from './grid.js?v=126';
 import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=126';
 import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=126';
+import { supporterCardsHtml, ensureSupporterDelegates, rerenderSupporter, syncSupporterMeta } from './settings-supporter.js?v=126';
+import { syncSupporterHeader } from './supporter-header.js?v=126';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -350,6 +352,7 @@ function settingValuesEqual(left, right) {
     }
     applyAppearance();
     persistAppearance();
+    if (doc && doc.supporter) syncSupporterMeta(doc.supporter);
   }
 
   export function syncSettingsMetadata(doc) {
@@ -985,10 +988,12 @@ function settingValuesEqual(left, right) {
         (values.show_bind_addresses ? '' : ' hidden') + '><legend data-i18n="settings.bindFamilies">' +
         escapeHtml(t('settings.bindFamilies')) + '</legend>' + rowsFor(bindChildren) + '</fieldset>'
       : '';
-    const knownGroups = { appearance: true, grid: true, local: true, scanning: true, links: true };
+    const knownGroups = { appearance: true, grid: true, local: true, scanning: true, links: true, supporter: true };
     const extraAdvanced = groupOrder.filter(function (g) { return !knownGroups[g]; }).map(function (g) {
       return settingsCard('settings.groups.' + g + '.title', 'settings.groups.' + g + '.blurb', rowsFor(byGroup[g]));
     }).join('');
+    const showHeaderField = (byGroup.supporter || []).find(function (f) { return f.key === 'supporter_show_header'; }) || null;
+    const supporterDoc = doc.supporter || (S.meta && S.meta.supporter) || {};
 
     host.innerHTML =
       settingsPanelHtml('appearance',
@@ -1009,7 +1014,9 @@ function settingValuesEqual(left, right) {
         settingsCard('action.doctor', 'doctor.lead', '<div class="settings-diagnostics"><a href="#/doctor" id="btn-doctor" class="btn-secondary" data-i18n="doctor.refresh">' + escapeHtml(t('doctor.refresh')) + '</a></div>') +
         settingsCard('settings.groups.links.title', 'settings.groups.links.blurb', rowsFor(byGroup.links || [])) +
         extraAdvanced +
-        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div><p class="settings-source-note" data-i18n="settings.lead">' + escapeHtml(t('settings.lead')) + '</p>'));
+        settingsCard('settings.host.title', 'settings.host.blurb', '<div id="settings-env-only"></div><p class="settings-source-note" data-i18n="settings.lead">' + escapeHtml(t('settings.lead')) + '</p>')) +
+      settingsPanelHtml('supporter',
+        supporterCardsHtml(supporterDoc, showHeaderField, values.supporter_show_header !== false, !!doc.readonly));
 
     const env = doc.env_only || {};
     const envHost = document.getElementById('settings-env-only');
@@ -1031,6 +1038,8 @@ function settingValuesEqual(left, right) {
     syncDependentSettings();
     ensureAutomationDelegates();
     ensureThemeDelegates();
+    ensureSupporterDelegates();
+    if (doc.supporter) syncSupporterMeta(doc.supporter);
     renderPeersEditor(!!doc.readonly || !!S.hostCatalog.readonly);
   }
 
@@ -1126,6 +1135,14 @@ function settingValuesEqual(left, right) {
     }
     applyAppearance();
     persistAppearance();
+    if (body && body.supporter) {
+      syncSupporterMeta(body.supporter);
+    } else if (body && body.values && Object.prototype.hasOwnProperty.call(body.values, 'supporter_show_header')) {
+      if (!S.meta) S.meta = {};
+      if (!S.meta.supporter) S.meta.supporter = { active: false, tier: null, issued_at: null, show_in_header: true };
+      S.meta.supporter.show_in_header = !!body.values.supporter_show_header;
+      syncSupporterHeader();
+    }
     syncSettingsMetadata(body);
     if (body.values && body.values.local_scanners && body.values.local_scanners.length) {
       const repair = document.querySelector('[data-i18n="settings.scanners.invalid"]');
@@ -1276,6 +1293,7 @@ function settingValuesEqual(left, right) {
         syncRefreshCapacity();
         rerenderAutomationCards();
         rerenderAnalysis();
+        rerenderSupporter();
         if (S.settingsDoc) {
           const lead = document.getElementById('settings-lead');
           if (lead) lead.textContent = S.settingsDoc.readonly ? t('settings.leadReadonly') : '';

@@ -1304,7 +1304,187 @@ a:focus-visible,
   background: var(--chip-active-bg); color: var(--accent);
 }
 .settings-nav [role="tab"]:focus-visible { outline: none; box-shadow: var(--focus); }
+.settings-nav-divider {
+  display: block;
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
+}
+#settings-tab-supporter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#settings-tab-supporter[aria-selected="true"] {
+  background: color-mix(in srgb, var(--configured) 14%, transparent);
+  color: var(--text);
+}
+.supporter-tab-dot,
+.supporter-beacon-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--configured);
+  display: inline-block;
+  flex-shrink: 0;
+}
+.supporter-tab-dot[hidden] { display: none; }
 .settings-panel[hidden] { display: none; }
+
+/* ── Settings → Supporter Key (Harbor Beacon Plaque) ──── */
+
+.settings-card.supporter-plaque {
+  border-color: color-mix(in srgb, var(--configured) 48%, var(--border));
+  background: color-mix(in srgb, var(--configured) 5%, var(--card));
+}
+.plaque-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 22px 14px;
+}
+.plaque-emblem {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--configured) 45%, var(--border));
+  background: color-mix(in srgb, var(--configured) 12%, var(--elevated));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.plaque-logo { width: 30px; height: 30px; color: var(--text); display: block; }
+.plaque-meta { flex: 1; min-width: 0; }
+.plaque-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.plaque-title { font-size: 0.98rem; font-weight: 650; color: var(--text); }
+.plaque-tier-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--configured) 45%, var(--border));
+  background: color-mix(in srgb, var(--configured) 12%, var(--bg));
+  color: var(--text);
+}
+.plaque-since {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--configured);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+.plaque-thanks {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.supporter-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--configured) 35%, var(--border));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+}
+.supporter-receipt .rk { color: var(--text); font-weight: 600; word-break: break-all; }
+.supporter-receipt .rv { color: var(--free); font-weight: 600; }
+.supporter-manage-card { padding-top: 6px; }
+.supporter-manage {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.supporter-manage > summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 550;
+  line-height: 1.5;
+}
+.supporter-manage > summary:hover { color: var(--text); }
+.supporter-manage > summary:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 4px; }
+.supporter-manage-body { padding-top: 12px; }
+.supporter-env-hint { margin-bottom: 10px; }
+.supporter-key-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.supporter-key-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}
+.supporter-key-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus); }
+.supporter-btn-remove { color: var(--danger); }
+.supporter-btn-remove:hover { border-color: var(--danger); }
+.supporter-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg));
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.supporter-alert p { flex: 1 1 200px; margin: 0; color: var(--danger); }
+.supporter-inactive-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+.supporter-inactive-foot code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+  color: var(--text);
+}
+.supporter-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.supporter-link:hover { text-decoration: underline; }
 
 .settings-card {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -1786,6 +1966,8 @@ a:focus-visible,
   .settings-sidebar { z-index: 6; top: var(--header-h, 52px); margin: 0 -14px 20px; padding-bottom: 8px; background: var(--bg); border-bottom: 1px solid var(--border); }
   .settings-nav { flex-direction: row; gap: 4px; overflow-x: auto; scrollbar-width: thin; padding: 8px 14px; }
   .settings-nav [role="tab"] { flex: 0 0 auto; min-height: 40px; padding: 8px 12px; white-space: nowrap; }
+  .settings-nav-divider { width: 1px; height: 20px; align-self: center; margin: 0 4px; flex: 0 0 auto; }
+  .plaque-top { padding: 16px 16px 12px; }
   .settings-footer { margin: 0; padding: 0 14px; border: 0; }
   .settings-card-head { padding: 16px; }
   .settings-card-body { padding: 0 16px 8px; }
@@ -2050,7 +2232,8 @@ a:focus-visible,
   .ui-links .toolbar-btn { display: block; max-width: 76px; line-height: 30px; }
 }
 #settings-form:has(#settings-panel-analysis:not([hidden])) #settings-lead,
-#settings-form:has(#settings-panel-analysis:not([hidden])) .settings-footer { display: none; }
+#settings-form:has(#settings-panel-analysis:not([hidden])) .settings-footer,
+#settings-form:has(#settings-panel-supporter:not([hidden]):not(:has(.supporter-plaque))) .settings-footer { display: none; }
 
 .workspace-page { max-width: 1080px; margin: 0 auto; padding: 32px 20px 72px; }
 .workspace-page:focus { outline: none; }
