@@ -1,12 +1,17 @@
 /* Settings → Supporter Key panel: Harbor Beacon Plaque and offline key activation. */
 
-import { S } from './state.js?v=128';
-import { t, escapeHtml } from './text.js?v=128';
-import { api } from './api.js?v=128';
-import { kvRow } from './settings-format.js?v=128';
-import { syncSupporterHeader } from './supporter-header.js?v=128';
+import { S } from './state.js?v=129';
+import { t, escapeHtml } from './text.js?v=129';
+import { api } from './api.js?v=129';
+import { kvRow } from './settings-format.js?v=129';
+import { syncSupporterHeader } from './supporter-header.js?v=129';
 
 const SUPPORT_URL = 'https://portlight.stepaniah.me/#support';
+const BEACON_GLYPH_SVG =
+  '<svg class="beacon-glyph" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+  '<path d="M8 1.5v2.4M2.8 4.1l1.9 1.3M13.2 4.1l-1.9 1.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+  '<path d="M5.6 7.5h4.8l.95 6.5h-6.7l.95-6.5Z" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/>' +
+  '<circle cx="8" cy="5.7" r="1.35" fill="currentColor"/></svg>';
 
 function plaqueLogoHtml() {
   const brandSvg = document.querySelector('#brand-link .brand-icon');
@@ -58,9 +63,49 @@ function composeHintHtml() {
     .replace('PORT_LIGHT_SUPPORTER_KEY', '<code>PORT_LIGHT_SUPPORTER_KEY</code>');
   return '<div class="supporter-inactive-foot">' +
     '<span>' + text + '</span>' +
-    '<a class="supporter-link" href="' + SUPPORT_URL + '" target="_blank" rel="noopener noreferrer">' +
-    '<span data-i18n="supporter.inactive.getKey">' + escapeHtml(t('supporter.inactive.getKey')) + '</span>' +
-    '<span aria-hidden="true"> ↗</span></a></div>';
+    '<span class="supporter-inactive-offline" data-i18n="supporter.inactive.offlineNote">' +
+    escapeHtml(t('supporter.inactive.offlineNote')) + '</span></div>';
+}
+
+function previewButtonLabelKey(previewOn) {
+  return previewOn ? 'supporter.preview.hideHeader' : 'supporter.preview.tryHeader';
+}
+
+function showcaseCardHtml() {
+  const previewOn = !!S.supporterPreviewHeader;
+  const btnKey = previewButtonLabelKey(previewOn);
+  return '<section class="settings-card supporter-plaque supporter-showcase">' +
+    '<div class="supporter-showcase-bar">' +
+    '<span class="supporter-showcase-badge" data-i18n="supporter.showcase.livePreview">' +
+    escapeHtml(t('supporter.showcase.livePreview')) + '</span>' +
+    '<button type="button" class="supporter-preview-btn" data-supporter-preview aria-pressed="' + (previewOn ? 'true' : 'false') + '">' +
+    BEACON_GLYPH_SVG +
+    '<span data-supporter-preview-label data-i18n="' + btnKey + '">' + escapeHtml(t(btnKey)) + '</span></button>' +
+    '</div>' +
+    '<div class="plaque-top">' +
+    '<div class="plaque-emblem">' + plaqueLogoHtml() + '</div>' +
+    '<div class="plaque-meta">' +
+    '<div class="plaque-eyebrow" data-i18n="supporter.plaque.eyebrow">' + escapeHtml(t('supporter.plaque.eyebrow')) + '</div>' +
+    '<div class="plaque-title-row">' +
+    '<h2 class="plaque-title" data-i18n="supporter.showcase.title">' + escapeHtml(t('supporter.showcase.title')) + '</h2>' +
+    '<span class="plaque-tier-tag">' + BEACON_GLYPH_SVG +
+    '<span data-i18n="supporter.badge.personal">' + escapeHtml(t('supporter.badge.personal')) + '</span></span>' +
+    '<span class="supporter-preview-pill" data-i18n="supporter.showcase.previewTag">' + escapeHtml(t('supporter.showcase.previewTag')) + '</span>' +
+    '</div>' +
+    '<p class="plaque-thanks" data-i18n="supporter.inactive.lead">' + escapeHtml(t('supporter.inactive.lead')) + '</p>' +
+    '<div class="supporter-showcase-pillars">' +
+    '<span><i aria-hidden="true"></i><span data-i18n="supporter.showcase.pillarOneTime">' + escapeHtml(t('supporter.showcase.pillarOneTime')) + '</span></span>' +
+    '<span><i aria-hidden="true"></i><span data-i18n="supporter.showcase.pillarThemes">' + escapeHtml(t('supporter.showcase.pillarThemes')) + '</span></span>' +
+    '<span><i aria-hidden="true"></i><span data-i18n="supporter.showcase.pillarOffline">' + escapeHtml(t('supporter.showcase.pillarOffline')) + '</span></span>' +
+    '</div>' +
+    '</div></div>' +
+    '<div class="supporter-showcase-cta">' +
+    '<a class="supporter-cta-btn" href="' + SUPPORT_URL + '" target="_blank" rel="noopener noreferrer">' +
+    BEACON_GLYPH_SVG +
+    '<span data-i18n="supporter.showcase.cta">' + escapeHtml(t('supporter.showcase.cta')) + '</span>' +
+    '<span aria-hidden="true">↗</span></a>' +
+    '<span class="supporter-cta-note" data-i18n="supporter.showcase.tiersNote">' + escapeHtml(t('supporter.showcase.tiersNote')) + '</span>' +
+    '</div></section>';
 }
 
 export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValue, readonly) {
@@ -150,10 +195,9 @@ export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValu
     : '<p class="field-help" data-i18n="supporter.manage.readonly">' +
       escapeHtml(t('supporter.manage.readonly')) + '</p>';
 
-  return '<section class="settings-card supporter-inactive">' +
+  const activateCard = '<section class="settings-card supporter-inactive">' +
     '<header class="settings-card-head">' +
-    '<h2 data-i18n="supporter.inactive.title">' + escapeHtml(t('supporter.inactive.title')) + '</h2>' +
-    '<p data-i18n="supporter.inactive.lead">' + escapeHtml(t('supporter.inactive.lead')) + '</p>' +
+    '<h2 data-i18n="supporter.inactive.haveKeyTitle">' + escapeHtml(t('supporter.inactive.haveKeyTitle')) + '</h2>' +
     '</header>' +
     '<div class="settings-card-body">' +
     alertHtml +
@@ -161,6 +205,9 @@ export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValu
     '<p id="supporter-action-status" class="action-status" role="status" aria-live="polite"></p>' +
     composeHintHtml() +
     '</div></section>';
+
+  const showcaseCard = showcaseCardHtml();
+  return s.status === 'invalid' ? activateCard + showcaseCard : showcaseCard + activateCard;
 }
 
 function setSupporterStatus(key, className) {
@@ -289,11 +336,51 @@ export async function clearSupporterKey() {
   }
 }
 
+function syncPreviewButtonDom() {
+  const btn = document.querySelector('[data-supporter-preview]');
+  if (!btn) return;
+  const on = !!S.supporterPreviewHeader;
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  const lbl = btn.querySelector('[data-supporter-preview-label]');
+  if (lbl) {
+    const key = previewButtonLabelKey(on);
+    lbl.setAttribute('data-i18n', key);
+    lbl.textContent = t(key);
+  }
+}
+
+export function toggleSupporterPreview() {
+  if (S.meta && S.meta.supporter && S.meta.supporter.active) {
+    S.supporterPreviewHeader = false;
+    syncSupporterHeader();
+    syncPreviewButtonDom();
+    return false;
+  }
+  S.supporterPreviewHeader = !S.supporterPreviewHeader;
+  syncSupporterHeader();
+  syncPreviewButtonDom();
+  return !!S.supporterPreviewHeader;
+}
+
+export function clearSupporterPreview() {
+  if (!S.supporterPreviewHeader) return false;
+  S.supporterPreviewHeader = false;
+  syncSupporterHeader();
+  syncPreviewButtonDom();
+  return true;
+}
+
 let _delegated = false;
 export function ensureSupporterDelegates() {
   if (_delegated) return;
   _delegated = true;
   document.addEventListener('click', function (e) {
+    const previewBtn = e.target.closest('[data-supporter-preview]');
+    if (previewBtn) {
+      e.preventDefault();
+      toggleSupporterPreview();
+      return;
+    }
     const activateBtn = e.target.closest('[data-supporter-activate]');
     if (activateBtn) {
       e.preventDefault();

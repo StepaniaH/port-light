@@ -1328,10 +1328,10 @@
       "readonly": "Settings are read-only on this host. Set or update PORT_LIGHT_SUPPORTER_KEY in your environment."
     },
     "inactive": {
-      "title": "Supporter Key",
       "lead": "Every Port-Light feature stays free and unlocked under MIT with zero telemetry. Paste an optional offline key to light the beacon.",
       "composeHint": "Or set {env} in Compose",
-      "getKey": "Get a key"
+      "haveKeyTitle": "Already have a Supporter Key?",
+      "offlineNote": "Zero outbound requests"
     },
     "input": {
       "label": "Supporter Key",
@@ -1359,6 +1359,27 @@
       "invalid": "Supporter Key verification failed. Check that the full key was pasted without edits.",
       "readonly": "Settings are read-only on this host.",
       "failed": "Could not update Supporter Key."
+    },
+    "showcase": {
+      "livePreview": "Live preview · Matches current theme",
+      "title": "Light the Harbor Beacon",
+      "previewTag": "Preview",
+      "pillarOneTime": "One-time · No subscription",
+      "pillarThemes": "22 theme-matched finishes",
+      "pillarOffline": "Ed25519 verified offline",
+      "cta": "Support Port-Light · from $9",
+      "tiersNote": "Personal ($9+) · Team / Fleet ($49+) · Instant offline key"
+    },
+    "preview": {
+      "tryHeader": "Preview in header",
+      "hideHeader": "Hide header preview",
+      "headerTitle": "Supporter Beacon preview"
     }
+  },
+  "footer": {
+    "mit": "MIT Open Source",
+    "support": "Support Port-Light",
+    "supporting": "Thank you for supporting Port-Light",
+    "supportingSince": "Supporting Port-Light since {date}"
   }
 }

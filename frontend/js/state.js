@@ -105,6 +105,7 @@ export const S = {
   settingsDirty: false,
   settingsRevision: 0,
   supporterRevision: 0,
+  supporterPreviewHeader: false,
   peersDirty: false,
   peersRevision: 0,
   peersSubmitting: false,

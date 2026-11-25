@@ -133,13 +133,16 @@ try {
     if (message.type() === 'error' && !expectedInvalid) errors.push(message.text());
   });
 
-  // 1. Free / unactivated dashboard: zero badge, zero horizon, crisp command search
+  // 1. Free / unactivated dashboard: zero badge, zero horizon, crisp command search, gentle footer
   await page.goto(baseUrl);
   await expect(page.locator('#brand-link')).toBeVisible();
   await expect(page.locator('#supporter-badge')).toBeHidden();
   await expect(page.locator('#supporter-badge-divider')).toBeHidden();
   await expect(page.locator('#app-header')).not.toHaveClass(/has-supporter-beacon/);
   await expect(page.locator('.search-kbd')).toBeVisible();
+  await expect(page.locator('#app-footer')).toBeVisible();
+  await expect(page.locator('#footer-support-link')).not.toHaveClass(/\bis-lit\b/);
+  await expect(page.locator('#footer-support-label')).toHaveText('Support Port-Light');
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'No desktop overflow');
   await shot(page, '01-dashboard-free-dark-1280.png');
 
@@ -149,14 +152,28 @@ try {
   await expect(page.locator('.search-kbd')).toHaveCSS('opacity', '0');
   await page.keyboard.press('Escape');
 
-  // 2. Settings → Supporter Key (unactivated calm state)
-  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  // 2. Dashboard footer jumps straight to Settings → Supporter Key Showcase
+  await page.locator('#footer-support-link').click();
+  await expect(page).toHaveURL(/#\/settings\/supporter$/);
   await expect(page.locator('#settings-tab-supporter-dot')).toBeHidden();
-  await page.locator('#settings-tab-supporter').click();
+  await expect(page.locator('#settings-tab-supporter-glyph')).toBeVisible();
   await expect(page.locator('#settings-panel-supporter')).toBeVisible();
-  await expect(page.locator('#settings-panel-supporter .supporter-plaque')).toHaveCount(0);
+  await expect(page.locator('#settings-panel-supporter .supporter-showcase')).toBeVisible();
   await expect(page.locator('.settings-footer')).toBeHidden();
   await shot(page, '02-settings-supporter-inactive-dark.png');
+
+  // Ephemeral "Preview in header" lights header temporarily and clears on switching away
+  await page.locator('[data-supporter-preview]').click();
+  await expect(page.locator('[data-supporter-preview]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#supporter-badge')).toBeVisible();
+  await expect(page.locator('#supporter-badge')).toHaveAttribute('data-preview', 'true');
+  await expect(page.locator('#app-header')).toHaveClass(/has-supporter-beacon/);
+  await expect(page.locator('#settings-tab-supporter-dot')).toBeHidden();
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+  await expect(page.locator('#supporter-badge')).toBeHidden();
+  await expect(page.locator('#app-header')).not.toHaveClass(/has-supporter-beacon/);
+  await page.locator('#settings-tab-supporter').click();
+  await expect(page.locator('[data-supporter-preview]')).toHaveAttribute('aria-pressed', 'false');
 
   // Tampered key rejected inline without saving
   await page.locator('#supporter-key-input').fill(vectors.personal.slice(0, -1) + (vectors.personal.endsWith('A') ? 'B' : 'A'));
@@ -184,6 +201,8 @@ try {
   await expect(page.locator('#view-grid')).toBeVisible();
   await expect(page.locator('#btn-settings')).not.toHaveClass(/\bactive\b/);
   await expect(page.locator('#supporter-badge')).toBeVisible();
+  await expect(page.locator('#footer-support-link')).toHaveClass(/\bis-lit\b/);
+  await expect(page.locator('#footer-support-label')).toContainText('Supporting Port-Light since');
   await expect(page.locator('#grid .port-cell').first()).toBeVisible();
   // Verify #port-menu dropdown stays unclipped while has-supporter-beacon is active
   await page.locator('#btn-manage').click();
@@ -325,12 +344,13 @@ try {
   const storageDump = await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }));
   assert.ok(!storageDump.includes(vectors.personal) && !storageDump.includes(vectors.fleet), 'Raw key leaked in browser storage');
 
-  // Remove saved key -> returns cleanly to unactivated state
+  // Remove saved key -> returns cleanly to unactivated showcase state
   await page.locator('.supporter-manage summary').click();
   await page.locator('[data-supporter-clear]').click();
-  await expect(page.locator('#settings-panel-supporter .supporter-plaque')).toHaveCount(0);
+  await expect(page.locator('#settings-panel-supporter .supporter-showcase')).toBeVisible();
   await expect(page.locator('#supporter-badge')).toBeHidden();
   await expect(page.locator('#settings-tab-supporter-dot')).toBeHidden();
+  await expect(page.locator('#settings-tab-supporter-glyph')).toBeVisible();
 
   assert.deepEqual(errors, []);
   console.log('Supporter browser smoke passed: free/personal/fleet states, header nameplate, horizon shimmer, live toggle, themes (dark/light/catppuccin), zh-CN locale, 390px/360px mobile overflow checks, zero raw-key leakage.');

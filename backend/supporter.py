@@ -391,3 +391,28 @@ def meta_supporter_summary(values: dict[str, Any] | None = None) -> dict[str, An
 def settings_supporter_document(values: dict[str, Any] | None = None) -> dict[str, Any]:
     """Full masked supporter status exposed on GET /api/settings and supporter-key endpoints."""
     return resolve_supporter_state(values)
+
+
+SUPPORT_URL = "https://portlight.stepaniah.me/#support"
+
+
+def log_startup_notice(public_keys: tuple[bytes, ...] | None = None) -> bool:
+    """Emit one quiet MIT / voluntary support log line at startup when unactivated."""
+    from . import port_store
+
+    try:
+        state = resolve_supporter_state(public_keys=public_keys)
+    except port_store.StoreReadError:
+        return False
+    if state["status"] != "inactive":
+        return False
+    msg = (
+        "Port-Light is free and MIT open source (zero telemetry). "
+        f"Support independent maintenance: {SUPPORT_URL}"
+    )
+    uvicorn_log = logging.getLogger("uvicorn.error")
+    if uvicorn_log.handlers:
+        uvicorn_log.info(msg)
+    else:
+        logging.getLogger("port-light").info(msg)
+    return True

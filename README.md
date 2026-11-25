@@ -187,8 +187,12 @@ Settings, labels, and history are stored in the data volume. `port_light.json` m
 - Frontend: static HTML/CSS/JS
 - Image: `python:3.12-slim` + `iproute2`
 
+## Support Port-Light
+
+Every Port-Light feature stays free and unlocked under MIT with zero telemetry. If Port-Light saves you time across your homelab or fleet, you can back independent maintenance with an optional one-time offline [Supporter Key](https://portlight.stepaniah.me/#support) (verified locally via Ed25519 with zero outbound requests) that lights a theme-matched metallic Harbor Beacon across all 22 built-in themes.
+
 ## License
 
 [MIT](LICENSE) © 2026 StepaniaH
 
-[Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Ko-fi](https://ko-fi.com/stepaniah)
+[Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Support](https://portlight.stepaniah.me/#support) · [Ko-fi](https://ko-fi.com/stepaniah)

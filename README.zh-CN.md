@@ -185,8 +185,12 @@ Port-Light 无遥测。出站 HTTP 请求用于已配置的实例查询、Webhoo
 - 前端：静态 HTML/CSS/JS
 - 镜像：`python:3.12-slim` + `iproute2`
 
+## 支持 Port-Light
+
+Port-Light 的全部功能永久保持 MIT 开源、无功能锁、零遥测。如果它在你的家庭实验室或服务器机群中帮到了你，欢迎通过可选的一次性离线 [赞助者密钥（Supporter Key）](https://portlight.stepaniah.me/#support) 支持独立维护——密钥纯本地 Ed25519 离线验签、零出站请求，点亮后将在全部 22 套内置主题中呈现专属配色的金属港口灯标铭牌。
+
 ## 许可证
 
 [MIT](LICENSE) © 2026 StepaniaH
 
-[Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Ko-fi](https://ko-fi.com/stepaniah)
+[更新日志](CHANGELOG.md) · [安全说明](SECURITY.md) · [贡献指南](CONTRIBUTING.md) · [支持项目](https://portlight.stepaniah.me/#support) · [Ko-fi](https://ko-fi.com/stepaniah)

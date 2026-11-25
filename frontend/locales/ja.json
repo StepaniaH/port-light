@@ -1328,10 +1328,10 @@
       "readonly": "このホストの設定は読み取り専用です。環境変数 PORT_LIGHT_SUPPORTER_KEY で設定または更新してください。"
     },
     "inactive": {
-      "title": "サポーターキー",
       "lead": "Port-Light の全機能は MIT ライセンスのもとテレメトリなしで無料公開されています。任意のオフラインキーを貼り付けるとビーコンが点灯します。",
       "composeHint": "または Compose で {env} を設定",
-      "getKey": "キーを取得"
+      "haveKeyTitle": "サポーターキーをお持ちですか？",
+      "offlineNote": "外部通信なし"
     },
     "input": {
       "label": "サポーターキー",
@@ -1359,6 +1359,27 @@
       "invalid": "サポーターキーの検証に失敗しました。文字の欠落や編集がないか確認してください。",
       "readonly": "このホストの設定は読み取り専用です。",
       "failed": "サポーターキーを更新できませんでした。"
+    },
+    "showcase": {
+      "livePreview": "ライブプレビュー · 現在のテーマに連動",
+      "title": "ハーバービーコンを点灯",
+      "previewTag": "プレビュー",
+      "pillarOneTime": "買い切り · サブスクなし",
+      "pillarThemes": "22 テーマ専用メタリック仕上げ",
+      "pillarOffline": "Ed25519 オフライン検証",
+      "cta": "Port-Light を支援 · $9〜",
+      "tiersNote": "Personal ($9+) · Team / Fleet ($49+) · 即時オフラインキー発行"
+    },
+    "preview": {
+      "tryHeader": "ヘッダーで試す",
+      "hideHeader": "プレビューを閉じる",
+      "headerTitle": "サポータービーコンのプレビュー"
     }
+  },
+  "footer": {
+    "mit": "MIT オープンソース",
+    "support": "Port-Light を支援",
+    "supporting": "Port-Light へのご支援ありがとうございます",
+    "supportingSince": "{date} から Port-Light を支援中"
   }
 }

@@ -1,22 +1,22 @@
-import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=128';
-export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=128';
-import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=128';
-export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=128';
-import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=128';
-export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=128';
-import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows, testPeerConnection } from './settings-peers.js?v=128';
-export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=128';
+import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=129';
+export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=129';
+import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=129';
+export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=129';
+import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=129';
+export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=129';
+import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows, testPeerConnection } from './settings-peers.js?v=129';
+export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=129';
 /* Settings panels, locale menu, theme picker, and peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=128';
-import { t, escapeHtml, errorText } from './text.js?v=128';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=128';
-import { api, fetchHosts, fetchSettings } from './api.js?v=128';
-import { bindAddressView } from './grid.js?v=128';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=128';
-import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=128';
-import { supporterCardsHtml, ensureSupporterDelegates, rerenderSupporter, syncSupporterMeta } from './settings-supporter.js?v=128';
-import { syncSupporterHeader } from './supporter-header.js?v=128';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=129';
+import { t, escapeHtml, errorText } from './text.js?v=129';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=129';
+import { api, fetchHosts, fetchSettings } from './api.js?v=129';
+import { bindAddressView } from './grid.js?v=129';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=129';
+import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=129';
+import { supporterCardsHtml, ensureSupporterDelegates, rerenderSupporter, syncSupporterMeta, clearSupporterPreview } from './settings-supporter.js?v=129';
+import { syncSupporterHeader } from './supporter-header.js?v=129';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -259,6 +259,7 @@ function settingValuesEqual(left, right) {
     }
     if (id === 'analysis') syncAnalysisSettings(S.route?.analysisSection);
     else closeAnalysisSettings();
+    if (id !== 'supporter') clearSupporterPreview();
     if (resetScroll) window.scrollTo(0, 0);
   }
 
@@ -1455,7 +1456,7 @@ function settingValuesEqual(left, right) {
         return loadSettingsPage();
       },
       show(section, resetScroll = true) { showSettingsPanel(section, resetScroll); },
-      close() { settingsLoadGeneration += 1; closeAnalysisSettings(); applyAppearance(); },
+      close() { settingsLoadGeneration += 1; closeAnalysisSettings(); clearSupporterPreview(); applyAppearance(); },
       syncPaletteAvailability,
       closeTransient(opts) { return closeLocaleMenu(opts); },
       hasPending() {

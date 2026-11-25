@@ -208,3 +208,37 @@ def test_validate_supporter_key_rejects_invalid_utf8_and_non_dict_json():
     for raw in (b"[]", b'"hello"', b"123", b"null"):
         payload, err = supporter.validate_supporter_key(f"PL1.{_b64u(raw)}.{sig}", public_keys=pub1)
         assert payload is None and err == "supporter_key_format"
+
+
+def test_startup_notice_logs_once_when_inactive_and_silent_when_active(monkeypatch, caplog, tmp_path):
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("PORT_LIGHT_SUPPORTER_KEY", raising=False)
+    pub1 = (supporter.parse_public_key_pem(TEST_PUB1_PEM),)
+
+    # Inactive -> logs one quiet MIT/support notice
+    caplog.clear()
+    with caplog.at_level("INFO", logger="port-light"):
+        assert supporter.log_startup_notice(public_keys=pub1) is True
+    assert any("https://portlight.stepaniah.me/#support" in r.getMessage() and "MIT" in r.getMessage() for r in caplog.records)
+
+    # Active -> silent
+    monkeypatch.setenv("PORT_LIGHT_SUPPORTER_KEY", PERSONAL_KEY)
+    caplog.clear()
+    with caplog.at_level("INFO", logger="port-light"):
+        assert supporter.log_startup_notice(public_keys=pub1) is False
+    assert not any("https://portlight.stepaniah.me/#support" in r.getMessage() for r in caplog.records)
+
+    # Invalid -> silent (only invalid warning, no promo line)
+    monkeypatch.setenv("PORT_LIGHT_SUPPORTER_KEY", "PL1.bad.key")
+    caplog.clear()
+    with caplog.at_level("INFO", logger="port-light"):
+        assert supporter.log_startup_notice(public_keys=pub1) is False
+    assert not any("https://portlight.stepaniah.me/#support" in r.getMessage() for r in caplog.records)
+
+    # Corrupted port_light.json -> never crashes startup and emits no notice
+    monkeypatch.delenv("PORT_LIGHT_SUPPORTER_KEY", raising=False)
+    (tmp_path / "port_light.json").write_text("{corrupt", encoding="utf-8")
+    caplog.clear()
+    with caplog.at_level("INFO", logger="port-light"):
+        assert supporter.log_startup_notice(public_keys=pub1) is False
+    assert not any("https://portlight.stepaniah.me/#support" in r.getMessage() for r in caplog.records)

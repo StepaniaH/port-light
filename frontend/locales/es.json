@@ -1328,10 +1328,10 @@
       "readonly": "Los ajustes son de solo lectura en este equipo. Define o actualiza PORT_LIGHT_SUPPORTER_KEY en tu entorno."
     },
     "inactive": {
-      "title": "Clave Supporter",
       "lead": "Todas las funciones de Port-Light siguen siendo gratuitas bajo licencia MIT y sin telemetría. Pega una clave sin conexión opcional para encender el faro.",
       "composeHint": "O define {env} en Compose",
-      "getKey": "Obtener una clave"
+      "haveKeyTitle": "¿Ya tienes una Supporter Key?",
+      "offlineNote": "Sin peticiones salientes"
     },
     "input": {
       "label": "Clave Supporter",
@@ -1359,6 +1359,27 @@
       "invalid": "Falló la verificación de la clave Supporter. Comprueba que se pegó completa y sin cambios.",
       "readonly": "Los ajustes son de solo lectura en este equipo.",
       "failed": "No se pudo actualizar la clave Supporter."
+    },
+    "showcase": {
+      "livePreview": "Vista previa en vivo · Sigue tu tema actual",
+      "title": "Enciende el faro portuario",
+      "previewTag": "Vista previa",
+      "pillarOneTime": "Pago único · Sin suscripción",
+      "pillarThemes": "22 acabados metálicos por tema",
+      "pillarOffline": "Verificado sin conexión con Ed25519",
+      "cta": "Apoyar Port-Light · desde $9",
+      "tiersNote": "Personal ($9+) · Equipo / Flota ($49+) · Clave sin conexión al instante"
+    },
+    "preview": {
+      "tryHeader": "Probar en cabecera",
+      "hideHeader": "Ocultar vista previa",
+      "headerTitle": "Vista previa del faro Supporter"
     }
+  },
+  "footer": {
+    "mit": "Código abierto MIT",
+    "support": "Apoyar Port-Light",
+    "supporting": "Gracias por apoyar Port-Light",
+    "supportingSince": "Apoyando Port-Light desde {date}"
   }
 }

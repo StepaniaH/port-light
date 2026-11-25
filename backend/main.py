@@ -65,6 +65,7 @@ _monitor: OccupancyMonitor
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
+    supporter.log_startup_notice()
     await _monitor.start()
     try:
         async with analysis_lifespan(_app, VERSION):

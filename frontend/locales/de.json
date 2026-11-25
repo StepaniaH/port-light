@@ -1328,10 +1328,10 @@
       "readonly": "Die Einstellungen sind auf diesem Host schreibgeschützt. Setzen oder aktualisieren Sie PORT_LIGHT_SUPPORTER_KEY in der Umgebung."
     },
     "inactive": {
-      "title": "Supporter-Schlüssel",
       "lead": "Alle Funktionen von Port-Light bleiben unter MIT kostenlos und ohne Telemetrie nutzbar. Fügen Sie einen optionalen Offline-Schlüssel ein, um das Leuchtfeuer zu aktivieren.",
       "composeHint": "Oder {env} in Compose setzen",
-      "getKey": "Schlüssel erhalten"
+      "haveKeyTitle": "Bereits einen Supporter Key?",
+      "offlineNote": "Keine ausgehenden Anfragen"
     },
     "input": {
       "label": "Supporter-Schlüssel",
@@ -1359,6 +1359,27 @@
       "invalid": "Prüfung des Supporter-Schlüssels fehlgeschlagen. Stellen Sie sicher, dass der Schlüssel vollständig und unverändert eingefügt wurde.",
       "readonly": "Die Einstellungen sind auf diesem Host schreibgeschützt.",
       "failed": "Supporter-Schlüssel konnte nicht aktualisiert werden."
+    },
+    "showcase": {
+      "livePreview": "Live-Vorschau · Passend zum aktiven Theme",
+      "title": "Hafen-Leuchtfeuer einschalten",
+      "previewTag": "Vorschau",
+      "pillarOneTime": "Einmalig · Kein Abo",
+      "pillarThemes": "22 themenspezifische Metall-Finishes",
+      "pillarOffline": "Offline per Ed25519 geprüft",
+      "cta": "Port-Light unterstützen · ab $9",
+      "tiersNote": "Personal ($9+) · Team / Fleet ($49+) · Sofortiger Offline-Schlüssel"
+    },
+    "preview": {
+      "tryHeader": "In Kopfzeile testen",
+      "hideHeader": "Vorschau ausblenden",
+      "headerTitle": "Vorschau des Supporter-Leuchtfeuers"
     }
+  },
+  "footer": {
+    "mit": "MIT Open Source",
+    "support": "Port-Light unterstützen",
+    "supporting": "Vielen Dank für die Unterstützung von Port-Light",
+    "supportingSince": "Unterstützt Port-Light seit {date}"
   }
 }

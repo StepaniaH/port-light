@@ -1328,10 +1328,10 @@
       "readonly": "目前主機為唯讀設定模式，請透過環境變數設定或更新 PORT_LIGHT_SUPPORTER_KEY。"
     },
     "inactive": {
-      "title": "贊助者金鑰",
       "lead": "Port-Light 所有功能皆以 MIT 永久免費開放、零遙測。貼上可選離線金鑰即可點亮港口燈標。",
       "composeHint": "或在 Compose 中設定 {env}",
-      "getKey": "取得金鑰"
+      "haveKeyTitle": "已有贊助者金鑰？",
+      "offlineNote": "零出站請求"
     },
     "input": {
       "label": "贊助者金鑰",
@@ -1359,6 +1359,27 @@
       "invalid": "贊助者金鑰驗證未通過，請確認完整貼上且未修改字元。",
       "readonly": "目前主機設定為唯讀模式。",
       "failed": "無法更新贊助者金鑰。"
+    },
+    "showcase": {
+      "livePreview": "即時預覽 · 跟隨目前主題",
+      "title": "點亮港口燈標",
+      "previewTag": "預覽",
+      "pillarOneTime": "一次性贊助 · 無訂閱",
+      "pillarThemes": "22 套主題專屬金屬工藝",
+      "pillarOffline": "Ed25519 純離線驗簽",
+      "cta": "支持 Port-Light · $9 起",
+      "tiersNote": "個人（$9 起）· 團隊 / 機群（$49 起）· 購買即得離線金鑰"
+    },
+    "preview": {
+      "tryHeader": "試亮頂欄預覽",
+      "hideHeader": "關閉頂欄預覽",
+      "headerTitle": "贊助者燈標預覽"
     }
+  },
+  "footer": {
+    "mit": "MIT 開源",
+    "support": "支持 Port-Light",
+    "supporting": "感謝你支持 Port-Light",
+    "supportingSince": "自 {date} 起支持 Port-Light"
   }
 }

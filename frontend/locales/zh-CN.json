@@ -1328,10 +1328,10 @@
       "readonly": "当前主机处于只读设置模式，请在环境变量中设置或更新 PORT_LIGHT_SUPPORTER_KEY。"
     },
     "inactive": {
-      "title": "赞助者密钥",
       "lead": "Port-Light 全部功能基于 MIT 永久免费开放、零遥测。粘贴可选离线密钥即可点亮港口灯标。",
       "composeHint": "或在 Compose 中设置 {env}",
-      "getKey": "获取密钥"
+      "haveKeyTitle": "已有赞助者密钥？",
+      "offlineNote": "零出站请求"
     },
     "input": {
       "label": "赞助者密钥",
@@ -1359,6 +1359,27 @@
       "invalid": "赞助者密钥验签未通过，请确认完整粘贴且未改动字符。",
       "readonly": "当前主机设置处于只读模式。",
       "failed": "无法更新赞助者密钥。"
+    },
+    "showcase": {
+      "livePreview": "实时预览 · 跟随当前主题",
+      "title": "点亮港口灯标",
+      "previewTag": "预览",
+      "pillarOneTime": "一次性赞助 · 无订阅",
+      "pillarThemes": "22 套主题专属金属工艺",
+      "pillarOffline": "Ed25519 纯离线验签",
+      "cta": "支持 Port-Light · $9 起",
+      "tiersNote": "个人（$9 起）· 团队 / 机群（$49 起）· 购买即得离线密钥"
+    },
+    "preview": {
+      "tryHeader": "试亮顶栏预览",
+      "hideHeader": "关闭顶栏预览",
+      "headerTitle": "赞助者灯标预览"
     }
+  },
+  "footer": {
+    "mit": "MIT 开源",
+    "support": "支持 Port-Light",
+    "supporting": "感谢你支持 Port-Light",
+    "supportingSince": "自 {date} 起支持 Port-Light"
   }
 }

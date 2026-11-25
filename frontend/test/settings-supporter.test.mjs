@@ -123,7 +123,10 @@ test('supporterCardsHtml renders activated plaque, fleet env override, readonly,
     can_clear: false,
     show_in_header: true,
   }, SHOW_HEADER_FIELD, true, false);
-  assert.doesNotMatch(inactive, /supporter-plaque/);
+  assert.match(inactive, /supporter-showcase/);
+  assert.match(inactive, /supporter-inactive/);
+  assert.ok(inactive.indexOf('supporter-showcase') < inactive.indexOf('supporter-inactive'), 'normal unactivated state puts showcase before activation card');
+  assert.match(inactive, /data-supporter-preview/);
   assert.match(inactive, /data-supporter-input/);
   assert.match(inactive, /data-supporter-activate/);
   assert.match(inactive, /supporter\.inactive\.composeHint/);
@@ -503,5 +506,42 @@ test('concurrent settings autosave and supporter key mutations preserve newer st
     form.elements = prevElements;
     panel.remove();
     Object.assign(S, prevState);
+  }
+});
+
+test('invalid supporter state prioritizes recovery card above showcase, and header preview toggles and clears cleanly', async () => {
+  const { supporterCardsHtml, toggleSupporterPreview, clearSupporterPreview } = await import('../js/settings-supporter.js?' + V);
+  const { S } = await import('../js/state.js?' + V);
+
+  const invalidHtml = supporterCardsHtml({
+    active: false, status: 'invalid', tier: null, issued_at: null, key_preview: null,
+    order_preview: null, origin: 'file', env_configured: false, can_edit: true, can_clear: true, show_in_header: true,
+  }, SHOW_HEADER_FIELD, true, false);
+  assert.match(invalidHtml, /supporter-alert/);
+  assert.match(invalidHtml, /supporter-showcase/);
+  assert.ok(invalidHtml.indexOf('supporter-inactive') < invalidHtml.indexOf('supporter-showcase'),
+    'invalid key state must place recovery card before showcase');
+
+  const header = document.getElementById('app-header');
+  header.classList = makeClassList();
+  const badge = document.getElementById('supporter-badge');
+  const prevActive = S.meta.supporter;
+  const prevPreview = S.supporterPreviewHeader;
+  try {
+    S.meta.supporter = { active: false, tier: null, issued_at: null, show_in_header: true };
+    S.supporterPreviewHeader = false;
+    assert.equal(toggleSupporterPreview(), true);
+    assert.equal(S.supporterPreviewHeader, true);
+    assert.equal(badge.hidden, false);
+    assert.equal(header.classList.contains('has-supporter-beacon'), true);
+
+    assert.equal(clearSupporterPreview(), true);
+    assert.equal(S.supporterPreviewHeader, false);
+    assert.equal(badge.hidden, true);
+    assert.equal(header.classList.contains('has-supporter-beacon'), false);
+    assert.equal(clearSupporterPreview(), false);
+  } finally {
+    S.meta.supporter = prevActive;
+    S.supporterPreviewHeader = prevPreview;
   }
 });

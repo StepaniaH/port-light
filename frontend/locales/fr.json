@@ -1328,10 +1328,10 @@
       "readonly": "Les réglages sont en lecture seule sur cet hôte. Définissez ou mettez à jour PORT_LIGHT_SUPPORTER_KEY dans votre environnement."
     },
     "inactive": {
-      "title": "Clé Supporter",
       "lead": "Toutes les fonctionnalités de Port-Light restent gratuites et libres sous licence MIT, sans télémétrie. Collez une clé hors ligne facultative pour allumer la balise.",
       "composeHint": "Ou définissez {env} dans Compose",
-      "getKey": "Obtenir une clé"
+      "haveKeyTitle": "Vous avez déjà une Supporter Key ?",
+      "offlineNote": "Aucune requête sortante"
     },
     "input": {
       "label": "Clé Supporter",
@@ -1359,6 +1359,27 @@
       "invalid": "Échec de la vérification de la clé Supporter. Vérifiez qu’elle a été collée intégralement sans modification.",
       "readonly": "Les réglages sont en lecture seule sur cet hôte.",
       "failed": "Impossible de mettre à jour la clé Supporter."
+    },
+    "showcase": {
+      "livePreview": "Aperçu en direct · Adapté au thème actif",
+      "title": "Allumer la balise portuaire",
+      "previewTag": "Aperçu",
+      "pillarOneTime": "Paiement unique · Sans abonnement",
+      "pillarThemes": "22 finitions métalliques par thème",
+      "pillarOffline": "Vérifié hors ligne via Ed25519",
+      "cta": "Soutenir Port-Light · dès 9 $",
+      "tiersNote": "Personnel (9 $+) · Équipe / Flotte (49 $+) · Clé hors ligne immédiate"
+    },
+    "preview": {
+      "tryHeader": "Essayer dans l’en-tête",
+      "hideHeader": "Masquer l’aperçu",
+      "headerTitle": "Aperçu de la balise Supporter"
     }
+  },
+  "footer": {
+    "mit": "Open Source MIT",
+    "support": "Soutenir Port-Light",
+    "supporting": "Merci de soutenir Port-Light",
+    "supportingSince": "Soutient Port-Light depuis le {date}"
   }
 }
