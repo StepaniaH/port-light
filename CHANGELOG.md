@@ -2,6 +2,22 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## 0.9.2 — 2026-11-26
+
+### Added
+
+- Add optional offline Ed25519 Supporter Key verification (`PORT_LIGHT_SUPPORTER_KEY` or **Settings → Supporter Key**), implemented in pure Python stdlib with zero new dependencies, zero outbound requests, and zero feature locks; invalid or corrupted stored keys stay isolated from occupancy monitoring, `/api/health`, and Doctor checks, and raw keys and full order IDs are never echoed by APIs, logs, or diagnostic reports.
+- Add theme-matched metallic Harbor Beacon nameplates across all 22 built-in themes (11 palettes in dark and light modes), a Harbor Beacon Plaque in **Settings → Supporter Key** with a `Show beacon in header` toggle (`PORT_LIGHT_SUPPORTER_SHOW_HEADER`), an unactivated live theme showcase with an ephemeral in-memory header preview, a subtle dashboard footer, and a single startup notice when unactivated.
+- Add full seven-locale UI translations (`en`, `fr`, `de`, `es`, `zh-CN`, `zh-TW`, `ja`), Playwright Supporter E2E smoke coverage (`npm run smoke:supporter`), and official support page links in READMEs, `.github/FUNDING.yml`, and the Unraid template.
+
+### Changed
+
+- Upgrade the top application bar to a balanced three-column layout with a centered command search bar, a `/` shortcut keycap, and a cleaner borderless action toolbar.
+
+### Fixed
+
+- Read populated two-machine host board widths atomically in `frontend/test/fleet-regression.mjs` to avoid reading detached placeholder nodes during initial occupancy refresh.
+
 ## 0.9.1 — 2026-11-25
 
 ### Changed

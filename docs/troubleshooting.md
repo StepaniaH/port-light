@@ -16,7 +16,7 @@ Hover over the information icon, or focus or click the warning, to see guidance 
 
 Generally no configuration migration is required: existing peers and saved settings are preserved. However, `v0.8.5` saved `"peers": []` into `/data/port_light.json` whenever any setting was updated; if you configure `PORT_LIGHT_PEERS` via environment variables in default `auto` mode and see `scope=all` report `all:0/0`, either set `PORT_LIGHT_SETTINGS_SOURCE=env`, remove the empty `"peers": []` key from `/data/port_light.json`, or save peers under **Settings → Machines & scanning**. Back up `/data` before upgrading because `analysis/state/analysis.sqlite3` migrates forward-only (schema v2 to v3 in `v0.9.0`), so downgrading requires restoring the pre-upgrade data backup for saved reports. Settings now sends only changed fields, supports restoring an environment/default value, and reports settings and peer saves independently. Setup / Doctor is available under **Settings → Advanced** (`#/doctor`).
 
-If your enabled scanners already work, updating the image and recreating the container is enough. Change a pinned image tag to the current release, such as `v0.9.1`, before running these commands; pulling an older version tag does not upgrade it. Deployments using `latest` can retain that tag:
+If your enabled scanners already work, updating the image and recreating the container is enough. Change a pinned image tag to the current release, such as `v0.9.2`, before running these commands; pulling an older version tag does not upgrade it. Deployments using `latest` can retain that tag:
 
 ```bash
 docker compose pull port-light
