@@ -26,10 +26,15 @@ _B64U_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SPKI_ED25519_PREFIX = bytes.fromhex("302a300506032b6570032100")
 
-# Production Ed25519 SPKI public keys (PEM). Empty by default (fail-closed)
-# until the production public key paired with Cloudflare Pages ED25519_PRIVATE_KEY
-# is embedded here. Supports multiple entries for zero-downtime key rotation.
-TRUSTED_PUBLIC_KEYS_PEM: tuple[str, ...] = ()
+# Production Ed25519 SPKI public keys (PEM) paired with Cloudflare Pages
+# ED25519_PRIVATE_KEY. Supports multiple entries for zero-downtime key rotation.
+TRUSTED_PUBLIC_KEYS_PEM: tuple[str, ...] = (
+    (
+        "-----BEGIN PUBLIC KEY-----\n"
+        "MCowBQYDK2VwAyEAF9M1iSpaZQYFaYpGqfVNqeJ3/d0jfTqkgywWYxnYdWc=\n"
+        "-----END PUBLIC KEY-----"
+    ),
+)
 
 # ── RFC 8032 Ed25519 curve constants ──────────────────────────
 

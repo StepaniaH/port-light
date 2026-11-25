@@ -116,6 +116,20 @@ def test_verify_supporter_key_fails_closed_when_no_trusted_keys_or_tampered():
     assert supporter.verify_supporter_key("", public_keys=pub1) is None
 
 
+def test_embedded_production_public_key_loads_and_rejects_test_vectors():
+    assert len(supporter.TRUSTED_PUBLIC_KEYS_PEM) >= 1
+    assert len(supporter.TRUSTED_PUBLIC_KEYS) == len(supporter.TRUSTED_PUBLIC_KEYS_PEM)
+    for key_bytes in supporter.TRUSTED_PUBLIC_KEYS:
+        assert len(key_bytes) == 32
+        point = supporter._decode_point(key_bytes)
+        assert point is not None
+        assert not supporter._is_small_order(point)
+    # Throwaway test keys must never verify against the embedded production key
+    assert supporter.verify_supporter_key(PERSONAL_KEY) is None
+    assert supporter.verify_supporter_key(FLEET_KEY) is None
+    assert supporter.verify_supporter_key(ROTATED_KEY) is None
+
+
 def test_payload_schema_rejects_bool_version_bad_dates_and_control_chars():
     # Verify schema checks independently of signature
     assert supporter.parse_supporter_payload({"v": True, "tier": "personal", "oid": "ord_1", "iat": "2026-11-25"}) is None
