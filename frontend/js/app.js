@@ -24,6 +24,7 @@ import { mountDoctorPage } from './doctor.js?v=126';
 import { renderUiLinks } from './ui-links.js?v=126';
 import { mountWorkspacePage } from './workspace.js?v=126';
 import { observeSelects, enhanceSelects } from './select.js?v=126';
+import { syncSupporterHeader } from './supporter-header.js?v=126';
 
 (function () {
   'use strict';
@@ -285,6 +286,7 @@ import { observeSelects, enhanceSelects } from './select.js?v=126';
     onSaved: setupRefresh,
     onLocaleApplied() {
       renderUiLinks(S.meta.ui_links);
+      syncSupporterHeader();
       if (S.route.name === 'workspace') workspacePage.open(S.route);
       enhanceSelects(document);
       syncHiddenButton();
@@ -799,6 +801,7 @@ import { observeSelects, enhanceSelects } from './select.js?v=126';
         if (window.PortLightI18n?.setSampleCopies) PortLightI18n.setSampleCopies(meta?.preview?.samples);
         const ver = document.getElementById('app-version');
         if (ver && S.meta.version) ver.textContent = 'v' + S.meta.version;
+        syncSupporterHeader();
         return fetchSettings();
       })
       .then(function (doc) {
@@ -815,6 +818,7 @@ import { observeSelects, enhanceSelects } from './select.js?v=126';
       .then(function () {
         if (window.PortLightI18n) PortLightI18n.applyDom();
         renderUiLinks(S.meta.ui_links);
+        syncSupporterHeader();
         if (S.showHidden && S.meta.hidden_unlock_required && !S.hiddenUnlock) {
           S.showHidden = false;
           S.kindFilters.delete('hidden');
