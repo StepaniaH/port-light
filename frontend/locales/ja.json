@@ -823,7 +823,8 @@
       "occupancy": "ポートマップ",
       "automation": "オートメーション",
       "advanced": "詳細",
-      "hosts": "マシンとスキャン"
+      "hosts": "マシンとスキャン",
+      "supporter": "サポーターキー"
     },
     "theme": {
       "builtin": "組み込み",
@@ -892,6 +893,10 @@
       "links": {
         "title": "アクセス URL",
         "blurb": "詳細パネルで http リンクを推定するときのホスト名。"
+      },
+      "supporter": {
+        "title": "サポーターキー",
+        "blurb": "Port-Light サポーター向けの任意オフライン認識キーです。"
       }
     },
     "host": {
@@ -1044,6 +1049,10 @@
       "show_bind_ipv6": {
         "label": "IPv6 アドレス",
         "help": "カードの要約に IPv6 バインドアドレスを含めます。"
+      },
+      "supporter_show_header": {
+        "label": "ヘッダーにビーコンを表示",
+        "help": "トップバーのバージョン横に控えめなサポーター銘板を表示します。"
       }
     },
     "auto": {
@@ -1286,5 +1295,67 @@
     "temporaryReservation": "CI ビルド用の予約（24 時間）",
     "permanentReservation": "統合環境用の予約（無期限）",
     "singlePort": "手動追加のサンプル"
+  },
+  "supporter": {
+    "badge": {
+      "personal": "Supporter",
+      "fleet": "Fleet",
+      "title": "{tier} · {date} から点灯",
+      "titleNoDate": "{tier}"
+    },
+    "tier": {
+      "personal": "個人サポーター",
+      "fleet": "チーム / フリートサポーター"
+    },
+    "plaque": {
+      "lit": "点灯中",
+      "since": "{date} からビーコンを点灯中",
+      "thanksPersonal": "Port-Light の独立した継続開発へのご支援に感謝します。すべての機能は MIT ライセンス・テレメトリなしで提供されます。",
+      "thanksFleet": "チーム環境での Port-Light へのご支援に感謝します。すべての機能は MIT ライセンス・テレメトリなしで提供されます。",
+      "verified": "Ed25519 オフライン検証済み · 外部通信なし",
+      "tierLabel": "プラン",
+      "orderLabel": "注文参照",
+      "originLabel": "キーの取得元"
+    },
+    "origin": {
+      "file": "データファイル",
+      "env": "環境変数"
+    },
+    "manage": {
+      "summary": "サポーターキーの差し替え・削除",
+      "envOverrideHint": "現在は PORT_LIGHT_SUPPORTER_KEY から読み込まれています。ここで保存するとローカルの port_light.json で上書きされます。",
+      "readonly": "このホストの設定は読み取り専用です。環境変数 PORT_LIGHT_SUPPORTER_KEY で設定または更新してください。"
+    },
+    "inactive": {
+      "title": "サポーターキー",
+      "lead": "Port-Light の全機能は MIT ライセンスのもとテレメトリなしで無料公開されています。任意のオフラインキーを貼り付けるとビーコンが点灯します。",
+      "composeHint": "または Compose で {env} を設定",
+      "getKey": "キーを取得"
+    },
+    "input": {
+      "label": "サポーターキー",
+      "placeholder": "PL1.…"
+    },
+    "action": {
+      "activate": "有効化",
+      "activating": "検証中…",
+      "remove": "保存済みキーを削除",
+      "removing": "削除中…"
+    },
+    "status": {
+      "activated": "サポーターキーをオフラインで検証しました。",
+      "removed": "保存済みのサポーターキーを削除しました。"
+    },
+    "invalid": {
+      "file": "保存済みのサポーターキーはオフライン検証に失敗しました。有効なキーを貼り付けるか、保存済みキーを削除してください。",
+      "env": "PORT_LIGHT_SUPPORTER_KEY のオフライン検証に失敗しました。環境変数の値を確認するか、下で有効なキーを貼り付けてください。"
+    },
+    "error": {
+      "empty": "PL1. で始まるサポーターキーを貼り付けてください。",
+      "format": "キーの形式が正しくありません。PL1 サポーターキーが必要です。",
+      "invalid": "サポーターキーの検証に失敗しました。文字の欠落や編集がないか確認してください。",
+      "readonly": "このホストの設定は読み取り専用です。",
+      "failed": "サポーターキーを更新できませんでした。"
+    }
   }
 }

@@ -823,7 +823,8 @@
       "occupancy": "Occupation",
       "automation": "Automatisation",
       "advanced": "Avancé",
-      "hosts": "Machines et analyse"
+      "hosts": "Machines et analyse",
+      "supporter": "Clé Supporter"
     },
     "theme": {
       "builtin": "Intégrée",
@@ -892,6 +893,10 @@
       "links": {
         "title": "URL d'accès",
         "blurb": "Hôte utilisé pour deviner les liens http dans le panneau de détail."
+      },
+      "supporter": {
+        "title": "Clé Supporter",
+        "blurb": "Clé hors ligne facultative de reconnaissance pour les soutiens de Port-Light."
       }
     },
     "host": {
@@ -1044,6 +1049,10 @@
       "show_bind_ipv6": {
         "label": "Adresses IPv6",
         "help": "Inclure les adresses d’écoute IPv6 dans les résumés."
+      },
+      "supporter_show_header": {
+        "label": "Afficher la balise dans l’en-tête",
+        "help": "Affiche la plaque discrète de soutien à côté de la version dans la barre supérieure."
       }
     },
     "auto": {
@@ -1286,5 +1295,67 @@
     "temporaryReservation": "Réservation de compilation CI (24 heures)",
     "permanentReservation": "Réservation d’intégration (permanente)",
     "singlePort": "Exemple d’entrée manuelle"
+  },
+  "supporter": {
+    "badge": {
+      "personal": "Supporter",
+      "fleet": "Fleet",
+      "title": "{tier} · Allumée depuis {date}",
+      "titleNoDate": "{tier}"
+    },
+    "tier": {
+      "personal": "Soutien individuel",
+      "fleet": "Soutien équipe / flotte"
+    },
+    "plaque": {
+      "lit": "Balise allumée",
+      "since": "Balise allumée depuis le {date}",
+      "thanksPersonal": "Merci de soutenir la maintenance indépendante de Port-Light. Chaque fonctionnalité reste open source sous licence MIT, sans télémétrie.",
+      "thanksFleet": "Merci de soutenir Port-Light sur la flotte de votre équipe. Chaque fonctionnalité reste open source sous licence MIT, sans télémétrie.",
+      "verified": "Vérifié hors ligne via Ed25519 · Aucune requête sortante",
+      "tierLabel": "Niveau",
+      "orderLabel": "Référence de commande",
+      "originLabel": "Source de la clé"
+    },
+    "origin": {
+      "file": "Fichier enregistré",
+      "env": "Environnement"
+    },
+    "manage": {
+      "summary": "Remplacer ou supprimer la clé Supporter",
+      "envOverrideHint": "Actuellement chargée depuis PORT_LIGHT_SUPPORTER_KEY. Enregistrer une clé ici la remplace localement dans port_light.json.",
+      "readonly": "Les réglages sont en lecture seule sur cet hôte. Définissez ou mettez à jour PORT_LIGHT_SUPPORTER_KEY dans votre environnement."
+    },
+    "inactive": {
+      "title": "Clé Supporter",
+      "lead": "Toutes les fonctionnalités de Port-Light restent gratuites et libres sous licence MIT, sans télémétrie. Collez une clé hors ligne facultative pour allumer la balise.",
+      "composeHint": "Ou définissez {env} dans Compose",
+      "getKey": "Obtenir une clé"
+    },
+    "input": {
+      "label": "Clé Supporter",
+      "placeholder": "PL1.…"
+    },
+    "action": {
+      "activate": "Activer",
+      "activating": "Vérification…",
+      "remove": "Supprimer la clé enregistrée",
+      "removing": "Suppression…"
+    },
+    "status": {
+      "activated": "Clé Supporter vérifiée hors ligne.",
+      "removed": "Clé Supporter enregistrée supprimée."
+    },
+    "invalid": {
+      "file": "La vérification hors ligne de la clé enregistrée a échoué. Collez une clé valide ou supprimez la clé enregistrée.",
+      "env": "La vérification hors ligne de PORT_LIGHT_SUPPORTER_KEY a échoué. Vérifiez la variable d’environnement ou collez une clé valide ci-dessous."
+    },
+    "error": {
+      "empty": "Collez une clé Supporter commençant par PL1.",
+      "format": "Format de clé invalide. Une clé Supporter PL1 est attendue.",
+      "invalid": "Échec de la vérification de la clé Supporter. Vérifiez qu’elle a été collée intégralement sans modification.",
+      "readonly": "Les réglages sont en lecture seule sur cet hôte.",
+      "failed": "Impossible de mettre à jour la clé Supporter."
+    }
   }
 }

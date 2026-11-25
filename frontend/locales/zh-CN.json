@@ -823,7 +823,8 @@
       "occupancy": "占用图",
       "automation": "自动化",
       "advanced": "高级",
-      "hosts": "机器与扫描"
+      "hosts": "机器与扫描",
+      "supporter": "赞助者密钥"
     },
     "theme": {
       "builtin": "内置",
@@ -892,6 +893,10 @@
       "links": {
         "title": "访问地址",
         "blurb": "详情面板里猜测 http 链接所用的主机名。"
+      },
+      "supporter": {
+        "title": "赞助者密钥",
+        "blurb": "用于 Port-Light 赞助者的可选离线识别密钥。"
       }
     },
     "host": {
@@ -1045,6 +1050,10 @@
       "url_scheme": {
         "label": "URL 协议",
         "help": "自动会在 443/8443/9443 以及名称含 HTTPS 时使用 https。"
+      },
+      "supporter_show_header": {
+        "label": "在顶栏显示赞助者标示",
+        "help": "在顶栏版本号旁展示克制的金属铭牌与顶缘微光。"
       }
     },
     "auto": {
@@ -1286,5 +1295,67 @@
     "temporaryReservation": "CI 构建预留（24 小时）",
     "permanentReservation": "集成环境预留（长期）",
     "singlePort": "手动添加示例"
+  },
+  "supporter": {
+    "badge": {
+      "personal": "Supporter",
+      "fleet": "Fleet",
+      "title": "{tier} · 点亮于 {date}",
+      "titleNoDate": "{tier}"
+    },
+    "tier": {
+      "personal": "个人赞助者",
+      "fleet": "团队 / 机群赞助者"
+    },
+    "plaque": {
+      "lit": "灯标已点亮",
+      "since": "自 {date} 起持续点亮灯标",
+      "thanksPersonal": "感谢你支持 Port-Light 的独立维护。全部功能保持 MIT 开源、零遥测。",
+      "thanksFleet": "感谢你在团队机群中支持 Port-Light。全部功能保持 MIT 开源、零遥测。",
+      "verified": "Ed25519 本地离线验签通过 · 零出站请求",
+      "tierLabel": "档位",
+      "orderLabel": "订单编号",
+      "originLabel": "密钥来源"
+    },
+    "origin": {
+      "file": "数据卷文件",
+      "env": "环境变量"
+    },
+    "manage": {
+      "summary": "更换或移除赞助者密钥",
+      "envOverrideHint": "当前由 PORT_LIGHT_SUPPORTER_KEY 环境变量生效；在此保存新密钥将在本地 port_light.json 中覆盖。",
+      "readonly": "当前主机处于只读设置模式，请在环境变量中设置或更新 PORT_LIGHT_SUPPORTER_KEY。"
+    },
+    "inactive": {
+      "title": "赞助者密钥",
+      "lead": "Port-Light 全部功能基于 MIT 永久免费开放、零遥测。粘贴可选离线密钥即可点亮港口灯标。",
+      "composeHint": "或在 Compose 中设置 {env}",
+      "getKey": "获取密钥"
+    },
+    "input": {
+      "label": "赞助者密钥",
+      "placeholder": "PL1.…"
+    },
+    "action": {
+      "activate": "激活",
+      "activating": "验签中…",
+      "remove": "移除已保存密钥",
+      "removing": "移除中…"
+    },
+    "status": {
+      "activated": "赞助者密钥已在本地离线验签通过。",
+      "removed": "已移除保存的赞助者密钥。"
+    },
+    "invalid": {
+      "file": "已保存的赞助者密钥离线验签失败。请粘贴有效密钥，或移除已保存的密钥。",
+      "env": "PORT_LIGHT_SUPPORTER_KEY 离线验签失败。请检查环境变量配置，或在下方粘贴有效密钥。"
+    },
+    "error": {
+      "empty": "请粘贴以 PL1. 开头的赞助者密钥。",
+      "format": "密钥格式无效，应为 PL1 赞助者密钥。",
+      "invalid": "赞助者密钥验签未通过，请确认完整粘贴且未改动字符。",
+      "readonly": "当前主机设置处于只读模式。",
+      "failed": "无法更新赞助者密钥。"
+    }
   }
 }

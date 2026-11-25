@@ -823,7 +823,8 @@
       "occupancy": "Ocupación",
       "automation": "Automatización",
       "advanced": "Avanzado",
-      "hosts": "Equipos y escaneo"
+      "hosts": "Equipos y escaneo",
+      "supporter": "Clave Supporter"
     },
     "theme": {
       "builtin": "Integradas",
@@ -892,6 +893,10 @@
       "links": {
         "title": "URL de acceso",
         "blurb": "Equipo utilizado al deducir los enlaces http en el panel de detalles."
+      },
+      "supporter": {
+        "title": "Clave Supporter",
+        "blurb": "Clave sin conexión opcional de reconocimiento para quienes apoyan Port-Light."
       }
     },
     "host": {
@@ -1044,6 +1049,10 @@
       "show_bind_ipv6": {
         "label": "Direcciones IPv6",
         "help": "Incluir direcciones IPv6 vinculadas en los resúmenes."
+      },
+      "supporter_show_header": {
+        "label": "Mostrar faro en la barra superior",
+        "help": "Muestra la placa discreta de apoyo junto a la versión en la barra superior."
       }
     },
     "auto": {
@@ -1286,5 +1295,67 @@
     "temporaryReservation": "Reserva de compilación CI (24 horas)",
     "permanentReservation": "Reserva de integración (permanente)",
     "singlePort": "Ejemplo de entrada manual"
+  },
+  "supporter": {
+    "badge": {
+      "personal": "Supporter",
+      "fleet": "Fleet",
+      "title": "{tier} · Encendido desde {date}",
+      "titleNoDate": "{tier}"
+    },
+    "tier": {
+      "personal": "Apoyo personal",
+      "fleet": "Apoyo equipo / flota"
+    },
+    "plaque": {
+      "lit": "Faro encendido",
+      "since": "Encendiendo el faro desde {date}",
+      "thanksPersonal": "Gracias por apoyar el mantenimiento independiente de Port-Light. Todas las funciones siguen siendo código abierto MIT y sin telemetría.",
+      "thanksFleet": "Gracias por respaldar Port-Light en la flota de tu equipo. Todas las funciones siguen siendo código abierto MIT y sin telemetría.",
+      "verified": "Verificado sin conexión con Ed25519 · Sin peticiones salientes",
+      "tierLabel": "Nivel",
+      "orderLabel": "Referencia de pedido",
+      "originLabel": "Origen de la clave"
+    },
+    "origin": {
+      "file": "Archivo guardado",
+      "env": "Entorno"
+    },
+    "manage": {
+      "summary": "Reemplazar o eliminar clave Supporter",
+      "envOverrideHint": "Cargada actualmente desde PORT_LIGHT_SUPPORTER_KEY. Guardar una clave aquí la sobrescribe localmente en port_light.json.",
+      "readonly": "Los ajustes son de solo lectura en este equipo. Define o actualiza PORT_LIGHT_SUPPORTER_KEY en tu entorno."
+    },
+    "inactive": {
+      "title": "Clave Supporter",
+      "lead": "Todas las funciones de Port-Light siguen siendo gratuitas bajo licencia MIT y sin telemetría. Pega una clave sin conexión opcional para encender el faro.",
+      "composeHint": "O define {env} en Compose",
+      "getKey": "Obtener una clave"
+    },
+    "input": {
+      "label": "Clave Supporter",
+      "placeholder": "PL1.…"
+    },
+    "action": {
+      "activate": "Activar",
+      "activating": "Verificando…",
+      "remove": "Eliminar clave guardada",
+      "removing": "Eliminando…"
+    },
+    "status": {
+      "activated": "Clave Supporter verificada sin conexión.",
+      "removed": "Clave Supporter guardada eliminada."
+    },
+    "invalid": {
+      "file": "La verificación sin conexión de la clave guardada falló. Pega una clave válida o elimina la clave guardada.",
+      "env": "La verificación sin conexión de PORT_LIGHT_SUPPORTER_KEY falló. Revisa la variable de entorno o pega una clave válida abajo."
+    },
+    "error": {
+      "empty": "Pega una clave Supporter que empiece por PL1.",
+      "format": "Formato de clave no válido. Se esperaba una clave Supporter PL1.",
+      "invalid": "Falló la verificación de la clave Supporter. Comprueba que se pegó completa y sin cambios.",
+      "readonly": "Los ajustes son de solo lectura en este equipo.",
+      "failed": "No se pudo actualizar la clave Supporter."
+    }
   }
 }

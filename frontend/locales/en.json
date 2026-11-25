@@ -823,7 +823,8 @@
       "occupancy": "Occupancy",
       "automation": "Automation",
       "advanced": "Advanced",
-      "hosts": "Machines & scanning"
+      "hosts": "Machines & scanning",
+      "supporter": "Supporter Key"
     },
     "theme": {
       "builtin": "Built-in",
@@ -892,6 +893,10 @@
       "links": {
         "title": "Access URLs",
         "blurb": "Host used when guessing http links in the detail panel."
+      },
+      "supporter": {
+        "title": "Supporter Key",
+        "blurb": "Optional offline recognition key for Port-Light supporters."
       }
     },
     "host": {
@@ -1045,6 +1050,10 @@
       "url_scheme": {
         "label": "URL scheme",
         "help": "Auto uses https for 443/8443/9443 and names containing HTTPS."
+      },
+      "supporter_show_header": {
+        "label": "Show beacon in header",
+        "help": "Display the subtle supporter nameplate beside the version in the top bar."
       }
     },
     "auto": {
@@ -1286,5 +1295,67 @@
     "temporaryReservation": "CI build reservation (24 hours)",
     "permanentReservation": "Integration reservation (permanent)",
     "singlePort": "Demo manual entry"
+  },
+  "supporter": {
+    "badge": {
+      "personal": "Supporter",
+      "fleet": "Fleet",
+      "title": "{tier} · Lit since {date}",
+      "titleNoDate": "{tier}"
+    },
+    "tier": {
+      "personal": "Personal Supporter",
+      "fleet": "Team / Fleet Supporter"
+    },
+    "plaque": {
+      "lit": "Beacon lit",
+      "since": "Lighting the beacon since {date}",
+      "thanksPersonal": "Thank you for supporting independent maintenance of Port-Light. Every feature stays MIT open source with zero telemetry.",
+      "thanksFleet": "Thank you for backing Port-Light across your team fleet. Every feature stays MIT open source with zero telemetry.",
+      "verified": "Ed25519 verified offline · Zero outbound requests",
+      "tierLabel": "Tier",
+      "orderLabel": "Order reference",
+      "originLabel": "Key source"
+    },
+    "origin": {
+      "file": "Saved file",
+      "env": "Environment"
+    },
+    "manage": {
+      "summary": "Replace or remove Supporter Key",
+      "envOverrideHint": "Currently loaded from PORT_LIGHT_SUPPORTER_KEY. Saving a key here overrides it locally in port_light.json.",
+      "readonly": "Settings are read-only on this host. Set or update PORT_LIGHT_SUPPORTER_KEY in your environment."
+    },
+    "inactive": {
+      "title": "Supporter Key",
+      "lead": "Every Port-Light feature stays free and unlocked under MIT with zero telemetry. Paste an optional offline key to light the beacon.",
+      "composeHint": "Or set {env} in Compose",
+      "getKey": "Get a key"
+    },
+    "input": {
+      "label": "Supporter Key",
+      "placeholder": "PL1.…"
+    },
+    "action": {
+      "activate": "Activate",
+      "activating": "Verifying…",
+      "remove": "Remove saved key",
+      "removing": "Removing…"
+    },
+    "status": {
+      "activated": "Supporter Key verified offline.",
+      "removed": "Saved Supporter Key removed."
+    },
+    "invalid": {
+      "file": "The saved Supporter Key failed offline verification. Paste a valid key or remove the saved key.",
+      "env": "PORT_LIGHT_SUPPORTER_KEY failed offline verification. Check the environment value or paste a valid key below."
+    },
+    "error": {
+      "empty": "Paste a Supporter Key starting with PL1.",
+      "format": "Invalid key format. Expected a PL1 Supporter Key.",
+      "invalid": "Supporter Key verification failed. Check that the full key was pasted without edits.",
+      "readonly": "Settings are read-only on this host.",
+      "failed": "Could not update Supporter Key."
+    }
   }
 }

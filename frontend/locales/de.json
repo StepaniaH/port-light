@@ -823,7 +823,8 @@
       "occupancy": "Belegung",
       "automation": "Automatisierung",
       "advanced": "Erweitert",
-      "hosts": "Rechner und Scans"
+      "hosts": "Rechner und Scans",
+      "supporter": "Supporter-Schlüssel"
     },
     "theme": {
       "builtin": "Eingebaute",
@@ -892,6 +893,10 @@
       "links": {
         "title": "Zugriffs-URLs",
         "blurb": "Host, der beim Erraten von http-Links im Detailbereich verwendet wird."
+      },
+      "supporter": {
+        "title": "Supporter-Schlüssel",
+        "blurb": "Optionaler Offline-Anerkennungsschlüssel für Port-Light-Unterstützer."
       }
     },
     "host": {
@@ -1044,6 +1049,10 @@
       "show_bind_ipv6": {
         "label": "IPv6-Adressen",
         "help": "IPv6-Bind-Adressen in Kartenzusammenfassungen aufnehmen."
+      },
+      "supporter_show_header": {
+        "label": "Leuchtfeuer in der Kopfzeile anzeigen",
+        "help": "Zeigt die dezente Supporter-Plakette neben der Version in der oberen Leiste an."
       }
     },
     "auto": {
@@ -1286,5 +1295,67 @@
     "temporaryReservation": "CI-Build-Reservierung (24 Stunden)",
     "permanentReservation": "Integrationsreservierung (dauerhaft)",
     "singlePort": "Beispiel für einen manuellen Eintrag"
+  },
+  "supporter": {
+    "badge": {
+      "personal": "Supporter",
+      "fleet": "Fleet",
+      "title": "{tier} · Aktiv seit {date}",
+      "titleNoDate": "{tier}"
+    },
+    "tier": {
+      "personal": "Einzel-Supporter",
+      "fleet": "Team- / Flotten-Supporter"
+    },
+    "plaque": {
+      "lit": "Leuchtfeuer aktiv",
+      "since": "Leuchtfeuer aktiv seit {date}",
+      "thanksPersonal": "Vielen Dank für die Unterstützung der unabhängigen Pflege von Port-Light. Alle Funktionen bleiben MIT-Open-Source ohne Telemetrie.",
+      "thanksFleet": "Vielen Dank für die Unterstützung von Port-Light in Ihrer Team-Flotte. Alle Funktionen bleiben MIT-Open-Source ohne Telemetrie.",
+      "verified": "Offline per Ed25519 geprüft · Keine ausgehenden Anfragen",
+      "tierLabel": "Stufe",
+      "orderLabel": "Bestellreferenz",
+      "originLabel": "Schlüsselquelle"
+    },
+    "origin": {
+      "file": "Gespeicherte Datei",
+      "env": "Umgebung"
+    },
+    "manage": {
+      "summary": "Supporter-Schlüssel ersetzen oder entfernen",
+      "envOverrideHint": "Derzeit aus PORT_LIGHT_SUPPORTER_KEY geladen. Das Speichern eines Schlüssels überschreibt ihn lokal in port_light.json.",
+      "readonly": "Die Einstellungen sind auf diesem Host schreibgeschützt. Setzen oder aktualisieren Sie PORT_LIGHT_SUPPORTER_KEY in der Umgebung."
+    },
+    "inactive": {
+      "title": "Supporter-Schlüssel",
+      "lead": "Alle Funktionen von Port-Light bleiben unter MIT kostenlos und ohne Telemetrie nutzbar. Fügen Sie einen optionalen Offline-Schlüssel ein, um das Leuchtfeuer zu aktivieren.",
+      "composeHint": "Oder {env} in Compose setzen",
+      "getKey": "Schlüssel erhalten"
+    },
+    "input": {
+      "label": "Supporter-Schlüssel",
+      "placeholder": "PL1.…"
+    },
+    "action": {
+      "activate": "Aktivieren",
+      "activating": "Wird geprüft…",
+      "remove": "Gespeicherten Schlüssel entfernen",
+      "removing": "Wird entfernt…"
+    },
+    "status": {
+      "activated": "Supporter-Schlüssel offline verifiziert.",
+      "removed": "Gespeicherter Supporter-Schlüssel entfernt."
+    },
+    "invalid": {
+      "file": "Die Offline-Prüfung des gespeicherten Supporter-Schlüssels ist fehlgeschlagen. Fügen Sie einen gültigen Schlüssel ein oder entfernen Sie den gespeicherten Schlüssel.",
+      "env": "Die Offline-Prüfung von PORT_LIGHT_SUPPORTER_KEY ist fehlgeschlagen. Prüfen Sie die Umgebungsvariable oder fügen Sie unten einen gültigen Schlüssel ein."
+    },
+    "error": {
+      "empty": "Fügen Sie einen Supporter-Schlüssel ein, der mit PL1. beginnt.",
+      "format": "Ungültiges Schlüsselformat. Erwartet wird ein PL1-Supporter-Schlüssel.",
+      "invalid": "Prüfung des Supporter-Schlüssels fehlgeschlagen. Stellen Sie sicher, dass der Schlüssel vollständig und unverändert eingefügt wurde.",
+      "readonly": "Die Einstellungen sind auf diesem Host schreibgeschützt.",
+      "failed": "Supporter-Schlüssel konnte nicht aktualisiert werden."
+    }
   }
 }

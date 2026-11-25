@@ -156,6 +156,8 @@ AI 的运行环境需要能访问实例。MCP、CLI + Skill、Docker 与更新�
 | `PORT_LIGHT_AI_PROXY` | 未设置 | BYOK AI 出站请求使用的可选 HTTP(S) 代理地址。只能用环境变量。 |
 | `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
 | `AGENT_TOKEN` | 未设置 | 设置后，端口建议及预留创建、恢复接口需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
+| `PORT_LIGHT_SUPPORTER_KEY` | 未设置 | 可选的离线 Ed25519 赞助者密钥（`PL1.…`），纯本地验签、零出站请求；可写模式下也可在 **设置 → 赞助者密钥** 粘贴激活。 |
+| `PORT_LIGHT_SUPPORTER_SHOW_HEADER` | `true` | 已激活赞助者密钥时，在顶栏显示赞助者标示。 |
 
 多数选项也可在设置页修改，自动保存到 `/data/port_light.json`。超时、路径和密钥通过环境变量配置；设置 `PORT_LIGHT_SETTINGS_SOURCE=env`（或 `SETTINGS_READONLY=1`）可将设置页设为只读。
 

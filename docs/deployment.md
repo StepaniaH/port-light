@@ -211,4 +211,6 @@ This instance fetches those URLs; the browser does not. From the default Docker 
 
 Paths (`COMPOSE_SCAN_DIR`) and secrets (`AUTH_*`, `HIDDEN_UNLOCK_PASSWORD`) cannot be stored from the UI.
 
+Optional supporter recognition: set `PORT_LIGHT_SUPPORTER_KEY` (an offline Ed25519 `PL1.…` key) or paste it under **Settings → Supporter Key** to display the supporter nameplate and plaque. Verification runs locally with zero outbound requests; set `PORT_LIGHT_SUPPORTER_SHOW_HEADER=false` (or toggle it in Settings) to keep the top bar plain while keeping the plaque active.
+
 Interactive API docs: `http://localhost:2100/docs`.

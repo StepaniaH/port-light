@@ -158,6 +158,8 @@ With Basic Auth or `HIDDEN_UNLOCK_PASSWORD` enabled, hidden ports require unlock
 | `PORT_LIGHT_AI_PROXY` | unset | Optional HTTP(S) proxy URL for outbound BYOK AI requests. Env-only. |
 | `METRICS_ENABLED` | unset | Set to `1` to expose `GET /api/metrics` (Prometheus text format: used/configured/free counts, hidden, degradations, Compose files). Aggregates only — never ports or names. Env-only. |
 | `AGENT_TOKEN` | unset | When set, suggestions and reservation creation/recovery require a matching `X-Agent-Token` header. Env-only. |
+| `PORT_LIGHT_SUPPORTER_KEY` | unset | Optional offline Ed25519 Supporter Key (`PL1.…`) verified locally with zero outbound requests. Also configurable in **Settings → Supporter Key** when writable. |
+| `PORT_LIGHT_SUPPORTER_SHOW_HEADER` | `true` | Show the supporter nameplate in the top bar when a valid Supporter Key is active. |
 
 Most options are also available in Settings and save automatically to `/data/port_light.json`. Configure timeout, paths, and secrets through environment variables. Set `PORT_LIGHT_SETTINGS_SOURCE=env` (or `SETTINGS_READONLY=1`) for read-only settings.
 

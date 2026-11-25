@@ -823,7 +823,8 @@
       "occupancy": "佔用圖",
       "automation": "自動化",
       "advanced": "進階",
-      "hosts": "機器與掃描"
+      "hosts": "機器與掃描",
+      "supporter": "贊助者金鑰"
     },
     "theme": {
       "builtin": "內建",
@@ -892,6 +893,10 @@
       "links": {
         "title": "存取網址",
         "blurb": "詳情面板裡猜測 http 連結所用的主機名稱。"
+      },
+      "supporter": {
+        "title": "贊助者金鑰",
+        "blurb": "供 Port-Light 贊助者使用的可選離線識別金鑰。"
       }
     },
     "host": {
@@ -1044,6 +1049,10 @@
       "show_bind_ipv6": {
         "label": "IPv6 位址",
         "help": "在卡片摘要中包含 IPv6 綁定位址。"
+      },
+      "supporter_show_header": {
+        "label": "在頂欄顯示贊助者標示",
+        "help": "在頂欄版本號旁顯示低調的金屬銘牌與頂緣微光。"
       }
     },
     "auto": {
@@ -1286,5 +1295,67 @@
     "temporaryReservation": "CI 建置預留（24 小時）",
     "permanentReservation": "整合環境預留（長期）",
     "singlePort": "手動新增範例"
+  },
+  "supporter": {
+    "badge": {
+      "personal": "Supporter",
+      "fleet": "Fleet",
+      "title": "{tier} · 點亮於 {date}",
+      "titleNoDate": "{tier}"
+    },
+    "tier": {
+      "personal": "個人贊助者",
+      "fleet": "團隊 / 機群贊助者"
+    },
+    "plaque": {
+      "lit": "燈標已點亮",
+      "since": "自 {date} 起持續點亮燈標",
+      "thanksPersonal": "感謝你支持 Port-Light 的獨立維護。所有功能維持 MIT 開源、零遙測。",
+      "thanksFleet": "感謝你在團隊機群中支持 Port-Light。所有功能維持 MIT 開源、零遙測。",
+      "verified": "Ed25519 本機離線驗簽通過 · 零出站請求",
+      "tierLabel": "方案",
+      "orderLabel": "訂單編號",
+      "originLabel": "金鑰來源"
+    },
+    "origin": {
+      "file": "資料卷檔案",
+      "env": "環境變數"
+    },
+    "manage": {
+      "summary": "更換或移除贊助者金鑰",
+      "envOverrideHint": "目前由 PORT_LIGHT_SUPPORTER_KEY 環境變數生效；在此儲存新金鑰會於本機 port_light.json 中覆寫。",
+      "readonly": "目前主機為唯讀設定模式，請透過環境變數設定或更新 PORT_LIGHT_SUPPORTER_KEY。"
+    },
+    "inactive": {
+      "title": "贊助者金鑰",
+      "lead": "Port-Light 所有功能皆以 MIT 永久免費開放、零遙測。貼上可選離線金鑰即可點亮港口燈標。",
+      "composeHint": "或在 Compose 中設定 {env}",
+      "getKey": "取得金鑰"
+    },
+    "input": {
+      "label": "贊助者金鑰",
+      "placeholder": "PL1.…"
+    },
+    "action": {
+      "activate": "啟用",
+      "activating": "驗證中…",
+      "remove": "移除已儲存金鑰",
+      "removing": "移除中…"
+    },
+    "status": {
+      "activated": "贊助者金鑰已於本機離線驗證通過。",
+      "removed": "已移除儲存的贊助者金鑰。"
+    },
+    "invalid": {
+      "file": "已儲存的贊助者金鑰離線驗證失敗。請貼上有效金鑰，或移除已儲存的金鑰。",
+      "env": "PORT_LIGHT_SUPPORTER_KEY 離線驗證失敗。請檢查環境變數設定，或於下方貼上有效金鑰。"
+    },
+    "error": {
+      "empty": "請貼上以 PL1. 開頭的贊助者金鑰。",
+      "format": "金鑰格式無效，應為 PL1 贊助者金鑰。",
+      "invalid": "贊助者金鑰驗證未通過，請確認完整貼上且未修改字元。",
+      "readonly": "目前主機設定為唯讀模式。",
+      "failed": "無法更新贊助者金鑰。"
+    }
   }
 }

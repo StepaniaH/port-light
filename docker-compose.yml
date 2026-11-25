@@ -39,6 +39,8 @@ services:
       # - PORT_LIGHT_SETTINGS_SOURCE=auto
       # - PORT_LIGHT_HOST_NAME=Studio
       # - PORT_LIGHT_PEERS=[{"name":"NAS","url":"http://<peer-lan-ip>:2100"}]
+      # - PORT_LIGHT_SUPPORTER_KEY=PL1.<payload>.<signature>
+      # - PORT_LIGHT_SUPPORTER_SHOW_HEADER=true
     healthcheck:
       test:
         [

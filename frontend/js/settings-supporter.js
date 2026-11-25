@@ -1,10 +1,10 @@
 /* Settings → Supporter Key panel: Harbor Beacon Plaque and offline key activation. */
 
-import { S } from './state.js?v=126';
-import { t, escapeHtml } from './text.js?v=126';
-import { api } from './api.js?v=126';
-import { kvRow } from './settings-format.js?v=126';
-import { syncSupporterHeader } from './supporter-header.js?v=126';
+import { S } from './state.js?v=127';
+import { t, escapeHtml } from './text.js?v=127';
+import { api } from './api.js?v=127';
+import { kvRow } from './settings-format.js?v=127';
+import { syncSupporterHeader } from './supporter-header.js?v=127';
 
 const SUPPORT_URL = 'https://portlight.stepaniah.me/#support';
 
