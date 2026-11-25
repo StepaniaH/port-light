@@ -10,9 +10,14 @@ import base64
 import datetime
 import hashlib
 import json
+import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Literal, Sequence
+
+_LOG = logging.getLogger("port-light")
+_WARNED_INVALID_SIGNATURES: set[tuple[str, str]] = set()
 
 Tier = Literal["personal", "fleet"]
 
@@ -253,3 +258,154 @@ def mask_order_id(order_id: str) -> str:
     if len(trimmed) > 3:
         return f"•••••{trimmed[-3:]}"
     return f"•••••{trimmed}"
+
+
+def validate_supporter_key(
+    key_string: Any,
+    *,
+    public_keys: Sequence[bytes] | None = None,
+) -> tuple[SupporterKeyPayload | None, str | None]:
+    """Validate format, schema, and Ed25519 signature, returning (payload, error_code)."""
+    if not isinstance(key_string, str):
+        return None, "supporter_key_format"
+    trimmed = key_string.strip()
+    if not trimmed or len(trimmed) > 2048:
+        return None, "supporter_key_format"
+    parts = trimmed.split(".")
+    if len(parts) != 3 or parts[0] != "PL1":
+        return None, "supporter_key_format"
+    _, payload_b64u, sig_b64u = parts
+    payload_bytes = _b64u_decode(payload_b64u)
+    sig_bytes = _b64u_decode(sig_b64u)
+    if payload_bytes is None or sig_bytes is None or len(sig_bytes) != 64:
+        return None, "supporter_key_format"
+    try:
+        raw_payload = json.loads(payload_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None, "supporter_key_format"
+    payload = parse_supporter_payload(raw_payload)
+    if payload is None:
+        return None, "supporter_key_format"
+    keys = TRUSTED_PUBLIC_KEYS if public_keys is None else tuple(public_keys)
+    if not keys:
+        return None, "supporter_key_invalid"
+    signing_input = f"PL1.{payload_b64u}".encode("ascii")
+    for pub in keys:
+        if verify_ed25519(pub, signing_input, sig_bytes):
+            return payload, None
+    return None, "supporter_key_invalid"
+
+
+def _warn_invalid_once(origin: str, raw_key: str) -> None:
+    digest = hashlib.sha256(raw_key.encode("utf-8", errors="replace")).hexdigest()[:12]
+    token = (origin, digest)
+    if token in _WARNED_INVALID_SIGNATURES:
+        return
+    _WARNED_INVALID_SIGNATURES.add(token)
+    source_desc = "PORT_LIGHT_SUPPORTER_KEY" if origin == "env" else "stored supporter key"
+    _LOG.warning("Ignoring invalid %s (offline Ed25519 verification failed)", source_desc)
+
+
+def resolve_supporter_state(
+    values: dict[str, Any] | None = None,
+    *,
+    public_keys: Sequence[bytes] | None = None,
+) -> dict[str, Any]:
+    """Resolve current supporter status with settings.py-identical read/write precedence."""
+    from . import port_store, settings as app_settings
+
+    mode = app_settings.settings_source()
+    readonly = app_settings.settings_readonly()
+    if values is None:
+        resolved_values, _ = app_settings.resolve()
+    else:
+        resolved_values = values
+    show_in_header = bool(resolved_values.get("supporter_show_header", True))
+
+    env_raw = (os.environ.get("PORT_LIGHT_SUPPORTER_KEY") or "").strip() or None
+    file_raw: str | None = None
+    if mode != "env":
+        try:
+            file_raw = port_store.get_supporter_key()
+        except port_store.StoreReadError:
+            file_raw = None
+
+    origin: Literal["file", "env", "none"]
+    active_raw: str | None
+    if mode == "env":
+        active_raw = env_raw
+        origin = "env" if env_raw else "none"
+    elif file_raw is not None:
+        active_raw = file_raw
+        origin = "file"
+    elif env_raw is not None:
+        active_raw = env_raw
+        origin = "env"
+    else:
+        active_raw = None
+        origin = "none"
+
+    can_edit = not readonly
+    can_clear = (not readonly) and (file_raw is not None)
+
+    if active_raw is None:
+        return {
+            "active": False,
+            "status": "inactive",
+            "tier": None,
+            "issued_at": None,
+            "key_preview": None,
+            "order_preview": None,
+            "origin": "none",
+            "env_configured": env_raw is not None,
+            "can_edit": can_edit,
+            "can_clear": can_clear,
+            "show_in_header": show_in_header,
+        }
+
+    payload, _err = validate_supporter_key(active_raw, public_keys=public_keys)
+    if payload is None:
+        _warn_invalid_once(origin, active_raw)
+        return {
+            "active": False,
+            "status": "invalid",
+            "tier": None,
+            "issued_at": None,
+            "key_preview": None,
+            "order_preview": None,
+            "origin": origin,
+            "env_configured": env_raw is not None,
+            "can_edit": can_edit,
+            "can_clear": can_clear,
+            "show_in_header": show_in_header,
+        }
+
+    return {
+        "active": True,
+        "status": "active",
+        "tier": payload.tier,
+        "issued_at": payload.issued_at,
+        "key_preview": mask_key(active_raw),
+        "order_preview": mask_order_id(payload.order_id),
+        "origin": origin,
+        "env_configured": env_raw is not None,
+        "can_edit": can_edit,
+        "can_clear": can_clear,
+        "show_in_header": show_in_header,
+    }
+
+
+def meta_supporter_summary(values: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Minimal non-sensitive supporter summary exposed on GET /api/meta."""
+    state = resolve_supporter_state(values)
+    return {
+        "active": state["active"],
+        "tier": state["tier"],
+        "issued_at": state["issued_at"],
+        "show_in_header": state["show_in_header"],
+    }
+
+
+def settings_supporter_document(values: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Full masked supporter status exposed on GET /api/settings and supporter-key endpoints."""
+    return resolve_supporter_state(values)

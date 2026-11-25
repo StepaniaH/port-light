@@ -128,7 +128,7 @@ def _load() -> dict:
         key in data and not isinstance(data[key], expected)
         for key, expected in (("manual_ports", list), ("hidden_ports", list),
                               ("peers", list), ("machines", list), ("settings", dict), ("port_rules", list),
-                              ("reservation_requests", dict))
+                              ("reservation_requests", dict), ("supporter_key", str))
     ):
         raise _read_error()
     if any(_entry_port(entry) is None for entry in data.get("manual_ports", [])):
@@ -689,6 +689,30 @@ def update_stored_settings(patch: dict) -> dict:
         data["settings"] = current
         _save(data)
         return current
+
+
+# ── Supporter key ─────────────────────────────────────────────
+
+def get_supporter_key() -> str | None:
+    """Return the stored raw supporter key if set, else None."""
+    with _LOCK:
+        data = _load()
+        raw = data.get("supporter_key")
+        if not isinstance(raw, str):
+            return None
+        trimmed = raw.strip()
+        return trimmed or None
+
+
+def set_supporter_key(key: str | None) -> None:
+    """Persist or remove the stored supporter key in port_light.json."""
+    with _LOCK:
+        data = _load()
+        if key is None or not str(key).strip():
+            data.pop("supporter_key", None)
+        else:
+            data["supporter_key"] = str(key).strip()
+        _save(data)
 
 
 # ── Peers ─────────────────────────────────────────────────────

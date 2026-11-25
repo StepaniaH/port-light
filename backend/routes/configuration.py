@@ -2,7 +2,7 @@
 from __future__ import annotations
 from fastapi import Body, HTTPException
 from .. import port_rules
-from .. import port_store, themes
+from .. import port_store, supporter, themes
 from .. import settings as app_settings
 from fastapi import APIRouter
 from types import ModuleType
@@ -85,3 +85,31 @@ def delete_custom_theme(theme_id: str) -> dict:
     if current.get("theme_palette") == "@custom:" + theme_id:
         app_settings.apply_patch({"theme_palette": ""})
     return {"removed": theme_id}
+
+
+@router.put("/api/supporter-key")
+def put_supporter_key(body: dict = Body(...)) -> dict:
+    if app_settings.settings_readonly():
+        raise HTTPException(
+            status_code=403,
+            detail="settings are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY",
+        )
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="supporter_key_format")
+    raw_key = body.get("key")
+    payload, err = supporter.validate_supporter_key(raw_key)
+    if payload is None:
+        raise HTTPException(status_code=400, detail=err or "supporter_key_invalid")
+    port_store.set_supporter_key(str(raw_key).strip())
+    return {"supporter": supporter.settings_supporter_document()}
+
+
+@router.delete("/api/supporter-key")
+def delete_supporter_key() -> dict:
+    if app_settings.settings_readonly():
+        raise HTTPException(
+            status_code=403,
+            detail="settings are locked by PORT_LIGHT_SETTINGS_SOURCE=env or SETTINGS_READONLY",
+        )
+    port_store.set_supporter_key(None)
+    return {"supporter": supporter.settings_supporter_document()}

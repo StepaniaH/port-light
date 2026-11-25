@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from port_light_client import __version__
 
 from . import port_rules
-from . import agent_events, degradations, doctor, hosts, port_store, themes
+from . import agent_events, degradations, doctor, hosts, port_store, supporter, themes
 from . import settings as app_settings
 from .auth import (
     auth_configured,
@@ -387,6 +387,7 @@ def _settings_document(body: dict | None = None) -> dict:
         "scan_age_seconds": monitor["scan_age_seconds"],
         "scanners": scanners,
     }
+    body["supporter"] = supporter.settings_supporter_document(body["values"])
     return body
 
 

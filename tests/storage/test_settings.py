@@ -9,7 +9,7 @@ from backend import settings as app_settings
 
 def test_settings_field_groups_match_the_settings_panes():
     assert {spec.group for spec in app_settings.FIELDS} <= {
-        "appearance", "grid", "local", "scanning", "links",
+        "appearance", "grid", "local", "scanning", "links", "supporter",
     }
 
 

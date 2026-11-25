@@ -162,6 +162,10 @@ FIELDS: tuple[FieldSpec, ...] = (
         "URL scheme", "auto uses https for 443/8443/9443 and names containing HTTPS.",
         choices=("auto", "http", "https"),
     ),
+    FieldSpec(
+        "supporter_show_header", "bool", "PORT_LIGHT_SUPPORTER_SHOW_HEADER", True, "supporter",
+        "Show beacon in header", "Display the subtle supporter mark beside the app version in the top bar.",
+    ),
 )
 
 _FIELD_BY_KEY = {f.key: f for f in FIELDS}

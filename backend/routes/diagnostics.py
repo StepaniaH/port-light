@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from fastapi import HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
-from .. import agent_events, degradations, doctor, history, hosts
+from .. import agent_events, degradations, doctor, history, hosts, supporter
 from .. import settings as app_settings
 from ..auth import (
     auth_configuration_valid,
@@ -65,6 +65,7 @@ def meta(request: Request) -> dict:
         "settings_readonly": app_settings.settings_readonly(),
         "automation": automation,
         "ui_links": list(getattr(request.app.state, "ui_links", ())),
+        "supporter": supporter.meta_supporter_summary(),
     }
 
 
