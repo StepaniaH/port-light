@@ -1,6 +1,6 @@
 /* Shared DOM references and sticky-header / sync-banner utilities. */
 
-import { t } from './text.js?v=129';
+import { t } from './text.js?v=130';
 
 function byId(id) {
   return document.getElementById(id);

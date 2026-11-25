@@ -32,6 +32,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 from . import degradations
 
@@ -128,7 +129,7 @@ def _load() -> dict:
         key in data and not isinstance(data[key], expected)
         for key, expected in (("manual_ports", list), ("hidden_ports", list),
                               ("peers", list), ("machines", list), ("settings", dict), ("port_rules", list),
-                              ("reservation_requests", dict), ("supporter_key", str))
+                              ("reservation_requests", dict))
     ):
         raise _read_error()
     if any(_entry_port(entry) is None for entry in data.get("manual_ports", [])):
@@ -693,15 +694,22 @@ def update_stored_settings(patch: dict) -> dict:
 
 # ── Supporter key ─────────────────────────────────────────────
 
-def get_supporter_key() -> str | None:
-    """Return the stored raw supporter key if set, else None."""
+def get_supporter_key_entry() -> tuple[bool, Any]:
+    """Return (present, raw_value) for supporter_key without failing core store loads."""
     with _LOCK:
         data = _load()
-        raw = data.get("supporter_key")
-        if not isinstance(raw, str):
-            return None
-        trimmed = raw.strip()
-        return trimmed or None
+        if "supporter_key" not in data:
+            return False, None
+        return True, data.get("supporter_key")
+
+
+def get_supporter_key() -> str | None:
+    """Return the stored raw supporter key if set to a non-empty string, else None."""
+    present, raw = get_supporter_key_entry()
+    if not present or not isinstance(raw, str):
+        return None
+    trimmed = raw.strip()
+    return trimmed or None
 
 
 def set_supporter_key(key: str | None) -> None:

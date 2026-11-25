@@ -306,17 +306,26 @@ def resolve_supporter_state(
 
     env_raw = (os.environ.get("PORT_LIGHT_SUPPORTER_KEY") or "").strip() or None
     file_raw: str | None = None
+    file_corrupt = False
     if mode != "env":
         try:
-            file_raw = port_store.get_supporter_key()
+            file_present, file_val = port_store.get_supporter_key_entry()
         except port_store.StoreReadError:
-            file_raw = None
+            file_present, file_val = False, None
+        if file_present and file_val is not None:
+            if isinstance(file_val, str):
+                file_raw = file_val.strip() or None
+            else:
+                file_corrupt = True
 
     origin: Literal["file", "env", "none"]
     active_raw: str | None
     if mode == "env":
         active_raw = env_raw
         origin = "env" if env_raw else "none"
+    elif file_corrupt:
+        active_raw = None
+        origin = "file"
     elif file_raw is not None:
         active_raw = file_raw
         origin = "file"
@@ -328,7 +337,23 @@ def resolve_supporter_state(
         origin = "none"
 
     can_edit = not readonly
-    can_clear = (not readonly) and (file_raw is not None)
+    can_clear = (not readonly) and (file_raw is not None or file_corrupt)
+
+    if file_corrupt:
+        _warn_invalid_once("file", "<non-string>")
+        return {
+            "active": False,
+            "status": "invalid",
+            "tier": None,
+            "issued_at": None,
+            "key_preview": None,
+            "order_preview": None,
+            "origin": "file",
+            "env_configured": env_raw is not None,
+            "can_edit": can_edit,
+            "can_clear": can_clear,
+            "show_in_header": show_in_header,
+        }
 
     if active_raw is None:
         return {
@@ -411,7 +436,8 @@ def log_startup_notice(public_keys: tuple[bytes, ...] | None = None) -> bool:
         f"Support independent maintenance: {SUPPORT_URL}"
     )
     uvicorn_log = logging.getLogger("uvicorn.error")
-    if uvicorn_log.handlers:
+    uvicorn_parent = logging.getLogger("uvicorn")
+    if (uvicorn_log.handlers or uvicorn_parent.handlers) and uvicorn_log.isEnabledFor(logging.INFO):
         uvicorn_log.info(msg)
     else:
         logging.getLogger("port-light").info(msg)

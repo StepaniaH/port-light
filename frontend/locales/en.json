@@ -1325,7 +1325,8 @@
     "manage": {
       "summary": "Replace or remove Supporter Key",
       "envOverrideHint": "Currently loaded from PORT_LIGHT_SUPPORTER_KEY. Saving a key here overrides it locally in port_light.json.",
-      "readonly": "Settings are read-only on this host. Set or update PORT_LIGHT_SUPPORTER_KEY in your environment."
+      "readonly": "Settings are read-only on this host. Set or update PORT_LIGHT_SUPPORTER_KEY in your environment.",
+      "readonlyFile": "Settings are read-only on this host. This key is loaded from port_light.json (which takes precedence over PORT_LIGHT_SUPPORTER_KEY). Edit or remove supporter_key in port_light.json, or set PORT_LIGHT_SETTINGS_SOURCE=env to read from the environment instead."
     },
     "inactive": {
       "lead": "Every Port-Light feature stays free and unlocked under MIT with zero telemetry. Paste an optional offline key to light the beacon.",

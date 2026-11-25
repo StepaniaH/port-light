@@ -1325,7 +1325,8 @@
     "manage": {
       "summary": "サポーターキーの差し替え・削除",
       "envOverrideHint": "現在は PORT_LIGHT_SUPPORTER_KEY から読み込まれています。ここで保存するとローカルの port_light.json で上書きされます。",
-      "readonly": "このホストの設定は読み取り専用です。環境変数 PORT_LIGHT_SUPPORTER_KEY で設定または更新してください。"
+      "readonly": "このホストの設定は読み取り専用です。環境変数 PORT_LIGHT_SUPPORTER_KEY で設定または更新してください。",
+      "readonlyFile": "このホストの設定は読み取り専用です。このキーは port_light.json から読み込まれています（PORT_LIGHT_SUPPORTER_KEY より優先されます）。port_light.json の supporter_key を編集・削除するか、環境変数を使うには PORT_LIGHT_SETTINGS_SOURCE=env を設定してください。"
     },
     "inactive": {
       "lead": "Port-Light の全機能は MIT ライセンスのもとテレメトリなしで無料公開されています。任意のオフラインキーを貼り付けるとビーコンが点灯します。",

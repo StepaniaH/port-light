@@ -1,22 +1,22 @@
-import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=129';
-export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=129';
-import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=129';
-export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=129';
-import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=129';
-export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=129';
-import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows, testPeerConnection } from './settings-peers.js?v=129';
-export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=129';
+import { automationCardsHtml, ensureAutomationDelegates, rerenderAutomationCards } from './settings-automation.js?v=130';
+export { automationCardsHtml, releaseLease, rerenderAutomationCards, ensureAutomationDelegates } from './settings-automation.js?v=130';
+import { closeLocaleMenu, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=130';
+export { localeCopyHtml, closeLocaleMenu, moveLocaleHighlight, syncLocaleTrigger, renderLocaleList, renderModePicker, currentMode, renderPalettePicker, syncPaletteAvailability } from './settings-appearance.js?v=130';
+import { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=130';
+export { choiceLabel, settingsCard, kvRow } from './settings-format.js?v=130';
+import { renderPeersEditor as renderPeersEditorView, readPeersDraftFromForm, peersPayload, syncSavedPeerRows, testPeerConnection } from './settings-peers.js?v=130';
+export { readPeersDraftFromForm, peersPayload, syncSavedPeerRows } from './settings-peers.js?v=130';
 /* Settings panels, locale menu, theme picker, and peers editor. */
 
-import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=129';
-import { t, escapeHtml, errorText } from './text.js?v=129';
-import { rangeStartInput, rangeEndInput } from './dom.js?v=129';
-import { api, fetchHosts, fetchSettings } from './api.js?v=129';
-import { bindAddressView } from './grid.js?v=129';
-import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=129';
-import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=129';
-import { supporterCardsHtml, ensureSupporterDelegates, rerenderSupporter, syncSupporterMeta, clearSupporterPreview } from './settings-supporter.js?v=129';
-import { syncSupporterHeader } from './supporter-header.js?v=129';
+import { S, SETTINGS_PANELS, LIVE_APPLY_KEYS, CARD_FIELD_KEYS, CUSTOM_PREFIX, applyAppearance, persistAppearance, saveView } from './state.js?v=130';
+import { t, escapeHtml, errorText } from './text.js?v=130';
+import { rangeStartInput, rangeEndInput } from './dom.js?v=130';
+import { api, fetchHosts, fetchSettings } from './api.js?v=130';
+import { bindAddressView } from './grid.js?v=130';
+import { recommendedPeerLimit, refreshChoices } from './fleet.js?v=130';
+import { analysisCardsHtml, closeAnalysisSettings, rerenderAnalysis, syncAnalysisSettings } from './settings-analysis.js?v=130';
+import { supporterCardsHtml, ensureSupporterDelegates, rerenderSupporter, syncSupporterMeta, clearSupporterPreview } from './settings-supporter.js?v=130';
+import { syncSupporterHeader } from './supporter-header.js?v=130';
 
 const BIND_FAMILY_KEYS = ['show_bind_ipv4', 'show_bind_ipv6'];
 const statusTimers = {};
@@ -119,11 +119,19 @@ function settingValuesEqual(left, right) {
     // connection edit can land on controls that the response is about to replace.
     closeAnalysisSettings();
     const loadRevision = S.settingsRevision;
+    const loadSupporterRevision = S.supporterRevision;
     return Promise.all([fetchSettings(), fetchHosts()]).then(function (pair) {
       if (generation !== settingsLoadGeneration || S.settingsDirty || loadRevision !== S.settingsRevision) return;
       const doc = pair[0];
       if (pair[1]) S.hostCatalog = pair[1];
       if (!doc) return;
+      if (loadSupporterRevision !== S.supporterRevision && S.settingsDoc && S.settingsDoc.supporter) {
+        const preserved = Object.assign({}, S.settingsDoc.supporter);
+        if (doc.values && Object.prototype.hasOwnProperty.call(doc.values, 'supporter_show_header')) {
+          preserved.show_in_header = !!doc.values.supporter_show_header;
+        }
+        doc.supporter = preserved;
+      }
       S.settingsDoc = doc;
       S.customThemes = Array.isArray(doc.custom_themes) ? doc.custom_themes : [];
       S.peersDraft = (S.hostCatalog.peers || []).map(clonePeerRow);

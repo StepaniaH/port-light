@@ -6,35 +6,13 @@ import json
 import pytest
 
 from backend import supporter
-
-# Test-only Ed25519 keypairs and signatures generated via Node WebCrypto using
-# port-light-page/functions/_lib/supporter.js (never production keys).
-TEST_PUB1_PEM = (
-    "-----BEGIN PUBLIC KEY-----\n"
-    "MCowBQYDK2VwAyEANG45UzRcpXN5W2GGR2iCtJKtv6l78qJ5azZMz6mEyJc=\n"
-    "-----END PUBLIC KEY-----"
-)
-TEST_PUB2_PEM = (
-    "-----BEGIN PUBLIC KEY-----\n"
-    "MCowBQYDK2VwAyEAzitIufXJnQAZGOt9OZCfWbEb4L4nn0QC8OB0U4nW7jE=\n"
-    "-----END PUBLIC KEY-----"
-)
-
-PERSONAL_KEY = (
-    "PL1.eyJpYXQiOiIyMDI2LTExLTI1Iiwib2lkIjoib3JkXzU1NTQ0NDMzMyIsInRpZXIiOiJwZXJzb25hbCIsInYiOjF9."
-    "j9cC3q_BhXLQO0QnBy9X-NAmvSh0hv9Y9C_5lpgd78icxtPmHRkWdfpPNZOV7SIM_tARYuulAlaRHDA9TmH4Bw"
-)
-FLEET_KEY = (
-    "PL1.eyJpYXQiOiIyMDI2LTExLTI1Iiwib2lkIjoib3JkX2ZsZWV0Xzk4NzY1NCIsInRpZXIiOiJmbGVldCIsInYiOjF9."
-    "dfYGfIwQ9x1MsdKEiFdzWs9uSutR6NtXHw6m45pGa6oFF1CBEuMZpxt6Y6gh9k8ARd8PoznPmk8QGxdkZJgmBw"
-)
-ROTATED_KEY = (
-    "PL1.eyJpYXQiOiIyMDI2LTEyLTAxIiwib2lkIjoib3JkX3JvdF8wMDEiLCJ0aWVyIjoicGVyc29uYWwiLCJ2IjoxfQ."
-    "cmyBZUXNq_9yvSMD7CWJj85gCDBXd8-R68xIKfDg_WxW-9gboc0fGEwDZRqixg4cn0g3aOpeMNhwIe5hwVmDAA"
-)
-EXTRA_FIELD_KEY = (
-    "PL1.eyJleHRyYSI6ImZ1dHVyZSIsImlhdCI6IjIwMjYtMTEtMjUiLCJvaWQiOiJvcmRfZXh0cmFfOTkiLCJ0aWVyIjoicGVyc29uYWwiLCJ2IjoxfQ."
-    "O1DKd2Fpj1_z7QmksBjwdbU0zNXe5EBdztuffeZGlSUYlQZUUkYORZDazBKp8t3vSblzHQxydMgPSurjn7XVDg"
+from tests.storage.supporter_vectors import (
+    EXTRA_FIELD_KEY,
+    FLEET_KEY,
+    PERSONAL_KEY,
+    ROTATED_KEY,
+    TEST_PUB1_PEM,
+    TEST_PUB2_PEM,
 )
 
 
@@ -242,3 +220,36 @@ def test_startup_notice_logs_once_when_inactive_and_silent_when_active(monkeypat
     with caplog.at_level("INFO", logger="port-light"):
         assert supporter.log_startup_notice(public_keys=pub1) is False
     assert not any("https://portlight.stepaniah.me/#support" in r.getMessage() for r in caplog.records)
+
+
+def test_startup_notice_uses_uvicorn_parent_handler_like_default_uvicorn(monkeypatch, tmp_path):
+    import logging
+
+    monkeypatch.setenv("PORT_LIGHT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("PORT_LIGHT_SUPPORTER_KEY", raising=False)
+    pub1 = (supporter.parse_public_key_pem(TEST_PUB1_PEM),)
+
+    # Simulate Uvicorn's real default LOGGING_CONFIG: handler on parent 'uvicorn', empty handlers on 'uvicorn.error'
+    records: list[logging.LogRecord] = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    parent = logging.getLogger("uvicorn")
+    child = logging.getLogger("uvicorn.error")
+    old_parent_level, old_child_level = parent.level, child.level
+    old_parent_prop = parent.propagate
+    handler = CaptureHandler()
+    parent.addHandler(handler)
+    parent.setLevel(logging.INFO)
+    parent.propagate = False
+    child.setLevel(logging.INFO)
+    try:
+        assert supporter.log_startup_notice(public_keys=pub1) is True
+        assert any("https://portlight.stepaniah.me/#support" in r.getMessage() for r in records)
+    finally:
+        parent.removeHandler(handler)
+        parent.setLevel(old_parent_level)
+        parent.propagate = old_parent_prop
+        child.setLevel(old_child_level)

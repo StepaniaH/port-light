@@ -545,3 +545,107 @@ test('invalid supporter state prioritizes recovery card above showcase, and head
     S.supporterPreviewHeader = prevPreview;
   }
 });
+
+test('readonly file-origin supporter shows file-specific guidance, proxy HTML 200 fails cleanly, and slow loadSettingsPage preserves new activation', async () => {
+  const { supporterCardsHtml, submitSupporterKey, clearSupporterKey } = await import('../js/settings-supporter.js?' + V);
+  const { loadSettingsPage } = await import('../js/settings.js?' + V);
+  const { S } = await import('../js/state.js?' + V);
+
+  // 1. Readonly active key from file vs env shows distinct accurate guidance
+  const roFile = supporterCardsHtml({
+    active: true, status: 'active', tier: 'personal', issued_at: '2026-11-25',
+    key_preview: 'PL1.abc…', order_preview: 'ord_•••••333',
+    origin: 'file', env_configured: true, can_edit: false, can_clear: false, show_in_header: true,
+  }, SHOW_HEADER_FIELD, true, true);
+  assert.match(roFile, /supporter\.manage\.readonlyFile/);
+  const roEnv = supporterCardsHtml({
+    active: true, status: 'active', tier: 'fleet', issued_at: '2026-11-25',
+    key_preview: 'PL1.abc…', order_preview: 'ord_•••••999',
+    origin: 'env', env_configured: true, can_edit: false, can_clear: false, show_in_header: true,
+  }, SHOW_HEADER_FIELD, true, true);
+  assert.match(roEnv, /supporter\.manage\.readonly"/);
+
+  // 2. Proxy returning HTTP 200 HTML (non-JSON) must NEVER report success on activate or remove
+  const prevFetch = globalThis.fetch;
+  const prevState = {
+    settingsDoc: S.settingsDoc,
+    meta: S.meta,
+    supporterRevision: S.supporterRevision,
+    settingsDirty: S.settingsDirty,
+    settingsPanel: S.settingsPanel,
+  };
+  const panel = document.createElement('div');
+  panel.id = 'settings-panel-supporter';
+  const statusEl = document.createElement('p');
+  statusEl.id = 'supporter-action-status';
+  panel.appendChild(statusEl);
+  document.body.appendChild(panel);
+  try {
+    S.meta = { supporter: { active: false, tier: null, issued_at: null, show_in_header: true } };
+    S.settingsDoc = { readonly: false, values: { supporter_show_header: true }, fields: [SHOW_HEADER_FIELD], supporter: { active: false, status: 'inactive' } };
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('Unexpected token < in JSON'); },
+    });
+    assert.equal(await submitSupporterKey('PL1.some.key'), false, 'HTML 200 must fail activation');
+    assert.equal(S.meta.supporter.active, false);
+    assert.match(statusEl.className, /is-error/);
+    assert.equal(await clearSupporterKey(), false, 'HTML 200 must fail removal');
+
+    // 3. Slow GET /api/settings during loadSettingsPage must NOT overwrite a newer activation
+    let releaseGetSettings;
+    const staleGetPromise = new Promise(resolve => { releaseGetSettings = resolve; });
+    globalThis.fetch = async (url, init) => {
+      if (url === '/api/settings' && (!init || !init.method || init.method === 'GET')) {
+        return await staleGetPromise;
+      }
+      if (url === '/api/hosts') {
+        return { ok: true, status: 200, json: async () => ({ local: { id: 'local', name: '', local: true }, peers: [], readonly: false, max_peers: 32 }) };
+      }
+      if (url === '/api/supporter-key' && init && init.method === 'PUT') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            supporter: {
+              active: true, status: 'active', tier: 'personal', issued_at: '2026-11-25',
+              key_preview: 'PL1.new…', order_preview: 'ord_•••••333',
+              origin: 'file', env_configured: false, can_edit: true, can_clear: true, show_in_header: true,
+            },
+          }),
+        };
+      }
+      throw new Error('Unexpected fetch: ' + url);
+    };
+    S.settingsDirty = false;
+    S.settingsPanel = 'supporter';
+    const loadPromise = loadSettingsPage();
+    assert.equal(await submitSupporterKey('PL1.fresh.key'), true);
+    assert.equal(S.settingsDoc.supporter.active, true);
+
+    // Now the stale GET /api/settings arrives with inactive supporter snapshot
+    releaseGetSettings({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        readonly: false,
+        values: { supporter_show_header: true },
+        fields: [SHOW_HEADER_FIELD],
+        custom_themes: [],
+        supporter: {
+          active: false, status: 'inactive', tier: null, issued_at: null,
+          key_preview: null, order_preview: null, origin: 'none',
+          env_configured: false, can_edit: true, can_clear: false, show_in_header: true,
+        },
+      }),
+    });
+    await loadPromise;
+    assert.equal(S.settingsDoc.supporter.active, true, 'stale GET /api/settings must preserve newer activation');
+    assert.equal(S.meta.supporter.active, true);
+  } finally {
+    globalThis.fetch = prevFetch;
+    panel.remove();
+    Object.assign(S, prevState);
+  }
+});

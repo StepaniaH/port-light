@@ -6,6 +6,7 @@ from .. import port_store, supporter, themes
 from .. import settings as app_settings
 from fastapi import APIRouter
 from types import ModuleType
+from typing import Any
 
 # Bound by the application after its monitor and services are initialized.
 runtime: ModuleType | None = None
@@ -88,7 +89,7 @@ def delete_custom_theme(theme_id: str) -> dict:
 
 
 @router.put("/api/supporter-key")
-def put_supporter_key(body: dict = Body(...)) -> dict:
+def put_supporter_key(body: Any = Body(...)) -> dict:
     if app_settings.settings_readonly():
         raise HTTPException(
             status_code=403,

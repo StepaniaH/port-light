@@ -31,7 +31,7 @@ async function readTestVectors() {
   const out = await new Promise((resolve, reject) => {
     const proc = spawn(python, ['-c', `
 import json
-from tests.storage.test_supporter import PERSONAL_KEY, FLEET_KEY
+from tests.storage.supporter_vectors import PERSONAL_KEY, FLEET_KEY
 print(json.dumps({"personal": PERSONAL_KEY, "fleet": FLEET_KEY}))
 `], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
@@ -84,7 +84,7 @@ async function startServer() {
   const bootCode = `
 import uvicorn
 from backend import supporter
-from tests.storage.test_supporter import TEST_PUB1_PEM
+from tests.storage.supporter_vectors import TEST_PUB1_PEM
 supporter.TRUSTED_PUBLIC_KEYS_PEM = (TEST_PUB1_PEM,)
 supporter.TRUSTED_PUBLIC_KEYS = (supporter.parse_public_key_pem(TEST_PUB1_PEM),)
 uvicorn.run("backend.main:app", host="127.0.0.1", port=${port}, log_level="warning")

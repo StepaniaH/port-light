@@ -1325,7 +1325,8 @@
     "manage": {
       "summary": "更換或移除贊助者金鑰",
       "envOverrideHint": "目前由 PORT_LIGHT_SUPPORTER_KEY 環境變數生效；在此儲存新金鑰會於本機 port_light.json 中覆寫。",
-      "readonly": "目前主機為唯讀設定模式，請透過環境變數設定或更新 PORT_LIGHT_SUPPORTER_KEY。"
+      "readonly": "目前主機為唯讀設定模式，請透過環境變數設定或更新 PORT_LIGHT_SUPPORTER_KEY。",
+      "readonlyFile": "目前主機處於唯讀設定模式。此金鑰來自資料卷檔案 port_light.json（優先權高於 PORT_LIGHT_SUPPORTER_KEY）；請編輯或移除 port_light.json 中的 supporter_key，或設定 PORT_LIGHT_SETTINGS_SOURCE=env 以改用環境變數。"
     },
     "inactive": {
       "lead": "Port-Light 所有功能皆以 MIT 永久免費開放、零遙測。貼上可選離線金鑰即可點亮港口燈標。",

@@ -2072,8 +2072,12 @@ a:focus-visible,
 }
 [data-mode="light"] .supporter-cta-btn {
   background:
-    linear-gradient(160deg, var(--sup-main) 0%, color-mix(in srgb, var(--sup-sec) 45%, var(--sup-main)) 100%) padding-box,
-    var(--sup-main) border-box;
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--sup-main) 66%, #0b1324) 0%,
+      color-mix(in srgb, color-mix(in srgb, var(--sup-sec) 45%, var(--sup-main)) 66%, #0b1324) 100%
+    ) padding-box,
+    color-mix(in srgb, var(--sup-main) 72%, #0b1324) border-box;
   color: #ffffff;
   box-shadow: 0 2px 8px -3px color-mix(in srgb, var(--sup-main) 45%, transparent);
 }

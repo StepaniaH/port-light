@@ -1,10 +1,10 @@
 /* Settings → Supporter Key panel: Harbor Beacon Plaque and offline key activation. */
 
-import { S } from './state.js?v=129';
-import { t, escapeHtml } from './text.js?v=129';
-import { api } from './api.js?v=129';
-import { kvRow } from './settings-format.js?v=129';
-import { syncSupporterHeader } from './supporter-header.js?v=129';
+import { S } from './state.js?v=130';
+import { t, escapeHtml } from './text.js?v=130';
+import { api } from './api.js?v=130';
+import { kvRow } from './settings-format.js?v=130';
+import { syncSupporterHeader } from './supporter-header.js?v=130';
 
 const SUPPORT_URL = 'https://portlight.stepaniah.me/#support';
 const BEACON_GLYPH_SVG =
@@ -157,10 +157,11 @@ export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValu
       ? '<p class="field-help supporter-env-hint" data-i18n="supporter.manage.envOverrideHint">' +
         escapeHtml(t('supporter.manage.envOverrideHint')) + '</p>'
       : '';
+    const readonlyKey = s.origin === 'file' ? 'supporter.manage.readonlyFile' : 'supporter.manage.readonly';
     const manageInner = canEdit
       ? envHint + keyFormHtml(canClear)
-      : '<p class="field-help" data-i18n="supporter.manage.readonly">' +
-        escapeHtml(t('supporter.manage.readonly')) + '</p>';
+      : '<p class="field-help" data-i18n="' + readonlyKey + '">' +
+        escapeHtml(t(readonlyKey)) + '</p>';
 
     const manageCard =
       '<section class="settings-card">' +
@@ -269,6 +270,15 @@ function setSupporterControlsBusy(busy, action) {
   }
 }
 
+function extractSupporterResponse(body, requireActive) {
+  if (!body || typeof body !== 'object' || !body.supporter || typeof body.supporter !== 'object') {
+    return null;
+  }
+  if (typeof body.supporter.active !== 'boolean') return null;
+  if (requireActive && !body.supporter.active) return null;
+  return body.supporter;
+}
+
 export async function submitSupporterKey(rawKey) {
   if (_inFlight) return false;
   const trimmed = String(rawKey || '').trim();
@@ -286,13 +296,18 @@ export async function submitSupporterKey(rawKey) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: trimmed }),
     });
-    const body = await res.json().catch(function () { return {}; });
+    const body = await res.json().catch(function () { return null; });
     if (!res.ok) {
       setSupporterControlsBusy(false, 'activate');
       setSupporterStatus(supporterErrorKey(body, res.status), 'action-status is-error');
       return false;
     }
-    const next = body && body.supporter ? body.supporter : body;
+    const next = extractSupporterResponse(body, true);
+    if (!next) {
+      setSupporterControlsBusy(false, 'activate');
+      setSupporterStatus('supporter.error.failed', 'action-status is-error');
+      return false;
+    }
     S.supporterRevision = (S.supporterRevision || 0) + 1;
     if (S.settingsDoc) S.settingsDoc.supporter = next;
     syncSupporterMeta(next);
@@ -315,13 +330,18 @@ export async function clearSupporterKey() {
   setSupporterStatus('', 'action-status');
   try {
     const res = await api('/api/supporter-key', { method: 'DELETE' });
-    const body = await res.json().catch(function () { return {}; });
+    const body = await res.json().catch(function () { return null; });
     if (!res.ok) {
       setSupporterControlsBusy(false, 'remove');
       setSupporterStatus(supporterErrorKey(body, res.status), 'action-status is-error');
       return false;
     }
-    const next = body && body.supporter ? body.supporter : body;
+    const next = extractSupporterResponse(body, false);
+    if (!next) {
+      setSupporterControlsBusy(false, 'remove');
+      setSupporterStatus('supporter.error.failed', 'action-status is-error');
+      return false;
+    }
     S.supporterRevision = (S.supporterRevision || 0) + 1;
     if (S.settingsDoc) S.settingsDoc.supporter = next;
     syncSupporterMeta(next);

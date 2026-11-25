@@ -1325,7 +1325,8 @@
     "manage": {
       "summary": "Reemplazar o eliminar clave Supporter",
       "envOverrideHint": "Cargada actualmente desde PORT_LIGHT_SUPPORTER_KEY. Guardar una clave aquí la sobrescribe localmente en port_light.json.",
-      "readonly": "Los ajustes son de solo lectura en este equipo. Define o actualiza PORT_LIGHT_SUPPORTER_KEY en tu entorno."
+      "readonly": "Los ajustes son de solo lectura en este equipo. Define o actualiza PORT_LIGHT_SUPPORTER_KEY en tu entorno.",
+      "readonlyFile": "La configuración es de solo lectura en este host. Esta clave se carga desde port_light.json (con prioridad sobre PORT_LIGHT_SUPPORTER_KEY). Edita o elimina supporter_key en port_light.json, o define PORT_LIGHT_SETTINGS_SOURCE=env para usar el entorno."
     },
     "inactive": {
       "lead": "Todas las funciones de Port-Light siguen siendo gratuitas bajo licencia MIT y sin telemetría. Pega una clave sin conexión opcional para encender el faro.",

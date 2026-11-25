@@ -224,3 +224,47 @@ def test_raw_supporter_key_never_leaks_across_meta_settings_health_or_doctor(tmp
         assert PERSONAL_KEY not in res.text
         assert PERSONAL_KEY.split(".")[2] not in res.text
         assert "ord_555444333" not in res.text
+
+
+def test_null_or_non_string_supporter_key_never_breaks_core_endpoints_and_can_be_cleared(tmp_path, monkeypatch):
+    _clean_env(monkeypatch, tmp_path)
+    data_file = tmp_path / "port_light.json"
+    client = TestClient(app)
+
+    # Case 1: supporter_key explicitly set to null -> treated as unset, all endpoints stay 200
+    data_file.write_text(json.dumps({"manual_ports": [], "hidden_ports": [], "supporter_key": None}), encoding="utf-8")
+    for path in ("/api/ports", "/api/settings", "/api/meta", "/api/doctor"):
+        res = client.get(path)
+        assert res.status_code == 200, f"{path} failed on supporter_key=null: {res.text}"
+    sup = client.get("/api/settings").json()["supporter"]
+    assert sup["active"] is False and sup["status"] == "inactive"
+    assert client.delete("/api/supporter-key").status_code == 200
+
+    # Case 2: supporter_key is non-string junk (e.g., int/object) -> core endpoints stay 200, status=invalid, clearable
+    data_file.write_text(json.dumps({"manual_ports": [], "hidden_ports": [], "supporter_key": 12345}), encoding="utf-8")
+    for path in ("/api/ports", "/api/settings", "/api/meta", "/api/doctor"):
+        res = client.get(path)
+        assert res.status_code == 200, f"{path} failed on non-string supporter_key: {res.text}"
+    sup = client.get("/api/settings").json()["supporter"]
+    assert sup["active"] is False
+    assert sup["status"] == "invalid"
+    assert sup["origin"] == "file"
+    assert sup["can_clear"] is True
+    cleared = client.delete("/api/supporter-key")
+    assert cleared.status_code == 200
+    assert cleared.json()["supporter"]["status"] == "inactive"
+    assert "supporter_key" not in json.loads(data_file.read_text(encoding="utf-8"))
+
+
+def test_put_supporter_key_never_echoes_raw_non_object_payload(tmp_path, monkeypatch):
+    _clean_env(monkeypatch, tmp_path)
+    client = TestClient(app)
+    secret_marker = "PL1.secret-input-must-never-echo.sig"
+    res = client.put(
+        "/api/supporter-key",
+        content=json.dumps(secret_marker),
+        headers={"Content-Type": "application/json"},
+    )
+    assert res.status_code == 400
+    assert res.json() == {"detail": "supporter_key_format"}
+    assert secret_marker not in res.text

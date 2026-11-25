@@ -1325,7 +1325,8 @@
     "manage": {
       "summary": "更换或移除赞助者密钥",
       "envOverrideHint": "当前由 PORT_LIGHT_SUPPORTER_KEY 环境变量生效；在此保存新密钥将在本地 port_light.json 中覆盖。",
-      "readonly": "当前主机处于只读设置模式，请在环境变量中设置或更新 PORT_LIGHT_SUPPORTER_KEY。"
+      "readonly": "当前主机处于只读设置模式，请在环境变量中设置或更新 PORT_LIGHT_SUPPORTER_KEY。",
+      "readonlyFile": "当前主机处于只读设置模式。此密钥来自数据卷文件 port_light.json（优先级高于 PORT_LIGHT_SUPPORTER_KEY）；请编辑或移除 port_light.json 中的 supporter_key，或设置 PORT_LIGHT_SETTINGS_SOURCE=env 以改用环境变量。"
     },
     "inactive": {
       "lead": "Port-Light 全部功能基于 MIT 永久免费开放、零遥测。粘贴可选离线密钥即可点亮港口灯标。",

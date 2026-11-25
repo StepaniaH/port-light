@@ -1,7 +1,7 @@
 /* Locale menu and theme selection controls. */
-import { S, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable } from './state.js?v=129';
-import { t, escapeHtml } from './text.js?v=129';
-import { choiceLabel } from './settings-format.js?v=129';
+import { S, CORE_THEMES, PALETTE_VARIANTS, CUSTOM_PREFIX, resolveMode, paletteAvailable } from './state.js?v=130';
+import { t, escapeHtml } from './text.js?v=130';
+import { choiceLabel } from './settings-format.js?v=130';
 
   export function localeCopyHtml(c) {
     var native;

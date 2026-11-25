@@ -1325,7 +1325,8 @@
     "manage": {
       "summary": "Supporter-Schlüssel ersetzen oder entfernen",
       "envOverrideHint": "Derzeit aus PORT_LIGHT_SUPPORTER_KEY geladen. Das Speichern eines Schlüssels überschreibt ihn lokal in port_light.json.",
-      "readonly": "Die Einstellungen sind auf diesem Host schreibgeschützt. Setzen oder aktualisieren Sie PORT_LIGHT_SUPPORTER_KEY in der Umgebung."
+      "readonly": "Die Einstellungen sind auf diesem Host schreibgeschützt. Setzen oder aktualisieren Sie PORT_LIGHT_SUPPORTER_KEY in der Umgebung.",
+      "readonlyFile": "Die Einstellungen sind auf diesem Host schreibgeschützt. Dieser Schlüssel stammt aus port_light.json (hat Vorrang vor PORT_LIGHT_SUPPORTER_KEY). Bearbeiten oder entfernen Sie supporter_key in port_light.json oder setzen Sie PORT_LIGHT_SETTINGS_SOURCE=env."
     },
     "inactive": {
       "lead": "Alle Funktionen von Port-Light bleiben unter MIT kostenlos und ohne Telemetrie nutzbar. Fügen Sie einen optionalen Offline-Schlüssel ein, um das Leuchtfeuer zu aktivieren.",
