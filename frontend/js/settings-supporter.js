@@ -143,7 +143,7 @@ export function supporterCardsHtml(supporterDoc, showHeaderField, showHeaderValu
     : '<p class="field-help" data-i18n="supporter.manage.readonly">' +
       escapeHtml(t('supporter.manage.readonly')) + '</p>';
 
-  return '<section class="settings-card">' +
+  return '<section class="settings-card supporter-inactive">' +
     '<header class="settings-card-head">' +
     '<h2 data-i18n="supporter.inactive.title">' + escapeHtml(t('supporter.inactive.title')) + '</h2>' +
     '<p data-i18n="supporter.inactive.lead">' + escapeHtml(t('supporter.inactive.lead')) + '</p>' +
@@ -222,8 +222,9 @@ export async function submitSupporterKey(rawKey) {
       setSupporterStatus(supporterErrorKey(body, res.status), 'action-status is-error');
       return false;
     }
-    if (S.settingsDoc) S.settingsDoc.supporter = body;
-    syncSupporterMeta(body);
+    const next = body && body.supporter ? body.supporter : body;
+    if (S.settingsDoc) S.settingsDoc.supporter = next;
+    syncSupporterMeta(next);
     rerenderSupporter('supporter.status.activated', 'action-status is-ok');
     return true;
   } catch (err) {
@@ -254,8 +255,9 @@ export async function clearSupporterKey() {
       setSupporterStatus(supporterErrorKey(body, res.status), 'action-status is-error');
       return false;
     }
-    if (S.settingsDoc) S.settingsDoc.supporter = body;
-    syncSupporterMeta(body);
+    const next = body && body.supporter ? body.supporter : body;
+    if (S.settingsDoc) S.settingsDoc.supporter = next;
+    syncSupporterMeta(next);
     rerenderSupporter('supporter.status.removed', 'action-status is-ok');
     return true;
   } catch (err) {

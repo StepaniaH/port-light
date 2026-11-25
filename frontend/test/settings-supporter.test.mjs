@@ -266,9 +266,11 @@ test('submitSupporterKey, clearSupporterKey, and saving supporter_show_header sy
         ok: true,
         status: 200,
         json: async () => ({
-          active: true, status: 'active', tier: 'fleet', issued_at: '2026-11-25',
-          key_preview: 'PL1.eyJpYXQiOiIyMD…', order_preview: 'ord_•••••777',
-          origin: 'file', env_configured: false, can_edit: true, can_clear: true, show_in_header: true,
+          supporter: {
+            active: true, status: 'active', tier: 'fleet', issued_at: '2026-11-25',
+            key_preview: 'PL1.eyJpYXQiOiIyMD…', order_preview: 'ord_•••••777',
+            origin: 'file', env_configured: false, can_edit: true, can_clear: true, show_in_header: true,
+          },
         }),
       };
     };
@@ -311,9 +313,11 @@ test('submitSupporterKey, clearSupporterKey, and saving supporter_show_header sy
         ok: true,
         status: 200,
         json: async () => ({
-          active: false, status: 'inactive', tier: null, issued_at: null,
-          key_preview: null, order_preview: null,
-          origin: 'none', env_configured: false, can_edit: true, can_clear: false, show_in_header: false,
+          supporter: {
+            active: false, status: 'inactive', tier: null, issued_at: null,
+            key_preview: null, order_preview: null,
+            origin: 'none', env_configured: false, can_edit: true, can_clear: false, show_in_header: false,
+          },
         }),
       };
     };
