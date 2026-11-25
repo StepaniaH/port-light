@@ -19,8 +19,8 @@
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>
-  <DonateText>Ko-fi</DonateText>
-  <DonateLink>https://ko-fi.com/stepaniah</DonateLink>
+  <DonateText>Support Port-Light</DonateText>
+  <DonateLink>https://portlight.stepaniah.me/#support</DonateLink>
   <Requires>Requires a writable appdata directory and access to the host Docker socket and /proc. Authentication is off by default; use a trusted network. See the ReadMe to enable Basic Auth or optional Compose scanning.</Requires>
   <Config Name="WebUI" Target="2100" Default="2100" Mode="tcp" Description="Port-Light web UI" Type="Port" Display="always" Required="true" Mask="false">2100</Config>
   <Config Name="Compose stacks" Target="/compose" Default="" Mode="ro" Description="Optional folder of Compose projects (read-only). Leave empty if unused. After mapping a folder, enable Compose in Port-Light Settings - Machines &amp; scanning." Type="Path" Display="advanced" Required="false" Mask="false"/>
