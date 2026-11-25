@@ -2,6 +2,16 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## 0.9.1 — 2026-11-25
+
+### Changed
+
+- Remove the redundant top-bar language shortcut button (`#btn-language`); language selection remains in **Settings → Appearance**.
+
+### Fixed
+
+- Allow same-origin mutating requests to `/api/*` and `/analysis/api/*` through TLS-terminating or host-rewriting reverse proxies and normalized host headers (honoring `Sec-Fetch-Site: same-origin`, `Forwarded`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port`, default ports, and case-insensitive hostnames), fixing `403 cross-origin requests are not allowed` errors when saving language and other settings while continuing to reject `cross-site`, `same-site`, opaque `null`, malformed, and duplicate-header requests.
+
 ## 0.9.0 — 2026-11-24
 
 ### Upgrade notes

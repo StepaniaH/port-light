@@ -27,7 +27,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.9.0
+    image: stepaniah/port-light:v0.9.1
     container_name: port-light
     restart: unless-stopped
     ports:
