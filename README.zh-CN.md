@@ -7,7 +7,7 @@
 自托管的主机端口占用看板，汇总主机监听、Docker 端口映射和 Compose 声明。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.9.2-blue)](https://github.com/StepaniaH/port-light/releases)
+[![Version](https://img.shields.io/badge/version-v0.9.3-blue)](https://github.com/StepaniaH/port-light/releases)
 [![Docker Pulls](https://img.shields.io/docker/pulls/stepaniah/port-light)](https://hub.docker.com/r/stepaniah/port-light)
 [![Unraid Community Apps](https://img.shields.io/badge/Unraid-Community_Apps-F15A2C?logo=unraid&logoColor=white)](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml)
 
@@ -43,7 +43,7 @@
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.9.2
+    image: stepaniah/port-light:v0.9.3
     container_name: port-light
     restart: unless-stopped
     ports:

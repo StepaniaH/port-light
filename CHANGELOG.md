@@ -2,6 +2,18 @@
 
 Versions follow git tags and image tags (`stepaniah/port-light:vX.Y.Z`).
 
+## 0.9.3 — 2026-11-26
+
+### Added
+
+- Pass the active UI locale (`en`, `fr`, `de`, `es`, `zh-CN`, `zh-TW`, `ja`) as `?lang=<locale>#support` when opening the official Supporter Key page from **Settings → Supporter Key**, updating live when the user switches languages without reload.
+- Extract the full environment-variable reference, access control, custom port names, and data/privacy documentation into `docs/configuration.md`, upgrade `docs/README.md` into a categorized documentation hub, and feature NodeFinch as a sponsor in both READMEs.
+
+### Changed
+
+- Slim `README.md` and `README.zh-CN.md` into concise landing pages with clearer Docker socket proxy vs. Basic Auth guidance, keeping documentation links, sponsors, and support options prominent.
+- Replace the slow/timeout-prone dynamic Docker Hub and GitHub tag badges in both READMEs with a reliable static version badge checked against `__version__` in release tests.
+
 ## 0.9.2 — 2026-11-26
 
 ### Added

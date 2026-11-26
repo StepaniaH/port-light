@@ -7,7 +7,7 @@
 A self-hosted dashboard for host port occupancy. It shows host listeners, Docker port mappings, and Compose declarations.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.9.2-blue)](https://github.com/StepaniaH/port-light/releases)
+[![Version](https://img.shields.io/badge/version-v0.9.3-blue)](https://github.com/StepaniaH/port-light/releases)
 [![Docker Pulls](https://img.shields.io/docker/pulls/stepaniah/port-light)](https://hub.docker.com/r/stepaniah/port-light)
 [![Unraid Community Apps](https://img.shields.io/badge/Unraid-Community_Apps-F15A2C?logo=unraid&logoColor=white)](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml)
 
@@ -43,7 +43,7 @@ Image: [`stepaniah/port-light`](https://hub.docker.com/r/stepaniah/port-light) (
 ```yaml
 services:
   port-light:
-    image: stepaniah/port-light:v0.9.2
+    image: stepaniah/port-light:v0.9.3
     container_name: port-light
     restart: unless-stopped
     ports:
