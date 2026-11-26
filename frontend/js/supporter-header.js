@@ -1,8 +1,8 @@
 /* Top-bar Supporter Beacon nameplate and settings-tab indicator. */
 
-import { S } from './state.js?v=131';
-import { t } from './text.js?v=131';
-import { syncHeaderHeight } from './dom.js?v=131';
+import { S } from './state.js?v=132';
+import { t } from './text.js?v=132';
+import { syncHeaderHeight } from './dom.js?v=132';
 
 export function syncSupporterHeader() {
   const info = (S.meta && S.meta.supporter) || {};

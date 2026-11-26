@@ -1,15 +1,15 @@
 /* Grid view: summary bar, host columns, occupancy cells, filters/sort/search. */
 
-import { groupPorts, portRuns } from './port-groups.js?v=131';
-import { S } from './state.js?v=131';
-import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=131';
-import { KIND_MATCHERS } from './kinds.js?v=131';
-import { isLease } from './leases.js?v=131';
-import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=131';
-import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=131';
-import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=131';
-import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=131';
-import { api } from './api.js?v=131';
+import { groupPorts, portRuns } from './port-groups.js?v=132';
+import { S } from './state.js?v=132';
+import { t, tx, collate, escapeHtml, safeHref } from './text.js?v=132';
+import { KIND_MATCHERS } from './kinds.js?v=132';
+import { isLease } from './leases.js?v=132';
+import { cardBindAddresses, summarizeBindAddresses } from './bind-addresses.js?v=132';
+import { scanWarningMarkup, scanWarningState, wireScanWarnings } from './scan-warning.js?v=132';
+import { appEl, grid, hostBoards, hostSwitcher, summary, detailPanel, searchInput, unhideBtn, syncHeaderHeight } from './dom.js?v=132';
+import { hasPeers, listedHosts, displayedHosts, usesFocusedHostView, hostById, hostName, dataForHost, portApiUrl } from './hosts.js?v=132';
+import { api } from './api.js?v=132';
 
 const ALLOWED_STATUSES = new Set(['used', 'configured', 'free', 'unknown']);
 function safeStatus(status) {

@@ -1,5 +1,5 @@
 /* Navigation for local pages registered by the hosting application. */
-import { escapeHtml } from './text.js?v=131';
+import { escapeHtml } from './text.js?v=132';
 
 export function workspaceHref(link, port) {
   if (link?.workspace?.api !== 1 || !/^[a-z][a-z0-9-]{0,39}$/.test(link.key || '')) return null;

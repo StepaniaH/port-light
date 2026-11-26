@@ -1,12 +1,23 @@
 /* Settings → Supporter Key panel: Harbor Beacon Plaque and offline key activation. */
 
-import { S } from './state.js?v=131';
-import { t, escapeHtml } from './text.js?v=131';
-import { api } from './api.js?v=131';
-import { kvRow } from './settings-format.js?v=131';
-import { syncSupporterHeader } from './supporter-header.js?v=131';
+import { S } from './state.js?v=132';
+import { t, escapeHtml } from './text.js?v=132';
+import { api } from './api.js?v=132';
+import { kvRow } from './settings-format.js?v=132';
+import { syncSupporterHeader } from './supporter-header.js?v=132';
 
-const SUPPORT_URL = 'https://portlight.stepaniah.me/#support';
+const SUPPORT_ORIGIN = 'https://portlight.stepaniah.me/';
+const SUPPORT_HASH = '#support';
+const SUPPORT_URL = SUPPORT_ORIGIN + SUPPORT_HASH;
+const LOCALE_CODE_RE = /^[a-z]{2}(?:-[A-Za-z0-9]{2,8})*$/;
+
+export function supportUrl() {
+  const i18n = typeof window !== 'undefined' ? window.PortLightI18n : null;
+  const raw = i18n && typeof i18n.locale === 'function' ? String(i18n.locale() || '').trim() : '';
+  if (!raw || raw === 'auto' || !LOCALE_CODE_RE.test(raw)) return SUPPORT_URL;
+  if (Array.isArray(i18n.supported) && i18n.supported.indexOf(raw) < 0) return SUPPORT_URL;
+  return SUPPORT_ORIGIN + '?lang=' + encodeURIComponent(raw) + SUPPORT_HASH;
+}
 const BEACON_GLYPH_SVG =
   '<svg class="beacon-glyph" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
   '<path d="M8 1.5v2.4M2.8 4.1l1.9 1.3M13.2 4.1l-1.9 1.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
@@ -102,7 +113,7 @@ function showcaseCardHtml() {
     '</div>' +
     '</div></div>' +
     '<div class="supporter-showcase-cta">' +
-    '<a class="supporter-cta-btn" href="' + SUPPORT_URL + '" target="_blank" rel="noopener noreferrer">' +
+    '<a class="supporter-cta-btn" href="' + escapeHtml(supportUrl()) + '" target="_blank" rel="noopener noreferrer">' +
     BEACON_GLYPH_SVG +
     '<span data-i18n="supporter.showcase.cta">' + escapeHtml(t('supporter.showcase.cta')) + '</span>' +
     '<span aria-hidden="true">↗</span></a>' +

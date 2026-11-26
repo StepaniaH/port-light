@@ -1,19 +1,19 @@
 /* Port detail drawer: desktop side panel, mobile modal, hide/unhide actions. */
 
-import { S, saveView } from './state.js?v=131';
-import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=131';
-import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=131';
-import { trapTab } from './a11y.js?v=131';
-import { api, fetchHostOccupancy } from './api.js?v=131';
-import { portApiUrl, hasPeers, listedHosts, hostName, gridHash, portHash, dataForHost } from './hosts.js?v=131';
-import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=131';
+import { S, saveView } from './state.js?v=132';
+import { t, tx, escapeHtml, safeHref, errorText } from './text.js?v=132';
+import { appEl, detailPanel, detailBackdrop, detailContent, unhideBtn, syncHeaderHeight } from './dom.js?v=132';
+import { trapTab } from './a11y.js?v=132';
+import { api, fetchHostOccupancy } from './api.js?v=132';
+import { portApiUrl, hasPeers, listedHosts, hostName, gridHash, portHash, dataForHost } from './hosts.js?v=132';
+import { isLease, remainingSeconds, fmtRemaining } from './leases.js?v=132';
 import {
   render, syncHiddenButton, getKnownForFree, hiddenOccupancy, buildSearchContext,
   getCellLabel, showCopyToast, applyPendingGridFocus, freeStub, pendingStub,
   portFromList,
-} from './grid.js?v=131';
-import { closeModals, modalOpen, openModal } from './modal.js?v=131';
-import { portUiLinksHtml } from './ui-links.js?v=131';
+} from './grid.js?v=132';
+import { closeModals, modalOpen, openModal } from './modal.js?v=132';
+import { portUiLinksHtml } from './ui-links.js?v=132';
 
 const ALLOWED_STATUSES = new Set(['used', 'configured', 'free', 'unknown']);
 const CONTAINER_STATUSES = new Set([

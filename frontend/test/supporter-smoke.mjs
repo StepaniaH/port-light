@@ -159,6 +159,7 @@ try {
   await expect(page.locator('#settings-tab-supporter-glyph')).toBeVisible();
   await expect(page.locator('#settings-panel-supporter')).toBeVisible();
   await expect(page.locator('#settings-panel-supporter .supporter-showcase')).toBeVisible();
+  await expect(page.locator('#settings-panel-supporter .supporter-cta-btn')).toHaveAttribute('href', 'https://portlight.stepaniah.me/?lang=en#support');
   await expect(page.locator('.settings-footer')).toBeHidden();
   await shot(page, '02-settings-supporter-inactive-dark.png');
 
@@ -348,9 +349,18 @@ try {
   await page.locator('.supporter-manage summary').click();
   await page.locator('[data-supporter-clear]').click();
   await expect(page.locator('#settings-panel-supporter .supporter-showcase')).toBeVisible();
+  await expect(page.locator('#settings-panel-supporter .supporter-cta-btn')).toHaveAttribute('href', 'https://portlight.stepaniah.me/?lang=zh-CN#support');
   await expect(page.locator('#supporter-badge')).toBeHidden();
   await expect(page.locator('#settings-tab-supporter-dot')).toBeHidden();
   await expect(page.locator('#settings-tab-supporter-glyph')).toBeVisible();
+
+  // Live locale switch while unactivated updates the Supporter CTA ?lang= query immediately
+  await page.locator('#settings-tab-appearance').click();
+  await page.locator('.locale-trigger').click();
+  await page.locator('#locale-opt-ja').click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
+  await page.locator('#settings-tab-supporter').click();
+  await expect(page.locator('#settings-panel-supporter .supporter-cta-btn')).toHaveAttribute('href', 'https://portlight.stepaniah.me/?lang=ja#support');
 
   // Verify WCAG AA (>= 4.5:1) contrast on showcase pill, badge, eyebrow, and CTA across all 11 light themes
   const lightPalettes = ['', 'gruvbox', 'catppuccin', 'nord', 'dracula', 'tokyo-night', 'one-dark', 'solarized', 'everforest', 'rose-pine', 'kanagawa'];

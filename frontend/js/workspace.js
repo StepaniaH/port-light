@@ -1,10 +1,10 @@
 /* Optional local modules use the same shell, appearance and navigation as core views. */
-import { S } from './state.js?v=131';
-import { t } from './text.js?v=131';
-import { enhanceSelects } from './select.js?v=131';
-import { workspaceAssets } from './extension-assets.js?v=131';
+import { S } from './state.js?v=132';
+import { t } from './text.js?v=132';
+import { enhanceSelects } from './select.js?v=132';
+import { workspaceAssets } from './extension-assets.js?v=132';
 
-export { workspaceAssets } from './extension-assets.js?v=131';
+export { workspaceAssets } from './extension-assets.js?v=132';
 
 export function getHiddenUnlock() {
   if (S.hiddenUnlock) return String(S.hiddenUnlock);

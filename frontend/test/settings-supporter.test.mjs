@@ -834,3 +834,68 @@ test('late PUT/DELETE /api/supporter-key response preserves supporter_show_heade
     Object.assign(S, prevState);
   }
 });
+
+test('supportUrl and showcase CTA pass active UI locale as ?lang=<locale>#support and update on rerender', async () => {
+  const { S } = await import('../js/state.js?' + V);
+  const { supporterCardsHtml, rerenderSupporter, supportUrl } = await import('../js/settings-supporter.js?' + V);
+
+  const prevI18n = window.PortLightI18n;
+  const prevSettingsDoc = S.settingsDoc;
+  const prevSettings = S.settings;
+  const prevDraft = S.settingsDraft;
+  const panel = document.getElementById('settings-panel-supporter');
+  const prevHtml = panel.innerHTML;
+  const supported = ['en', 'fr', 'de', 'es', 'zh-CN', 'zh-TW', 'ja'];
+  const inactiveDoc = {
+    active: false, status: 'inactive', tier: null, issued_at: null, key_preview: null,
+    order_preview: null, origin: 'none', env_configured: false, can_edit: true, can_clear: false, show_in_header: true,
+  };
+
+  try {
+    delete window.PortLightI18n;
+    assert.equal(supportUrl(), 'https://portlight.stepaniah.me/#support', 'falls back to clean base URL without i18n');
+
+    let currentLocale = 'en';
+    window.PortLightI18n = {
+      supported,
+      locale: () => currentLocale,
+      t: (k) => k,
+    };
+
+    for (const code of supported) {
+      currentLocale = code;
+      const expected = 'https://portlight.stepaniah.me/?lang=' + code + '#support';
+      assert.equal(supportUrl(), expected);
+      const markup = supporterCardsHtml(inactiveDoc, SHOW_HEADER_FIELD, true, false);
+      assert.ok(markup.includes('href="' + expected + '"'), 'CTA href matches ' + code);
+    }
+
+    for (const invalid of ['', 'auto', 'xx-INVALID', 'zh-CN&foo=1', 'javascript:alert(1)']) {
+      currentLocale = invalid;
+      assert.equal(supportUrl(), 'https://portlight.stepaniah.me/#support', 'rejects invalid locale: ' + invalid);
+    }
+
+    S.settings = { supporter_show_header: true };
+    S.settingsDraft = null;
+    S.settingsDoc = { readonly: false, fields: [SHOW_HEADER_FIELD], supporter: inactiveDoc };
+
+    currentLocale = 'en';
+    rerenderSupporter();
+    assert.equal(panel.querySelector('.supporter-cta-btn').getAttribute('href'), 'https://portlight.stepaniah.me/?lang=en#support');
+
+    currentLocale = 'zh-CN';
+    rerenderSupporter();
+    assert.equal(panel.querySelector('.supporter-cta-btn').getAttribute('href'), 'https://portlight.stepaniah.me/?lang=zh-CN#support');
+
+    currentLocale = 'ja';
+    rerenderSupporter();
+    assert.equal(panel.querySelector('.supporter-cta-btn').getAttribute('href'), 'https://portlight.stepaniah.me/?lang=ja#support');
+  } finally {
+    if (prevI18n) window.PortLightI18n = prevI18n;
+    else delete window.PortLightI18n;
+    S.settingsDoc = prevSettingsDoc;
+    S.settings = prevSettings;
+    S.settingsDraft = prevDraft;
+    panel.innerHTML = prevHtml;
+  }
+});
