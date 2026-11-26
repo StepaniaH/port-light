@@ -11,12 +11,23 @@ def test_dockerhub_links_resolve_to_release_tag_and_keep_screenshot():
     source = (ROOT / 'README.md').read_text(encoding='utf-8')
     rendered = render(source, 'v0.8.2')
     assert 'src="https://raw.githubusercontent.com/StepaniaH/port-light/v0.8.2/docs/screenshots/dashboard.png"' in rendered
+    assert 'src="https://raw.githubusercontent.com/StepaniaH/port-light/v0.8.2/docs/sponsors/nodefinch.png"' in rendered
     assert '(https://github.com/StepaniaH/port-light/blob/v0.8.2/docs/cli.md)' in rendered
     assert '(https://github.com/StepaniaH/port-light/blob/v0.8.2/docs/README.md)' in rendered
+    assert '(https://github.com/StepaniaH/port-light/blob/v0.8.2/docs/configuration.md)' in rendered
     assert '[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/StepaniaH/port-light/blob/v0.8.2/LICENSE)' in rendered
     assert '(https://hub.docker.com/r/stepaniah/port-light)' in rendered
     assert '(docs/' not in rendered
+    assert 'src="docs/' not in rendered
     assert '(LICENSE)' not in rendered
+
+
+def test_readme_version_badges_match_package_version():
+    version_segment = f'v{__version__}'.replace('-', '--')
+    expected = f'https://img.shields.io/badge/version-{version_segment}-blue'
+    for name in ('README.md', 'README.zh-CN.md'):
+        text = (ROOT / name).read_text(encoding='utf-8')
+        assert expected in text, f'{name} version badge out of sync with v{__version__}'
 
 
 def test_dockerhub_render_rewrites_nested_relative_badge_image_and_link():

@@ -57,7 +57,7 @@ data and processes on exit. Set `PYTHON` to override the Python executable.
 
 Edit `frontend/*` and hard-refresh. Cache-bust query strings are in `frontend/index.html` (`?v=`). Bump them when JS or CSS changes.
 
-Settings that belong on both Compose and the UI live in `backend/settings.py`. Secrets and filesystem paths stay env-only.
+Settings that belong on both Compose and the UI live in `backend/settings.py`. Secrets and filesystem paths stay env-only. Document new or changed environment variables in [docs/configuration.md](docs/configuration.md).
 
 The dependency-free command-line client lives in `port_light_client/`. Run it
 from a checkout with `python -m port_light_client`, or install the console
@@ -120,7 +120,7 @@ Submit pull requests against `main`.
 1. Move Unreleased notes into a version section in `CHANGELOG.md`.
 2. Bump `__version__` in `port_light_client/__init__.py`; the backend, CLI,
    MCP server, package metadata, and release check all read that one value.
-3. Update pinned image examples in both READMEs, `docs/deployment.md`, and `deploy/unraid/port-light.xml`. Remove the development-only notice when these features are included in the release.
+3. Update the version badge and pinned image examples in both READMEs, `docs/deployment.md`, and `deploy/unraid/port-light.xml`. Remove the development-only notice when these features are included in the release.
 4. Merge the release changes into `main` and wait for its CI to pass.
 5. Tag that tested commit `vX.Y.Z` and push the tag. [Release](.github/workflows/release.yml) verifies that the tagged commit belongs to `main` and has a successful `main` push run of `ci.yml`. It waits up to 15 minutes if CI has not finished; a failed, cancelled, or timed-out check blocks publication.
 6. Release verifies that the backend, CLI, and tag versions match, then builds

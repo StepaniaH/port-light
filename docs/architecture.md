@@ -2,6 +2,12 @@
 
 Port-Light is a single-process FastAPI app that serves a static UI and a JSON API. Configuration is stored in JSON; optional history and agent events use local SQLite. There is no message queue or frontend build.
 
+## Tech stack
+
+- Backend: Python 3.11+ (CI covers 3.11–3.13), FastAPI, Uvicorn
+- Frontend: static HTML/CSS/JS (native ES modules, no bundler)
+- Container image: `python:3.12-slim` + `iproute2`
+
 ## Module layout
 
 `backend/main.py` initializes the application, monitor, and shared occupancy/allocation services. `backend/routes/` contains the configuration, claims, occupancy, peers, and diagnostics endpoints. Route modules receive the initialized runtime during application assembly; they do not import the application module.

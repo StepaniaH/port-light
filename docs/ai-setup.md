@@ -4,6 +4,18 @@ Use this guide when the user asks to connect an AI coding tool to an existing
 Port-Light instance. It installs the client integration, not the Port-Light
 server. Keep existing server deployments and unrelated AI configuration intact.
 
+## Quick prompt
+
+In **Settings → Automation**, copy the setup prompt into your AI tool. For an
+assistant that can read GitHub directly, you can also send:
+
+> Read https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/ai-setup.md
+> and follow its instructions to install or update Port-Light for my AI tool.
+> My instance URL is `<your-instance-url>`.
+
+AI setup and the packaged MCP entry point are available in v0.8.4 and later
+(see below for client templates and commands added in v0.9.0+).
+
 ## Identify the target
 
 - Use the instance URL supplied by the user. If this document was fetched from

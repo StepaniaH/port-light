@@ -7,18 +7,34 @@
 自托管的主机端口占用看板，汇总主机监听、Docker 端口映射和 Compose 声明。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Docker Hub](https://img.shields.io/docker/v/stepaniah/port-light?label=docker%20hub&sort=semver)](https://hub.docker.com/r/stepaniah/port-light)
+[![Version](https://img.shields.io/badge/version-v0.9.2-blue)](https://github.com/StepaniaH/port-light/releases)
 [![Docker Pulls](https://img.shields.io/docker/pulls/stepaniah/port-light)](https://hub.docker.com/r/stepaniah/port-light)
-[![GitHub release](https://img.shields.io/github/v/tag/StepaniaH/port-light?label=version)](https://github.com/StepaniaH/port-light/tags)
 [![Unraid Community Apps](https://img.shields.io/badge/Unraid-Community_Apps-F15A2C?logo=unraid&logoColor=white)](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml)
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-[快速开始](#快速开始) · [Unraid](#unraid) · [使用文档](docs/README.md)
+[快速开始](#快速开始) · [文档中心](docs/README.md) · [配置说明](docs/configuration.md) · [赞助商](#赞助商) · [支持项目](#支持-port-light)
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Port-Light 双主机自适应端口看板">
 </p>
+
+<p align="center"><sub>由 <a href="https://nodefinch.com/zh-hans/"><strong>NodeFinch</strong></a> 赞助 — 随时掌握你管理的服务器 · <a href="#赞助商">成为赞助商</a></sub></p>
+
+## 功能
+
+- 按端口、服务、项目、进程或绑定地址搜索与筛选，按 Compose 项目/服务分组并折叠连续端口范围。
+- 识别 Compose 冲突并生成替代映射，管理带有效期的端口预留与命名端口范围规则（[端口管理](docs/port-management.md)）。
+- 汇总最多 32 台其他实例的端口占用，支持瀑布流和标签页布局；每台机器独立运行管理操作。
+- 内置纯本地排障工作台与变更报告，无需模型 Key；支持可选 BYOK AI 辅助（[排障与 BYOK](docs/analysis.md)）。
+- 提供 MCP 服务器、零依赖 CLI、Agent Skill、HTTP API、Webhook 与 Prometheus 指标，便于 AI 工具和脚本接入（[AI 接入说明](docs/ai-setup.md)、[CLI](docs/cli.md)、[API 与 MCP](docs/integrations.md)）。
+- 支持七种界面语言、22 套内置主题、本地 SQLite 历史记录与 Doctor 诊断，全程零遥测（[配置说明](docs/configuration.md)）。
+
+| 状态 | 含义 |
+|------|------|
+| 占用 | 存在监听进程或运行中的容器映射 |
+| 已配置 | 已在 Compose 或手动条目中登记，尚未检测到监听 |
+| 空闲 | 当前扫描范围内可用（搜索端口号时显示空闲建议） |
 
 ## 快速开始
 
@@ -42,155 +58,53 @@ services:
 ```
 
 ```bash
-mkdir -p data
-docker compose up -d
+mkdir -p data && docker compose up -d
 ```
 
 打开 `http://localhost:2100`。
 
-挂载 Docker socket 会授予 Docker API 访问权限，包括修改操作。可通过 [socket proxy](docs/deployment.md#docker-socket-proxy) 限制权限。Unraid、Podman 和反向代理配置见[部署文档](docs/deployment.md)。
+挂载 `docker.sock`（即使带 `:ro`）仍授予 Docker API 写权限，建议使用 [socket proxy](docs/deployment.md#docker-socket-proxy) 限制容器权限，并配合 `AUTH_USER` / `AUTH_PASSWORD` 启用页面与 API 的 Basic Auth（[访问控制](docs/configuration.md#access-control) · [SECURITY.md](SECURITY.md)）。无 Docker 环境可设置 `PORT_LIGHT_SCANNERS=listen,compose`。扫描失败或数据过期时会显示警告并暂停端口分配，排查方法见[故障排查](docs/troubleshooting.md#occupancy-scan-warning)。
 
-默认启用监听、Docker 和 Compose 三种扫描来源。无 Docker 的部署可设置 `PORT_LIGHT_SCANNERS=listen,compose`。扫描失败或数据过期时，页面会显示警告，端口分配暂停；排查方法见[故障排查](docs/troubleshooting.md#occupancy-scan-warning)。
+### Unraid
 
-## Unraid
-
-Port-Light 已上架 [Unraid Community Applications](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml)。在 Unraid 服务器中打开 **Apps（应用）**，搜索 `port-light`，安装 **StepaniaH's Repository** 提供的条目。
-
-模板默认扫描主机监听和 Docker 容器，Compose 扫描可选。存储路径、认证和升级方法见 [Unraid 安装指南](deploy/unraid/README.md)。
-
-## 功能
-
-- 按端口、服务、项目、进程或绑定地址搜索，支持筛选和排序。
-- 按 Compose 项目或服务分组，折叠连续端口范围。
-- 查看 Compose 冲突，生成替代端口的映射片段。
-- 创建和管理端口预留，按到期状态筛选，复制释放命令。
-- 定义命名端口范围，并检查项目声明是否超出范围。
-- 汇总最多 32 台其他实例的端口，支持瀑布流和标签页布局。每台机器运行独立实例，管理操作在对应实例中执行。
-- 通过 CLI、API 或 MCP 检查和预留端口。
-- 支持七种界面语言、主题配色、端口历史、Webhook 和 Doctor 诊断。
-
-看板默认显示已占用和已配置的端口，搜索端口号时显示空闲建议：
-
-| 状态 | 含义 |
-|------|------|
-| 占用 | 存在监听进程或运行中的容器映射 |
-| 已配置 | 已在 Compose 或手动条目中登记，尚未检测到监听 |
-| 空闲 | 当前扫描范围内可用 |
-
-## 本地排障
-
-排障工作台可列出建议检查项、查看近期端口变化、保存报告并复查。
-这些检查在本机运行，无需模型 Key。
-
-可选的 AI 辅助在 **设置 → AI** 中配置自己的供应商、模型和 Key。
-可选择预设，也可填写兼容 OpenAI 的自定义 API 地址。
-每次调用前预览数据并明确确认，费用由你的模型供应商向该 Key 计收。
-使用限制、存储和隐私说明见[排障与 BYOK 文档](docs/analysis.md)。
-
-## 和 AI 一起使用
-
-在 **设置 → 自动化** 中复制接入指令，发给你的 AI 工具。指令带有当前实例地址，
-AI 会按说明安装或更新接入并验证连接。之后可让它检查项目端口、在启动服务前预留，
-并在服务停止后释放自己的预留。
-
-也可以将下面这段话发给能读取 GitHub 的助手，替换实例地址即可：
-
-> 读取 https://raw.githubusercontent.com/StepaniaH/port-light/main/docs/ai-setup.md，
-> 并按其中的说明，为我的 AI 工具安装或更新 Port-Light 接入。
-> 我的实例地址是 `<你的实例地址>`。
-
-AI 的运行环境需要能访问实例。MCP、CLI + Skill、Docker 与更新方式见
-[AI 接入说明](docs/ai-setup.md)。接入页面和独立 MCP 安装入口从 v0.8.4 开始提供（`v0.9.0+` 新增的客户端模板与命令版本要求见该指南）。
-
-## 访问控制
-
-通过 `AUTH_USER` 和 `AUTH_PASSWORD` 为页面和 API 启用 Basic Auth。公网部署应配合 HTTPS 反向代理。
-
-启用 Basic Auth 或 `HIDDEN_UNLOCK_PASSWORD` 后，隐藏端口需解锁才能通过 API 读取；其他情况下，隐藏操作仅影响显示。详见 [SECURITY.md](SECURITY.md)。
-
-## 配置
-
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `PORT_LIGHT_SCANNERS` | `listen,docker,compose` | 启用的扫描来源，逗号分隔，至少选择一项。 |
-| `PORT_LIGHT_SCAN_TIMEOUT_S` | `10` | 后台刷新超时秒数（1–60），超时后保留快照并标记过期。只能用环境变量。 |
-| `COMPOSE_SCAN_DIR` | `/compose` | 扫描 compose 文件的目录（只能用环境变量） |
-| `COMPOSE_SCAN_DEPTH` | `4` | 扫描子目录的最大深度 |
-| `COMPOSE_SCAN_EXCLUDE_DIRS` | 未设置 | 自动发现时跳过的目录名，逗号分隔；Compose 中显式 `include` / `extends` 的文件仍会读取。 |
-| `COMPOSE_SCAN_MAX_FILES` | `400` | 每次刷新最多解析的 compose 文件数 |
-| `PORT_RANGE_START` | `1` | **空闲数量**统计的起始端口 |
-| `PORT_RANGE_END` | `9999` | 空闲数量统计的结束端口 |
-| `PORT_LIGHT_DATA_DIR` | `/data` | 手动端口、隐藏列表、已保存设置（JSON） |
-| `PORT_LIGHT_PORT` | `2100` | 容器内的 HTTP 监听端口 |
-| `CUSTOM_PORTS_FILE` | `/data/custom_ports.json` | 额外 / 覆盖的端口名称（只能用环境变量） |
-| `THEME_MODE` | `system` | `system` / `dark` / `light` |
-| `THEME_PALETTE` | 内置 | 配色：`gruvbox`、`catppuccin`、`solarized`、`nord`、`dracula`、`tokyo-night`、`one-dark`、`everforest`、`rose-pine`、`kanagawa`。留空使用内置颜色。 |
-| `LOCALE` | `auto` | `auto` / `en` / `fr` / `de` / `es` / `zh-CN` / `zh-TW` / `ja`。`auto` 跟随浏览器。 |
-| `GRID_DENSITY` | `standard` | 卡片密度预设：`loose`(宽松)、`standard`(标准)、`compact`(紧凑)。旧值 `comfortable` 视同 `standard`。 |
-| `SHOW_STATUS_TEXT` | `false` | 在卡片上显示简短的占用 / 已配置文字标签。 |
-| `SHOW_ACCESS_BADGE` | `true` | 标记常见浏览器访问端口徽标。 |
-| `SHOW_PROTOCOL_BADGE` | `true` | 在非纯 TCP 卡片上显示 `udp` / `tcp,udp` 协议徽标。 |
-| `SHOW_BIND_ADDRESSES` | `false` | 在已占用卡片上显示紧凑的绑定地址摘要。 |
-| `SHOW_BIND_IPV4` | `true` | 开启卡片绑定地址摘要时包含 IPv4 地址。 |
-| `SHOW_BIND_IPV6` | `true` | 开启卡片绑定地址摘要时包含 IPv6 地址。 |
-| `COPY_ON_CLICK` | `true` | 点击卡片时复制端口号到剪贴板。 |
-| `AUTO_REFRESH` | `true` | 按轮询间隔自动刷新端口占用图。 |
-| `REFRESH_MS` | `5000` | 看板轮询间隔（1,000–300,000 毫秒）。设置页提供 5 秒至 5 分钟选项，并提示建议的其他机器容量；本机后台扫描间隔仍不超过 30 秒。 |
-| `PORT_LIGHT_HOST_LAYOUT` | `waterfall` | 默认以响应式瀑布流展示全部机器；`tabs` 为逐台切换。桌面和移动端均遵循此选择。 |
-| `GUESS_URLS` | `true` | 为常见 Web / 访问端口生成猜测的 `http(s)://host:port` 链接。 |
-| `URL_HOST` | 空 | 猜测链接里用的主机名 |
-| `URL_SCHEME` | `auto` | `auto` / `http` / `https` |
-| `AUTH_USER` / `AUTH_PASSWORD` | 未设置 | 可选 HTTP Basic Auth。`/api/health` 保持开放。只能用环境变量。 两项都必须非空；缺一项或空值会返回 503。完全取消两项环境变量才会关闭认证。 |
-| `HIDDEN_UNLOCK_PASSWORD` | 未设置 | 设置后（或启用了 Basic Auth），从网格隐藏的端口不会出现在未解锁的 API 里；未启用 Basic Auth 时，CLI/MCP 分配端口需配合 `AGENT_TOKEN`（`check` 查询未隐藏的空闲端口需启用 Basic Auth，已隐藏端口未解锁前仍返回 `404`）。只能用环境变量。 |
-| `PORT_LIGHT_SETTINGS_SOURCE` | `auto` | `auto`：设置页的值覆盖 env 默认值。`env`：只认 Compose，设置页只读。`file`：设置项未保存时仍回退到 env 默认值，但 `PORT_LIGHT_PEERS` 仅从数据文件读取、不回退到环境变量。 |
-| `SETTINGS_READONLY` | `0` | 设为 `1` 可在保留已保存文件读取的同时将设置页锁定为只读。只能用环境变量。 |
-| `PORT_LIGHT_HOST_NAME` | 主机名 | 多机器视图中本机占用图的名称。也可在设置 → 机器与扫描中修改。 |
-| `PORT_LIGHT_HOST_DESCRIPTION` | 空 | 多机器视图中本机名称下方的可选纯文本短描述，最多 120 字。 |
-| `PORT_LIGHT_PEERS` | 未设置 | 最多 32 个 `{name, url, description?, username?, password?}` 条目的 JSON 数组。短描述为可选纯文本，最多 120 字。数据文件没有 `peers` 键时使用，或 `PORT_LIGHT_SETTINGS_SOURCE=env` 时使用。 |
-| `PORT_LIGHT_LOG_LEVEL` | `warning` | 后端日志级别（`debug` / `info` / `warning` / `error`）。扫描器降级（Docker 不可达、Compose 文件解析失败等）会记一条日志，并出现在 `/api/health` 的 `degradations` 里。只能用环境变量。 |
-| `WEBHOOK_URL` | 未设置 | 可选 webhook 目标（仅 http/https）。配合 `WEBHOOK_EVENTS=new_listener,conflict`，在端口开始占用或发生冲突时 POST `{event, port}`。 |
-| `WEBHOOK_SECRET` | 未设置 | 以 `X-Port-Light-Secret` 头发送。 |
-| `WEBHOOK_EVENTS` | 未设置 | 逗号分隔：`new_listener`、`conflict`。 |
-| `WEBHOOK_COOLDOWN_S` | `0` | 可选的按事件与端口冷却秒数，端口退出占用或冲突状态后重新触发时防抖（`v0.9.0+`）。只能用环境变量。 |
-| `HISTORY_RETENTION_DAYS` | `7` | 本地 SQLite 端口占用历史保留天数（设为 `0` 禁用历史）。只能用环境变量。 |
-| `PORT_LIGHT_AI_PROXY` | 未设置 | BYOK AI 出站请求使用的可选 HTTP(S) 代理地址。只能用环境变量。 |
-| `METRICS_ENABLED` | 未设置 | 设为 `1` 后开放 `GET /api/metrics`（Prometheus 文本格式：占用/已配置/空闲数量、隐藏数、降级数、Compose 文件数）。只输出聚合值，不含端口与名称。只能用环境变量。 |
-| `AGENT_TOKEN` | 未设置 | 设置后，端口建议及预留创建、恢复接口需要匹配的 `X-Agent-Token` 头。只能用环境变量。 |
-| `PORT_LIGHT_SUPPORTER_KEY` | 未设置 | 可选的离线 Ed25519 赞助者密钥（`PL1.…`），纯本地验签、零出站请求；可写模式下也可在 **设置 → 赞助者密钥** 粘贴激活。 |
-| `PORT_LIGHT_SUPPORTER_SHOW_HEADER` | `true` | 已激活赞助者密钥时，在顶栏显示赞助者标示。 |
-
-多数选项也可在设置页修改，自动保存到 `/data/port_light.json`。超时、路径和密钥通过环境变量配置；设置 `PORT_LIGHT_SETTINGS_SOURCE=env`（或 `SETTINGS_READONLY=1`）可将设置页设为只读。
-
-自定义端口名称可参考 [custom_ports.example.json](custom_ports.example.json)。挂载前请先创建对应文件。
-
-## 数据与隐私
-
-Port-Light 无遥测。出站 HTTP 请求用于已配置的实例查询、Webhook，以及用户明确确认的 BYOK 模型请求。Webhook 发送 `{event, port}`；模型请求将选定的脱敏证据发送到用户配置的供应商。
-
-扫描结果、机器描述和端口规则可由页面及 API 用户读取，多机汇总实例也会接收这些数据。Compose 的 `.env` 在本地用于变量替换。Doctor 报告提供脱敏后的汇总信息。
-
-设置、标签和历史保存在数据卷中，其中 `port_light.json` 可包含其他实例的访问密码。CLI 释放凭据保存在本地私有状态目录中，容器内默认为 `/data/cli-state`。浏览器创建的预留凭据保存在标签页会话存储中，复制的释放命令含有令牌。请保护数据卷、命令和截图中的敏感信息。
+已上架 [Unraid Community Applications](https://ca.unraid.net/apps/port-light-1avxhcx0ugtgml)（在 **Apps（应用）** 中搜索 `port-light`，安装 **StepaniaH's Repository** 条目）。存储路径、认证和升级方法见 [Unraid 安装指南](deploy/unraid/README.md)。
 
 ## 文档
 
-- [完整文档索引](docs/README.md)：全部使用与维护文档清单
-- [端口管理](docs/port-management.md)：分组、冲突、预留与范围规则
-- [部署](docs/deployment.md)、[故障排查](docs/troubleshooting.md)与[排障和 BYOK](docs/analysis.md)
-- [AI 接入说明](docs/ai-setup.md)、[CLI](docs/cli.md)与[API 与 MCP](docs/integrations.md)；运行实例的 `/docs` 提供 OpenAPI 文档
-- [架构](docs/architecture.md)与[贡献指南](CONTRIBUTING.md)
+查看完整[文档中心](docs/README.md)（英文技术文档），或直接跳转至对应章节：
 
-## 技术栈
+| 主题 | 文档 |
+|------|------|
+| 部署与配置 | [部署指南](docs/deployment.md) · [Unraid 安装指南](deploy/unraid/README.md) · [环境变量与配置说明](docs/configuration.md) · [故障排查](docs/troubleshooting.md) |
+| 端口与排障 | [端口管理](docs/port-management.md) · [本地排障与 BYOK](docs/analysis.md) |
+| 自动化与 AI | [AI 接入说明](docs/ai-setup.md) · [CLI 客户端](docs/cli.md) · [API、Webhook、指标与 MCP](docs/integrations.md)（运行实例的 `/docs` 提供 OpenAPI 文档） |
+| 安全与架构 | [安全说明](SECURITY.md) · [数据与隐私](docs/configuration.md#data-and-privacy) · [系统架构](docs/architecture.md) · [贡献指南](CONTRIBUTING.md) |
 
-- 后端：Python 3.11+（CI 覆盖 3.11–3.13）、FastAPI、Uvicorn
-- 前端：静态 HTML/CSS/JS
-- 镜像：`python:3.12-slim` + `iproute2`
+## 赞助商
+
+<table>
+  <tr>
+    <td align="center" width="76">
+      <a href="https://nodefinch.com/zh-hans/">
+        <img src="docs/sponsors/nodefinch.png" width="52" height="52" alt="NodeFinch">
+      </a>
+    </td>
+    <td>
+      <a href="https://nodefinch.com/zh-hans/"><strong>NodeFinch</strong></a> — 随时掌握你管理的服务器。<br>
+      <sub>在 iPhone 上查看服务器的在线状态、历史趋势、网络诊断、流量和续费，无需注册 NodeFinch 账号。</sub><br>
+      <sub><a href="https://nodefinch.com/zh-hans/">官网</a></sub>
+    </td>
+  </tr>
+</table>
+
+<sub>欢迎团队或独立开发者赞助 Port-Light 并在此展示你的产品或服务：<a href="mailto:support@nodefinch.com?subject=Sponsoring%20Port-Light">成为赞助商</a>。</sub>
 
 ## 支持 Port-Light
 
-Port-Light 的全部功能永久保持 MIT 开源、无功能锁、零遥测。如果它在你的家庭实验室或服务器机群中帮到了你，欢迎通过可选的一次性离线 [赞助者密钥（Supporter Key）](https://portlight.stepaniah.me/#support) 支持独立维护——密钥纯本地 Ed25519 离线验签、零出站请求，点亮后将在全部 22 套内置主题中呈现专属配色的金属港口灯标铭牌。
+Port-Light 的全部功能永久保持 MIT 开源、无功能锁、零遥测。如果它在你的家庭实验室或服务器机群中帮到了你，欢迎通过可选的一次性离线[赞助者密钥（Supporter Key）](https://portlight.stepaniah.me/?lang=zh-CN#support)支持独立维护——密钥纯本地 Ed25519 离线验签、零出站请求，点亮后将在全部 22 套内置主题中呈现专属配色的金属港口灯标铭牌；也可以通过 [Ko-fi](https://ko-fi.com/stepaniah) 请作者喝杯咖啡。
 
 ## 许可证
 
 [MIT](LICENSE) © 2026 StepaniaH
 
-[更新日志](CHANGELOG.md) · [安全说明](SECURITY.md) · [贡献指南](CONTRIBUTING.md) · [支持项目](https://portlight.stepaniah.me/#support) · [Ko-fi](https://ko-fi.com/stepaniah)
+[更新日志](CHANGELOG.md) · [安全说明](SECURITY.md) · [贡献指南](CONTRIBUTING.md) · [支持项目](https://portlight.stepaniah.me/?lang=zh-CN#support) · [Ko-fi](https://ko-fi.com/stepaniah)

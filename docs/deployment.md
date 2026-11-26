@@ -189,7 +189,7 @@ If `port_light.json` becomes unreadable or invalid, fix its permissions or resto
 
 ## Settings (Compose and Web UI)
 
-Non-secret options (theme, language, range, refresh, local machine name, scanner selection, Compose discovery, `URL_HOST`, …) can be set as environment variables **or** on the Settings page (`#/settings`). Changes save automatically into `/data/port_light.json`; only changed fields are written. To remove a saved override and restore its environment/default value, send `null` for that field to `PUT /api/settings`. Mounts, socket permissions, absolute paths, and secrets remain deployment-only.
+Non-secret options (theme, language, range, refresh, local machine name, scanner selection, Compose discovery, `URL_HOST`, …) can be set as environment variables **or** on the Settings page (`#/settings`). See the [configuration reference](configuration.md) for every environment variable, default, and privacy note. Changes save automatically into `/data/port_light.json`; only changed fields are written. To remove a saved override and restore its environment/default value, send `null` for that field to `PUT /api/settings`. Mounts, socket permissions, absolute paths, and secrets remain deployment-only.
 
 To keep GitOps / Compose as the only source:
 

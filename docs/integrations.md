@@ -248,7 +248,7 @@ stop listening or clear a conflict re-arm for future transitions, with an
 optional per-port cooldown configured via `WEBHOOK_COOLDOWN_S` (default `0`).
 `WEBHOOK_SECRET` adds an `X-Port-Light-Secret` header for the receiver to check.
 
-See the environment tables in the README for the full variable list.
+See the [configuration reference](configuration.md) for the full variable list.
 
 ## Coding agents
 
