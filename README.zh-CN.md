@@ -97,7 +97,7 @@ mkdir -p data && docker compose up -d
   </tr>
 </table>
 
-<sub>欢迎团队或独立开发者赞助 Port-Light 并在此展示你的产品或服务：<a href="mailto:support@nodefinch.com?subject=Sponsoring%20Port-Light">成为赞助商</a>。</sub>
+<sub>欢迎团队或独立开发者赞助 Port-Light 并在此展示你的产品或服务：<a href="mailto:StepaniaH0907@gmail.com?subject=Sponsoring%20Port-Light">成为赞助商</a>。</sub>
 
 ## 支持 Port-Light
 

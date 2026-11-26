@@ -97,7 +97,7 @@ Browse the full [Documentation hub](docs/README.md) or jump straight to a guide:
   </tr>
 </table>
 
-<sub>Interested in sponsoring Port-Light and showcasing your product or service here? <a href="mailto:support@nodefinch.com?subject=Sponsoring%20Port-Light">Become a sponsor</a>.</sub>
+<sub>Interested in sponsoring Port-Light and showcasing your product or service here? <a href="mailto:StepaniaH0907@gmail.com?subject=Sponsoring%20Port-Light">Become a sponsor</a>.</sub>
 
 ## Support Port-Light
 
